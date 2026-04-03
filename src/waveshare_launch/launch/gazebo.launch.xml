@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="use_sim_time" default="true" />
+    <arg name="model" default="$(find-pkg-share waver_description)/urdf/waver.xacro" />
+    <arg name="world_file" default="$(find-pkg-share waver_gazebo)/worlds/room.sdf" />
+    <arg name="gui" default="false" description="Launch the Gazebo GUI client." />
+
+    <include file="$(find-pkg-share waver_description)/launch/description.launch.xml">
+        <arg name="use_sim_time" value="$(var use_sim_time)" />
+        <arg name="model" value="$(var model)" />
+    </include>
+
+    <include if="$(var gui)" file="$(find-pkg-share ros_gz_sim)/launch/gz_sim.launch.py">
+        <arg name="gz_args" value="-r -v 4 $(var world_file)" />
+    </include>
+
+    <include unless="$(var gui)" file="$(find-pkg-share ros_gz_sim)/launch/gz_sim.launch.py">
+        <arg name="gz_args" value="-r -s -v 4 $(var world_file)" />
+    </include>
+
+    <node pkg="ros_gz_sim" exec="create" name="spawn_waver"
+        args="-name waver -topic robot_description" output="screen">
+    </node>
+
+    <node pkg="ros_gz_bridge" exec="parameter_bridge" name="gz_bridge" output="screen"
+        args="--ros-args -p config_file:=$(find-pkg-share waver_gazebo)/config/ros_gz_bridge.yaml">
+    </node>
+
+</launch>

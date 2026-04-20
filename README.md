@@ -21,6 +21,28 @@ colcon build
 ```
 __NOTE:__ see `setup-shell-env.sh` for more build helpers such as `bros`, `dros`, `sros`, and `cbpu`/`cbps`.
 
+To build just the LiveKit bridge package and download the latest LiveKit SDK
+release from GitHub during CMake configure, run:
+```bash
+colcon build --packages-select ros2_livekit_bridge
+```
+
+To use a local LiveKit SDK install prefix instead, set
+`LIVEKIT_LOCAL_SDK_DIR` to that install directory when invoking `colcon`:
+```bash
+LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk \
+colcon build --packages-select ros2_livekit_bridge
+```
+
+You can also pin a specific GitHub release instead of `latest`:
+```bash
+colcon build --packages-select ros2_livekit_bridge \
+  --cmake-args -DLIVEKIT_SDK_VERSION=1.2.3
+```
+
+If you build the SDK locally for use with this workspace, build the SDK itself
+with `-DLIVEKIT_USE_SYSTEM_SPDLOG=ON`.
+
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.
 

@@ -45,6 +45,10 @@ RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-gz-ros2-control* \
     ros-${ROS_DISTRO}-ros2-control*
 
+# ros-livekit-bridge dependencies
+RUN apt-get update && apt-get install -y \
+    ros-${ROS_DISTRO}-rosx-introspection
+
 ENV GZ_VERSION=fortress
 
 COPY ./setup-shell-env.sh /tmp/setup-shell-env.sh

@@ -1,0 +1,4 @@
+topics:
+  - name: "/robot_status"
+    type: "demo_msgs/msg/RobotStatus"
+    qos_depth: 10

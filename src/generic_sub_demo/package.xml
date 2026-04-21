@@ -15,6 +15,12 @@
   <depend>rclcpp</depend>
   <depend>yaml_cpp_vendor</depend>
 
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>sensor_msgs</test_depend>
+  <test_depend>rosbag2_cpp</test_depend>
+  <test_depend>rosbag2_storage</test_depend>
+  <test_depend>rosbag2_storage_mcap</test_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

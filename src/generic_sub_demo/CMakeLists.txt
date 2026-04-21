@@ -23,4 +23,15 @@ install(TARGETS generic_sub_node
 install(DIRECTORY config/
   DESTINATION share/${PROJECT_NAME}/config)
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(sensor_msgs REQUIRED)
+  find_package(rosbag2_cpp REQUIRED)
+  find_package(rosbag2_storage REQUIRED)
+
+  ament_add_gtest(test_cdr_mcap_roundtrip test/test_cdr_mcap_roundtrip.cpp)
+  ament_target_dependencies(test_cdr_mcap_roundtrip
+    rclcpp sensor_msgs rosbag2_cpp rosbag2_storage)
+endif()
+
 ament_package()

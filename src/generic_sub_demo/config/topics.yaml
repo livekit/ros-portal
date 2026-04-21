@@ -1,0 +1,10 @@
+topics:
+  - name: "/odom"
+    type: "nav_msgs/msg/Odometry"
+    qos_depth: 10
+  - name: "/scan"
+    type: "sensor_msgs/msg/LaserScan"
+    qos_depth: 5
+  - name: "/chatter"
+    type: "std_msgs/msg/String"
+    qos_depth: 10

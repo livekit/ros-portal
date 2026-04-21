@@ -20,7 +20,7 @@
     "QT_X11_NO_MITSHM": "1"
   },
   "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && mkdir -p src/externals && if [ -f external.repos ]; then vcs import --skip-existing src/externals < external.repos; fi && rosdep update && rosdep install --from-paths src --ignore-src -r -y'",
-  "postStartCommand": "bash -lc 'if [ -d src/externals ]; then for repo in src/externals/*; do if [ -d \"$repo/.git\" ]; then if ! git -C \"$repo\" symbolic-ref -q HEAD >/dev/null 2>&1; then echo \"Skipping pull for $repo (detached HEAD)\"; elif [ -n \"$(git -C \"$repo\" status --porcelain)\" ]; then echo \"Skipping pull for $repo (local changes)\"; else git -C \"$repo\" pull --recurse-submodules; fi; fi; done; fi'",
+
   "customizations": {
     "vscode": {
       "settings": {

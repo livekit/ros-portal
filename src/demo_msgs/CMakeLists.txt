@@ -8,6 +8,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RobotStatus.msg"
@@ -15,7 +16,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 add_executable(robot_status_publisher src/robot_status_publisher.cpp)
-ament_target_dependencies(robot_status_publisher rclcpp)
+ament_target_dependencies(robot_status_publisher rclcpp sensor_msgs)
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
 target_link_libraries(robot_status_publisher "${cpp_typesupport_target}")
 

@@ -56,44 +56,6 @@ cbps()
     cd "\${WS}" && sros && colcon build --packages-select "\$@" && sros
 }
 
-waver() {
-    if [[ "\$1" == "description" && -z "\$2" ]]; then
-        bros && sros && ros2 launch waver_description description.launch.xml
-    elif [[ "\$1" == "gazebo" && -z "\$2" ]]; then
-        bros && sros && ros2 launch waveshare_launch gazebo.launch.xml
-    elif [[ "\$1" == "nav" && -z "\$2" ]]; then
-        bros && sros && ros2 launch nav2_bringup navigation_launch.py
-    elif [[ "\$1" == "nav" && "\$2" == "slam_toolbox" && -z "\$3" ]]; then
-        bros && sros && echo "Use: async_slam_toolbox_node | online_async_launch"
-    elif [[ "\$1" == "nav" && "\$2" == "slam_toolbox" && "\$3" == "async_slam_toolbox_node" ]]; then
-        bros && sros && ros2 launch waver_nav async_slam_toolbox.launch.xml
-    elif [[ "\$1" == "nav" && "\$2" == "slam_toolbox" && "\$3" == "online_async_launch" ]]; then
-        bros && sros && ros2 launch waver_nav online_async.launch.xml
-    elif [[ "\$1" == "rviz" && -z "\$2" ]]; then
-        bros && sros && ros2 launch waver_viz rviz.launch.xml
-    elif [[ "\$1" == "teleop" && -z "\$2" ]]; then
-        sros && ros2 run teleop_twist_keyboard teleop_twist_keyboard
-    else
-        echo "Use: waver [description|gazebo|nav|rviz|teleop]"
-    fi
-}
-
-if [ -n "\${BASH_VERSION:-}" ]; then
-    _waver_completion() {
-        local cur=\${COMP_WORDS[COMP_CWORD]}
-        local prev=\${COMP_WORDS[COMP_CWORD-1]}
-
-        if [[ \$COMP_CWORD -eq 1 ]]; then
-            COMPREPLY=( \$(compgen -W "description gazebo nav rviz teleop" -- "\$cur") )
-        elif [[ \$COMP_CWORD -eq 2 && "\$prev" == "nav" ]]; then
-            COMPREPLY=( \$(compgen -W "slam_toolbox" -- "\$cur") )
-        elif [[ \$COMP_CWORD -eq 3 && "\$prev" == "slam_toolbox" ]]; then
-            COMPREPLY=( \$(compgen -W "async_slam_toolbox_node online_async_launch" -- "\$cur") )
-        fi
-    }
-    complete -F _waver_completion waver
-fi
-
 if [ -n "\${ZSH_VERSION:-}" ]; then
     PROMPT='(ros-livekit) %n@%m:%~ %# '
 else

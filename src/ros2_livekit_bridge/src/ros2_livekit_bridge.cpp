@@ -15,12 +15,13 @@
  */
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
+#include "ros2_livekit_bridge/utils/image_conversion.hpp"
+#include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
-#include <stdexcept>
 #include <geometry_msgs/msg/polygon_stamped.hpp>
 #include <geometry_msgs/msg/pose2_d.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
@@ -44,6 +45,8 @@ namespace ros2_livekit_bridge
 namespace
 {
 
+namespace bridge_utils = ::livekit::ros_bridge::utils;
+
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
@@ -63,97 +66,6 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
     livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
   std::memcpy(frame.data(), rgba, rgba_size);
   return frame;
-}
-
-/**
- * @brief Convert a sensor_msgs::msg::Image to packed RGBA8.
- * @param img The input image
- * @param out The output buffer
- * @return True if the conversion was successful, false otherwise
- * @note this should be gutted. super inneficient.
- */
-bool convertToRgba(
-  const sensor_msgs::msg::Image & img,
-  std::vector<std::uint8_t> & out)
-{
-  const std::size_t num_pixels =
-    static_cast<std::size_t>(img.width) * img.height;
-  out.resize(num_pixels * 4);
-
-  const auto & enc = img.encoding;
-
-  if (enc == "rgba8") {
-    if (img.step == img.width * 4) {
-      std::memcpy(out.data(), img.data.data(), num_pixels * 4);
-    } else {
-      for (std::uint32_t y = 0; y < img.height; ++y) {
-        std::memcpy(out.data() + y * img.width * 4,
-                    img.data.data() + y * img.step, img.width * 4);
-      }
-    }
-    return true;
-  }
-
-  if (enc == "rgb8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        const auto *px = row + x * 3;
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = px[0];
-        dst[1] = px[1];
-        dst[2] = px[2];
-        dst[3] = 255;
-      }
-    }
-    return true;
-  }
-
-  if (enc == "bgr8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        const auto *px = row + x * 3;
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = px[2];
-        dst[1] = px[1];
-        dst[2] = px[0];
-        dst[3] = 255;
-      }
-    }
-    return true;
-  }
-
-  if (enc == "bgra8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        const auto *px = row + x * 4;
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = px[2];
-        dst[1] = px[1];
-        dst[2] = px[0];
-        dst[3] = px[3];
-      }
-    }
-    return true;
-  }
-
-  if (enc == "mono8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = row[x];
-        dst[1] = row[x];
-        dst[2] = row[x];
-        dst[3] = 255;
-      }
-    }
-    return true;
-  }
-
-  return false;
 }
 
 /// Try a ROS parameter first; if empty, fall back to an environment variable.
@@ -187,42 +99,14 @@ std::string resolveCredential(
   return {};
 }
 
-/**
- * @brief Compile a vector of strings into a vector of regex patterns.
- * @param strings The vector of strings to compile
- * @param out The output vector of regex patterns
- * @param logger The logger to use
- */
-void compilePatterns(
-  const std::vector<std::string> & strings,
-  std::vector<std::regex> & out, rclcpp::Logger logger)
+void logPatternCompileErrors(
+  const std::vector<bridge_utils::PatternCompileError> & errors,
+  rclcpp::Logger logger)
 {
-  for (const auto & pattern : strings) {
-    try {
-      out.emplace_back(pattern, std::regex::ECMAScript);
-    } catch (const std::regex_error & e) {
-      RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s", pattern.c_str(),
-                   e.what());
-    }
+  for (const auto & error : errors) {
+    RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s",
+                 error.pattern.c_str(), error.message.c_str());
   }
-}
-
-/**
- * @brief Check if a string matches any of the regex patterns.
- * @param str The string to check
- * @param patterns The vector of regex patterns to check against
- * @return True if the string matches any of the patterns, false otherwise
- */
-bool matchesAnyPattern(
-  const std::string & str,
-  const std::vector<std::regex> & patterns)
-{
-  for (const auto & pattern : patterns) {
-    if (std::regex_match(str, pattern)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 } // namespace
@@ -257,12 +141,17 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
   max_qos_depth_ =
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   ros_topic_patterns_ = this->get_parameter("ros_topics").as_string_array();
-  compilePatterns(ros_topic_patterns_, compiled_patterns_, this->get_logger());
+  std::vector<bridge_utils::PatternCompileError> pattern_errors;
+  compiled_patterns_ =
+    bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);
+  logPatternCompileErrors(pattern_errors, this->get_logger());
 
   auto best_effort_topics =
     this->get_parameter("best_effort_qos_topics").as_string_array();
-  compilePatterns(best_effort_topics, best_effort_qos_topic_patterns_,
-                  this->get_logger());
+  pattern_errors.clear();
+  best_effort_qos_topic_patterns_ =
+    bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
+  logPatternCompileErrors(pattern_errors, this->get_logger());
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu topic patterns, "
@@ -600,7 +489,7 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 
         state.source->captureFrame(*frame, timestamp_us);
       } else {
-        if (!convertToRgba(*msg, state.rgba_buf)) {
+        if (!bridge_utils::convertToRgba(*msg, state.rgba_buf)) {
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                              "Unsupported image encoding '%s' on topic '%s'",
                              msg->encoding.c_str(), topic_name.c_str());
@@ -637,7 +526,7 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 
 bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
 {
-  return matchesAnyPattern(topic_name, compiled_patterns_);
+  return bridge_utils::matchesAnyPattern(topic_name, compiled_patterns_);
 }
 
 rclcpp::QoS
@@ -683,7 +572,9 @@ Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
   // Reliability: force best-effort if topic matches the override list,
   // otherwise use RELIABLE only when every publisher offers it (mixed policies
   // fall back to best-effort so we can connect to all publishers).
-  if (matchesAnyPattern(topic_name, best_effort_qos_topic_patterns_)) {
+  if (bridge_utils::matchesAnyPattern(
+      topic_name, best_effort_qos_topic_patterns_))
+  {
     qos.best_effort();
   } else if (!publisher_info.empty() &&
     reliable_count == publisher_info.size())

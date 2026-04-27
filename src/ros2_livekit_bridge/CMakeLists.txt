@@ -174,6 +174,8 @@ endif()
 ament_auto_add_executable(ros2_livekit_bridge_node
   src/ros2_livekit_bridge_node.cpp
   src/ros2_livekit_bridge.cpp
+  src/utils/image_conversion.cpp
+  src/utils/topic_matcher.cpp
 )
 target_link_libraries(ros2_livekit_bridge_node
   "${LIVEKIT_CORE_TARGET}"
@@ -203,6 +205,16 @@ if(BUILD_TESTING)
       INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
     )
   endif()
+
+  ament_auto_add_gtest(topic_matcher_test
+    test/unit/topic_matcher_test.cpp
+    src/utils/topic_matcher.cpp
+  )
+
+  ament_auto_add_gtest(image_conversion_test
+    test/unit/image_conversion_test.cpp
+    src/utils/image_conversion.cpp
+  )
 
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)

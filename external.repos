@@ -1,0 +1,9 @@
+repositories:
+  foxglove-sdk:
+    type: git
+    url: https://github.com/foxglove/foxglove-sdk.git
+    version: ros-v3.2.3
+  waver:
+    type: git
+    url: https://github.com/GGomezMorales/waver.git
+    version: 9146ead456dc57f6b4bdaa1a8ca1c7b9fdb59465

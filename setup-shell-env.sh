@@ -18,7 +18,7 @@ set -euo pipefail
 
 cat <<EOF >/etc/profile.d/ros-livekit-bridge.sh
 export ROS_DISTRO=${ROS_DISTRO}
-export WS=${WS}
+export WS="${WS}"
 
 _source_ros_env() {
     if [ -n "\${ZSH_VERSION:-}" ]; then
@@ -30,37 +30,37 @@ _source_ros_env() {
 
 _source_ws_overlay() {
     if [ -n "\${ZSH_VERSION:-}" ]; then
-        if [ -f ${WS}/install/setup.zsh ]; then
-            source ${WS}/install/setup.zsh
+        if [ -f "\${WS}/install/setup.zsh" ]; then
+            source "\${WS}/install/setup.zsh"
         fi
     else
-        if [ -f ${WS}/install/setup.bash ]; then
-            source ${WS}/install/setup.bash
+        if [ -f "\${WS}/install/setup.bash" ]; then
+            source "\${WS}/install/setup.bash"
         fi
     fi
 }
 
 _source_ros_env
 
-alias bros='cd ${WS} && colcon build'
-alias dros='cd ${WS} && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
+alias bros='cd "\${WS}" && colcon build'
+alias dros='cd "\${WS}" && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
 alias sros='_source_ros_env && _source_ws_overlay'
 
 cbpu()
 {
-    cd ${WS} && sros && colcon build --packages-up-to "\$@"
+    cd "\${WS}" && sros && colcon build --packages-up-to "\$@"
 }
 
 cbps()
 {
-    cd ${WS} && sros && colcon build --packages-select "\$@" && sros
+    cd "\${WS}" && sros && colcon build --packages-select "\$@" && sros
 }
 
 waver() {
     if [[ "\$1" == "description" && -z "\$2" ]]; then
         bros && sros && ros2 launch waver_description description.launch.xml
     elif [[ "\$1" == "gazebo" && -z "\$2" ]]; then
-        bros && sros && ros2 launch waver_gazebo gazebo.launch.xml
+        bros && sros && ros2 launch waveshare_launch gazebo.launch.xml
     elif [[ "\$1" == "nav" && -z "\$2" ]]; then
         bros && sros && ros2 launch nav2_bringup navigation_launch.py
     elif [[ "\$1" == "nav" && "\$2" == "slam_toolbox" && -z "\$3" ]]; then

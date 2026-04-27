@@ -1,8 +1,8 @@
 # ROS LiveKit Bridge
 
-ROS2 workspace for the LiveKit bridge. This repo is used as a development evenironment and a build environment for the LiveKit bridge library.
+ROS2 workspace for the LiveKit bridge. This repo is used as a development environment and a build environment for the LiveKit bridge library.
 
-It is intented that all development and builds are done in the devcontainer.
+It is intended that all development and builds are done in the devcontainer.
 
 ## Devcontainer layout
 

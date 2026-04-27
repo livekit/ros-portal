@@ -49,7 +49,5 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-rosx-introspection
 
-ENV GZ_VERSION=fortress
-
 COPY ./setup-shell-env.sh /tmp/setup-shell-env.sh
 RUN chmod +x /tmp/setup-shell-env.sh && /tmp/setup-shell-env.sh && rm /tmp/setup-shell-env.sh

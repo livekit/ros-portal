@@ -407,7 +407,10 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string &topic_name) {
     auto &state = state_it->second;
 
     if (!state.track) {
-      auto *participant = localParticipant();
+      if (!room_) {
+        return;
+      }
+      auto *participant = room_->localParticipant();
       if (!participant) {
         return;
       }
@@ -514,7 +517,10 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string &topic_name) {
     auto &state = state_it->second;
 
     if (!state.track) {
-      auto *participant = localParticipant();
+      if (!room_) {
+        return;
+      }
+      auto *participant = room_->localParticipant();
       if (!participant) {
         return;
       }
@@ -597,10 +603,6 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string &topic_name) {
 
 bool Ros2LiveKitBridge::matchesTopic(const std::string &topic_name) const {
   return matchesAnyPattern(topic_name, compiled_patterns_);
-}
-
-livekit::LocalParticipant *Ros2LiveKitBridge::localParticipant() const {
-  return room_ ? room_->localParticipant() : nullptr;
 }
 
 rclcpp::QoS

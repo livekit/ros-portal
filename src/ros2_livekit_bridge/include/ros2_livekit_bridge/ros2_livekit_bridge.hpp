@@ -90,11 +90,6 @@ private:
   void createDataSubscriber(const std::string &topic_name);
 
   /**
-   * @brief Return the local participant for the active room, if connected.
-   */
-  livekit::LocalParticipant *localParticipant() const;
-
-  /**
    * @brief Check if the topic matches the allowed topics
    * @param topic_name The name of the topic
    * @return True if the topic matches the allowed topics, false otherwise

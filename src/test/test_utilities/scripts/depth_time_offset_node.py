@@ -51,9 +51,9 @@ class DepthTimeOffsetNode(Node):
         # Convert message header stamp to rclpy Time
         msg_time = rclpy.time.Time.from_msg(msg.header.stamp)
 
-        # Compute difference in nanoseconds
+        # Compute difference and publish it in milliseconds.
         delta = now - msg_time
-        delta_ms = delta.nanoseconds / 1e-6
+        delta_ms = delta.nanoseconds / 1e6
 
         # Publish as Float64
         out_msg = Float64()

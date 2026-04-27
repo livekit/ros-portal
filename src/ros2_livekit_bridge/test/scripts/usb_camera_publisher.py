@@ -38,6 +38,9 @@ class UsbCameraPublisher(Node):
 
         camera_index = self.get_parameter('camera_index').value
         fps = self.get_parameter('fps').value
+        if fps <= 0:
+            self.get_logger().fatal(f'fps must be greater than 0, got {fps}')
+            raise ValueError(f'fps must be greater than 0, got {fps}')
 
         self.publisher_ = self.create_publisher(Image, '/test/image1', 10)
 

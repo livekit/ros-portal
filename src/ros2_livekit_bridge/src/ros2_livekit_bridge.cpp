@@ -68,28 +68,16 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
   return frame;
 }
 
-/// Try a ROS parameter first; if empty, fall back to an environment variable.
-/// Returns the resolved value and sets @p source to a human-readable label.
 /**
- * @brief Try a ROS parameter first; if empty, fall back to an environment
- * variable.
- * @param node The node to resolve the credential from
- * @param param_name The name of the parameter
+ * @brief Resolve a credential from an environment variable.
  * @param env_var_name The name of the environment variable
- * @param source The source of the credential. This is set to a human-readable
- * label of the source.
+ * @param source The source of the credential. This is set to a
+ * human-readable label of the source.
  * @return The resolved credential
  */
-std::string resolveCredential(
-  rclcpp::Node *node, const std::string & param_name,
-  const std::string & env_var_name,
-  std::string & source)
+std::string resolveEnvironmentCredential(
+  const std::string & env_var_name, std::string & source)
 {
-  const std::string param_val = node->get_parameter(param_name).as_string();
-  if (!param_val.empty()) {
-    source = "ROS parameter '" + param_name + "'";
-    return param_val;
-  }
   const char *env_val = std::getenv(env_var_name.c_str());
   if (env_val && env_val[0] != '\0') {
     source = "environment variable " + env_var_name;
@@ -115,8 +103,6 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ros2_livekit_bridge", options)
 {
   this->declare_parameter<std::string>("room_name", "");
-  this->declare_parameter<std::string>("livekit_url", "");
-  this->declare_parameter<std::string>("livekit_token", "");
   this->declare_parameter<int>("topic_polling_period_ms", 500);
   this->declare_parameter<int>("ros_threads", 0);
   const std::vector<std::string> kEmptyStringVec{};
@@ -161,12 +147,12 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
-  // ----- Resolve LiveKit credentials (param -> env var fallback) -----
+  // ----- Resolve LiveKit credentials from environment variables only -----
   std::string url_source, token_source;
   const std::string livekit_url =
-    resolveCredential(this, "livekit_url", "LIVEKIT_URL", url_source);
+    resolveEnvironmentCredential("LIVEKIT_URL", url_source);
   const std::string livekit_token =
-    resolveCredential(this, "livekit_token", "LIVEKIT_TOKEN", token_source);
+    resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s",
               url_source.c_str());
@@ -184,9 +170,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
         "LiveKit credentials not fully provided — bridge will not connect.\n"
         "  livekit_url   : %s\n"
         "  livekit_token : %s\n"
-        "Set them via ROS parameters (-p livekit_url:=... -p "
-        "livekit_token:=...)\n"
-        "or environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
+        "Set them via environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
         livekit_url.empty() ? "(missing)" : url_source.c_str(),
         livekit_token.empty() ? "(missing)" : token_source.c_str());
   } else {

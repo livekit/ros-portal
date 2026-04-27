@@ -21,20 +21,21 @@
 #include <foxglove/PoseInFrame.pb.h>
 #include <foxglove/PosesInFrame.pb.h>
 
-namespace ros2_foxglove_adapters {
+namespace ros2_foxglove_adapters
+{
 
-foxglove::PoseInFrame toFoxglove(const nav_msgs::msg::Odometry &msg);
-foxglove::PosesInFrame toFoxglove(const nav_msgs::msg::Path &msg);
-foxglove::Grid toFoxglove(const nav_msgs::msg::OccupancyGrid &msg);
-foxglove::FrameTransform toFoxglove(const geometry_msgs::msg::TransformStamped &msg);
-foxglove::Pose toFoxglove(const geometry_msgs::msg::Pose2D &msg);
-foxglove::Log toFoxglove(const geometry_msgs::msg::PolygonStamped &msg);
+foxglove::PoseInFrame toFoxglove(const nav_msgs::msg::Odometry & msg);
+foxglove::PosesInFrame toFoxglove(const nav_msgs::msg::Path & msg);
+foxglove::Grid toFoxglove(const nav_msgs::msg::OccupancyGrid & msg);
+foxglove::FrameTransform toFoxglove(const geometry_msgs::msg::TransformStamped & msg);
+foxglove::Pose toFoxglove(const geometry_msgs::msg::Pose2D & msg);
+foxglove::Log toFoxglove(const geometry_msgs::msg::PolygonStamped & msg);
 foxglove::PoseInFrame toFoxglove(
-    const geometry_msgs::msg::PoseWithCovarianceStamped &msg);
-foxglove::PointCloud toFoxglove(const sensor_msgs::msg::PointCloud2 &msg);
-foxglove::PoseInFrame toFoxglove(const sensor_msgs::msg::Imu &msg);
-foxglove::Log toFoxglove(const sensor_msgs::msg::Joy &msg);
-foxglove::Log toFoxglove(const sensor_msgs::msg::BatteryState &msg);
-foxglove::Log toFoxglove(const std_msgs::msg::String &msg);
+  const geometry_msgs::msg::PoseWithCovarianceStamped & msg);
+foxglove::PointCloud toFoxglove(const sensor_msgs::msg::PointCloud2 & msg);
+foxglove::PoseInFrame toFoxglove(const sensor_msgs::msg::Imu & msg);
+foxglove::Log toFoxglove(const sensor_msgs::msg::Joy & msg);
+foxglove::Log toFoxglove(const sensor_msgs::msg::BatteryState & msg);
+foxglove::Log toFoxglove(const std_msgs::msg::String & msg);
 
 } // namespace ros2_foxglove_adapters

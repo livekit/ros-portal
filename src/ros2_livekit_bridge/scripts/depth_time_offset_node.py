@@ -20,7 +20,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float64
 
-IMAGE_TOPIC="/camera/realsense2_camera/depth/image_rect_raw/compressed"
+IMAGE_TOPIC = '/camera/realsense2_camera/depth/image_rect_raw/compressed'
+
 
 class DepthTimeOffsetNode(Node):
 
@@ -29,11 +30,11 @@ class DepthTimeOffsetNode(Node):
 
         self.subscription = self.create_subscription(
             CompressedImage,
-	    IMAGE_TOPIC,
+            IMAGE_TOPIC,
             self.depth_callback,
             10
         )
-        print("Subbing to topic: {}", IMAGE_TOPIC)
+        print('Subbing to topic: {}'.format(IMAGE_TOPIC))
 
         self.publisher = self.create_publisher(
             Float64,
@@ -59,7 +60,8 @@ class DepthTimeOffsetNode(Node):
         out_msg.data = float(delta_ms)
 
         self.publisher.publish(out_msg)
-        print("diff ms: {}", out_msg.data)
+        print('diff ms: {}'.format(out_msg.data))
+
 
 def main(args=None):
     rclpy.init(args=args)

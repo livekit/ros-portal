@@ -62,5 +62,5 @@ def generate_launch_description():
         DeclareLaunchArgument('image_topic', default_value='/camera',
                               description='Topic to start viewing in RQt.'),
         bridge,
-#        rqt
+        rqt
     ])

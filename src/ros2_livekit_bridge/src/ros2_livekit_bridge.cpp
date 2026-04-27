@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <stdexcept>
 #include <geometry_msgs/msg/polygon_stamped.hpp>
 #include <geometry_msgs/msg/pose2_d.hpp>
@@ -37,25 +38,29 @@
 #include <livekit/video_frame.h>
 #include <ros2_foxglove_adapters/to_foxglove.hpp>
 
-namespace ros2_livekit_bridge {
+namespace ros2_livekit_bridge
+{
 
-namespace {
+namespace
+{
 
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
 
-livekit::VideoFrame makeRgbaVideoFrame(int width, int height,
-                                       const std::uint8_t *rgba,
-                                       std::size_t rgba_size) {
+std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
+  int width, int height,
+  const std::uint8_t *rgba,
+  std::size_t rgba_size)
+{
   const std::size_t expected_size =
-      static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
+    static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
   if (rgba_size != expected_size) {
-    throw std::runtime_error("RGBA buffer size does not match image geometry");
+    return std::nullopt;
   }
 
   auto frame =
-      livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
+    livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
   std::memcpy(frame.data(), rgba, rgba_size);
   return frame;
 }
@@ -67,13 +72,15 @@ livekit::VideoFrame makeRgbaVideoFrame(int width, int height,
  * @return True if the conversion was successful, false otherwise
  * @note this should be gutted. super inneficient.
  */
-bool convertToRgba(const sensor_msgs::msg::Image &img,
-                   std::vector<std::uint8_t> &out) {
+bool convertToRgba(
+  const sensor_msgs::msg::Image & img,
+  std::vector<std::uint8_t> & out)
+{
   const std::size_t num_pixels =
-      static_cast<std::size_t>(img.width) * img.height;
+    static_cast<std::size_t>(img.width) * img.height;
   out.resize(num_pixels * 4);
 
-  const auto &enc = img.encoding;
+  const auto & enc = img.encoding;
 
   if (enc == "rgba8") {
     if (img.step == img.width * 4) {
@@ -161,9 +168,11 @@ bool convertToRgba(const sensor_msgs::msg::Image &img,
  * label of the source.
  * @return The resolved credential
  */
-std::string resolveCredential(rclcpp::Node *node, const std::string &param_name,
-                              const std::string &env_var_name,
-                              std::string &source) {
+std::string resolveCredential(
+  rclcpp::Node *node, const std::string & param_name,
+  const std::string & env_var_name,
+  std::string & source)
+{
   const std::string param_val = node->get_parameter(param_name).as_string();
   if (!param_val.empty()) {
     source = "ROS parameter '" + param_name + "'";
@@ -184,12 +193,14 @@ std::string resolveCredential(rclcpp::Node *node, const std::string &param_name,
  * @param out The output vector of regex patterns
  * @param logger The logger to use
  */
-void compilePatterns(const std::vector<std::string> &strings,
-                     std::vector<std::regex> &out, rclcpp::Logger logger) {
-  for (const auto &pattern : strings) {
+void compilePatterns(
+  const std::vector<std::string> & strings,
+  std::vector<std::regex> & out, rclcpp::Logger logger)
+{
+  for (const auto & pattern : strings) {
     try {
       out.emplace_back(pattern, std::regex::ECMAScript);
-    } catch (const std::regex_error &e) {
+    } catch (const std::regex_error & e) {
       RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s", pattern.c_str(),
                    e.what());
     }
@@ -202,9 +213,11 @@ void compilePatterns(const std::vector<std::string> &strings,
  * @param patterns The vector of regex patterns to check against
  * @return True if the string matches any of the patterns, false otherwise
  */
-bool matchesAnyPattern(const std::string &str,
-                       const std::vector<std::regex> &patterns) {
-  for (const auto &pattern : patterns) {
+bool matchesAnyPattern(
+  const std::string & str,
+  const std::vector<std::regex> & patterns)
+{
+  for (const auto & pattern : patterns) {
     if (std::regex_match(str, pattern)) {
       return true;
     }
@@ -214,8 +227,9 @@ bool matchesAnyPattern(const std::string &str,
 
 } // namespace
 
-Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions &options)
-    : rclcpp::Node("ros2_livekit_bridge", options) {
+Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
+: rclcpp::Node("ros2_livekit_bridge", options)
+{
   this->declare_parameter<std::string>("room_name", "");
   this->declare_parameter<std::string>("livekit_url", "");
   this->declare_parameter<std::string>("livekit_token", "");
@@ -233,20 +247,20 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions &options)
 
   room_name_ = this->get_parameter("room_name").as_string();
   topic_polling_period_ms_ =
-      this->get_parameter("topic_polling_period_ms").as_int();
+    this->get_parameter("topic_polling_period_ms").as_int();
   ros_threads_ = this->get_parameter("ros_threads").as_int();
 
   reentrant_callback_group_ =
-      this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ =
-      static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
+    static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ =
-      static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
+    static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   ros_topic_patterns_ = this->get_parameter("ros_topics").as_string_array();
   compilePatterns(ros_topic_patterns_, compiled_patterns_, this->get_logger());
 
   auto best_effort_topics =
-      this->get_parameter("best_effort_qos_topics").as_string_array();
+    this->get_parameter("best_effort_qos_topics").as_string_array();
   compilePatterns(best_effort_topics, best_effort_qos_topic_patterns_,
                   this->get_logger());
 
@@ -261,9 +275,9 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions &options)
   // ----- Resolve LiveKit credentials (param -> env var fallback) -----
   std::string url_source, token_source;
   const std::string livekit_url =
-      resolveCredential(this, "livekit_url", "LIVEKIT_URL", url_source);
+    resolveCredential(this, "livekit_url", "LIVEKIT_URL", url_source);
   const std::string livekit_token =
-      resolveCredential(this, "livekit_token", "LIVEKIT_TOKEN", token_source);
+    resolveCredential(this, "livekit_token", "LIVEKIT_TOKEN", token_source);
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s",
               url_source.c_str());
@@ -315,7 +329,8 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions &options)
       reentrant_callback_group_);
 }
 
-Ros2LiveKitBridge::~Ros2LiveKitBridge() {
+Ros2LiveKitBridge::~Ros2LiveKitBridge()
+{
   data_topic_states_.clear();
   image_topic_states_.clear();
   if (room_) {
@@ -328,7 +343,8 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   }
 }
 
-void Ros2LiveKitBridge::pollTopics() {
+void Ros2LiveKitBridge::pollTopics()
+{
   auto topic_names_and_types = this->get_topic_names_and_types();
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
@@ -344,15 +360,17 @@ void Ros2LiveKitBridge::pollTopics() {
       continue;
     }
 
-    const auto &topic_type = topic_types.front();
+    const auto & topic_type = topic_types.front();
     RCLCPP_INFO(this->get_logger(), "Discovered matching topic: '%s' [%s]",
                 topic_name.c_str(), topic_type.c_str());
     createSubscriber(topic_name, topic_type);
   }
 }
 
-void Ros2LiveKitBridge::createSubscriber(const std::string &topic_name,
-                                         const std::string &topic_type) {
+void Ros2LiveKitBridge::createSubscriber(
+  const std::string & topic_name,
+  const std::string & topic_type)
+{
   if (topic_type == kImageMsgType) {
     createImageSubscriber(topic_name);
     // TODO(sderosa): audio track support
@@ -390,8 +408,9 @@ void Ros2LiveKitBridge::createSubscriber(const std::string &topic_name,
   }
 }
 
-template <typename RosMsgT>
-void Ros2LiveKitBridge::createDataSubscriber(const std::string &topic_name) {
+template<typename RosMsgT>
+void Ros2LiveKitBridge::createDataSubscriber(const std::string & topic_name)
+{
   auto qos = determineQoS(topic_name);
 
   rclcpp::SubscriptionOptions sub_options;
@@ -400,64 +419,64 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string &topic_name) {
   data_topic_states_[topic_name] = DataTopicState{};
 
   auto callback = [this, topic_name](typename RosMsgT::ConstSharedPtr msg) {
-    const auto state_it = data_topic_states_.find(topic_name);
-    if (state_it == data_topic_states_.end()) {
-      return;
-    }
-    auto &state = state_it->second;
-
-    if (!state.track) {
-      if (!room_) {
+      const auto state_it = data_topic_states_.find(topic_name);
+      if (state_it == data_topic_states_.end()) {
         return;
       }
-      auto *participant = room_->localParticipant();
-      if (!participant) {
-        return;
-      }
+      auto & state = state_it->second;
 
-      const auto publish_result = participant->publishDataTrack(topic_name);
-      if (!publish_result) {
-        const auto &error = publish_result.error();
-        RCLCPP_ERROR(
+      if (!state.track) {
+        if (!room_) {
+          return;
+        }
+        auto *participant = room_->localParticipant();
+        if (!participant) {
+          return;
+        }
+
+        const auto publish_result = participant->publishDataTrack(topic_name);
+        if (!publish_result) {
+          const auto & error = publish_result.error();
+          RCLCPP_ERROR(
             this->get_logger(),
             "Failed to publish data track for '%s': code=%u message=%s",
             topic_name.c_str(), static_cast<std::uint32_t>(error.code),
             error.message.c_str());
-        return;
-      }
+          return;
+        }
 
-      state.track = publish_result.value();
-      if (!state.track) {
-        RCLCPP_ERROR(this->get_logger(),
+        state.track = publish_result.value();
+        if (!state.track) {
+          RCLCPP_ERROR(this->get_logger(),
                      "publishDataTrack('%s') returned a null track",
                      topic_name.c_str());
+          return;
+        }
+
+        RCLCPP_INFO(this->get_logger(), "Created data track '%s'",
+                  topic_name.c_str());
+      }
+
+      auto fg_msg = ros2_foxglove_adapters::toFoxglove(*msg);
+      std::string serialized;
+      if (!fg_msg.SerializeToString(&serialized)) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                           "Failed to serialize Foxglove message for '%s'",
+                           topic_name.c_str());
         return;
       }
 
-      RCLCPP_INFO(this->get_logger(), "Created data track '%s'",
-                  topic_name.c_str());
-    }
-
-    auto fg_msg = ros2_foxglove_adapters::toFoxglove(*msg);
-    std::string serialized;
-    if (!fg_msg.SerializeToString(&serialized)) {
-      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                           "Failed to serialize Foxglove message for '%s'",
-                           topic_name.c_str());
-      return;
-    }
-
-    auto push_result = state.track->tryPush(
+      auto push_result = state.track->tryPush(
         std::vector<std::uint8_t>(serialized.begin(), serialized.end()));
-    if (!push_result) {
-      const auto &error = push_result.error();
-      RCLCPP_WARN_THROTTLE(
+      if (!push_result) {
+        const auto & error = push_result.error();
+        RCLCPP_WARN_THROTTLE(
           this->get_logger(), *this->get_clock(), 5000,
           "Failed to push data frame for '%s': code=%u message=%s",
           topic_name.c_str(), static_cast<std::uint32_t>(error.code),
           error.message.c_str());
-    }
-  };
+      }
+    };
 
   auto subscription = this->create_subscription<RosMsgT>(topic_name, qos,
                                                          callback, sub_options);
@@ -470,37 +489,38 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string &topic_name) {
 
 // Explicit template instantiations for all supported Foxglove-adapted types.
 template void Ros2LiveKitBridge::createDataSubscriber<nav_msgs::msg::Odometry>(
-    const std::string &);
+  const std::string &);
 template void Ros2LiveKitBridge::createDataSubscriber<nav_msgs::msg::Path>(
-    const std::string &);
+  const std::string &);
 template void
 Ros2LiveKitBridge::createDataSubscriber<nav_msgs::msg::OccupancyGrid>(
-    const std::string &);
+  const std::string &);
 template void
 Ros2LiveKitBridge::createDataSubscriber<geometry_msgs::msg::TransformStamped>(
-    const std::string &);
+  const std::string &);
 template void
 Ros2LiveKitBridge::createDataSubscriber<geometry_msgs::msg::Pose2D>(
-    const std::string &);
+  const std::string &);
 template void
 Ros2LiveKitBridge::createDataSubscriber<geometry_msgs::msg::PolygonStamped>(
-    const std::string &);
+  const std::string &);
 template void Ros2LiveKitBridge::createDataSubscriber<
-    geometry_msgs::msg::PoseWithCovarianceStamped>(const std::string &);
+  geometry_msgs::msg::PoseWithCovarianceStamped>(const std::string &);
 template void
 Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::PointCloud2>(
-    const std::string &);
+  const std::string &);
 template void Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::Imu>(
-    const std::string &);
+  const std::string &);
 template void Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::Joy>(
-    const std::string &);
+  const std::string &);
 template void
 Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::BatteryState>(
-    const std::string &);
+  const std::string &);
 template void Ros2LiveKitBridge::createDataSubscriber<std_msgs::msg::String>(
-    const std::string &);
+  const std::string &);
 
-void Ros2LiveKitBridge::createImageSubscriber(const std::string &topic_name) {
+void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
+{
   auto qos = determineQoS(topic_name);
 
   rclcpp::SubscriptionOptions sub_options;
@@ -509,87 +529,101 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string &topic_name) {
   image_topic_states_[topic_name] = ImageTopicState{};
 
   auto callback = [this,
-                   topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg) {
-    const auto state_it = image_topic_states_.find(topic_name);
-    if (state_it == image_topic_states_.end()) {
-      return;
-    }
-    auto &state = state_it->second;
-
-    if (!state.track) {
-      if (!room_) {
+      topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+      const auto state_it = image_topic_states_.find(topic_name);
+      if (state_it == image_topic_states_.end()) {
         return;
       }
-      auto *participant = room_->localParticipant();
-      if (!participant) {
-        return;
-      }
+      auto & state = state_it->second;
 
-      try {
-        state.source = std::make_shared<livekit::VideoSource>(
+      if (!state.track) {
+        if (!room_) {
+          return;
+        }
+        auto *participant = room_->localParticipant();
+        if (!participant) {
+          return;
+        }
+
+        try {
+          state.source = std::make_shared<livekit::VideoSource>(
             static_cast<int>(msg->width), static_cast<int>(msg->height));
-        state.track = participant->publishVideoTrack(
+          state.track = participant->publishVideoTrack(
             topic_name, state.source, livekit::TrackSource::SOURCE_CAMERA);
-        RCLCPP_INFO(this->get_logger(), "Created video track '%s' (%ux%u, %s)",
+          RCLCPP_INFO(this->get_logger(), "Created video track '%s' (%ux%u, %s)",
                     topic_name.c_str(), msg->width, msg->height,
                     msg->encoding.c_str());
-      } catch (const std::exception &e) {
-        RCLCPP_ERROR(this->get_logger(),
+        } catch (const std::exception & e) {
+          RCLCPP_ERROR(this->get_logger(),
                      "Failed to create video track for '%s': %s",
                      topic_name.c_str(), e.what());
-        return;
+          return;
+        }
       }
-    }
 
-    if (!state.source) {
-      RCLCPP_ERROR(this->get_logger(),
+      if (!state.source) {
+        RCLCPP_ERROR(this->get_logger(),
                    "Video source for '%s' is unexpectedly null",
                    topic_name.c_str());
-      return;
-    }
+        return;
+      }
 
-    if (state.source->width() != static_cast<int>(msg->width) ||
-        state.source->height() != static_cast<int>(msg->height)) {
-      RCLCPP_WARN_THROTTLE(
+      if (state.source->width() != static_cast<int>(msg->width) ||
+        state.source->height() != static_cast<int>(msg->height))
+      {
+        RCLCPP_WARN_THROTTLE(
           this->get_logger(), *this->get_clock(), 5000,
           "Skipping frame for '%s' because image size changed from %dx%d to "
           "%ux%u after the track was published",
           topic_name.c_str(), state.source->width(), state.source->height(),
           msg->width, msg->height);
-      return;
-    }
+        return;
+      }
 
-    const auto &stamp = msg->header.stamp;
-    const std::int64_t timestamp_us =
+      const auto & stamp = msg->header.stamp;
+      const std::int64_t timestamp_us =
         static_cast<std::int64_t>(stamp.sec) * 1'000'000 +
         static_cast<std::int64_t>(stamp.nanosec) / 1'000;
 
-    try {
       if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
         auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
-                                        static_cast<int>(msg->height),
-                                        msg->data.data(), msg->data.size());
-        state.source->captureFrame(frame, timestamp_us);
+                                      static_cast<int>(msg->height),
+                                      msg->data.data(), msg->data.size());
+        if (!frame) {
+          RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 5000,
+            "Skipping RGBA image on topic '%s' because buffer size %zu does "
+            "not match %ux%u geometry",
+            topic_name.c_str(), msg->data.size(), msg->width, msg->height);
+          return;
+        }
+
+        state.source->captureFrame(*frame, timestamp_us);
       } else {
         if (!convertToRgba(*msg, state.rgba_buf)) {
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                               "Unsupported image encoding '%s' on topic '%s'",
-                               msg->encoding.c_str(), topic_name.c_str());
+                             "Unsupported image encoding '%s' on topic '%s'",
+                             msg->encoding.c_str(), topic_name.c_str());
           return;
         }
 
         auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
-                                        static_cast<int>(msg->height),
-                                        state.rgba_buf.data(),
-                                        state.rgba_buf.size());
-        state.source->captureFrame(frame, timestamp_us);
+                                      static_cast<int>(msg->height),
+                                      state.rgba_buf.data(),
+                                      state.rgba_buf.size());
+        if (!frame) {
+          RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 5000,
+            "Skipping converted image on topic '%s' because RGBA buffer size "
+            "%zu does not match %ux%u geometry",
+            topic_name.c_str(), state.rgba_buf.size(), msg->width,
+            msg->height);
+          return;
+        }
+
+        state.source->captureFrame(*frame, timestamp_us);
       }
-    } catch (const std::exception &e) {
-      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                           "Failed to push video frame for '%s': %s",
-                           topic_name.c_str(), e.what());
-    }
-  };
+    };
 
   auto subscription = this->create_subscription<sensor_msgs::msg::Image>(
       topic_name, qos, callback, sub_options);
@@ -601,12 +635,14 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string &topic_name) {
 
 /** Helpers **/
 
-bool Ros2LiveKitBridge::matchesTopic(const std::string &topic_name) const {
+bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
+{
   return matchesAnyPattern(topic_name, compiled_patterns_);
 }
 
 rclcpp::QoS
-Ros2LiveKitBridge::determineQoS(const std::string &topic_name) const {
+Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
+{
   // Follows the approach used by ros2 topic echo and the Foxglove bridge:
   // https://github.com/foxglove/foxglove-sdk/blob/main/ros/src/foxglove_bridge/src/ros2_foxglove_bridge.cpp
   size_t depth = 0;
@@ -615,8 +651,8 @@ Ros2LiveKitBridge::determineQoS(const std::string &topic_name) const {
 
   const auto publisher_info = this->get_publishers_info_by_topic(topic_name);
 
-  for (const auto &publisher : publisher_info) {
-    const auto &qos = publisher.qos_profile();
+  for (const auto & publisher : publisher_info) {
+    const auto & qos = publisher.qos_profile();
 
     if (qos.reliability() == rclcpp::ReliabilityPolicy::Reliable) {
       ++reliable_count;
@@ -650,7 +686,8 @@ Ros2LiveKitBridge::determineQoS(const std::string &topic_name) const {
   if (matchesAnyPattern(topic_name, best_effort_qos_topic_patterns_)) {
     qos.best_effort();
   } else if (!publisher_info.empty() &&
-             reliable_count == publisher_info.size()) {
+    reliable_count == publisher_info.size())
+  {
     qos.reliable();
   } else {
     if (reliable_count > 0) {
@@ -664,7 +701,8 @@ Ros2LiveKitBridge::determineQoS(const std::string &topic_name) const {
 
   // Durability: TRANSIENT_LOCAL only when every publisher offers it.
   if (!publisher_info.empty() &&
-      transient_local_count == publisher_info.size()) {
+    transient_local_count == publisher_info.size())
+  {
     qos.transient_local();
   } else {
     if (transient_local_count > 0) {
@@ -681,11 +719,11 @@ Ros2LiveKitBridge::determineQoS(const std::string &topic_name) const {
       this->get_logger(),
       "QoS for '%s': depth=%zu, reliability=%s, durability=%s (%zu publishers)",
       topic_name.c_str(), depth,
-      qos.reliability() == rclcpp::ReliabilityPolicy::Reliable ? "RELIABLE"
-                                                               : "BEST_EFFORT",
-      qos.durability() == rclcpp::DurabilityPolicy::TransientLocal
-          ? "TRANSIENT_LOCAL"
-          : "VOLATILE",
+      qos.reliability() == rclcpp::ReliabilityPolicy::Reliable ? "RELIABLE" :
+                                                                 "BEST_EFFORT",
+      qos.durability() == rclcpp::DurabilityPolicy::TransientLocal ?
+            "TRANSIENT_LOCAL" :
+            "VOLATILE",
       publisher_info.size());
 
   return qos;

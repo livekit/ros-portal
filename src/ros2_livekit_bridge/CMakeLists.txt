@@ -25,14 +25,14 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
-find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(ros2_foxglove_adapters REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies(REQUIRED
+  geometry_msgs
+  nav_msgs
+  rclcpp
+  ros2_foxglove_adapters
+  sensor_msgs
+  std_msgs)
 
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
@@ -171,37 +171,39 @@ endif()
 # ---------------------------------------------------------------------------
 # Main bridge node
 # ---------------------------------------------------------------------------
-add_executable(ros2_livekit_bridge_node
+ament_auto_add_executable(ros2_livekit_bridge_node
   src/ros2_livekit_bridge_node.cpp
   src/ros2_livekit_bridge.cpp
 )
-target_include_directories(ros2_livekit_bridge_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
 target_link_libraries(ros2_livekit_bridge_node
   "${LIVEKIT_CORE_TARGET}"
-  ros2_foxglove_adapters::ros2_foxglove_adapters
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 set_target_properties(ros2_livekit_bridge_node PROPERTIES
   BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
   INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
 )
-ament_target_dependencies(ros2_livekit_bridge_node
-  rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs ros2_foxglove_adapters)
-
-install(TARGETS ros2_livekit_bridge_node
-  DESTINATION lib/${PROJECT_NAME})
-
-install(DIRECTORY config/
-  DESTINATION share/${PROJECT_NAME}/config)
-
-install(DIRECTORY launch/
-  DESTINATION share/${PROJECT_NAME}/launch)
-
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
+
+  ament_auto_add_gtest(livekit_connect_node_test
+    test/integration/livekit_connect_node.cpp
+  )
+  if(TARGET livekit_connect_node_test)
+    target_compile_definitions(livekit_connect_node_test PRIVATE
+      LIVEKIT_CONNECT_NODE_TEST
+    )
+    target_link_libraries(livekit_connect_node_test
+      "${LIVEKIT_CORE_TARGET}"
+      ${LIVEKIT_EXTRA_LINK_LIBS}
+    )
+    set_target_properties(livekit_connect_node_test PROPERTIES
+      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    )
+  endif()
+
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
@@ -218,7 +220,7 @@ option(BUILD_INTEGRATION_TESTS
   "Build LiveKit library integration tests" OFF)
 
 if(BUILD_INTEGRATION_TESTS)
-  add_executable(livekit_connect_node
+  ament_auto_add_executable(livekit_connect_node
     test/integration/livekit_connect_node.cpp
   )
   target_link_libraries(livekit_connect_node
@@ -229,10 +231,6 @@ if(BUILD_INTEGRATION_TESTS)
     BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
     INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
   )
-  ament_target_dependencies(livekit_connect_node rclcpp)
-
-  install(TARGETS livekit_connect_node
-    DESTINATION lib/${PROJECT_NAME})
 endif()
 
-ament_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)

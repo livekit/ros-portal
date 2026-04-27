@@ -19,13 +19,14 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(ament_cmake REQUIRED)
-find_package(builtin_interfaces REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies(REQUIRED
+  builtin_interfaces
+  geometry_msgs
+  nav_msgs
+  sensor_msgs
+  std_msgs)
 find_package(Protobuf REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
 
 set(FOXGLOVE_SCHEMA_ROOT
   "${CMAKE_CURRENT_SOURCE_DIR}/../externals/foxglove-sdk/schemas/proto")
@@ -87,33 +88,15 @@ set_source_files_properties(${FOXGLOVE_PROTO_SRCS} ${FOXGLOVE_PROTO_HDRS}
 add_custom_target(${PROJECT_NAME}_generated_protos
   DEPENDS ${FOXGLOVE_PROTO_SRCS} ${FOXGLOVE_PROTO_HDRS})
 
-add_library(${PROJECT_NAME} SHARED
+ament_auto_add_library(${PROJECT_NAME} SHARED
   src/to_foxglove.cpp
   ${FOXGLOVE_PROTO_SRCS})
 add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_generated_protos)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-  $<INSTALL_INTERFACE:include>)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 
 target_link_libraries(${PROJECT_NAME} protobuf::libprotobuf)
-
-ament_target_dependencies(${PROJECT_NAME}
-  builtin_interfaces
-  geometry_msgs
-  nav_msgs
-  sensor_msgs
-  std_msgs)
-
-install(TARGETS ${PROJECT_NAME}
-  EXPORT export_${PROJECT_NAME}
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin)
-
-install(DIRECTORY include/
-  DESTINATION include)
 
 install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/foxglove"
   DESTINATION include)
@@ -128,8 +111,6 @@ ament_export_dependencies(
   Protobuf
   sensor_msgs
   std_msgs)
-ament_export_include_directories(include)
-ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -138,4 +119,4 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_package()
+ament_auto_package()

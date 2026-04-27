@@ -18,14 +18,15 @@
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   rclcpp::init(argc, argv);
 
   auto node = std::make_shared<ros2_livekit_bridge::Ros2LiveKitBridge>();
 
   rclcpp::ExecutorOptions exec_options;
   const size_t num_threads =
-      node->ros_threads() > 0 ? static_cast<size_t>(node->ros_threads()) : 0;
+    node->ros_threads() > 0 ? static_cast<size_t>(node->ros_threads()) : 0;
 
   std::cout << "Starting executor with " << num_threads << " threads"
             << std::endl;

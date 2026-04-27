@@ -14,44 +14,55 @@
 
 #include <google/protobuf/timestamp.pb.h>
 
-namespace ros2_foxglove_adapters {
+namespace ros2_foxglove_adapters
+{
 
-namespace {
+namespace
+{
 
-void setTimestamp(const builtin_interfaces::msg::Time &stamp,
-                  google::protobuf::Timestamp *out) {
+void setTimestamp(
+  const builtin_interfaces::msg::Time & stamp,
+  google::protobuf::Timestamp *out)
+{
   out->set_seconds(stamp.sec);
   out->set_nanos(static_cast<int32_t>(stamp.nanosec));
 }
 
-void setVector3(const geometry_msgs::msg::Vector3 &in, foxglove::Vector3 *out) {
+void setVector3(const geometry_msgs::msg::Vector3 & in, foxglove::Vector3 *out)
+{
   out->set_x(in.x);
   out->set_y(in.y);
   out->set_z(in.z);
 }
 
-void setPoint(const geometry_msgs::msg::Point &in, foxglove::Vector3 *out) {
+void setPoint(const geometry_msgs::msg::Point & in, foxglove::Vector3 *out)
+{
   out->set_x(in.x);
   out->set_y(in.y);
   out->set_z(in.z);
 }
 
-void setQuaternion(const geometry_msgs::msg::Quaternion &in,
-                   foxglove::Quaternion *out) {
+void setQuaternion(
+  const geometry_msgs::msg::Quaternion & in,
+  foxglove::Quaternion *out)
+{
   out->set_x(in.x);
   out->set_y(in.y);
   out->set_z(in.z);
   out->set_w(in.w);
 }
 
-void setPose(const geometry_msgs::msg::Pose &in, foxglove::Pose *out) {
+void setPose(const geometry_msgs::msg::Pose & in, foxglove::Pose *out)
+{
   setPoint(in.position, out->mutable_position());
   setQuaternion(in.orientation, out->mutable_orientation());
 }
 
-foxglove::Log makeLog(const builtin_interfaces::msg::Time &stamp,
-                      std::string message,
-                      foxglove::Log_Level level = foxglove::Log_Level_INFO) {
+foxglove::Log makeLog(
+  const builtin_interfaces::msg::Time & stamp,
+  std::string message,
+  foxglove::Log_Level level = foxglove::Log_Level_INFO)
+{
   foxglove::Log out;
   setTimestamp(stamp, out.mutable_timestamp());
   out.set_level(level);
@@ -60,30 +71,32 @@ foxglove::Log makeLog(const builtin_interfaces::msg::Time &stamp,
 }
 
 foxglove::PackedElementField_NumericType pointFieldTypeToFoxglove(
-    uint8_t datatype) {
+  uint8_t datatype)
+{
   switch (datatype) {
-  case sensor_msgs::msg::PointField::INT8:
-    return foxglove::PackedElementField_NumericType_INT8;
-  case sensor_msgs::msg::PointField::UINT8:
-    return foxglove::PackedElementField_NumericType_UINT8;
-  case sensor_msgs::msg::PointField::INT16:
-    return foxglove::PackedElementField_NumericType_INT16;
-  case sensor_msgs::msg::PointField::UINT16:
-    return foxglove::PackedElementField_NumericType_UINT16;
-  case sensor_msgs::msg::PointField::INT32:
-    return foxglove::PackedElementField_NumericType_INT32;
-  case sensor_msgs::msg::PointField::UINT32:
-    return foxglove::PackedElementField_NumericType_UINT32;
-  case sensor_msgs::msg::PointField::FLOAT32:
-    return foxglove::PackedElementField_NumericType_FLOAT32;
-  case sensor_msgs::msg::PointField::FLOAT64:
-    return foxglove::PackedElementField_NumericType_FLOAT64;
-  default:
-    return foxglove::PackedElementField_NumericType_UNKNOWN;
+    case sensor_msgs::msg::PointField::INT8:
+      return foxglove::PackedElementField_NumericType_INT8;
+    case sensor_msgs::msg::PointField::UINT8:
+      return foxglove::PackedElementField_NumericType_UINT8;
+    case sensor_msgs::msg::PointField::INT16:
+      return foxglove::PackedElementField_NumericType_INT16;
+    case sensor_msgs::msg::PointField::UINT16:
+      return foxglove::PackedElementField_NumericType_UINT16;
+    case sensor_msgs::msg::PointField::INT32:
+      return foxglove::PackedElementField_NumericType_INT32;
+    case sensor_msgs::msg::PointField::UINT32:
+      return foxglove::PackedElementField_NumericType_UINT32;
+    case sensor_msgs::msg::PointField::FLOAT32:
+      return foxglove::PackedElementField_NumericType_FLOAT32;
+    case sensor_msgs::msg::PointField::FLOAT64:
+      return foxglove::PackedElementField_NumericType_FLOAT64;
+    default:
+      return foxglove::PackedElementField_NumericType_UNKNOWN;
   }
 }
 
-std::string toFixedString(float value, int precision = 3) {
+std::string toFixedString(float value, int precision = 3)
+{
   if (std::isnan(value)) {
     return "nan";
   }
@@ -98,7 +111,8 @@ std::string toFixedString(float value, int precision = 3) {
 
 } // namespace
 
-foxglove::PoseInFrame toFoxglove(const nav_msgs::msg::Odometry &msg) {
+foxglove::PoseInFrame toFoxglove(const nav_msgs::msg::Odometry & msg)
+{
   foxglove::PoseInFrame out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_frame_id(msg.header.frame_id);
@@ -106,19 +120,21 @@ foxglove::PoseInFrame toFoxglove(const nav_msgs::msg::Odometry &msg) {
   return out;
 }
 
-foxglove::PosesInFrame toFoxglove(const nav_msgs::msg::Path &msg) {
+foxglove::PosesInFrame toFoxglove(const nav_msgs::msg::Path & msg)
+{
   foxglove::PosesInFrame out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_frame_id(msg.header.frame_id);
 
-  for (const auto &pose_stamped : msg.poses) {
+  for (const auto & pose_stamped : msg.poses) {
     setPose(pose_stamped.pose, out.add_poses());
   }
 
   return out;
 }
 
-foxglove::Grid toFoxglove(const nav_msgs::msg::OccupancyGrid &msg) {
+foxglove::Grid toFoxglove(const nav_msgs::msg::OccupancyGrid & msg)
+{
   foxglove::Grid out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_frame_id(msg.header.frame_id);
@@ -142,7 +158,8 @@ foxglove::Grid toFoxglove(const nav_msgs::msg::OccupancyGrid &msg) {
 }
 
 foxglove::FrameTransform
-toFoxglove(const geometry_msgs::msg::TransformStamped &msg) {
+toFoxglove(const geometry_msgs::msg::TransformStamped & msg)
+{
   foxglove::FrameTransform out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_parent_frame_id(msg.header.frame_id);
@@ -152,7 +169,8 @@ toFoxglove(const geometry_msgs::msg::TransformStamped &msg) {
   return out;
 }
 
-foxglove::Pose toFoxglove(const geometry_msgs::msg::Pose2D &msg) {
+foxglove::Pose toFoxglove(const geometry_msgs::msg::Pose2D & msg)
+{
   foxglove::Pose out;
   out.mutable_position()->set_x(msg.x);
   out.mutable_position()->set_y(msg.y);
@@ -166,11 +184,12 @@ foxglove::Pose toFoxglove(const geometry_msgs::msg::Pose2D &msg) {
   return out;
 }
 
-foxglove::Log toFoxglove(const geometry_msgs::msg::PolygonStamped &msg) {
+foxglove::Log toFoxglove(const geometry_msgs::msg::PolygonStamped & msg)
+{
   std::ostringstream ss;
   ss << "polygon frame=" << msg.header.frame_id << " points=[";
   for (size_t i = 0; i < msg.polygon.points.size(); ++i) {
-    const auto &pt = msg.polygon.points[i];
+    const auto & pt = msg.polygon.points[i];
     if (i > 0) {
       ss << ", ";
     }
@@ -182,7 +201,8 @@ foxglove::Log toFoxglove(const geometry_msgs::msg::PolygonStamped &msg) {
 }
 
 foxglove::PoseInFrame
-toFoxglove(const geometry_msgs::msg::PoseWithCovarianceStamped &msg) {
+toFoxglove(const geometry_msgs::msg::PoseWithCovarianceStamped & msg)
+{
   foxglove::PoseInFrame out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_frame_id(msg.header.frame_id);
@@ -190,14 +210,15 @@ toFoxglove(const geometry_msgs::msg::PoseWithCovarianceStamped &msg) {
   return out;
 }
 
-foxglove::PointCloud toFoxglove(const sensor_msgs::msg::PointCloud2 &msg) {
+foxglove::PointCloud toFoxglove(const sensor_msgs::msg::PointCloud2 & msg)
+{
   foxglove::PointCloud out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_frame_id(msg.header.frame_id);
   out.mutable_pose()->mutable_orientation()->set_w(1.0);
   out.set_point_stride(msg.point_step);
 
-  for (const auto &field_in : msg.fields) {
+  for (const auto & field_in : msg.fields) {
     auto *field_out = out.add_fields();
     field_out->set_name(field_in.name);
     field_out->set_offset(field_in.offset);
@@ -211,7 +232,8 @@ foxglove::PointCloud toFoxglove(const sensor_msgs::msg::PointCloud2 &msg) {
   return out;
 }
 
-foxglove::PoseInFrame toFoxglove(const sensor_msgs::msg::Imu &msg) {
+foxglove::PoseInFrame toFoxglove(const sensor_msgs::msg::Imu & msg)
+{
   foxglove::PoseInFrame out;
   setTimestamp(msg.header.stamp, out.mutable_timestamp());
   out.set_frame_id(msg.header.frame_id);
@@ -222,7 +244,8 @@ foxglove::PoseInFrame toFoxglove(const sensor_msgs::msg::Imu &msg) {
   return out;
 }
 
-foxglove::Log toFoxglove(const sensor_msgs::msg::Joy &msg) {
+foxglove::Log toFoxglove(const sensor_msgs::msg::Joy & msg)
+{
   std::ostringstream ss;
   ss << "joy axes=[";
   for (size_t i = 0; i < msg.axes.size(); ++i) {
@@ -242,7 +265,8 @@ foxglove::Log toFoxglove(const sensor_msgs::msg::Joy &msg) {
   return makeLog(msg.header.stamp, ss.str());
 }
 
-foxglove::Log toFoxglove(const sensor_msgs::msg::BatteryState &msg) {
+foxglove::Log toFoxglove(const sensor_msgs::msg::BatteryState & msg)
+{
   std::ostringstream ss;
   ss << "battery voltage=" << toFixedString(msg.voltage)
      << " current=" << toFixedString(msg.current)
@@ -254,7 +278,8 @@ foxglove::Log toFoxglove(const sensor_msgs::msg::BatteryState &msg) {
   return makeLog(msg.header.stamp, ss.str());
 }
 
-foxglove::Log toFoxglove(const std_msgs::msg::String &msg) {
+foxglove::Log toFoxglove(const std_msgs::msg::String & msg)
+{
   return makeLog(builtin_interfaces::msg::Time{}, msg.data);
 }
 

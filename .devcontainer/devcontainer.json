@@ -17,19 +17,25 @@
   ],
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
-    "QT_X11_NO_MITSHM": "1"
+    "QT_X11_NO_MITSHM": "1",
+    "COLCON_DEFAULTS_FILE": "/livekit_ws/.colcon/defaults.yaml"
   },
   "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && mkdir -p src/externals && if [ -f external.repos ]; then vcs import --skip-existing src/externals < external.repos; fi && rosdep update && rosdep install --from-paths src --ignore-src -r -y'",
   "postStartCommand": "bash -lc 'if [ -d src/externals ]; then for repo in src/externals/*; do if [ -d \"$repo/.git\" ]; then if [ -z \"$(git -C \"$repo\" status --porcelain)\" ]; then git -C \"$repo\" pull --recurse-submodules; else echo \"Skipping pull for $repo because it has local changes\"; fi; fi; done; fi'",
   "customizations": {
     "vscode": {
+      "extensions": [
+        "llvm-vs-code-extensions.vscode-clangd"
+      ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": {
             "path": "/usr/bin/zsh"
           }
-        }
+        },
+        "clangd.path": "/usr/bin/clangd",
+        "C_Cpp.intelliSenseEngine": "disabled"
       }
     }
   }

@@ -29,10 +29,6 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(ros2_foxglove_adapters REQUIRED)
 
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
@@ -181,7 +177,6 @@ target_include_directories(ros2_livekit_bridge_node PUBLIC
 )
 target_link_libraries(ros2_livekit_bridge_node
   "${LIVEKIT_CORE_TARGET}"
-  ros2_foxglove_adapters::ros2_foxglove_adapters
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 set_target_properties(ros2_livekit_bridge_node PROPERTIES
@@ -189,7 +184,7 @@ set_target_properties(ros2_livekit_bridge_node PROPERTIES
   INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
 )
 ament_target_dependencies(ros2_livekit_bridge_node
-  rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs ros2_foxglove_adapters)
+  rclcpp sensor_msgs)
 
 install(TARGETS ros2_livekit_bridge_node
   DESTINATION lib/${PROJECT_NAME})

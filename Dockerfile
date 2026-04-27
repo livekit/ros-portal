@@ -30,7 +30,8 @@ RUN apt update && apt install -y \
     zsh \
     nano \
     iputils-ping \
-    net-tools
+    net-tools \
+    clangd
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-joint-state-publisher

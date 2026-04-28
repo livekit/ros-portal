@@ -33,7 +33,8 @@
 #include <rclcpp/serialized_message.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-namespace ros2_livekit_bridge {
+namespace ros2_livekit_bridge
+{
 
 /**
  * @brief The main bridge node for the ROS2 LiveKit bridge.
@@ -50,10 +51,10 @@ public:
    * @param options The options for the node
    */
   explicit Ros2LiveKitBridge(
-      const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+    const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~Ros2LiveKitBridge() override;
 
-  int ros_threads() const { return ros_threads_; }
+  int ros_threads() const {return ros_threads_;}
 
 private:
   /**
@@ -66,8 +67,9 @@ private:
    * @param topic_name The name of the topic
    * @param topic_type The type of the topic
    */
-  void createSubscriber(const std::string &topic_name,
-                        const std::string &topic_type);
+  void createSubscriber(
+    const std::string & topic_name,
+    const std::string & topic_type);
 
   /**
    * @brief Create a typed subscriber for sensor_msgs/msg/Image topics.
@@ -77,7 +79,7 @@ private:
    * local LiveKit video track is created lazily on the first received frame and
    * pushFrame() is called directly inside the subscription callback.
    */
-  void createImageSubscriber(const std::string &topic_name);
+  void createImageSubscriber(const std::string & topic_name);
 
   /**
    * @brief Create a generic subscriber that forwards raw CDR-serialized bytes
@@ -89,20 +91,21 @@ private:
    * loader. A local LiveKit data track is created lazily on the first
    * received message.
    */
-  void createDataSubscriber(const std::string &topic_name,
-                            const std::string &topic_type);
+  void createDataSubscriber(
+    const std::string & topic_name,
+    const std::string & topic_type);
 
   /**
    * @brief Return the local participant for the active room, if connected.
    */
-  livekit::LocalParticipant *localParticipant() const;
+  livekit::LocalParticipant * localParticipant() const;
 
   /**
    * @brief Check if the topic matches the allowed topics
    * @param topic_name The name of the topic
    * @return True if the topic matches the allowed topics, false otherwise
    */
-  bool matchesTopic(const std::string &topic_name) const;
+  bool matchesTopic(const std::string & topic_name) const;
 
   /**
    * @brief Determine QoS for subscribing to a topic by aggregating all
@@ -114,7 +117,7 @@ private:
    * Durability is TRANSIENT_LOCAL only when every publisher offers
    * TRANSIENT_LOCAL.
    */
-  rclcpp::QoS determineQoS(const std::string &topic_name) const;
+  rclcpp::QoS determineQoS(const std::string & topic_name) const;
 
   //! @brief The name of the room
   std::string room_name_;
@@ -140,7 +143,7 @@ private:
   rclcpp::TimerBase::SharedPtr poll_timer_;
   //! @brief The subscriptions for the topics (generic and typed)
   std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr>
-      subscriptions_;
+  subscriptions_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
@@ -150,7 +153,8 @@ private:
   //! @brief Per-image-topic state: lazily created video source/track pair plus
   //! conversion buffer. Declared after room_ so it is destroyed first (tracks
   //! released before the room disconnects).
-  struct ImageTopicState {
+  struct ImageTopicState
+  {
     std::shared_ptr<livekit::VideoSource> source;
     std::shared_ptr<livekit::LocalVideoTrack> track;
     std::vector<std::uint8_t> rgba_buf;
@@ -160,7 +164,8 @@ private:
   //! @brief Per-data-topic state: lazily created data track. Declared after
   //! room_ so it is destroyed first (tracks released before the room
   //! disconnects).
-  struct DataTopicState {
+  struct DataTopicState
+  {
     std::shared_ptr<livekit::LocalDataTrack> track;
   };
   std::unordered_map<std::string, DataTopicState> data_topic_states_;

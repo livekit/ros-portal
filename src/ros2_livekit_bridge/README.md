@@ -37,32 +37,21 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
    regular expressions.
 4. **Creates subscriptions** for each newly matched topic, using a QoS profile
    aggregated from all active publishers (see [QoS Determination](#qos-determination)
-   below). For recognized message types (see below), a **typed subscription** is
-   created so the message fields are directly accessible; all other topics use a
-   **generic subscription** (`rclcpp::GenericSubscription`) that works with
-   serialized bytes.
+   below). `sensor_msgs/msg/Image` topics use a **typed subscription** so frames
+   can be pushed into a LiveKit video track; all other topics use a **generic
+   subscription** (`rclcpp::GenericSubscription`) and are forwarded as raw
+   CDR-serialized bytes over a LiveKit data track.
 
-### Typed (restricted) message support
+### Message-type handling
 
-| ROS2 message type          | LiveKit track type | Wire format | Behaviour |
-|----------------------------|--------------------|-------------|-----------|
-| `sensor_msgs/msg/Image`   | Video track        | RGBA pixels | A `livekit::VideoSource` and published `livekit::LocalVideoTrack` are created lazily on the first received frame (using the image dimensions). Each callback converts the image to RGBA and pushes the frame through `VideoSource::captureFrame()`. Supported encodings: `rgba8`, `rgb8`, `bgr8`, `bgra8`, `mono8`. |
-| `nav_msgs/msg/Odometry`   | Data track | Foxglove protobuf (`PoseInFrame`) | Converted via `ros2_foxglove_adapters`. Twist + covariance are dropped. |
-| `nav_msgs/msg/Path`       | Data track | Foxglove protobuf (`PosesInFrame`) | Per-pose timestamps are dropped; only the path header timestamp is used. |
-| `nav_msgs/msg/OccupancyGrid` | Data track | Foxglove protobuf (`Grid`) | Occupancy data stored as INT8 packed field. |
-| `geometry_msgs/msg/TransformStamped` | Data track | Foxglove protobuf (`FrameTransform`) | Direct field mapping. |
-| `geometry_msgs/msg/Pose2D` | Data track | Foxglove protobuf (`Pose`) | 2D pose promoted to 3D (z=0, quaternion encodes rotation about z). |
-| `geometry_msgs/msg/PolygonStamped` | Data track | Foxglove protobuf (`Log`) | Vertices serialized as structured text. |
-| `geometry_msgs/msg/PoseWithCovarianceStamped` | Data track | Foxglove protobuf (`PoseInFrame`) | Covariance matrix is dropped. |
-| `sensor_msgs/msg/PointCloud2` | Data track | Foxglove protobuf (`PointCloud`) | Binary point data copied verbatim with mapped field descriptors. |
-| `sensor_msgs/msg/Imu`     | Data track | Foxglove protobuf (`PoseInFrame`) | Only orientation preserved; angular velocity and linear acceleration are dropped. |
-| `sensor_msgs/msg/Joy`     | Data track | Foxglove protobuf (`Log`) | Axes and buttons serialized as structured text. |
-| `sensor_msgs/msg/BatteryState` | Data track | Foxglove protobuf (`Log`) | Key battery metrics serialized as structured text. |
-| `std_msgs/msg/String`     | Data track | Foxglove protobuf (`Log`) | String placed in Log.message field. |
+| ROS2 message type        | LiveKit track type | Wire format | Behaviour |
+|--------------------------|--------------------|-------------|-----------|
+| `sensor_msgs/msg/Image`  | Video track        | RGBA pixels | A `livekit::VideoSource` and published `livekit::LocalVideoTrack` are created lazily on the first received frame (using the image dimensions). Each callback converts the image to RGBA and pushes the frame through `VideoSource::captureFrame()`. Supported encodings: `rgba8`, `rgb8`, `bgr8`, `bgra8`, `mono8`. |
+| *(any other type)*       | Data track         | ROS 2 CDR   | A `rclcpp::GenericSubscription` is created using the type string discovered from the ROS graph. Incoming `rclcpp::SerializedMessage` buffers are pushed verbatim onto a `livekit::LocalDataTrack` (one track per topic, created lazily on the first received message). |
 
-Data track consumers only need the [Foxglove protobuf schema definitions](https://github.com/foxglove/schemas)
-to decode messages -- no ROS2 dependency is required. Unsupported message types
-are skipped with a warning logged at discovery time.
+The data-track payload is the unmodified CDR byte stream produced by the
+publisher. Consumers need the matching `.msg` definition (or any IDL/CDR-aware
+deserializer) to decode it; no Foxglove or protobuf dependency is required.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -80,10 +69,8 @@ are skipped with a warning logged at discovery time.
 │  │  2. regex match against patterns                                │  │
 │  │  3. skip already-subscribed topics                              │  │
 │  │  4. get_publishers_info_by_topic() for QoS                      │  │
-│  │  5a. sensor_msgs/msg/Image  → typed sub → pushFrame(RGBA)      │  │
-│  │  5b. supported data types   → typed sub → toFoxglove() →       │  │
-│  │      SerializeToString() → pushFrame(protobuf bytes)            │  │
-│  │  5c. unsupported types      → warn + skip                      │  │
+│  │  5a. sensor_msgs/msg/Image  → typed sub → pushFrame(RGBA)       │  │
+│  │  5b. any other type         → generic sub → tryPush(CDR bytes)  │  │
 │  └──────────────────────────────────────────────────┬──────────────┘  │
 │                                                     │                 │
 │  ┌──────────────────────────────────────────────────▼──────────────┐  │
@@ -94,7 +81,7 @@ are skipped with a warning logged at discovery time.
 │  │  │ (per image topic)          │                                 │  │
 │  │  └────────────────────────────┘                                 │  │
 │  │  ┌────────────────────────────┐                                 │  │
-│  │  │ LocalDataTrack             │── tryPush(protobuf) ───> Room   │  │
+│  │  │ LocalDataTrack             │── tryPush(CDR bytes) ──> Room   │  │
 │  │  │ (per data topic)           │                                 │  │
 │  │  └────────────────────────────┘                                 │  │
 │  │  TODO: AudioSource + LocalAudioTrack                            │  │
@@ -227,14 +214,14 @@ ros2 launch ros2_livekit_bridge ros2_livekit_bridge_launch.xml
 
 ### Data tracks
 
-- **Foxglove protobuf only.** Data tracks serialize using Foxglove protobuf
-  schemas via `ros2_foxglove_adapters`. Only the ~12 message types listed in
-  [Typed message support](#typed-restricted-message-support) are forwarded;
-  all other types are silently skipped. To add new types, implement a
-  `toFoxglove()` overload in the `ros2_foxglove_adapters` package.
-- **Schema information not sent out-of-band.** The consumer must know which
-  Foxglove protobuf type to deserialize for each topic. A future improvement
-  could include a schema negotiation or metadata channel.
+- **Raw CDR forwarding only.** Data tracks publish the unmodified CDR byte
+  stream from the publisher. The consumer is responsible for knowing the ROS
+  message type associated with each topic (e.g. via an out-of-band registry)
+  and decoding the bytes with a matching IDL/CDR deserializer.
+- **Schema information not sent out-of-band.** The bridge does not currently
+  publish topic-name → message-type metadata to the room. A future improvement
+  could include a schema negotiation or metadata channel so consumers can
+  auto-detect the type of each data track.
 
 ### General
 

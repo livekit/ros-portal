@@ -39,6 +39,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -99,6 +100,8 @@ jobs:
           tags: |
             ${{ steps.image.outputs.local_ref }}
             ${{ steps.image.outputs.arch_ref }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
       - name: Build and test ROS 2 packages in container
         run: |
@@ -185,6 +188,7 @@ jobs:
             WS_ROS=${{ env.WS_ROS }}
           tags: |
             ${{ steps.image.outputs.arch_ref }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
 
   publish-image:
     name: Publish Docker image

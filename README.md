@@ -13,6 +13,16 @@ The devcontainer builds from the repo-root `Dockerfile` and overrides `WS_ROS=li
 
 External repos are tracked in `external.repos` using `vcstool`.
 
+## CI Docker image cache
+
+CI tags Docker build images from an md5 hash of the repository files that
+directly affect the image, currently `Dockerfile` and `setup-shell-env.sh`.
+If an image with that tag already exists, CI reuses it instead of rebuilding.
+
+This cache key does not include upstream changes to the `ros:jazzy` base image
+or apt repositories. If those upstream inputs need to be refreshed, change one
+of the image input files or rebuild the cached image explicitly.
+
 ## Working in the container
 
 Open the folder in the devcontainer, then build from `/livekit_ws` with:

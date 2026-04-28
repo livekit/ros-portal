@@ -1,0 +1,71 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Docker Image Metadata
+description: Computes the Docker image tags used by CI jobs.
+
+inputs:
+  image-name:
+    description: Base image name.
+    required: true
+  arch:
+    description: Optional architecture suffix for architecture-specific tags.
+    required: false
+    default: ""
+
+outputs:
+  image_hash:
+    description: Hash of files that affect the Docker image.
+    value: ${{ steps.metadata.outputs.image_hash }}
+  image_ref:
+    description: Multi-architecture image reference.
+    value: ${{ steps.metadata.outputs.image_ref }}
+  arch_ref:
+    description: Architecture-specific image reference.
+    value: ${{ steps.metadata.outputs.arch_ref }}
+  local_ref:
+    description: Local Docker image reference.
+    value: ${{ steps.metadata.outputs.local_ref }}
+  x64_ref:
+    description: x64 image reference.
+    value: ${{ steps.metadata.outputs.x64_ref }}
+  aarch64_ref:
+    description: aarch64 image reference.
+    value: ${{ steps.metadata.outputs.aarch64_ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute metadata
+      id: metadata
+      shell: bash
+      env:
+        ARCH: ${{ inputs.arch }}
+        IMAGE_NAME: ${{ inputs.image-name }}
+      run: |
+        image_hash="$(md5sum Dockerfile setup-shell-env.sh | md5sum | awk '{print $1}')"
+        image_name="$(printf '%s' "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
+        image_ref="${image_name}:${image_hash}"
+        local_ref="ros2-livekit-bridge:${image_hash}"
+
+        {
+          echo "image_hash=${image_hash}"
+          echo "image_ref=${image_ref}"
+          echo "local_ref=${local_ref}"
+          echo "x64_ref=${image_name}:${image_hash}-x64"
+          echo "aarch64_ref=${image_name}:${image_hash}-aarch64"
+          if [ -n "${ARCH}" ]; then
+            echo "arch_ref=${image_name}:${image_hash}-${ARCH}"
+          fi
+        } >> "${GITHUB_OUTPUT}"

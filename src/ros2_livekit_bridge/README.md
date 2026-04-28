@@ -70,7 +70,7 @@ deserializer) to decode it; no Foxglove or protobuf dependency is required.
 │  │  3. skip already-subscribed topics                              │  │
 │  │  4. get_publishers_info_by_topic() for QoS                      │  │
 │  │  5a. sensor_msgs/msg/Image  → typed sub → pushFrame(RGBA)       │  │
-│  │  5b. any other type         → generic sub → tryPush(CDR bytes)  │  │
+│  │  5b. any other type         → generic sub → pushFrame(CDR)      │  │
 │  └──────────────────────────────────────────────────┬──────────────┘  │
 │                                                     │                 │
 │  ┌──────────────────────────────────────────────────▼──────────────┐  │
@@ -103,6 +103,9 @@ Parameters are loaded from `config/ros2_livekit_bridge_params.yaml`:
 | `max_qos_depth`            | int              | `25`    | Upper bound for subscriber history depth. |
 | `best_effort_qos_topics`   | list of strings  | `[]`    | Regex patterns for topics forced to BEST_EFFORT reliability. |
 
+LiveKit credentials are intentionally not loaded from the config file. Set
+`LIVEKIT_URL` and `LIVEKIT_TOKEN` in the node environment.
+
 ### Topic pattern examples
 
 Patterns are full ECMAScript regular expressions tested with `std::regex_match`
@@ -133,8 +136,8 @@ and the [Foxglove bridge](https://github.com/foxglove/foxglove-sdk/tree/main/ros
   `best_effort_qos_topics` are unconditionally forced to `BEST_EFFORT`.
 - **Durability**: `TRANSIENT_LOCAL` only when **all** publishers advertise
   `TRANSIENT_LOCAL`; otherwise `VOLATILE`.
-- **Incompatible QoS callback**: Each subscription registers an event callback
-  that logs an error if the chosen QoS is incompatible with a publisher.
+
+The bridge does not currently register subscription QoS event callbacks.
 
 ## Building
 
@@ -161,6 +164,8 @@ colcon build --packages-up-to ros2_livekit_bridge --cmake-args -DLIVEKIT_SDK_DIR
 
 ```bash
 source ros/install/setup.bash
+export LIVEKIT_URL=<url>
+export LIVEKIT_TOKEN=<token>
 
 # With parameters from the default config file:
 ros2 run ros2_livekit_bridge ros2_livekit_bridge_node \

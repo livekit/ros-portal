@@ -31,25 +31,28 @@ from sensor_msgs.msg import Image
 
 class UsbCameraPublisher(Node):
     def __init__(self):
-        super().__init__("usb_camera_publisher")
+        super().__init__('usb_camera_publisher')
 
-        self.declare_parameter("camera_index", 0)
-        self.declare_parameter("fps", 30)
+        self.declare_parameter('camera_index', 0)
+        self.declare_parameter('fps', 30)
 
-        camera_index = self.get_parameter("camera_index").value
-        fps = self.get_parameter("fps").value
+        camera_index = self.get_parameter('camera_index').value
+        fps = self.get_parameter('fps').value
+        if fps <= 0:
+            self.get_logger().fatal(f'fps must be greater than 0, got {fps}')
+            raise ValueError(f'fps must be greater than 0, got {fps}')
 
-        self.publisher_ = self.create_publisher(Image, "/test/image1", 10)
+        self.publisher_ = self.create_publisher(Image, '/test/image1', 10)
 
         self.cap_ = cv2.VideoCapture(camera_index)
         if not self.cap_.isOpened():
-            self.get_logger().fatal(f"Cannot open camera {camera_index}")
-            raise RuntimeError(f"Cannot open camera {camera_index}")
+            self.get_logger().fatal(f'Cannot open camera {camera_index}')
+            raise RuntimeError(f'Cannot open camera {camera_index}')
 
         width = int(self.cap_.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(self.cap_.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.get_logger().info(
-            f"Opened camera {camera_index} ({width}x{height}), publishing at {fps} fps"
+            f'Opened camera {camera_index} ({width}x{height}), publishing at {fps} fps'
         )
 
         period = 1.0 / fps
@@ -59,15 +62,15 @@ class UsbCameraPublisher(Node):
     def timer_callback(self):
         ret, frame = self.cap_.read()
         if not ret:
-            self.get_logger().warn("Failed to read frame from camera")
+            self.get_logger().warn('Failed to read frame from camera')
             return
 
         msg = Image()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "camera"
+        msg.header.frame_id = 'camera'
         msg.height = frame.shape[0]
         msg.width = frame.shape[1]
-        msg.encoding = "bgr8"
+        msg.encoding = 'bgr8'
         msg.is_bigendian = 0
         msg.step = frame.shape[1] * 3
         msg.data = frame.tobytes()
@@ -76,12 +79,12 @@ class UsbCameraPublisher(Node):
         self.frame_count_ += 1
 
         if self.frame_count_ % 100 == 0:
-            self.get_logger().info(f"Published {self.frame_count_} frames")
+            self.get_logger().info(f'Published {self.frame_count_} frames')
 
     def destroy_node(self):
         if self.cap_ is not None:
             self.cap_.release()
-            self.get_logger().info("Camera released")
+            self.get_logger().info('Camera released')
         super().destroy_node()
 
 
@@ -97,5 +100,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

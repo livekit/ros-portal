@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <cstdlib>
+#include <iostream>
+
 #include <rclcpp/rclcpp.hpp>
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"

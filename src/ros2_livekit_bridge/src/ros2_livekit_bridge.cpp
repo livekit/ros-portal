@@ -15,6 +15,8 @@
  */
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
+#include "ros2_livekit_bridge/utils/image_conversion.hpp"
+#include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -30,11 +32,13 @@ namespace ros2_livekit_bridge
 namespace
 {
 
+namespace bridge_utils = ::livekit::ros_bridge::utils;
+
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
 
-livekit::VideoFrame makeRgbaVideoFrame(
+std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
   int width, int height,
   const std::uint8_t *rgba,
   std::size_t rgba_size)
@@ -42,7 +46,7 @@ livekit::VideoFrame makeRgbaVideoFrame(
   const std::size_t expected_size =
     static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
   if (rgba_size != expected_size) {
-    throw std::runtime_error("RGBA buffer size does not match image geometry");
+    return std::nullopt;
   }
 
   auto frame =
@@ -52,118 +56,15 @@ livekit::VideoFrame makeRgbaVideoFrame(
 }
 
 /**
- * @brief Convert a sensor_msgs::msg::Image to packed RGBA8.
- * @param img The input image
- * @param out The output buffer
- * @return True if the conversion was successful, false otherwise
- * @note this should be gutted. super inneficient.
- */
-bool convertToRgba(
-  const sensor_msgs::msg::Image & img,
-  std::vector<std::uint8_t> & out)
-{
-  const std::size_t num_pixels =
-    static_cast<std::size_t>(img.width) * img.height;
-  out.resize(num_pixels * 4);
-
-  const auto & enc = img.encoding;
-
-  if (enc == "rgba8") {
-    if (img.step == img.width * 4) {
-      std::memcpy(out.data(), img.data.data(), num_pixels * 4);
-    } else {
-      for (std::uint32_t y = 0; y < img.height; ++y) {
-        std::memcpy(out.data() + y * img.width * 4,
-                    img.data.data() + y * img.step, img.width * 4);
-      }
-    }
-    return true;
-  }
-
-  if (enc == "rgb8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        const auto *px = row + x * 3;
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = px[0];
-        dst[1] = px[1];
-        dst[2] = px[2];
-        dst[3] = 255;
-      }
-    }
-    return true;
-  }
-
-  if (enc == "bgr8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        const auto *px = row + x * 3;
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = px[2];
-        dst[1] = px[1];
-        dst[2] = px[0];
-        dst[3] = 255;
-      }
-    }
-    return true;
-  }
-
-  if (enc == "bgra8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        const auto *px = row + x * 4;
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = px[2];
-        dst[1] = px[1];
-        dst[2] = px[0];
-        dst[3] = px[3];
-      }
-    }
-    return true;
-  }
-
-  if (enc == "mono8") {
-    for (std::uint32_t y = 0; y < img.height; ++y) {
-      const auto *row = img.data.data() + y * img.step;
-      for (std::uint32_t x = 0; x < img.width; ++x) {
-        auto *dst = out.data() + (y * img.width + x) * 4;
-        dst[0] = row[x];
-        dst[1] = row[x];
-        dst[2] = row[x];
-        dst[3] = 255;
-      }
-    }
-    return true;
-  }
-
-  return false;
-}
-
-/// Try a ROS parameter first; if empty, fall back to an environment variable.
-/// Returns the resolved value and sets @p source to a human-readable label.
-/**
- * @brief Try a ROS parameter first; if empty, fall back to an environment
- * variable.
- * @param node The node to resolve the credential from
- * @param param_name The name of the parameter
+ * @brief Resolve a credential from an environment variable.
  * @param env_var_name The name of the environment variable
- * @param source The source of the credential. This is set to a human-readable
- * label of the source.
+ * @param source The source of the credential. This is set to a
+ * human-readable label of the source.
  * @return The resolved credential
  */
-std::string resolveCredential(
-  rclcpp::Node *node, const std::string & param_name,
-  const std::string & env_var_name,
-  std::string & source)
+std::string resolveEnvironmentCredential(
+  const std::string & env_var_name, std::string & source)
 {
-  const std::string param_val = node->get_parameter(param_name).as_string();
-  if (!param_val.empty()) {
-    source = "ROS parameter '" + param_name + "'";
-    return param_val;
-  }
   const char *env_val = std::getenv(env_var_name.c_str());
   if (env_val && env_val[0] != '\0') {
     source = "environment variable " + env_var_name;
@@ -173,42 +74,14 @@ std::string resolveCredential(
   return {};
 }
 
-/**
- * @brief Compile a vector of strings into a vector of regex patterns.
- * @param strings The vector of strings to compile
- * @param out The output vector of regex patterns
- * @param logger The logger to use
- */
-void compilePatterns(
-  const std::vector<std::string> & strings,
-  std::vector<std::regex> & out, rclcpp::Logger logger)
+void logPatternCompileErrors(
+  const std::vector<bridge_utils::PatternCompileError> & errors,
+  rclcpp::Logger logger)
 {
-  for (const auto & pattern : strings) {
-    try {
-      out.emplace_back(pattern, std::regex::ECMAScript);
-    } catch (const std::regex_error & e) {
-      RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s", pattern.c_str(),
-                   e.what());
-    }
+  for (const auto & error : errors) {
+    RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s",
+                 error.pattern.c_str(), error.message.c_str());
   }
-}
-
-/**
- * @brief Check if a string matches any of the regex patterns.
- * @param str The string to check
- * @param patterns The vector of regex patterns to check against
- * @return True if the string matches any of the patterns, false otherwise
- */
-bool matchesAnyPattern(
-  const std::string & str,
-  const std::vector<std::regex> & patterns)
-{
-  for (const auto & pattern : patterns) {
-    if (std::regex_match(str, pattern)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 } // namespace
@@ -217,8 +90,6 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ros2_livekit_bridge", options)
 {
   this->declare_parameter<std::string>("room_name", "");
-  this->declare_parameter<std::string>("livekit_url", "");
-  this->declare_parameter<std::string>("livekit_token", "");
   this->declare_parameter<int>("topic_polling_period_ms", 500);
   this->declare_parameter<int>("ros_threads", 0);
   const std::vector<std::string> kEmptyStringVec{};
@@ -243,12 +114,17 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
   max_qos_depth_ =
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   ros_topic_patterns_ = this->get_parameter("ros_topics").as_string_array();
-  compilePatterns(ros_topic_patterns_, compiled_patterns_, this->get_logger());
+  std::vector<bridge_utils::PatternCompileError> pattern_errors;
+  compiled_patterns_ =
+    bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);
+  logPatternCompileErrors(pattern_errors, this->get_logger());
 
   auto best_effort_topics =
     this->get_parameter("best_effort_qos_topics").as_string_array();
-  compilePatterns(best_effort_topics, best_effort_qos_topic_patterns_,
-                  this->get_logger());
+  pattern_errors.clear();
+  best_effort_qos_topic_patterns_ =
+    bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
+  logPatternCompileErrors(pattern_errors, this->get_logger());
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu topic patterns, "
@@ -258,12 +134,12 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
-  // ----- Resolve LiveKit credentials (param -> env var fallback) -----
+  // ----- Resolve LiveKit credentials from environment variables only -----
   std::string url_source, token_source;
   const std::string livekit_url =
-    resolveCredential(this, "livekit_url", "LIVEKIT_URL", url_source);
+    resolveEnvironmentCredential("LIVEKIT_URL", url_source);
   const std::string livekit_token =
-    resolveCredential(this, "livekit_token", "LIVEKIT_TOKEN", token_source);
+    resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s",
               url_source.c_str());
@@ -281,9 +157,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
         "LiveKit credentials not fully provided — bridge will not connect.\n"
         "  livekit_url   : %s\n"
         "  livekit_token : %s\n"
-        "Set them via ROS parameters (-p livekit_url:=... -p "
-        "livekit_token:=...)\n"
-        "or environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
+        "Set them via environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
         livekit_url.empty() ? "(missing)" : url_source.c_str(),
         livekit_token.empty() ? "(missing)" : token_source.c_str());
   } else {
@@ -387,7 +261,10 @@ void Ros2LiveKitBridge::createDataSubscriber(
       auto & state = state_it->second;
 
       if (!state.track) {
-        auto *participant = localParticipant();
+        if (!room_) {
+          return;
+        }
+        auto *participant = room_->localParticipant();
         if (!participant) {
           return;
         }
@@ -464,7 +341,10 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
       auto & state = state_it->second;
 
       if (!state.track) {
-        auto *participant = localParticipant();
+        if (!room_) {
+          return;
+        }
+        auto *participant = room_->localParticipant();
         if (!participant) {
           return;
         }
@@ -509,30 +389,43 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
         static_cast<std::int64_t>(stamp.sec) * 1'000'000 +
         static_cast<std::int64_t>(stamp.nanosec) / 1'000;
 
-      try {
-        if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
-          auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
-                                        static_cast<int>(msg->height),
-                                        msg->data.data(), msg->data.size());
-          state.source->captureFrame(frame, timestamp_us);
-        } else {
-          if (!convertToRgba(*msg, state.rgba_buf)) {
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                               "Unsupported image encoding '%s' on topic '%s'",
-                               msg->encoding.c_str(), topic_name.c_str());
-            return;
-          }
-
-          auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
-                                        static_cast<int>(msg->height),
-                                        state.rgba_buf.data(),
-                                        state.rgba_buf.size());
-          state.source->captureFrame(frame, timestamp_us);
+      if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
+        auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
+                                      static_cast<int>(msg->height),
+                                      msg->data.data(), msg->data.size());
+        if (!frame) {
+          RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 5000,
+            "Skipping RGBA image on topic '%s' because buffer size %zu does "
+            "not match %ux%u geometry",
+            topic_name.c_str(), msg->data.size(), msg->width, msg->height);
+          return;
         }
-      } catch (const std::exception & e) {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                           "Failed to push video frame for '%s': %s",
-                           topic_name.c_str(), e.what());
+
+        state.source->captureFrame(*frame, timestamp_us);
+      } else {
+        if (!bridge_utils::convertToRgba(*msg, state.rgba_buf)) {
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                             "Unsupported image encoding '%s' on topic '%s'",
+                             msg->encoding.c_str(), topic_name.c_str());
+          return;
+        }
+
+        auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
+                                      static_cast<int>(msg->height),
+                                      state.rgba_buf.data(),
+                                      state.rgba_buf.size());
+        if (!frame) {
+          RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 5000,
+            "Skipping converted image on topic '%s' because RGBA buffer size "
+            "%zu does not match %ux%u geometry",
+            topic_name.c_str(), state.rgba_buf.size(), msg->width,
+            msg->height);
+          return;
+        }
+
+        state.source->captureFrame(*frame, timestamp_us);
       }
     };
 
@@ -548,12 +441,7 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 
 bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
 {
-  return matchesAnyPattern(topic_name, compiled_patterns_);
-}
-
-livekit::LocalParticipant * Ros2LiveKitBridge::localParticipant() const
-{
-  return room_ ? room_->localParticipant() : nullptr;
+  return bridge_utils::matchesAnyPattern(topic_name, compiled_patterns_);
 }
 
 rclcpp::QoS
@@ -599,7 +487,9 @@ Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
   // Reliability: force best-effort if topic matches the override list,
   // otherwise use RELIABLE only when every publisher offers it (mixed policies
   // fall back to best-effort so we can connect to all publishers).
-  if (matchesAnyPattern(topic_name, best_effort_qos_topic_patterns_)) {
+  if (bridge_utils::matchesAnyPattern(
+      topic_name, best_effort_qos_topic_patterns_))
+  {
     qos.best_effort();
   } else if (!publisher_info.empty() &&
     reliable_count == publisher_info.size())

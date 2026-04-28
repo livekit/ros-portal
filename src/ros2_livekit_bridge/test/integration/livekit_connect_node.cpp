@@ -44,6 +44,7 @@
 #include <cstring>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -200,20 +201,28 @@ static void drawString(
 namespace
 {
 
-livekit::VideoFrame makeRgbaVideoFrame(
+std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
   int width, int height,
   const std::vector<std::uint8_t> & rgba)
 {
+  if (width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+
   const std::size_t expected_size =
     static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
   if (rgba.size() != expected_size) {
-    throw std::runtime_error("RGBA buffer size does not match frame geometry");
+    return std::nullopt;
   }
 
-  auto frame =
-    livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
-  std::memcpy(frame.data(), rgba.data(), rgba.size());
-  return frame;
+  try {
+    auto frame =
+      livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
+    std::memcpy(frame.data(), rgba.data(), rgba.size());
+    return frame;
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 } // namespace
@@ -424,7 +433,12 @@ private:
       }
 
       auto frame = makeRgbaVideoFrame(kWidth, kHeight, video_buf_);
-      video_source_->captureFrame(frame, video_ts_us_);
+      if (!frame) {
+        RCLCPP_WARN(get_logger(), "Skipping invalid RGBA video frame");
+        return;
+      }
+
+      video_source_->captureFrame(*frame, video_ts_us_);
       video_ts_us_ += 33333; // ~30 fps in microseconds
       ++video_frame_count_;
     } catch (const std::exception & e) {
@@ -456,6 +470,37 @@ private:
 
 } // namespace ros2_livekit_bridge
 
+#ifdef LIVEKIT_CONNECT_NODE_TEST
+
+#include <gtest/gtest.h>
+
+namespace
+{
+
+TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer)
+{
+  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40,
+    50, 60, 70, 80};
+
+  auto frame = makeRgbaVideoFrame(2, 1, rgba);
+
+  ASSERT_TRUE(frame.has_value());
+  EXPECT_EQ(std::memcmp(frame->data(), rgba.data(), rgba.size()), 0);
+}
+
+TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize)
+{
+  EXPECT_NO_THROW({
+      const auto frame =
+      makeRgbaVideoFrame(2, 1, std::vector<std::uint8_t>{10, 20, 30, 40});
+      EXPECT_FALSE(frame.has_value());
+  });
+}
+
+} // namespace
+
+#else
+
 int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);
@@ -470,3 +515,5 @@ int main(int argc, char *argv[])
   rclcpp::shutdown();
   return 0;
 }
+
+#endif

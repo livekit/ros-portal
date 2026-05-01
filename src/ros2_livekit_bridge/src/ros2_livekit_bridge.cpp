@@ -21,23 +21,10 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
-#include <optional>
-#include <geometry_msgs/msg/polygon_stamped.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
-#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
-#include <nav_msgs/msg/occupancy_grid.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <nav_msgs/msg/path.hpp>
-#include <sensor_msgs/msg/battery_state.hpp>
-#include <sensor_msgs/msg/imu.hpp>
-#include <sensor_msgs/msg/joy.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-#include <std_msgs/msg/string.hpp>
+#include <stdexcept>
 
 #include <livekit/livekit.h>
 #include <livekit/video_frame.h>
-#include <ros2_foxglove_adapters/to_foxglove.hpp>
 
 namespace ros2_livekit_bridge
 {
@@ -235,7 +222,7 @@ void Ros2LiveKitBridge::pollTopics()
 
     const auto & topic_type = topic_types.front();
     RCLCPP_INFO(this->get_logger(), "Discovered matching topic: '%s' [%s]",
-                topic_name.c_str(), topic_type.c_str());
+                  topic_name.c_str(), topic_type.c_str());
     createSubscriber(topic_name, topic_type);
   }
 }
@@ -249,40 +236,14 @@ void Ros2LiveKitBridge::createSubscriber(
     // TODO(sderosa): audio track support
     // } else if (topic_type == kAudioMsgType) {
     //   createAudioSubscriber(topic_name);
-  } else if (topic_type == "nav_msgs/msg/Odometry") {
-    createDataSubscriber<nav_msgs::msg::Odometry>(topic_name);
-  } else if (topic_type == "nav_msgs/msg/Path") {
-    createDataSubscriber<nav_msgs::msg::Path>(topic_name);
-  } else if (topic_type == "nav_msgs/msg/OccupancyGrid") {
-    createDataSubscriber<nav_msgs::msg::OccupancyGrid>(topic_name);
-  } else if (topic_type == "geometry_msgs/msg/TransformStamped") {
-    createDataSubscriber<geometry_msgs::msg::TransformStamped>(topic_name);
-  } else if (topic_type == "geometry_msgs/msg/Pose2D") {
-    createDataSubscriber<geometry_msgs::msg::Pose2D>(topic_name);
-  } else if (topic_type == "geometry_msgs/msg/PolygonStamped") {
-    createDataSubscriber<geometry_msgs::msg::PolygonStamped>(topic_name);
-  } else if (topic_type == "geometry_msgs/msg/PoseWithCovarianceStamped") {
-    createDataSubscriber<geometry_msgs::msg::PoseWithCovarianceStamped>(
-        topic_name);
-  } else if (topic_type == "sensor_msgs/msg/PointCloud2") {
-    createDataSubscriber<sensor_msgs::msg::PointCloud2>(topic_name);
-  } else if (topic_type == "sensor_msgs/msg/Imu") {
-    createDataSubscriber<sensor_msgs::msg::Imu>(topic_name);
-  } else if (topic_type == "sensor_msgs/msg/Joy") {
-    createDataSubscriber<sensor_msgs::msg::Joy>(topic_name);
-  } else if (topic_type == "sensor_msgs/msg/BatteryState") {
-    createDataSubscriber<sensor_msgs::msg::BatteryState>(topic_name);
-  } else if (topic_type == "std_msgs/msg/String") {
-    createDataSubscriber<std_msgs::msg::String>(topic_name);
   } else {
-    RCLCPP_WARN(this->get_logger(),
-                "Unsupported message type '%s' on topic '%s' -- skipping",
-                topic_type.c_str(), topic_name.c_str());
+    createDataSubscriber(topic_name, topic_type);
   }
 }
 
-template<typename RosMsgT>
-void Ros2LiveKitBridge::createDataSubscriber(const std::string & topic_name)
+void Ros2LiveKitBridge::createDataSubscriber(
+  const std::string & topic_name,
+  const std::string & topic_type)
 {
   auto qos = determineQoS(topic_name);
 
@@ -291,7 +252,8 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string & topic_name)
 
   data_topic_states_[topic_name] = DataTopicState{};
 
-  auto callback = [this, topic_name](typename RosMsgT::ConstSharedPtr msg) {
+  auto callback = [this,
+      topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
       const auto state_it = data_topic_states_.find(topic_name);
       if (state_it == data_topic_states_.end()) {
         return;
@@ -307,6 +269,8 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string & topic_name)
           return;
         }
 
+        // TODO: When C++ SDK supports it, input encoding type (CDR) and schema of message (JSON) to this call
+        // Data track options (struct?)
         const auto publish_result = participant->publishDataTrack(topic_name);
         if (!publish_result) {
           const auto & error = publish_result.error();
@@ -330,17 +294,9 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string & topic_name)
                   topic_name.c_str());
       }
 
-      auto fg_msg = ros2_foxglove_adapters::toFoxglove(*msg);
-      std::string serialized;
-      if (!fg_msg.SerializeToString(&serialized)) {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                           "Failed to serialize Foxglove message for '%s'",
-                           topic_name.c_str());
-        return;
-      }
-
-      auto push_result = state.track->tryPush(
-        std::vector<std::uint8_t>(serialized.begin(), serialized.end()));
+      auto & rcl_msg = msg->get_rcl_serialized_message();
+      auto push_result = state.track->tryPush(std::vector<std::uint8_t>(
+        rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length));
       if (!push_result) {
         const auto & error = push_result.error();
         RCLCPP_WARN_THROTTLE(
@@ -351,46 +307,30 @@ void Ros2LiveKitBridge::createDataSubscriber(const std::string & topic_name)
       }
     };
 
-  auto subscription = this->create_subscription<RosMsgT>(topic_name, qos,
-                                                         callback, sub_options);
+  rclcpp::GenericSubscription::SharedPtr subscription;
+  try {
+    subscription = this->create_generic_subscription(
+        topic_name, topic_type, qos, callback, sub_options);
+  } catch (const std::exception & e) {
+    data_topic_states_.erase(topic_name);
+    RCLCPP_ERROR(this->get_logger(),
+                 "Failed to create generic subscription for '%s' [%s]: %s",
+                 topic_name.c_str(), topic_type.c_str(), e.what());
+    return;
+  } catch (...) {
+    data_topic_states_.erase(topic_name);
+    RCLCPP_ERROR(
+      this->get_logger(),
+      "Unknown exception creating generic subscription for '%s' [%s]",
+      topic_name.c_str(), topic_type.c_str());
+    return;
+  }
+
   subscriptions_[topic_name] = subscription;
 
-  RCLCPP_INFO(this->get_logger(),
-              "Subscribed to data topic '%s' (Foxglove protobuf)",
-              topic_name.c_str());
+  RCLCPP_INFO(this->get_logger(), "Subscribed to data topic '%s' [%s] (CDR)",
+              topic_name.c_str(), topic_type.c_str());
 }
-
-// Explicit template instantiations for all supported Foxglove-adapted types.
-template void Ros2LiveKitBridge::createDataSubscriber<nav_msgs::msg::Odometry>(
-  const std::string &);
-template void Ros2LiveKitBridge::createDataSubscriber<nav_msgs::msg::Path>(
-  const std::string &);
-template void
-Ros2LiveKitBridge::createDataSubscriber<nav_msgs::msg::OccupancyGrid>(
-  const std::string &);
-template void
-Ros2LiveKitBridge::createDataSubscriber<geometry_msgs::msg::TransformStamped>(
-  const std::string &);
-template void
-Ros2LiveKitBridge::createDataSubscriber<geometry_msgs::msg::Pose2D>(
-  const std::string &);
-template void
-Ros2LiveKitBridge::createDataSubscriber<geometry_msgs::msg::PolygonStamped>(
-  const std::string &);
-template void Ros2LiveKitBridge::createDataSubscriber<
-  geometry_msgs::msg::PoseWithCovarianceStamped>(const std::string &);
-template void
-Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::PointCloud2>(
-  const std::string &);
-template void Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::Imu>(
-  const std::string &);
-template void Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::Joy>(
-  const std::string &);
-template void
-Ros2LiveKitBridge::createDataSubscriber<sensor_msgs::msg::BatteryState>(
-  const std::string &);
-template void Ros2LiveKitBridge::createDataSubscriber<std_msgs::msg::String>(
-  const std::string &);
 
 void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 {

@@ -2,6 +2,8 @@ devel/
 logs/
 build/
 install/
+CMakeFiles/
+CMakeCache.txt
 bin/
 lib/
 log/
@@ -53,3 +55,10 @@ qtcreator-*
 CATKIN_IGNORE
 
 src/externals/
+
+# ROS stuff
+rosbag*
+
+# Local SDK scratch/checkouts
+client-sdk-cpp-*/
+local-sdk-*/

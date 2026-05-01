@@ -31,11 +31,16 @@ colcon build
 ```
 __NOTE:__ see `setup-shell-env.sh` for more build helpers such as `bros`, `dros`, `sros`, and `cbpu`/`cbps`.
 
-To build just the LiveKit bridge package and download the latest LiveKit SDK
+To build just the LiveKit bridge package and download the pinned LiveKit SDK
 release from GitHub during CMake configure, run:
 ```bash
 colcon build --packages-select ros2_livekit_bridge
 ```
+
+The pinned version lives in `src/ros2_livekit_bridge/colcon.pkg` (currently
+`0.3.4`) and as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable
+in `src/ros2_livekit_bridge/CMakeLists.txt`. Bump both together when
+upgrading.
 
 To use a local LiveKit SDK install prefix instead, set
 `LIVEKIT_LOCAL_SDK_DIR` to that install directory when invoking `colcon`:
@@ -44,10 +49,10 @@ LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk \
 colcon build --packages-select ros2_livekit_bridge
 ```
 
-You can also pin a specific GitHub release instead of `latest`:
+To override the pin for a one-off build (or to track upstream with `latest`):
 ```bash
 colcon build --packages-select ros2_livekit_bridge \
-  --cmake-args -DLIVEKIT_SDK_VERSION=1.2.3
+  --cmake-args -DLIVEKIT_SDK_VERSION=latest
 ```
 
 If you build the SDK locally for use with this workspace, build the SDK itself

@@ -28,7 +28,9 @@
 #include <livekit/local_video_track.h>
 #include <livekit/room.h>
 #include <livekit/video_source.h>
+#include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/serialized_message.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
 namespace ros2_livekit_bridge
@@ -80,16 +82,18 @@ private:
   void createImageSubscriber(const std::string & topic_name);
 
   /**
-   * @brief Create a typed subscriber that converts ROS messages to Foxglove
-   * protobuf and pushes serialized bytes over a LiveKit data track.
+   * @brief Create a generic subscriber that forwards raw CDR-serialized bytes
+   * over a LiveKit data track.
    *
-   * A local LiveKit data track is created lazily on the first received
-   * message.
-   * The template parameter must be a ROS2 message type for which a
-   * ros2_foxglove_adapters::toFoxglove() overload exists.
+   * Uses rclcpp::GenericSubscription so no compile-time message type
+   * knowledge is required; the @p topic_type string (resolved from the ROS
+   * graph by pollTopics()) is passed through to rosidl's runtime typesupport
+   * loader. A local LiveKit data track is created lazily on the first
+   * received message.
    */
-  template<typename RosMsgT>
-  void createDataSubscriber(const std::string & topic_name);
+  void createDataSubscriber(
+    const std::string & topic_name,
+    const std::string & topic_type);
 
   /**
    * @brief Check if the topic matches the allowed topics

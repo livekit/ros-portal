@@ -30,7 +30,6 @@ ament_auto_find_build_dependencies(REQUIRED
   geometry_msgs
   nav_msgs
   rclcpp
-  ros2_foxglove_adapters
   sensor_msgs
   std_msgs)
 
@@ -38,7 +37,10 @@ ament_auto_find_build_dependencies(REQUIRED
 # LiveKit SDK install
 #
 # Use a local install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release
-# asset from GitHub. By default, the latest SDK release is used.
+# asset from GitHub. By default, a pinned SDK version is downloaded (see
+# LIVEKIT_SDK_VERSION below). The same pin is mirrored in this package's
+# colcon.pkg so that a bare `colcon build` is reproducible without the pin
+# leaking into other packages' CMake invocations.
 #
 # Examples:
 #   colcon build --packages-select ros2_livekit_bridge
@@ -46,15 +48,16 @@ ament_auto_find_build_dependencies(REQUIRED
 #   export LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk
 #   colcon build --packages-select ros2_livekit_bridge
 #
+#   # Override the pin for a one-off build (or track upstream with "latest"):
 #   colcon build --packages-select ros2_livekit_bridge \
-#     --cmake-args -DLIVEKIT_SDK_VERSION=1.2.3
+#     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
 # If you build the SDK locally for use here, build the SDK itself with
 # -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
 # affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "latest" CACHE STRING
-  "LiveKit C++ SDK version to download")
+set(LIVEKIT_SDK_VERSION "0.3.4" CACHE STRING
+  "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
   "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
 set(LIVEKIT_LOCAL_SDK_DIR "$ENV{LIVEKIT_LOCAL_SDK_DIR}" CACHE PATH

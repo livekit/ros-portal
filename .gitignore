@@ -2,6 +2,8 @@ devel/
 logs/
 build/
 install/
+CMakeFiles/
+CMakeCache.txt
 bin/
 lib/
 log/

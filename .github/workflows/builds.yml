@@ -39,6 +39,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -87,8 +88,8 @@ jobs:
           docker pull --platform "${{ matrix.platform }}" "${{ steps.image.outputs.arch_ref }}"
           docker tag "${{ steps.image.outputs.arch_ref }}" "${{ steps.image.outputs.local_ref }}"
 
-      - name: Build image
-        if: steps.remote_image.outputs.exists != 'true'
+      - name: Build image with cache export
+        if: steps.remote_image.outputs.exists != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -99,6 +100,22 @@ jobs:
           tags: |
             ${{ steps.image.outputs.local_ref }}
             ${{ steps.image.outputs.arch_ref }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+      - name: Build image
+        if: steps.remote_image.outputs.exists != 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          build-args: |
+            WS_ROS=${{ env.WS_ROS }}
+          tags: |
+            ${{ steps.image.outputs.local_ref }}
+            ${{ steps.image.outputs.arch_ref }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
 
       - name: Build and test ROS 2 packages in container
         run: |
@@ -125,22 +142,6 @@ jobs:
         # TODO: add lint stage
         # TODO: add integration test stage
 
-      - name: Save architecture image artifact
-        if: github.ref == 'refs/heads/main' && steps.remote_image.outputs.exists != 'true'
-        run: |
-          docker save "${{ steps.image.outputs.arch_ref }}" \
-            | gzip > "/tmp/ros2-livekit-bridge-${{ matrix.arch }}.tar.gz"
-
-      - name: Upload architecture image artifact
-        if: github.ref == 'refs/heads/main' && steps.remote_image.outputs.exists != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: architecture-image-${{ matrix.arch }}
-          path: /tmp/ros2-livekit-bridge-${{ matrix.arch }}.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
-
   push-architecture-images:
     name: Push Architecture Image (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -149,6 +150,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -190,20 +192,18 @@ jobs:
             echo "exists=false" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Download architecture image artifact
+      - name: Build and push architecture image
         if: steps.remote_image.outputs.exists != 'true'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          name: architecture-image-${{ matrix.arch }}
-          path: /tmp
-
-      - name: Load architecture image
-        if: steps.remote_image.outputs.exists != 'true'
-        run: gzip -dc "/tmp/ros2-livekit-bridge-${{ matrix.arch }}.tar.gz" | docker load
-
-      - name: Push architecture image
-        if: steps.remote_image.outputs.exists != 'true'
-        run: docker push "${{ steps.image.outputs.arch_ref }}"
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
+          build-args: |
+            WS_ROS=${{ env.WS_ROS }}
+          tags: |
+            ${{ steps.image.outputs.arch_ref }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
 
   publish-image:
     name: Publish Docker image

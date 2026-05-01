@@ -88,8 +88,8 @@ jobs:
           docker pull --platform "${{ matrix.platform }}" "${{ steps.image.outputs.arch_ref }}"
           docker tag "${{ steps.image.outputs.arch_ref }}" "${{ steps.image.outputs.local_ref }}"
 
-      - name: Build image
-        if: steps.remote_image.outputs.exists != 'true'
+      - name: Build image with cache export
+        if: steps.remote_image.outputs.exists != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -102,6 +102,20 @@ jobs:
             ${{ steps.image.outputs.arch_ref }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+      - name: Build image
+        if: steps.remote_image.outputs.exists != 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          build-args: |
+            WS_ROS=${{ env.WS_ROS }}
+          tags: |
+            ${{ steps.image.outputs.local_ref }}
+            ${{ steps.image.outputs.arch_ref }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
 
       - name: Build and test ROS 2 packages in container
         run: |
@@ -136,6 +150,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:

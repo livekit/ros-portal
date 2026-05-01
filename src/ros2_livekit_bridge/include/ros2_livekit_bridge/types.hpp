@@ -39,8 +39,8 @@ using HasParticipantFn =
 //! @brief Invoke an RPC method on a remote participant and return its JSON
 //! response. Returns std::nullopt when the RPC call fails.
 using PerformRpcFn = std::function<std::optional<std::string>(
-    const std::string & participant_id, const std::string & method,
-    const std::string & payload, std::uint8_t timeout_sec)>;
+      const std::string & participant_id, const std::string & method,
+      const std::string & payload, std::uint8_t timeout_sec)>;
 
 //! @brief Register a local handler for an RPC method. Returns false when the
 //! method could not be registered (for example, the local participant is

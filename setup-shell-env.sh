@@ -72,6 +72,21 @@ cbtpu()
     cd "\${WS}" && sros && colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
 }
 
+rtl()
+{
+    cd "\${WS}" && sros && ros2 topic list "\$@"
+}
+
+rte()
+{
+    cd "\${WS}" && sros && ros2 topic echo "\$@"
+}
+
+rsl()
+{
+    cd "\${WS}" && sros && ros2 service list "\$@"
+}
+
 if [ -n "\${ZSH_VERSION:-}" ]; then
     PROMPT='(ros-livekit) %n@%m:%~ %# '
 else

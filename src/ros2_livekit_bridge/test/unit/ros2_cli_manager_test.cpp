@@ -72,12 +72,12 @@ public:
     Ros2CliManager::LivekitMethods livekit_methods;
 
     livekit_methods.has_participant =
-      [this](const std::string &) { return has_participant; };
+      [this](const std::string &) {return has_participant;};
 
     livekit_methods.perform_rpc =
       [this](const std::string & participant_id, const std::string & method,
-        const std::string & payload, std::uint8_t timeout_sec)
-        -> std::optional<std::string> {
+      const std::string & payload, std::uint8_t timeout_sec)
+      -> std::optional<std::string> {
         last_participant_id = participant_id;
         last_method = method;
         last_payload = payload;

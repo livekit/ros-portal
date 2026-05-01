@@ -49,6 +49,7 @@ with existing package structure.
   key configuration, and verification steps without duplicating implementation
   details.
 - If new configuration fields are added, update the documentation in `docs/configuration.md`.
+- Document new functions or signature updates in the header with proper Doxygen comments.
 
 ## Style
 

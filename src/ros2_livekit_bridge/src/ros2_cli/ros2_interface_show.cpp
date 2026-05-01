@@ -61,7 +61,8 @@ bool renderInterfaceDefinitionRecursive(
     if (nested_type && active_types.count(*nested_type) == 0) {
       if (!renderInterfaceDefinitionRecursive(
           *nested_type, show_nested_comments, show_nested_comments,
-          indent_level + 1, active_types, output)) {
+          indent_level + 1, active_types, output))
+      {
         active_types.erase(type);
         return false;
       }
@@ -91,7 +92,8 @@ renderInterfaceDefinition(const InterfaceShowOptions & options)
   std::ostringstream output;
   if (!renderInterfaceDefinitionRecursive(
       options.type, !options.no_comments, options.all_comments, 0, active_types,
-      output)) {
+      output))
+  {
     return std::nullopt;
   }
   return output.str();

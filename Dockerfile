@@ -31,6 +31,7 @@ RUN apt update && apt install -y \
     nano \
     iputils-ping \
     net-tools \
+    openssh-client \
     clangd
 
 RUN apt-get update && apt-get install -y \

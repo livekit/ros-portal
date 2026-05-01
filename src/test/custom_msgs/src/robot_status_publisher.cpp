@@ -18,8 +18,8 @@
 #include <cmath>
 #include <memory>
 
+#include <custom_msgs/msg/robot_status.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <example_msgs/msg/robot_status.hpp>
 #include <sensor_msgs/msg/battery_state.hpp>
 
 class RobotStatusPublisher : public rclcpp::Node {
@@ -27,14 +27,14 @@ public:
   RobotStatusPublisher()
   : rclcpp::Node("robot_status_publisher"), tick_(0)
   {
-    status_pub_ = this->create_publisher<example_msgs::msg::RobotStatus>(
-        "/robot_status", 10);
+    status_pub_ = this->create_publisher<custom_msgs::msg::RobotStatus>(
+        "/test/robot_status", 10);
     battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
-        "/battery_state", 10);
+        "/test/battery_state", 10);
     timer_ = this->create_wall_timer(std::chrono::seconds(1),
                                      std::bind(&RobotStatusPublisher::publish, this));
     RCLCPP_INFO(this->get_logger(),
-                "Publishing on /robot_status and /battery_state at 1 Hz");
+                "Publishing on /test/robot_status and /test/battery_state at 1 Hz");
   }
 
 private:
@@ -43,7 +43,7 @@ private:
     const auto now = this->now();
     const double voltage = 12.6 - 0.01 * (tick_ % 100);
 
-    example_msgs::msg::RobotStatus status;
+    custom_msgs::msg::RobotStatus status;
     status.header.stamp = now;
     status.header.frame_id = "base_link";
     status.robot_id = "livekit-bot-01";
@@ -84,7 +84,7 @@ private:
     tick_++;
   }
 
-  rclcpp::Publisher<example_msgs::msg::RobotStatus>::SharedPtr status_pub_;
+  rclcpp::Publisher<custom_msgs::msg::RobotStatus>::SharedPtr status_pub_;
   rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
   std::uint64_t tick_;

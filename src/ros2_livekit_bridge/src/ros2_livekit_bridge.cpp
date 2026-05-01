@@ -205,25 +205,25 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge()
 
 void Ros2LiveKitBridge::pollTopics()
 {
-  auto topic_names_and_types = this->get_topic_names_and_types();
+    auto topic_names_and_types = this->get_topic_names_and_types();
 
-  for (const auto &[topic_name, topic_types] : topic_names_and_types) {
-    if (subscriptions_.count(topic_name) > 0) {
-      continue;
-    }
+    for (const auto &[topic_name, topic_types] : topic_names_and_types) {
+      if (subscriptions_.count(topic_name) > 0) {
+        continue;
+      }
 
-    if (!matchesTopic(topic_name)) {
-      continue;
-    }
+      if (!matchesTopic(topic_name)) {
+        continue;
+      }
 
-    if (topic_types.empty()) {
-      continue;
-    }
+      if (topic_types.empty()) {
+        continue;
+      }
 
-    const auto & topic_type = topic_types.front();
-    RCLCPP_INFO(this->get_logger(), "Discovered matching topic: '%s' [%s]",
-                topic_name.c_str(), topic_type.c_str());
-    createSubscriber(topic_name, topic_type);
+      const auto & topic_type = topic_types.front();
+      RCLCPP_INFO(this->get_logger(), "Discovered matching topic: '%s' [%s]",
+                  topic_name.c_str(), topic_type.c_str());
+      createSubscriber(topic_name, topic_type);
   }
 }
 
@@ -258,7 +258,7 @@ void Ros2LiveKitBridge::createDataSubscriber(
       if (state_it == data_topic_states_.end()) {
         return;
       }
-      auto & state = state_it->second;
+      auto &state = state_it->second;
 
       if (!state.track) {
         if (!room_) {
@@ -269,6 +269,8 @@ void Ros2LiveKitBridge::createDataSubscriber(
           return;
         }
 
+        // TODO: When C++ SDK supports it, input encoding type (CDR) and schema of message (JSON) to this call
+        // Data track options (struct?)
         const auto publish_result = participant->publishDataTrack(topic_name);
         if (!publish_result) {
           const auto & error = publish_result.error();
@@ -292,7 +294,7 @@ void Ros2LiveKitBridge::createDataSubscriber(
                   topic_name.c_str());
       }
 
-      auto & rcl_msg = msg->get_rcl_serialized_message();
+      auto &rcl_msg = msg->get_rcl_serialized_message();
       auto push_result = state.track->tryPush(std::vector<std::uint8_t>(
         rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length));
       if (!push_result) {
@@ -314,6 +316,13 @@ void Ros2LiveKitBridge::createDataSubscriber(
     RCLCPP_ERROR(this->get_logger(),
                  "Failed to create generic subscription for '%s' [%s]: %s",
                  topic_name.c_str(), topic_type.c_str(), e.what());
+    return;
+  } catch (...) {
+    data_topic_states_.erase(topic_name);
+    RCLCPP_ERROR(
+      this->get_logger(),
+      "Unknown exception creating generic subscription for '%s' [%s]",
+      topic_name.c_str(), topic_type.c_str());
     return;
   }
 

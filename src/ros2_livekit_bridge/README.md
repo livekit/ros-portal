@@ -51,7 +51,7 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
 
 The data-track payload is the unmodified CDR byte stream produced by the
 publisher. Consumers need the matching `.msg` definition (or any IDL/CDR-aware
-deserializer) to decode it; no Foxglove or protobuf dependency is required.
+deserializer) to decode it.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐

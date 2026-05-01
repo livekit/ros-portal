@@ -16,7 +16,8 @@
 <launch>
   <arg name="config" default="$(find-pkg-share ros2_livekit_bridge)/config/ros2_livekit_bridge_params.yaml" />
 
-  <node pkg="ros2_livekit_bridge" exec="ros2_livekit_bridge_node" name="ros2_livekit_bridge" output="screen">
+  <node pkg="ros2_livekit_bridge" exec="ros2_livekit_bridge_node" name="ros2_livekit_bridge" output="screen"
+        args="--ros-args --disable-external-lib-logs">
     <param from="$(var config)"/>
   </node>
 </launch>

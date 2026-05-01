@@ -1,4 +1,0 @@
-build:
-  cmake-args:
-    - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-    # - -DLIVEKIT_SDK_VERSION=0.3.3

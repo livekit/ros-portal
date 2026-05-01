@@ -132,7 +132,7 @@ jobs:
                 vcs import --skip-existing src/externals < external.repos
               fi
               rosdep update
-              rosdep install --from-paths src/ros2_foxglove_adapters src/ros2_livekit_bridge --ignore-src -r -y
+              rosdep install --from-paths src/ros2_livekit_bridge --ignore-src -r -y
               colcon build --packages-up-to ros2_livekit_bridge
 
               # test here to avoid a rebuild

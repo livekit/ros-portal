@@ -173,7 +173,7 @@ ros2 run ros2_livekit_bridge ros2_livekit_bridge_node \
   $(ros2 pkg prefix ros2_livekit_bridge)/share/ros2_livekit_bridge/config/ros2_livekit_bridge_params.yaml
 
 # Or via the launch file:
-ros2 launch ros2_livekit_bridge ros2_livekit_bridge_launch.xml
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
 ```
 
 ```bash
@@ -265,7 +265,7 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 # Launch the livekit bridge
 export LIVEKIT_TOKEN=<token>
 export LIVEKIT_URL=<url>
-ros2 launch ros2_livekit_bridge ros2_livekit_bridge_launch.xml
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
 ```
 
 ### Debugging

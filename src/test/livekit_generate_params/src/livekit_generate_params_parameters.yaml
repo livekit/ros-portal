@@ -1,0 +1,96 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+livekit_generate_params:
+  version:
+    type: string
+    default_value: "0.0.1"
+    description: "Configuration schema version."
+  room_options:
+    join_retries:
+      type: int
+      default_value: 3
+      description: "Number of attempts to join the LiveKit room."
+      validation:
+        gt_eq<>: [0]
+  services:
+    names:
+      type: string_array
+      default_value: []
+      description: "Safe keys for service entries."
+      validation:
+        unique<>: null
+    __map_names:
+      service:
+        type: string
+        default_value: ""
+        description: "ROS service name."
+      direction:
+        type: string
+        default_value: "in"
+        description: "Bridge direction for this service."
+        validation:
+          one_of<>: [["in", "out"]]
+      participant:
+        type: string
+        default_value: ""
+        description: "LiveKit participant associated with this service."
+  topics:
+    names:
+      type: string_array
+      default_value: []
+      description: "Safe keys for topic entries."
+      validation:
+        unique<>: null
+    __map_names:
+      topic:
+        type: string
+        default_value: ""
+        description: "ROS topic name."
+      direction:
+        type: string
+        default_value: "out"
+        description: "Bridge direction for this topic."
+        validation:
+          one_of<>: [["in", "out", "bidirectional"]]
+      video_options:
+        enabled:
+          type: bool
+          default_value: false
+          description: "Whether this topic should use LiveKit video transport."
+        bitrate_kbps:
+          type: int
+          default_value: 0
+          description: "Video bitrate in kilobits per second; 0 leaves it unset."
+          validation:
+            gt_eq<>: [0]
+        codec:
+          type: string
+          default_value: ""
+          description: "Video codec override."
+      audio_options:
+        enabled:
+          type: bool
+          default_value: false
+          description: "Whether this topic should use LiveKit audio transport."
+        bitrate_kbps:
+          type: int
+          default_value: 0
+          description: "Audio bitrate in kilobits per second; 0 leaves it unset."
+          validation:
+            gt_eq<>: [0]
+        codec:
+          type: string
+          default_value: ""
+          description: "Audio codec override."

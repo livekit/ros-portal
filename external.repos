@@ -1,4 +1,8 @@
 repositories:
+  generate_parameter_library:
+    type: git
+    url: https://github.com/PickNikRobotics/generate_parameter_library.git
+    version: 0c6457dc682c69274f28994366fbc587d48259c5
   waver:
     type: git
     url: https://github.com/GGomezMorales/waver.git

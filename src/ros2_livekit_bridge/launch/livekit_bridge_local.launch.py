@@ -15,8 +15,8 @@
 # limitations under the License.
 
 import re
-import subprocess
 from pathlib import Path
+import subprocess
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -29,87 +29,87 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def _as_bool(value: str) -> bool:
-    return value.strip().lower() in ("1", "true", "yes", "on")
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def _room_name_from_params(config_path: Path) -> str:
-    text = config_path.read_text(encoding="utf-8")
-    match = re.search(r"^\s*room_name:\s*[\"']?([^\"'\s#]+)", text, re.MULTILINE)
+    text = config_path.read_text(encoding='utf-8')
+    match = re.search(r'^\s*room_name:\s*["\']?([^"\'\s#]+)', text, re.MULTILINE)
     if not match:
-        raise RuntimeError(f"Could not find ros__parameters.room_name in {config_path}")
+        raise RuntimeError(f'Could not find ros__parameters.room_name in {config_path}')
     return match.group(1)
 
 
 def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentials: bool) -> str:
     cmd = [
-        "lk",
-        "token",
-        "create",
-        "--join",
-        "--room",
+        'lk',
+        'token',
+        'create',
+        '--join',
+        '--room',
         room_name,
-        "--identity",
+        '--identity',
         identity,
-        "--name",
+        '--name',
         identity,
-        "--valid-for",
+        '--valid-for',
         valid_for,
-        "--grant",
+        '--grant',
         '{"canPublish":true,"canPublishData":true,"canSubscribe":true}',
-        "--token-only",
-        "--yes",
+        '--token-only',
+        '--yes',
     ]
     if use_dev_credentials:
-        cmd.append("--dev")
+        cmd.append('--dev')
 
     try:
         return subprocess.check_output(cmd, text=True).strip()
     except FileNotFoundError as exc:
         raise RuntimeError(
-            "Could not find the LiveKit CLI (`lk`) on PATH. Rebuild the devcontainer "
-            "or install the LiveKit CLI before using this launch file."
+            'Could not find the LiveKit CLI (`lk`) on PATH. Rebuild the devcontainer '
+            'or install the LiveKit CLI before using this launch file.'
         ) from exc
     except subprocess.CalledProcessError as exc:
-        output = exc.output.strip() if exc.output else ""
-        raise RuntimeError(f"Failed to mint LiveKit token with `lk`: {output}") from exc
+        output = exc.output.strip() if exc.output else ''
+        raise RuntimeError(f'Failed to mint LiveKit token with `lk`: {output}') from exc
 
 
 def _launch_setup(context, *args, **kwargs):
-    config_path = Path(LaunchConfiguration("config").perform(context))
-    livekit_url = LaunchConfiguration("livekit_url").perform(context)
-    identity = LaunchConfiguration("identity").perform(context)
-    valid_for = LaunchConfiguration("token_valid_for").perform(context)
-    use_dev_credentials = _as_bool(LaunchConfiguration("use_dev_credentials").perform(context))
+    config_path = Path(LaunchConfiguration('config').perform(context))
+    livekit_url = LaunchConfiguration('livekit_url').perform(context)
+    identity = LaunchConfiguration('identity').perform(context)
+    valid_for = LaunchConfiguration('token_valid_for').perform(context)
+    use_dev_credentials = _as_bool(LaunchConfiguration('use_dev_credentials').perform(context))
 
     room_name = _room_name_from_params(config_path)
     token = _mint_token(room_name, identity, valid_for, use_dev_credentials)
 
     return [
-        SetEnvironmentVariable("LIVEKIT_URL", livekit_url),
-        SetEnvironmentVariable("LIVEKIT_TOKEN", token),
+        SetEnvironmentVariable('LIVEKIT_URL', livekit_url),
+        SetEnvironmentVariable('LIVEKIT_TOKEN', token),
         Node(
-            package="ros2_livekit_bridge",
-            executable="ros2_livekit_bridge_node",
-            name="ros2_livekit_bridge",
-            output="screen",
+            package='ros2_livekit_bridge',
+            executable='ros2_livekit_bridge_node',
+            name='ros2_livekit_bridge',
+            output='screen',
             parameters=[str(config_path)],
-            arguments=["--ros-args", "--disable-external-lib-logs"],
+            arguments=['--ros-args', '--disable-external-lib-logs'],
         ),
     ]
 
 
 def generate_launch_description():
     default_config = PathJoinSubstitution([
-        FindPackageShare("ros2_livekit_bridge"),
-        "config",
-        "ros2_livekit_bridge_params.yaml",
+        FindPackageShare('ros2_livekit_bridge'),
+        'config',
+        'ros2_livekit_bridge_params.yaml',
     ])
 
     return LaunchDescription([
-        DeclareLaunchArgument("config", default_value=default_config),
-        DeclareLaunchArgument("livekit_url", default_value="ws://host.docker.internal:7880"),
-        DeclareLaunchArgument("identity", default_value="ros2-livekit-bridge"),
-        DeclareLaunchArgument("token_valid_for", default_value="1h"),
-        DeclareLaunchArgument("use_dev_credentials", default_value="true"),
+        DeclareLaunchArgument('config', default_value=default_config),
+        DeclareLaunchArgument('livekit_url', default_value='ws://host.docker.internal:7880'),
+        DeclareLaunchArgument('identity', default_value='ros2-livekit-bridge'),
+        DeclareLaunchArgument('token_valid_for', default_value='1h'),
+        DeclareLaunchArgument('use_dev_credentials', default_value='true'),
         OpaqueFunction(function=_launch_setup),
     ])

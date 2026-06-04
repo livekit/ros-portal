@@ -1,5 +1,5 @@
 {
   "cmake-args": [
-    "-DLIVEKIT_SDK_VERSION=0.3.4"
+    "-DLIVEKIT_SDK_VERSION=1.0.0"
   ]
 }

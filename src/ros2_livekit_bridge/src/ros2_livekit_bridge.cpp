@@ -167,11 +167,11 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
                 token_source.c_str());
     RCLCPP_INFO(this->get_logger(), "Connecting to %s ...",
                 livekit_url.c_str());
-    livekit::initialize(livekit::LogLevel::Info, livekit::LogSink::kConsole);
+    livekit::initialize(livekit::LogLevel::Info);
     sdk_initialized_ = true;
     room_ = std::make_unique<livekit::Room>();
 
-    if (room_->Connect(livekit_url, livekit_token, room_options)) {
+    if (room_->connect(livekit_url, livekit_token, room_options)) {
       RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room.");
     } else {
       room_.reset();
@@ -264,7 +264,7 @@ void Ros2LiveKitBridge::createDataSubscriber(
         if (!room_) {
           return;
         }
-        auto *participant = room_->localParticipant();
+        auto participant = room_->localParticipant().lock();
         if (!participant) {
           return;
         }
@@ -353,7 +353,7 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
         if (!room_) {
           return;
         }
-        auto *participant = room_->localParticipant();
+        auto participant = room_->localParticipant().lock();
         if (!participant) {
           return;
         }

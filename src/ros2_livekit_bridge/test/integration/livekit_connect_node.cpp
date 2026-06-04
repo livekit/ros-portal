@@ -41,8 +41,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -201,7 +201,8 @@ static void drawString(
 namespace
 {
 
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
+std::optional<livekit::VideoFrame>
+makeRgbaVideoFrame(
   int width, int height,
   const std::vector<std::uint8_t> & rgba)
 {
@@ -216,8 +217,8 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
   }
 
   try {
-    auto frame =
-      livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
+    auto frame = livekit::VideoFrame::create(width, height,
+                                             livekit::VideoBufferType::RGBA);
     std::memcpy(frame.data(), rgba.data(), rgba.size());
     return frame;
   } catch (...) {
@@ -253,8 +254,7 @@ public:
 
     RCLCPP_INFO(get_logger(), "Connecting to %s ...", url.c_str());
     try {
-      livekit::initialize(livekit::LogLevel::Info,
-                          livekit::LogSink::kConsole);
+      livekit::initialize(livekit::LogLevel::Info);
       sdk_initialized_ = true;
 
       livekit::RoomOptions room_options;
@@ -262,11 +262,11 @@ public:
       room_options.dynacast = false;
 
       room_ = std::make_unique<livekit::Room>();
-      if (!room_->Connect(url, token, room_options)) {
+      if (!room_->connect(url, token, room_options)) {
         throw std::runtime_error("livekit connection failed");
       }
 
-      auto *local_participant = room_->localParticipant();
+      auto local_participant = room_->localParticipant().lock();
       if (!local_participant) {
         throw std::runtime_error("missing local participant after connect");
       }
@@ -316,35 +316,39 @@ public:
 private:
   void shutdownLiveKit()
   {
-    auto *local_participant = room_ ? room_->localParticipant() : nullptr;
+    if (room_) {
+      auto local_participant = room_->localParticipant().lock();
 
-    if (local_participant) {
-      try {
-        if (audio_track_ && audio_track_->publication()) {
-          local_participant->unpublishTrack(audio_track_->publication()->sid());
+      if (local_participant) {
+        try {
+          if (audio_track_ && audio_track_->publication()) {
+            local_participant->unpublishTrack(
+                audio_track_->publication()->sid());
+          }
+        } catch (const std::exception & e) {
+          RCLCPP_WARN(get_logger(),
+                      "Failed to unpublish audio track during teardown: %s",
+                      e.what());
         }
-      } catch (const std::exception & e) {
-        RCLCPP_WARN(get_logger(),
-                    "Failed to unpublish audio track during teardown: %s",
-                    e.what());
+
+        try {
+          if (video_track_ && video_track_->publication()) {
+            local_participant->unpublishTrack(
+                video_track_->publication()->sid());
+          }
+        } catch (const std::exception & e) {
+          RCLCPP_WARN(get_logger(),
+                      "Failed to unpublish video track during teardown: %s",
+                      e.what());
+        }
       }
 
-      try {
-        if (video_track_ && video_track_->publication()) {
-          local_participant->unpublishTrack(video_track_->publication()->sid());
-        }
-      } catch (const std::exception & e) {
-        RCLCPP_WARN(get_logger(),
-                    "Failed to unpublish video track during teardown: %s",
-                    e.what());
-      }
+      audio_track_.reset();
+      audio_source_.reset();
+      video_track_.reset();
+      video_source_.reset();
+      room_.reset();
     }
-
-    audio_track_.reset();
-    audio_source_.reset();
-    video_track_.reset();
-    video_source_.reset();
-    room_.reset();
 
     if (sdk_initialized_) {
       livekit::shutdown();
@@ -477,10 +481,8 @@ private:
 namespace
 {
 
-TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer)
-{
-  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40,
-    50, 60, 70, 80};
+TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer) {
+  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40, 50, 60, 70, 80};
 
   auto frame = makeRgbaVideoFrame(2, 1, rgba);
 
@@ -488,8 +490,7 @@ TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer)
   EXPECT_EQ(std::memcmp(frame->data(), rgba.data(), rgba.size()), 0);
 }
 
-TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize)
-{
+TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize) {
   EXPECT_NO_THROW({
       const auto frame =
       makeRgbaVideoFrame(2, 1, std::vector<std::uint8_t>{10, 20, 30, 40});

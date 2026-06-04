@@ -32,7 +32,12 @@ RUN apt update && apt install -y \
     iputils-ping \
     net-tools \
     openssh-client \
-    clangd
+    clangd \
+    curl \
+    jq
+
+# Install LiveKit CLI
+RUN curl -sSL https://get.livekit.io/cli | bash
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-joint-state-publisher

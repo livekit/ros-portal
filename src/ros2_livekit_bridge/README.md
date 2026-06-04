@@ -176,6 +176,13 @@ ros2 run ros2_livekit_bridge ros2_livekit_bridge_node \
 ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
 ```
 
+When doing local development or testing, the Python launch file automatically sets `LIVEKIT_URL` and `LIVEKIT_TOKEN` against a local server:
+
+```bash
+source ros/install/setup.bash
+ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
+```
+
 ```bash
 # launch with gdb
    gdb --args /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/lib/ros2_livekit_bridge/ros2_livekit_bridge_node --ros-args -r __node:=ros2_livekit_bridge --params-file /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/share/ros2_livekit_bridge/config/ros2_livekit_bridge_params.yaml

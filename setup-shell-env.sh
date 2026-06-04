@@ -46,6 +46,17 @@ alias bros='cd "\${WS}" && colcon build'
 alias dros='cd "\${WS}" && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
 alias sros='_source_ros_env && _source_ws_overlay'
 
+# Helper alias for running ament_uncrustify within the devcontainer
+uncrust()
+{
+    cd "\${WS}" && sros
+    if [ "\$#" -eq 0 ]; then
+        ament_uncrustify --reformat src/ros2_livekit_bridge
+    else
+        ament_uncrustify --reformat "\$@"
+    fi
+}
+
 cbpu()
 {
     cd "\${WS}" && sros && colcon build --packages-up-to "\$@"

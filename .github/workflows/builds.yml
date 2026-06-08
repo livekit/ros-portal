@@ -28,119 +28,33 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/ros2-livekit-bridge
-  WS_ROS: livekit_ws
-
 jobs:
-  build-devcontainer:
-    name: Build Devcontainer
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-
-      - name: Build devcontainer
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
-        with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-          runCmd: |
-            bash -lc 'source /opt/ros/jazzy/setup.bash && test "${ROS_DISTRO}" = jazzy && colcon build'
-
   build-and-test:
     name: Build and Unit Tests (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      packages: read
-      actions: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x64
-            platform: linux/amd64
             runner: ubuntu-24.04
           - arch: aarch64
-            platform: linux/arm64
             runner: ubuntu-24.04-arm
 
     steps:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Compute Docker image metadata
-        id: image
-        uses: ./.github/actions/docker-image-metadata
+      - name: Build and test in devcontainer
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
-          image-name: ${{ env.IMAGE_NAME }}
-          arch: ${{ matrix.arch }}
-
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-
-      - name: Check for architecture-tagged image
-        id: remote_image
-        run: |
-          if docker buildx imagetools inspect "${{ steps.image.outputs.arch_ref }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "exists=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Pull existing image
-        if: steps.remote_image.outputs.exists == 'true'
-        run: |
-          docker pull --platform "${{ matrix.platform }}" "${{ steps.image.outputs.arch_ref }}"
-          docker tag "${{ steps.image.outputs.arch_ref }}" "${{ steps.image.outputs.local_ref }}"
-
-      - name: Build image with cache export
-        if: steps.remote_image.outputs.exists != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          load: true
-          build-args: |
-            WS_ROS=${{ env.WS_ROS }}
-          tags: |
-            ${{ steps.image.outputs.local_ref }}
-            ${{ steps.image.outputs.arch_ref }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
-
-      - name: Build image
-        if: steps.remote_image.outputs.exists != 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          load: true
-          build-args: |
-            WS_ROS=${{ env.WS_ROS }}
-          tags: |
-            ${{ steps.image.outputs.local_ref }}
-            ${{ steps.image.outputs.arch_ref }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-
-      - name: Build and test ROS 2 packages in container
-        run: |
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:/${WS_ROS}" \
-            -w "/${WS_ROS}" \
-            "${{ steps.image.outputs.local_ref }}" \
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: |
             bash -lc '
               set -eo pipefail
               source /opt/ros/jazzy/setup.bash
@@ -159,112 +73,3 @@ jobs:
             '
         # TODO: add lint stage
         # TODO: add integration test stage
-
-  push-architecture-images:
-    name: Push Architecture Image (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    needs: build-and-test
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-      actions: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            platform: linux/amd64
-            runner: ubuntu-24.04
-          - arch: aarch64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-
-      - name: Compute Docker image metadata
-        id: image
-        uses: ./.github/actions/docker-image-metadata
-        with:
-          image-name: ${{ env.IMAGE_NAME }}
-          arch: ${{ matrix.arch }}
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-
-      - name: Check for architecture-tagged image
-        id: remote_image
-        run: |
-          if docker buildx imagetools inspect "${{ steps.image.outputs.arch_ref }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "exists=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Build and push architecture image
-        if: steps.remote_image.outputs.exists != 'true'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: true
-          build-args: |
-            WS_ROS=${{ env.WS_ROS }}
-          tags: |
-            ${{ steps.image.outputs.arch_ref }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-
-  publish-image:
-    name: Publish Docker image
-    runs-on: ubuntu-24.04
-    needs: push-architecture-images
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-
-      - name: Compute Docker image metadata
-        id: image
-        uses: ./.github/actions/docker-image-metadata
-        with:
-          image-name: ${{ env.IMAGE_NAME }}
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-
-      - name: Check for Docker image manifest
-        id: remote_image
-        run: |
-          if docker buildx imagetools inspect "${{ steps.image.outputs.image_ref }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "exists=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Push multi-architecture Docker image manifest
-        if: steps.remote_image.outputs.exists != 'true'
-        run: |
-          docker buildx imagetools create \
-            --tag "${{ steps.image.outputs.image_ref }}" \
-            "${{ steps.image.outputs.x64_ref }}" \
-            "${{ steps.image.outputs.aarch64_ref }}"

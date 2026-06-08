@@ -43,13 +43,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Build and smoke test devcontainer
+      - name: Build devcontainer
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
           runCmd: |
-            bash -lc 'source /opt/ros/jazzy/setup.bash && test "${ROS_DISTRO}" = jazzy && colcon --version'
+            bash -lc 'source /opt/ros/jazzy/setup.bash && test "${ROS_DISTRO}" = jazzy && colcon build'
 
   build-and-test:
     name: Build and Unit Tests (${{ matrix.arch }})

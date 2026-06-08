@@ -50,11 +50,23 @@ fi
 LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-devkey}"
 LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-secret}"
 LIVEKIT_ROOM="${LIVEKIT_ROOM:-ros_bridge_participant_id_test}"
-LIVEKIT_URL="${LIVEKIT_URL:-ws://host.docker.internal:7880}"
 LIVEKIT_VALID_FOR="${LIVEKIT_VALID_FOR:-99999h}"
 LIVEKIT_IDENTITY_A="${LIVEKIT_IDENTITY_A:-bridge-test-a}"
 LIVEKIT_IDENTITY_B="${LIVEKIT_IDENTITY_B:-bridge-test-b}"
 _grant_json='{"canPublish":true,"canSubscribe":true,"canPublishData":true}'
+
+if [[ -z "${LIVEKIT_URL:-}" ]]; then
+  # Linux CI jobs run LiveKit on the same host as the devcontainer.
+  if [[ "${CI:-}" == "true" ]]; then
+    LIVEKIT_URL="ws://127.0.0.1:7880"
+  # Local Docker Desktop setups typically expose the host via this DNS alias.
+  elif command -v getent >/dev/null 2>&1 &&
+    getent hosts host.docker.internal >/dev/null 2>&1; then
+    LIVEKIT_URL="ws://host.docker.internal:7880"
+  else
+    LIVEKIT_URL="ws://127.0.0.1:7880"
+  fi
+fi
 
 if ! command -v lk >/dev/null 2>&1; then
   _fail "'lk' CLI not found. Install: https://docs.livekit.io/home/cli/" 2

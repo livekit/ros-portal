@@ -146,7 +146,27 @@ jobs:
       - name: Install LiveKit server
         run: |
           set -euxo pipefail
-          curl -sSL https://get.livekit.io | bash
+          livekit_version="1.12.0"
+          case "$(uname -m)" in
+            x86_64) livekit_arch="amd64" ;;
+            aarch64 | arm64) livekit_arch="arm64" ;;
+            *) echo "::error::unsupported LiveKit server architecture: $(uname -m)"; exit 1 ;;
+          esac
+
+          archive="livekit_${livekit_version}_linux_${livekit_arch}.tar.gz"
+          url="https://github.com/livekit/livekit/releases/download/v${livekit_version}/${archive}"
+          install_dir="$(mktemp -d)"
+          curl -fsSL "$url" -o "${install_dir}/${archive}"
+          tar -xzf "${install_dir}/${archive}" -C "$install_dir"
+
+          livekit_binary="$(find "$install_dir" -type f -name livekit-server -perm -111 | head -n 1)"
+          if [ -z "$livekit_binary" ]; then
+            echo "::error::livekit-server binary not found in ${archive}"
+            find "$install_dir" -maxdepth 3 -type f
+            exit 1
+          fi
+
+          sudo install -m 0755 "$livekit_binary" /usr/local/bin/livekit-server
           livekit-server --version
 
       - name: Start LiveKit server

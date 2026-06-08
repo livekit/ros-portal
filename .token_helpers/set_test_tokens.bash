@@ -109,6 +109,7 @@ _emit_eval() {
   printf 'export LIVEKIT_URL=%q\n' "$LIVEKIT_URL"
   printf 'export LIVEKIT_TOKEN_A=%q\n' "$LIVEKIT_TOKEN_A"
   printf 'export LIVEKIT_TOKEN_B=%q\n' "$LIVEKIT_TOKEN_B"
+  printf 'export LIVEKIT_ROOM=%q\n' "$LIVEKIT_ROOM"
 }
 
 if [[ "$_sourced" -eq 1 ]]; then

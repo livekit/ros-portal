@@ -15,16 +15,22 @@
  */
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
+#include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 #include <cstdlib>
 #include <cstring>
+#include <optional>
+#include <stdexcept>
 
 #include <livekit/data_track_frame.h>
 #include <livekit/data_track_stream.h>
 #include <livekit/livekit.h>
+#include <livekit/remote_data_track.h>
+#include <livekit/room_delegate.h>
+#include <livekit/video_frame.h>
 
 namespace ros2_livekit_bridge
 {
@@ -85,19 +91,20 @@ bool Ros2LiveKitBridge::initialize()
       outgoing_topic_patterns_, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
-  auto best_effort_topics =
-    this->get_parameter("best_effort_qos_topics").as_string_array();
-  pattern_errors.clear();
-  best_effort_qos_topic_patterns_ =
-    utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
-  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
-
   incoming_topic_patterns_ = utils::incomingTopicPatterns(*config);
   pattern_errors.clear();
   incoming_topic_compiled_patterns_ =
     utils::compileRegexPatterns(
       incoming_topic_patterns_, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
+
+  lk_topic_patterns_ =
+    this->get_parameter("lk_topics").as_string_array();
+  pattern_errors.clear();
+  lk_topic_compiled_patterns_ =
+    bridge_utils::compileRegexPatterns(
+      lk_topic_patterns_, &pattern_errors);
+  logPatternCompileErrors(pattern_errors, this->get_logger());
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu ROS topic "
@@ -151,7 +158,15 @@ bool Ros2LiveKitBridge::initialize()
     room_->setDelegate(this);
 
     if (room_->connect(livekit_url, livekit_token, room_options)) {
-      RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room: '%s'", room_name_.c_str());
+      auto local = room_->localParticipant().lock();
+      RCLCPP_INFO(this->get_logger(),
+                  "Connected to LiveKit room '%s' as identity '%s'",
+                  room_name_.c_str(),
+                  local ? local->identity().c_str() : "(unknown)");
+      ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
+        *this,
+        reentrant_callback_group_,
+        std::make_shared<LiveKitRos2CliRpcClient>(*room_));
     } else {
       room_.reset();
       livekit::shutdown();
@@ -190,6 +205,7 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge()
   }
   data_topic_states_.clear();
   image_topic_states_.clear();
+  ros2_cli_manager_.reset();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
     room_.reset();
@@ -426,7 +442,6 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
                              msg->encoding.c_str(), topic_name.c_str());
           return;
         }
-
         auto frame = utils::makeRgbaVideoFrame(
           static_cast<int>(msg->width), static_cast<int>(msg->height),
           state.rgba_buf.data(), state.rgba_buf.size());

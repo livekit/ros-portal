@@ -105,17 +105,63 @@ schema-driven `ros2_livekit_bridge_config` parser. Launch files pass this path
 to the node with the `config_path` ROS parameter. See the
 [configuration guide](../../docs/configuration.md) for the supported schema.
 
-For topic routing, the config uses a single `topics` list where each entry
-contains:
-
-- `topic`: an ECMAScript regex matched with `std::regex_match` against full topic names.
-- `direction`: one of `in`, `out`, or `bidirectional`.
-
 Direction handling:
 
 - `out`: allow ROS -> LiveKit forwarding.
 - `in`: allow LiveKit -> ROS forwarding.
 - `bidirectional`: `in` and `out` forwarding/functionality
+
+## Remote ROS2 CLI Calls
+The Bridge exposes ROS2 service calls that can be used to make ROS2 CLI calls to other ROS2 Livekit bridges.
+
+### Remote ROS2 topic listing
+
+Each connected bridge exposes a ROS service that can ask another bridge
+participant to list the topics in its local ROS graph:
+
+```bash
+ros2 service call /ros2_livekit_bridge/ros2_topic_list \
+  ros2_livekit_bridge_msgs/srv/Ros2TopicList \
+  "{participant_id: robot_b, show_types: false, count_topics: false, include_hidden_topics: false, verbose: false, timeout_sec: 10}"
+```
+
+The service request fields are:
+
+| Field | Description |
+|---|---|
+| `participant_id` | LiveKit identity of the remote bridge participant. |
+| `show_types` | Match `ros2 topic list --show-types`; show topic type names next to each topic. Ignored when `verbose` or `count_topics` is true. |
+| `count_topics` | Match `ros2 topic list --count-topics`; only return the number of discovered topics. |
+| `include_hidden_topics` | Match `ros2 topic list --include-hidden-topics`; include topics with hidden name tokens. |
+| `verbose` | When `false`, return one topic name per line. When `true`, return `ros2 topic list --verbose`-style published/subscribed sections with type and endpoint counts. |
+| `timeout_sec` | LiveKit RPC timeout in seconds. Use `0` for the default `10` seconds. |
+
+The service intentionally does not expose `--help`, `--spin-time`,
+`--no-daemon`, or `--use-sim-time`; discovery and ROS time behavior are owned by
+the already-running bridge node.
+
+The response contains `success`, `err_msg`, and `output`. Expected failures such
+as a missing participant, unsupported remote RPC method, or LiveKit RPC timeout
+are reported as `success: false` with details in `err_msg`.
+
+The service callback waits until the LiveKit RPC returns or times out. Keep
+`ros_threads` greater than `1` for normal bridge deployments so topic forwarding
+and timers can continue while a remote introspection request is pending; the
+default `ros_threads: 4` is recommended.
+
+### LiveKit-to-ROS topic names
+
+Inbound data tracks are published under a participant namespace:
+
+```text
+participant identity: robot_b
+LiveKit data track:   /odom/global
+ROS topic:            /robot_b/odom/global
+```
+
+Participant identities are converted to ROS-safe topic tokens by replacing
+characters outside `[A-Za-z0-9_]` with `_`. Use ROS-compatible LiveKit identities
+if the exact namespace matters.
 
 ### LiveKit-to-ROS topic names
 

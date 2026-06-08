@@ -19,6 +19,8 @@
   <arg name="rviz" default="false" description="Launch RViz alongside the robot stack." />
   <arg name="sim_gui" default="false" description="Launch the Gazebo GUI client when sim is enabled." />
   <arg name="foxglove" default="false" description="Launch the Foxglove bridge with default settings." />
+  <arg name="livekit" default="true" description="Launch the ROS 2 LiveKit bridge." />
+  <arg name="livekit_config" default="$(find-pkg-share ros2_livekit_bridge)/config/ros2_livekit_bridge.yaml" description="Config file for the ROS 2 LiveKit bridge." />
 
   <include unless="$(var sim)" file="$(find-pkg-share waver_description)/launch/description.launch.xml">
     <arg name="use_sim_time" value="false" />
@@ -57,4 +59,8 @@
   </group>
 
   <include if="$(var foxglove)" file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml" />
+
+  <include if="$(var livekit)" file="$(find-pkg-share ros2_livekit_bridge)/launch/livekit_bridge.launch.xml">
+    <arg name="config" value="$(var livekit_config)" />
+  </include>
 </launch>

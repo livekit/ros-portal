@@ -63,7 +63,8 @@ def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentia
         cmd.append('--dev')
 
     try:
-        return subprocess.check_output(cmd, text=True).strip()
+        output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+        return output.splitlines()[-1].strip()
     except FileNotFoundError as exc:
         raise RuntimeError(
             'Could not find the LiveKit CLI (`lk`) on PATH. Rebuild the devcontainer '

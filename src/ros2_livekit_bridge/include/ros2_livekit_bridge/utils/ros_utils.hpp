@@ -78,6 +78,10 @@ std::optional<std::string> liveKitToRosTopicName(
   const std::string & participant_identity,
   const std::string & track_name);
 
+std::optional<std::string> liveKitToRosTopicName(
+  const std::string & participant_identity,
+  const std::string & track_name);
+
 void logPatternCompileErrors(
   const std::vector<PatternCompileError> & errors,
   rclcpp::Logger logger);

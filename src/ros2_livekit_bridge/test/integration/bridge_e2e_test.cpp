@@ -22,11 +22,16 @@
 #include <gtest/gtest.h>
 
 #include <rclcpp/rclcpp.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 #include <std_msgs/msg/string.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -39,6 +44,7 @@ namespace
 
 using namespace std::chrono_literals;
 using ros2_livekit_bridge::utils::resolveEnvironmentCredential;
+using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
 using ros2_livekit_bridge::Ros2LiveKitBridge;
 using ros2_livekit_bridge::test::ScopedRosGraph;
 using ros2_livekit_bridge::test::TemporaryConfigFile;
@@ -54,6 +60,26 @@ constexpr auto kGraphTimeout = 15s;
 constexpr auto kMessageTimeout = 20s;
 constexpr auto kNegativeAssertionTimeout = 3s;
 constexpr const char * kBidirectionalTopic = "/bridge/out";
+
+struct TopicListServiceOptions
+{
+  bool verbose{false};
+  std::uint8_t timeout_sec{5};
+  bool show_types{false};
+  bool count_topics{false};
+  bool include_hidden_topics{false};
+};
+
+bool contains(const std::string & value, const std::string & needle)
+{
+  return value.find(needle) != std::string::npos;
+}
+
+std::size_t lineCount(const std::string & value)
+{
+  return static_cast<std::size_t>(
+    std::count(value.begin(), value.end(), '\n'));
+}
 
 /// Create a ROS node options object for a bridge node
 /// @param context The ROS context to use for the node
@@ -352,6 +378,41 @@ protected:
     return publisher_b_;
   }
 
+  Ros2TopicList::Response::SharedPtr callTopicListService(
+    const std::shared_ptr<rclcpp::Node> & node,
+    const std::string & participant_id,
+    const TopicListServiceOptions & options = {})
+  {
+    auto client = node->create_client<Ros2TopicList>(
+      "/ros2_livekit_bridge/ros2_topic_list");
+
+    if (!waitFor(
+        [&]() {
+          return client->wait_for_service(100ms);
+        },
+        kGraphTimeout))
+    {
+      ADD_FAILURE() << "ros2_topic_list service was not available";
+      return nullptr;
+    }
+
+    auto request = std::make_shared<Ros2TopicList::Request>();
+    request->participant_id = participant_id;
+    request->show_types = options.show_types;
+    request->count_topics = options.count_topics;
+    request->include_hidden_topics = options.include_hidden_topics;
+    request->verbose = options.verbose;
+    request->timeout_sec = options.timeout_sec;
+
+    auto future = client->async_send_request(request);
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << "ros2_topic_list service timed out";
+      return nullptr;
+    }
+
+    return future.get();
+  }
+
   std::shared_ptr<rclcpp::Node> robotANode() const {return robot_a_node_;}
   std::shared_ptr<rclcpp::Node> robotBNode() const {return robot_b_node_;}
   const std::string & identityA() const {return identity_a_;}
@@ -528,4 +589,108 @@ TEST_F(
       kSenderOnlyTopic,
       *forbidden_topic,
       "message that should stay blocked"));
+}
+
+TEST_F(
+  BridgeTestE2E,
+  ListsRemoteRosTopicsOverRpc)
+{
+  initializeRuntime(kBidirectionalTopic);
+
+  ASSERT_TRUE(
+    waitFor(
+      [&]() {return publisherB()->get_subscription_count() > 0;},
+      kGraphTimeout))
+    << "Bridge B did not subscribe to " << kBidirectionalTopic;
+
+  constexpr const char * kHiddenTopic = "/_hidden_topic";
+  auto hidden_publisher =
+    robotBNode()->create_publisher<std_msgs::msg::String>(kHiddenTopic, 10);
+  ASSERT_TRUE(
+    waitFor(
+      [&]() {return topicExists(*robotBNode(), kHiddenTopic);},
+      kGraphTimeout))
+    << "Hidden topic did not appear in bridge B graph";
+
+  const auto response =
+    callTopicListService(robotANode(), identityB());
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->success) << response->err_msg;
+  EXPECT_TRUE(contains(response->output, kBidirectionalTopic));
+  EXPECT_FALSE(contains(response->output, "[std_msgs/msg/String]"));
+  EXPECT_FALSE(contains(response->output, kHiddenTopic));
+  EXPECT_FALSE(contains(response->output, "Published topics:"));
+  EXPECT_FALSE(contains(response->output, "Subscribed topics:"));
+  EXPECT_FALSE(contains(response->output, " publisher"));
+  EXPECT_FALSE(contains(response->output, " subscriber"));
+
+  TopicListServiceOptions show_types_options;
+  show_types_options.show_types = true;
+  const auto show_types_response =
+    callTopicListService(robotANode(), identityB(), show_types_options);
+  ASSERT_NE(show_types_response, nullptr);
+  EXPECT_TRUE(show_types_response->success) << show_types_response->err_msg;
+  EXPECT_TRUE(
+    contains(
+      show_types_response->output,
+      std::string(kBidirectionalTopic) + " [std_msgs/msg/String]"));
+  EXPECT_FALSE(contains(show_types_response->output, kHiddenTopic));
+  EXPECT_FALSE(contains(show_types_response->output, "Published topics:"));
+  EXPECT_FALSE(contains(show_types_response->output, " publisher"));
+
+  TopicListServiceOptions include_hidden_options;
+  include_hidden_options.include_hidden_topics = true;
+  const auto include_hidden_response =
+    callTopicListService(robotANode(), identityB(), include_hidden_options);
+  ASSERT_NE(include_hidden_response, nullptr);
+  EXPECT_TRUE(include_hidden_response->success) <<
+    include_hidden_response->err_msg;
+  EXPECT_TRUE(contains(include_hidden_response->output, kHiddenTopic));
+  EXPECT_FALSE(contains(include_hidden_response->output, "[std_msgs/msg/String]"));
+
+  TopicListServiceOptions verbose_options;
+  verbose_options.verbose = true;
+  const auto verbose_response =
+    callTopicListService(robotANode(), identityB(), verbose_options);
+  ASSERT_NE(verbose_response, nullptr);
+  EXPECT_TRUE(verbose_response->success) << verbose_response->err_msg;
+  EXPECT_TRUE(contains(verbose_response->output, "Published topics:"));
+  EXPECT_TRUE(contains(verbose_response->output, "Subscribed topics:"));
+  EXPECT_TRUE(
+    contains(
+      verbose_response->output,
+      " * /parameter_events [rcl_interfaces/msg/ParameterEvent] 2 publishers\n"));
+  EXPECT_TRUE(
+    contains(
+      verbose_response->output,
+      " * /rosout [rcl_interfaces/msg/Log] 2 publishers\n"));
+  EXPECT_TRUE(
+    contains(
+      verbose_response->output,
+      " * /parameter_events [rcl_interfaces/msg/ParameterEvent] 1 subscriber\n"));
+  EXPECT_TRUE(
+    contains(
+      verbose_response->output,
+      std::string(kBidirectionalTopic) + " [std_msgs/msg/String]"));
+  EXPECT_FALSE(contains(verbose_response->output, kHiddenTopic));
+
+  TopicListServiceOptions count_topics_options;
+  count_topics_options.count_topics = true;
+  const auto count_topics_response =
+    callTopicListService(robotANode(), identityB(), count_topics_options);
+  ASSERT_NE(count_topics_response, nullptr);
+  EXPECT_TRUE(count_topics_response->success) << count_topics_response->err_msg;
+  EXPECT_EQ(
+    count_topics_response->output,
+    std::to_string(lineCount(response->output)) + "\n");
+  EXPECT_FALSE(contains(count_topics_response->output, "/"));
+  EXPECT_FALSE(contains(count_topics_response->output, "["));
+  EXPECT_FALSE(contains(count_topics_response->output, "Published topics:"));
+  EXPECT_FALSE(contains(count_topics_response->output, " publisher"));
+
+  const auto missing_response =
+    callTopicListService(robotANode(), "missing-livekit-participant");
+  ASSERT_NE(missing_response, nullptr);
+  EXPECT_FALSE(missing_response->success);
+  EXPECT_TRUE(contains(missing_response->err_msg, "missing-livekit-participant"));
 }

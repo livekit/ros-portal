@@ -46,6 +46,7 @@ endif()
 
 if(BUILD_TESTING)
   file(GLOB INTEGRATION_TEST_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_e2e.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_test.cpp"
   )
   list(SORT INTEGRATION_TEST_SOURCES)

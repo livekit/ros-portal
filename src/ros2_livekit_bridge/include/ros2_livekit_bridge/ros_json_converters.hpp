@@ -1,0 +1,102 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <string>
+
+#include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
+
+namespace ros2_livekit_bridge
+{
+
+/**
+ * @brief Formatting and graph filtering options for `ros2 topic list`.
+ */
+struct TopicListOptions
+{
+  //! @brief Render topic types next to each topic name.
+  bool show_types{false};
+  //! @brief Render only the number of discovered topics.
+  bool count_topics{false};
+  //! @brief Include hidden topics whose names contain hidden tokens.
+  bool include_hidden_topics{false};
+  //! @brief Render full publisher/subscriber details.
+  bool verbose{false};
+};
+
+using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
+
+/**
+ * @brief Convert a ROS service request to local topic-list options.
+ * @param request ROS service request.
+ * @return Topic-list options from the request flags.
+ */
+TopicListOptions topicListOptionsFromRequest(
+  const Ros2TopicList::Request & request);
+
+/**
+ * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+ * @param request ROS service request.
+ * @param timeout_sec Effective timeout to include in the payload.
+ * @return JSON request payload.
+ */
+std::string topicListRequestToJson(
+  const Ros2TopicList::Request & request,
+  std::uint8_t timeout_sec);
+
+/**
+ * @brief Parse topic-list options from a LiveKit RPC JSON request payload.
+ * @param payload JSON request payload.
+ * @return Topic-list options from the payload flags.
+ * @throws nlohmann::json::exception when @p payload is malformed.
+ */
+TopicListOptions topicListOptionsFromJson(const std::string & payload);
+
+/**
+ * @brief Construct a ROS service response.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return ROS service response.
+ */
+Ros2TopicList::Response makeTopicListResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output = {});
+
+/**
+ * @brief Serialize a topic-list result as a LiveKit RPC JSON response.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return JSON response payload.
+ */
+std::string topicListResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output);
+
+/**
+ * @brief Parse a LiveKit RPC JSON response into a ROS service response.
+ * @param payload JSON response payload.
+ * @return ROS service response.
+ * @throws nlohmann::json::exception when @p payload is malformed or incomplete.
+ */
+Ros2TopicList::Response topicListResponseFromJson(const std::string & payload);
+
+}  // namespace ros2_livekit_bridge

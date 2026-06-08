@@ -207,6 +207,28 @@ source ros/install/setup.bash
 ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
 ```
 
+## Integration Testing
+
+The participant-ID bridge integration test uses a local LiveKit server and two
+participant tokens. If the environment is not configured, the test skips cleanly.
+
+```bash
+# From the workspace root, with a local LiveKit server available.
+source src/ros2_livekit_bridge/test/token_helpers/set_bridge_integration_tokens.bash
+
+colcon build --packages-select ros2_livekit_bridge
+colcon test --packages-select ros2_livekit_bridge \
+  --ctest-args -R ros2_livekit_bridge_integration_tests
+colcon test-result --verbose
+```
+
+The helper defaults to local development credentials (`devkey` / `secret`) and
+the room `ros_bridge_participant_id_test`. It uses
+`ws://host.docker.internal:7880` by default to match the devcontainer launch
+setup. Override `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
+`LIVEKIT_ROOM`, or the `LIVEKIT_IDENTITY_A/B` values before sourcing the script
+if your server uses a different setup.
+
 ```bash
 # launch with gdb
    gdb --args /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/lib/ros2_livekit_bridge/ros2_livekit_bridge_node --ros-args -r __node:=ros2_livekit_bridge --params-file /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/share/ros2_livekit_bridge/config/ros2_livekit_bridge_params.yaml

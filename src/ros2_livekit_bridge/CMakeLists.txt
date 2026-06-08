@@ -192,32 +192,36 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
 
-  ament_auto_add_gtest(livekit_connect_node_test
-    test/integration/livekit_connect_node.cpp
-  )
-  if(TARGET livekit_connect_node_test)
-    target_compile_definitions(livekit_connect_node_test PRIVATE
-      LIVEKIT_CONNECT_NODE_TEST
-    )
-    target_link_libraries(livekit_connect_node_test
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
-    )
-    set_target_properties(livekit_connect_node_test PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
-
-  ament_auto_add_gtest(topic_matcher_test
+  ament_auto_add_gtest(ros2_livekit_bridge_unit_tests
+    test/unit/image_conversion_test.cpp
     test/unit/topic_matcher_test.cpp
+    src/utils/image_conversion.cpp
     src/utils/topic_matcher.cpp
   )
 
-  ament_auto_add_gtest(image_conversion_test
-    test/unit/image_conversion_test.cpp
+  ament_auto_add_gtest(ros2_livekit_bridge_integration_tests
+    test/integration/bridge_test_e2e.cpp
+    test/integration/livekit_connect_node.cpp
+    src/ros2_livekit_bridge.cpp
     src/utils/image_conversion.cpp
+    src/utils/topic_matcher.cpp
   )
+  if(TARGET ros2_livekit_bridge_integration_tests)
+    target_compile_definitions(ros2_livekit_bridge_integration_tests PRIVATE
+      LIVEKIT_CONNECT_NODE_TEST
+    )
+    target_link_libraries(ros2_livekit_bridge_integration_tests
+      "${LIVEKIT_CORE_TARGET}"
+      ${LIVEKIT_EXTRA_LINK_LIBS}
+    )
+    set_target_properties(ros2_livekit_bridge_integration_tests PROPERTIES
+      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    )
+    set_tests_properties(ros2_livekit_bridge_integration_tests PROPERTIES
+      TIMEOUT 240
+    )
+  endif()
 
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)

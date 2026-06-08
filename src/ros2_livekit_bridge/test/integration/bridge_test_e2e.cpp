@@ -16,6 +16,8 @@
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 
+#include "test_common.hpp"
+
 #include <gtest/gtest.h>
 
 #include <rclcpp/rclcpp.hpp>
@@ -25,7 +27,6 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -35,61 +36,48 @@
 #include <utility>
 #include <vector>
 
+#include <unistd.h>
+
 namespace
 {
 
 using namespace std::chrono_literals;
 using ros2_livekit_bridge::Ros2LiveKitBridge;
+using ros2_livekit_bridge::test::getenvString;
+using ros2_livekit_bridge::test::restoreEnv;
+using ros2_livekit_bridge::test::setEnv;
 
 constexpr auto kGraphTimeout = 15s;
 constexpr auto kMessageTimeout = 20s;
 constexpr auto kPollInterval = 50ms;
 
-std::optional<std::string> getenvString(const char * name)
-{
-  const char * value = std::getenv(name);
-  if (value == nullptr || value[0] == '\0') {
-    return std::nullopt;
-  }
-  return std::string(value);
-}
-
-bool setEnv(const char * name, const std::string & value)
-{
-  return ::setenv(name, value.c_str(), 1) == 0;
-}
-
-void restoreEnv(const char * name, const std::optional<std::string> & value)
-{
-  if (value) {
-    (void)::setenv(name, value->c_str(), 1);
-  } else {
-    (void)::unsetenv(name);
-  }
-}
-
-rclcpp::NodeOptions bridgeOptions(
+/// Create a ROS node options object for a bridge node
+/// @param context The ROS context to use for the node
+/// @param node_namespace The namespace to use for the node
+/// @param ros_topics The ROS topics to allow the bridge to publish to (ROS -> LiveKit)
+/// @param livekit_to_ros_allow_topics The LiveKit topics to allow the bridge to subscribe to (LiveKit -> ROS)
+/// @param livekit_to_ros_topic_types The LiveKit topic types to allow the bridge to subscribe to (LiveKit -> ROS)
+/// @return A ROS node options object
+rclcpp::NodeOptions createBridgeOptions(
+  // ROS args
+  const rclcpp::Context::SharedPtr & context,
   const std::string & node_namespace,
-  const std::vector<std::string> & ros_topics)
+  // Bridge config param args
+  const std::vector<std::string> & ros_topics,
+  const std::vector<std::string> & livekit_to_ros_allow_topics,
+  const std::vector<std::string> & livekit_to_ros_topic_types
+)
 {
-  const std::vector<std::string> inbound_topics{
-    "/bridge_a/out",
-    "/bridge_b/out",
-  };
-  const std::vector<std::string> inbound_topic_types{
-    "/bridge_a/out=std_msgs/msg/String",
-    "/bridge_b/out=std_msgs/msg/String",
-  };
-
   return rclcpp::NodeOptions()
+         .context(context)
          .arguments({"--ros-args", "-r", "__ns:=" + node_namespace})
          .parameter_overrides({
       rclcpp::Parameter("room_name", "integration_test"),
       rclcpp::Parameter("topic_polling_period_ms", 50),
       rclcpp::Parameter("ros_threads", 4),
       rclcpp::Parameter("ros_topics", ros_topics),
-      rclcpp::Parameter("livekit_to_ros_allow_topics", inbound_topics),
-      rclcpp::Parameter("livekit_to_ros_topic_types", inbound_topic_types),
+      rclcpp::Parameter("livekit_to_ros_allow_topics", livekit_to_ros_allow_topics),
+      rclcpp::Parameter("livekit_to_ros_topic_types", livekit_to_ros_topic_types),
     });
 }
 
@@ -130,6 +118,12 @@ std::optional<std::string> findParticipantPrefixedTopic(
   return std::nullopt;
 }
 
+bool topicExists(const rclcpp::Node & node, const std::string & topic)
+{
+  const auto topics = node.get_topic_names_and_types();
+  return topics.find(topic) != topics.end();
+}
+
 std_msgs::msg::String makeMessage(const std::string & data)
 {
   std_msgs::msg::String msg;
@@ -137,26 +131,44 @@ std_msgs::msg::String makeMessage(const std::string & data)
   return msg;
 }
 
-class ScopedRclcpp
+std::pair<std::size_t, std::size_t> testDomainIds()
+{
+  const auto pid = static_cast<std::size_t>(::getpid());
+  const auto base_domain_id = 20U + ((pid % 40U) * 2U);
+  return {base_domain_id, base_domain_id + 1U};
+}
+
+/// RAII wrapper for a ROS graph
+class ScopedRosGraph
 {
 public:
-  ScopedRclcpp()
+  /// Initialize a ROS graph with the given domain ID
+  /// Creates a context and initializes it with the given domain ID
+  /// The context is used to create ROS nodes and publishers/subscribers
+  explicit ScopedRosGraph(std::size_t domain_id)
+  : domain_id_(domain_id),
+    context_(std::make_shared<rclcpp::Context>())
   {
-    if (!rclcpp::ok()) {
-      rclcpp::init(0, nullptr);
-      initialized_here_ = true;
+    rclcpp::InitOptions init_options;
+    init_options.set_domain_id(domain_id_);
+    context_->init(0, nullptr, init_options);
+  }
+
+  /// Shutdown the ROS graph
+  /// Shuts down the context and cleans up the ROS graph
+  ~ScopedRosGraph()
+  {
+    if (context_ && rclcpp::ok(context_)) {
+      context_->shutdown("test ROS graph shutdown");
     }
   }
 
-  ~ScopedRclcpp()
-  {
-    if (initialized_here_ && rclcpp::ok()) {
-      rclcpp::shutdown();
-    }
-  }
+  rclcpp::Context::SharedPtr context() const {return context_;}
+  std::size_t domain_id() const {return domain_id_;}
 
 private:
-  bool initialized_here_{false};
+  std::size_t domain_id_;
+  rclcpp::Context::SharedPtr context_;
 };
 
 class BridgeTestE2E : public ::testing::Test
@@ -188,59 +200,100 @@ protected:
 
 }  // namespace
 
+// End-to-end bridge check: two isolated ROS graphs publish message topics through
+// separate bridge participants in the same LiveKit room, then verify each graph
+// receives the other's message only via the bridge. This catches regressions in
+// LiveKit data-track forwarding, participant topic prefixing, and ROS graph
+// isolation without relying on shared local ROS discovery.
 TEST_F(
   BridgeTestE2E,
   RepublishesRosMessagesBothWays)
 {
-  // Ensure environment variables are set
+  // Ensure environment variables are set before proceeding
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
-  ScopedRclcpp rclcpp_scope;
-  ASSERT_TRUE(setEnv("LIVEKIT_URL", *livekit_url_))
-    << "Failed to set environment variable LIVEKIT_URL";
+  // Setup domain IDs/graphs for the test
+  const auto [domain_id_a, domain_id_b] = testDomainIds();
+  ASSERT_NE(domain_id_a, domain_id_b);
+  ScopedRosGraph graph_a(domain_id_a);
+  ScopedRosGraph graph_b(domain_id_b);
+  SCOPED_TRACE(
+    "ROS graph A domain_id=" + std::to_string(graph_a.domain_id()) +
+    ", ROS graph B domain_id=" + std::to_string(graph_b.domain_id()));
 
-  // Context: right now the bridge config only accepts a LIVEKIT_TOKEN env var, since only a single bridge is needed on a compute.
-  // Instead of messing with that, reassign the A/B tokens to the individual bridges before instantiating them
+  // Context for the below setup: right now the bridge config only accepts a LIVEKIT_TOKEN
+  // env var, since only a single bridge is needed on a compute in production. Instead of
+  // adding another parameter for testing, reassign the A/B tokens to the individual bridges
+  // before instantiating them
 
   // Bridge A
+  std::cout << "-------------Bridge A Setup-------------" << std::endl;
+
   // Forward LK_TOKEN_A to Bridge A and instantiate the bridge
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", *token_a_))
     << "Failed to set environment variable LIVEKIT_TOKEN";
-  auto bridge_a = std::make_shared<Ros2LiveKitBridge>(bridgeOptions("/bridge_a_node",
-      {"/bridge_a/out"}));
+  auto bridge_a = std::make_shared<Ros2LiveKitBridge>(
+    createBridgeOptions(graph_a.context(), "/bridge_a_node", {"/bridge_a/out"}, {"/bridge_b/out"},
+    {"/bridge_b/out=std_msgs/msg/String"}));
+
+  std::cout << "------------Bridge A Created------------" << std::endl;
 
   // Bridge B
+  std::cout << "-------------Bridge B Setup-------------" << std::endl;
+
   // Forward LK_TOKEN_B to Bridge B and instantiate the bridge
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", *token_b_))
     << "Failed to set environment variable LIVEKIT_TOKEN";
-  auto bridge_b = std::make_shared<Ros2LiveKitBridge>(bridgeOptions("/bridge_b_node",
-      {"/bridge_b/out"}));
+  auto bridge_b = std::make_shared<Ros2LiveKitBridge>(
+    createBridgeOptions(graph_b.context(), "/bridge_b_node", {"/bridge_b/out"}, {"/bridge_a/out"},
+    {"/bridge_a/out=std_msgs/msg/String"}));
+  std::cout << "------------Bridge B Created------------" << std::endl;
 
-  // Model two independent ROS participants instead of a shared harness node.
+  // Each robot node is in the same ROS graph as its local bridge only.
   auto robot_a_node = std::make_shared<rclcpp::Node>(
-    "participant_id_bridge_integration_robot_a");
+    "participant_id_bridge_integration_robot_a",
+    rclcpp::NodeOptions().context(graph_a.context()));
   auto robot_b_node = std::make_shared<rclcpp::Node>(
-    "participant_id_bridge_integration_robot_b");
+    "participant_id_bridge_integration_robot_b",
+    rclcpp::NodeOptions().context(graph_b.context()));
 
-  rclcpp::executors::MultiThreadedExecutor executor(
-    rclcpp::ExecutorOptions{}, 4);
-  executor.add_node(bridge_a);
-  executor.add_node(bridge_b);
-  executor.add_node(robot_a_node);
-  executor.add_node(robot_b_node);
+  auto graph_a_executor_options = rclcpp::ExecutorOptions{};
+  graph_a_executor_options.context = graph_a.context();
+  rclcpp::executors::MultiThreadedExecutor graph_a_executor(
+    graph_a_executor_options, 2);
+  graph_a_executor.add_node(bridge_a);
+  graph_a_executor.add_node(robot_a_node);
 
-  std::atomic_bool spinning{true};
-  std::thread spin_thread([&]() {
-      executor.spin();
-      spinning.store(false);
+  auto graph_b_executor_options = rclcpp::ExecutorOptions{};
+  graph_b_executor_options.context = graph_b.context();
+  rclcpp::executors::MultiThreadedExecutor graph_b_executor(
+    graph_b_executor_options, 2);
+  graph_b_executor.add_node(bridge_b);
+  graph_b_executor.add_node(robot_b_node);
+
+  std::atomic_bool graph_a_spinning{true};
+  std::atomic_bool graph_b_spinning{true};
+  std::thread graph_a_spin_thread([&]() {
+      graph_a_executor.spin();
+      graph_a_spinning.store(false);
+    });
+  std::thread graph_b_spin_thread([&]() {
+      graph_b_executor.spin();
+      graph_b_spinning.store(false);
     });
 
-  const auto stop_executor = [&]() {
-      if (spinning.exchange(false)) {
-        executor.cancel();
+  const auto stop_executors = [&]() {
+      if (graph_a_spinning.exchange(false)) {
+        graph_a_executor.cancel();
       }
-      if (spin_thread.joinable()) {
-        spin_thread.join();
+      if (graph_b_spinning.exchange(false)) {
+        graph_b_executor.cancel();
+      }
+      if (graph_a_spin_thread.joinable()) {
+        graph_a_spin_thread.join();
+      }
+      if (graph_b_spin_thread.joinable()) {
+        graph_b_spin_thread.join();
       }
     };
 
@@ -248,6 +301,15 @@ TEST_F(
     robot_a_node->create_publisher<std_msgs::msg::String>("/bridge_a/out", 10);
   auto publisher_b =
     robot_b_node->create_publisher<std_msgs::msg::String>("/bridge_b/out", 10);
+
+  ASSERT_TRUE(waitFor(
+      [&]() {
+        return topicExists(*robot_a_node, "/bridge_a/out") &&
+               topicExists(*robot_b_node, "/bridge_b/out");
+    },
+    kGraphTimeout));
+  EXPECT_FALSE(topicExists(*robot_a_node, "/bridge_b/out"));
+  EXPECT_FALSE(topicExists(*robot_b_node, "/bridge_a/out"));
 
   const auto verify_direction =
     [&](const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>> &
@@ -267,7 +329,8 @@ TEST_F(
       if (!waitFor(
           [&]() {
             publisher->publish(makeMessage("warmup:" + expected_payload));
-            inbound_topic = findParticipantPrefixedTopic(*receiver_node, source_topic);
+            inbound_topic =
+            findParticipantPrefixedTopic(*receiver_node, source_topic);
             return inbound_topic.has_value();
         },
         kGraphTimeout))
@@ -291,8 +354,10 @@ TEST_F(
       std::condition_variable cv;
       std::optional<std::string> received_payload;
 
-      auto subscription = receiver_node->create_subscription<std_msgs::msg::String>(
-        *inbound_topic, 10,
+      auto subscription =
+        receiver_node->create_subscription<std_msgs::msg::String>(
+        *inbound_topic,
+        10,
         [&](const std_msgs::msg::String::ConstSharedPtr msg) {
           if (msg->data != expected_payload) {
             return;
@@ -327,22 +392,22 @@ TEST_F(
 
   const bool a_to_b =
     verify_direction(
-    publisher_a,
-    robot_b_node,
-    "/bridge_a/out",
-    "message from bridge a");
+      publisher_a,
+      robot_b_node,
+      "/bridge_a/out",
+      "message from bridge a");
   const bool b_to_a =
     verify_direction(
-    publisher_b,
-    robot_a_node,
-    "/bridge_b/out",
-    "message from bridge b");
+      publisher_b,
+      robot_a_node,
+      "/bridge_b/out",
+      "message from bridge b");
 
-  stop_executor();
-  executor.remove_node(robot_b_node);
-  executor.remove_node(robot_a_node);
-  executor.remove_node(bridge_b);
-  executor.remove_node(bridge_a);
+  stop_executors();
+  graph_b_executor.remove_node(robot_b_node);
+  graph_b_executor.remove_node(bridge_b);
+  graph_a_executor.remove_node(robot_a_node);
+  graph_a_executor.remove_node(bridge_a);
 
   EXPECT_TRUE(a_to_b);
   EXPECT_TRUE(b_to_a);

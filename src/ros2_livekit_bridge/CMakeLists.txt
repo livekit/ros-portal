@@ -207,6 +207,9 @@ if(BUILD_TESTING)
     src/utils/topic_matcher.cpp
   )
   if(TARGET ros2_livekit_bridge_integration_tests)
+    target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/common"
+    )
     target_compile_definitions(ros2_livekit_bridge_integration_tests PRIVATE
       LIVEKIT_CONNECT_NODE_TEST
     )

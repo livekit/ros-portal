@@ -17,17 +17,25 @@
 #pragma once
 
 #include <cstdint>
+#include <atomic>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <regex>
 #include <string>
+#include <thread>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
 #include <livekit/local_data_track.h>
 #include <livekit/local_participant.h>
 #include <livekit/local_video_track.h>
+#include <livekit/remote_data_track.h>
 #include <livekit/room.h>
+#include <livekit/room_delegate.h>
 #include <livekit/video_source.h>
+#include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialized_message.hpp>
@@ -44,7 +52,7 @@ namespace ros2_livekit_bridge
  * topics. The bridge treats video and audio as LK video/audio tracks and other
  * topics as data tracks.
  */
-class Ros2LiveKitBridge : public rclcpp::Node {
+class Ros2LiveKitBridge : public rclcpp::Node, public livekit::RoomDelegate {
 public:
   /**
    * @brief Constructor for the ROS2 LiveKit bridge.
@@ -96,11 +104,43 @@ private:
     const std::string & topic_type);
 
   /**
+   * @brief Handle remote LiveKit data tracks and republish them into ROS.
+   */
+  void onDataTrackPublished(
+    livekit::Room & room,
+    const livekit::DataTrackPublishedEvent & event) override;
+
+  /**
+   * @brief Stop republishing a remote LiveKit data track when it is removed.
+   */
+  void onDataTrackUnpublished(
+    livekit::Room & room,
+    const livekit::DataTrackUnpublishedEvent & event) override;
+
+  /**
    * @brief Check if the topic matches the allowed topics
    * @param topic_name The name of the topic
    * @return True if the topic matches the allowed topics, false otherwise
    */
   bool matchesTopic(const std::string & topic_name) const;
+
+  /**
+   * @brief Check if a remote LiveKit data track is allowed into ROS.
+   */
+  bool matchesLiveKitToRosTopic(const std::string & track_name) const;
+
+  /**
+   * @brief Resolve the ROS message type for an inbound LiveKit data track.
+   */
+  std::optional<std::string> liveKitToRosTopicType(
+    const std::string & track_name) const;
+
+  /**
+   * @brief Build the ROS topic for a remote participant's data track.
+   */
+  std::string liveKitToRosTopicName(
+    const std::string & participant_identity,
+    const std::string & track_name) const;
 
   /**
    * @brief Determine QoS for subscribing to a topic by aggregating all
@@ -122,6 +162,12 @@ private:
   std::vector<std::string> ros_topic_patterns_;
   //! @brief The compiled patterns for the topics
   std::vector<std::regex> compiled_patterns_;
+  //! @brief Remote LiveKit data track patterns allowed to be published into ROS.
+  std::vector<std::string> livekit_to_ros_allow_topic_patterns_;
+  //! @brief Compiled remote LiveKit data track allow patterns.
+  std::vector<std::regex> livekit_to_ros_allow_compiled_patterns_;
+  //! @brief Regex-to-message-type mappings for remote LiveKit data tracks.
+  std::vector<std::pair<std::regex, std::string>> livekit_to_ros_topic_types_;
 
   //! @brief The minimum QoS depth
   size_t min_qos_depth_;
@@ -164,6 +210,28 @@ private:
     std::shared_ptr<livekit::LocalDataTrack> track;
   };
   std::unordered_map<std::string, DataTopicState> data_topic_states_;
+
+  //! @brief Per-inbound-data-track state for LiveKit-to-ROS forwarding.
+  struct InboundDataTrackState
+  {
+    std::string sid;
+    std::string track_name;
+    std::string publisher_identity;
+    std::string ros_topic_name;
+    std::string ros_topic_type;
+    rclcpp::GenericPublisher::SharedPtr publisher;
+    std::shared_ptr<livekit::DataTrackStream> stream;
+    std::thread thread;
+    std::atomic_bool stop{false};
+  };
+  void readInboundDataTrack(
+    std::shared_ptr<InboundDataTrackState> state);
+  void stopInboundDataTrack(const std::string & sid);
+
+  std::mutex inbound_data_track_mutex_;
+  std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>>
+  inbound_data_track_states_;
+  std::unordered_set<std::string> inbound_ros_topic_names_;
 };
 
 } // namespace ros2_livekit_bridge

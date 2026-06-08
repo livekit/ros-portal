@@ -18,12 +18,20 @@
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <stdexcept>
+#include <utility>
 
+#include <livekit/data_track_frame.h>
+#include <livekit/data_track_stream.h>
 #include <livekit/livekit.h>
+#include <livekit/remote_data_track.h>
+#include <livekit/room_delegate.h>
 #include <livekit/video_frame.h>
 
 namespace ros2_livekit_bridge
@@ -84,6 +92,62 @@ void logPatternCompileErrors(
   }
 }
 
+std::string normalizeTrackTopicName(const std::string & track_name)
+{
+  if (track_name.empty()) {
+    return "/";
+  }
+  if (track_name.front() == '/') {
+    return track_name;
+  }
+  return "/" + track_name;
+}
+
+std::string sanitizeRosNameToken(const std::string & token)
+{
+  std::string sanitized;
+  sanitized.reserve(token.size());
+  for (const unsigned char ch : token) {
+    if (std::isalnum(ch) || ch == '_') {
+      sanitized.push_back(static_cast<char>(ch));
+    } else {
+      sanitized.push_back('_');
+    }
+  }
+
+  if (sanitized.empty()) {
+    return "participant";
+  }
+  if (std::isdigit(static_cast<unsigned char>(sanitized.front()))) {
+    sanitized.insert(sanitized.begin(), '_');
+  }
+  return sanitized;
+}
+
+std::optional<std::pair<std::string, std::string>> parseTopicTypeRule(
+  const std::string & rule)
+{
+  auto delimiter = rule.find(":=");
+  std::size_t delimiter_size = 2;
+  if (delimiter == std::string::npos) {
+    delimiter = rule.find('=');
+    delimiter_size = 1;
+  }
+  if (delimiter == std::string::npos) {
+    delimiter = rule.find(':');
+    delimiter_size = 1;
+  }
+  if (delimiter == std::string::npos || delimiter == 0 ||
+    delimiter + delimiter_size >= rule.size())
+  {
+    return std::nullopt;
+  }
+
+  return std::make_pair(
+    rule.substr(0, delimiter),
+    rule.substr(delimiter + delimiter_size));
+}
+
 } // namespace
 
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
@@ -100,6 +164,10 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
   this->declare_parameter<int>("max_qos_depth",
                                static_cast<int>(DEFAULT_MAX_QOS_DEPTH));
   this->declare_parameter("best_effort_qos_topics",
+                          rclcpp::ParameterValue(kEmptyStringVec));
+  this->declare_parameter("livekit_to_ros_allow_topics",
+                          rclcpp::ParameterValue(kEmptyStringVec));
+  this->declare_parameter("livekit_to_ros_topic_types",
                           rclcpp::ParameterValue(kEmptyStringVec));
 
   room_name_ = this->get_parameter("room_name").as_string();
@@ -126,11 +194,45 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
   logPatternCompileErrors(pattern_errors, this->get_logger());
 
+  livekit_to_ros_allow_topic_patterns_ =
+    this->get_parameter("livekit_to_ros_allow_topics").as_string_array();
+  pattern_errors.clear();
+  livekit_to_ros_allow_compiled_patterns_ =
+    bridge_utils::compileRegexPatterns(
+      livekit_to_ros_allow_topic_patterns_, &pattern_errors);
+  logPatternCompileErrors(pattern_errors, this->get_logger());
+
+  const auto topic_type_rules =
+    this->get_parameter("livekit_to_ros_topic_types").as_string_array();
+  for (const auto & rule : topic_type_rules) {
+    const auto parsed = parseTopicTypeRule(rule);
+    if (!parsed) {
+      RCLCPP_ERROR(
+        this->get_logger(),
+        "Invalid livekit_to_ros_topic_types rule '%s'; expected '<regex>=<msg_type>'",
+        rule.c_str());
+      continue;
+    }
+
+    try {
+      livekit_to_ros_topic_types_.emplace_back(
+        std::regex(parsed->first, std::regex::ECMAScript), parsed->second);
+    } catch (const std::regex_error & e) {
+      RCLCPP_ERROR(
+        this->get_logger(),
+        "Invalid livekit_to_ros_topic_types regex '%s': %s",
+        parsed->first.c_str(), e.what());
+    }
+  }
+
   RCLCPP_INFO(this->get_logger(),
-              "Room: '%s', polling period: %d ms, watching %zu topic patterns, "
-              "QoS depth range: [%zu, %zu]",
+              "Room: '%s', polling period: %d ms, watching %zu ROS topic "
+              "patterns, %zu LiveKit-to-ROS topic patterns, QoS depth range: "
+              "[%zu, %zu]",
               room_name_.c_str(), topic_polling_period_ms_,
-              compiled_patterns_.size(), min_qos_depth_, max_qos_depth_);
+              compiled_patterns_.size(),
+              livekit_to_ros_allow_compiled_patterns_.size(),
+              min_qos_depth_, max_qos_depth_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
@@ -170,6 +272,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     livekit::initialize(livekit::LogLevel::Info);
     sdk_initialized_ = true;
     room_ = std::make_unique<livekit::Room>();
+    room_->setDelegate(this);
 
     if (room_->connect(livekit_url, livekit_token, room_options)) {
       RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room.");
@@ -191,6 +294,19 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
 
 Ros2LiveKitBridge::~Ros2LiveKitBridge()
 {
+  {
+    std::vector<std::string> inbound_sids;
+    {
+      std::lock_guard<std::mutex> lock(inbound_data_track_mutex_);
+      inbound_sids.reserve(inbound_data_track_states_.size());
+      for (const auto & [sid, _] : inbound_data_track_states_) {
+        inbound_sids.push_back(sid);
+      }
+    }
+    for (const auto & sid : inbound_sids) {
+      stopInboundDataTrack(sid);
+    }
+  }
   data_topic_states_.clear();
   image_topic_states_.clear();
   if (room_) {
@@ -209,6 +325,10 @@ void Ros2LiveKitBridge::pollTopics()
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
     if (subscriptions_.count(topic_name) > 0) {
+      continue;
+    }
+
+    if (inbound_ros_topic_names_.count(topic_name) > 0) {
       continue;
     }
 
@@ -446,11 +566,183 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
               topic_name.c_str(), kImageMsgType);
 }
 
+void Ros2LiveKitBridge::onDataTrackPublished(
+  livekit::Room &,
+  const livekit::DataTrackPublishedEvent & event)
+{
+  if (!event.track) {
+    return;
+  }
+
+  const auto & info = event.track->info();
+  const auto & track_name = info.name;
+  if (!matchesLiveKitToRosTopic(track_name)) {
+    return;
+  }
+
+  const auto topic_type = liveKitToRosTopicType(track_name);
+  if (!topic_type) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Ignoring LiveKit data track '%s' from '%s' because no "
+      "livekit_to_ros_topic_types rule resolved its ROS message type",
+      track_name.c_str(), event.track->publisherIdentity().c_str());
+    return;
+  }
+
+  const std::string ros_topic_name =
+    liveKitToRosTopicName(event.track->publisherIdentity(), track_name);
+
+  std::shared_ptr<InboundDataTrackState> state;
+  {
+    std::lock_guard<std::mutex> lock(inbound_data_track_mutex_);
+    if (inbound_data_track_states_.count(info.sid) > 0) {
+      return;
+    }
+
+    state = std::make_shared<InboundDataTrackState>();
+    state->sid = info.sid;
+    state->track_name = track_name;
+    state->publisher_identity = event.track->publisherIdentity();
+    state->ros_topic_name = ros_topic_name;
+    state->ros_topic_type = *topic_type;
+    state->publisher = this->create_generic_publisher(
+      ros_topic_name, *topic_type, rclcpp::QoS(10));
+
+    const auto subscribe_result = event.track->subscribe();
+    if (!subscribe_result) {
+      const auto & error = subscribe_result.error();
+      RCLCPP_ERROR(
+        this->get_logger(),
+        "Failed to subscribe to LiveKit data track '%s' from '%s': code=%u "
+        "message=%s",
+        track_name.c_str(), state->publisher_identity.c_str(),
+        static_cast<std::uint32_t>(error.code), error.message.c_str());
+      return;
+    }
+
+    state->stream = subscribe_result.value();
+    inbound_data_track_states_[info.sid] = state;
+    inbound_ros_topic_names_.insert(ros_topic_name);
+  }
+
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Subscribed to LiveKit data track '%s' from '%s'; publishing ROS topic "
+    "'%s' [%s]",
+    track_name.c_str(), state->publisher_identity.c_str(),
+    ros_topic_name.c_str(), state->ros_topic_type.c_str());
+
+  state->thread = std::thread(&Ros2LiveKitBridge::readInboundDataTrack, this, state);
+}
+
+void Ros2LiveKitBridge::onDataTrackUnpublished(
+  livekit::Room &,
+  const livekit::DataTrackUnpublishedEvent & event)
+{
+  stopInboundDataTrack(event.sid);
+}
+
+void Ros2LiveKitBridge::readInboundDataTrack(
+  std::shared_ptr<InboundDataTrackState> state)
+{
+  livekit::DataTrackFrame frame;
+  while (!state->stop.load() && state->stream && state->stream->read(frame)) {
+    rclcpp::SerializedMessage serialized_msg(frame.payload.size());
+    auto & rcl_msg = serialized_msg.get_rcl_serialized_message();
+
+    if (!frame.payload.empty()) {
+      std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
+    }
+    rcl_msg.buffer_length = frame.payload.size();
+
+    try {
+      state->publisher->publish(serialized_msg);
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Failed to publish inbound LiveKit data frame from '%s' track '%s' to "
+        "ROS topic '%s': %s",
+        state->publisher_identity.c_str(), state->track_name.c_str(),
+        state->ros_topic_name.c_str(), e.what());
+    }
+  }
+
+  if (state->stream) {
+    const auto terminal_error = state->stream->terminalError();
+    if (terminal_error) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "LiveKit data track '%s' from '%s' ended with error: code=%u message=%s",
+        state->track_name.c_str(), state->publisher_identity.c_str(),
+        static_cast<std::uint32_t>(terminal_error->code),
+        terminal_error->message.c_str());
+    }
+  }
+}
+
+void Ros2LiveKitBridge::stopInboundDataTrack(const std::string & sid)
+{
+  std::shared_ptr<InboundDataTrackState> state;
+  {
+    std::lock_guard<std::mutex> lock(inbound_data_track_mutex_);
+    const auto it = inbound_data_track_states_.find(sid);
+    if (it == inbound_data_track_states_.end()) {
+      return;
+    }
+    state = it->second;
+    inbound_data_track_states_.erase(it);
+    inbound_ros_topic_names_.erase(state->ros_topic_name);
+  }
+
+  state->stop.store(true);
+  if (state->stream) {
+    state->stream->close();
+  }
+  if (state->thread.joinable()) {
+    state->thread.join();
+  }
+
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Stopped LiveKit-to-ROS data track '%s' from '%s' on ROS topic '%s'",
+    state->track_name.c_str(), state->publisher_identity.c_str(),
+    state->ros_topic_name.c_str());
+}
+
 /** Helpers **/
 
 bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
 {
   return bridge_utils::matchesAnyPattern(topic_name, compiled_patterns_);
+}
+
+bool Ros2LiveKitBridge::matchesLiveKitToRosTopic(
+  const std::string & track_name) const
+{
+  return bridge_utils::matchesAnyPattern(
+    normalizeTrackTopicName(track_name), livekit_to_ros_allow_compiled_patterns_);
+}
+
+std::optional<std::string> Ros2LiveKitBridge::liveKitToRosTopicType(
+  const std::string & track_name) const
+{
+  const std::string normalized_track_name = normalizeTrackTopicName(track_name);
+  for (const auto & [pattern, topic_type] : livekit_to_ros_topic_types_) {
+    if (std::regex_match(normalized_track_name, pattern)) {
+      return topic_type;
+    }
+  }
+  return std::nullopt;
+}
+
+std::string Ros2LiveKitBridge::liveKitToRosTopicName(
+  const std::string & participant_identity,
+  const std::string & track_name) const
+{
+  const auto participant_prefix = sanitizeRosNameToken(participant_identity);
+  const auto normalized_track_name = normalizeTrackTopicName(track_name);
+  return "/" + participant_prefix + normalized_track_name;
 }
 
 rclcpp::QoS

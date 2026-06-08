@@ -32,5 +32,10 @@
     # Omit or comment out to use default (no overrides -- QoS is inferred from publishers).
     # best_effort_qos_topics: ["/camera/.*", "/lidar/.*"]
 
-    # TODO(sderosa)
-    # livekit_to_ros_allow_topics: ["human.teleop"]
+    # Remote LiveKit data tracks allowed to be published back into ROS.
+    # Inbound ROS topics are prefixed with the remote participant identity:
+    #   participant "robot_b" + data track "/odom/global" -> "/robot_b/odom/global"
+    livekit_to_ros_allow_topics: ["/odom/global", "/test/robot_status"]
+    livekit_to_ros_topic_types:
+      - "/odom/global=nav_msgs/msg/Odometry"
+      - "/test/robot_status=custom_msgs/msg/RobotStatus"

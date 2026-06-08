@@ -41,6 +41,10 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
    can be pushed into a LiveKit video track; all other topics use a **generic
    subscription** (`rclcpp::GenericSubscription`) and are forwarded as raw
    CDR-serialized bytes over a LiveKit data track.
+5. **Subscribes to allowed remote LiveKit data tracks** and republishes their
+   raw CDR payloads into ROS with the remote participant identity prepended to
+   the topic name. For example, participant `robot_b` publishing data track
+   `/odom/global` is exposed locally as ROS topic `/robot_b/odom/global`.
 
 ### Message-type handling
 
@@ -53,7 +57,11 @@ The data-track payload is the unmodified CDR byte stream produced by the
 publisher. Consumers need the matching `.msg` definition (or any IDL/CDR-aware
 deserializer) to decode it.
 
-```
+For LiveKit-to-ROS data tracks, the track name does not currently include ROS
+message type metadata. Configure `livekit_to_ros_topic_types` so the bridge can
+create the matching `rclcpp::GenericPublisher`.
+
+```text
 ┌───────────────────────────────────────────────────────────────────────┐
 │                        Ros2LiveKitBridge Node                         │
 │                                                                       │
@@ -102,6 +110,8 @@ Parameters are loaded from `config/ros2_livekit_bridge_params.yaml`:
 | `min_qos_depth`            | int              | `1`     | Lower bound for subscriber history depth. |
 | `max_qos_depth`            | int              | `25`    | Upper bound for subscriber history depth. |
 | `best_effort_qos_topics`   | list of strings  | `[]`    | Regex patterns for topics forced to BEST_EFFORT reliability. |
+| `livekit_to_ros_allow_topics` | list of strings | `[]` | Remote LiveKit data track names allowed to be published into ROS. |
+| `livekit_to_ros_topic_types` | list of strings | `[]` | Rules in the form `<track-regex>=<ros-msg-type>` used to create inbound generic ROS publishers. |
 
 LiveKit credentials are intentionally not loaded from the config file. Set
 `LIVEKIT_URL` and `LIVEKIT_TOKEN` in the node environment.
@@ -117,6 +127,20 @@ Patterns are full ECMAScript regular expressions tested with `std::regex_match`
 | `/tf.*`              | `/tf`, `/tf_static`, `/tf_anything`          |
 | `/camera/.*`         | `/camera/image_raw`, `/camera/camera_info`   |
 | `/robot[0-9]+/odom`  | `/robot1/odom`, `/robot42/odom`              |
+
+### LiveKit-to-ROS topic names
+
+Inbound data tracks are published under a participant namespace:
+
+```text
+participant identity: robot_b
+LiveKit data track:   /odom/global
+ROS topic:            /robot_b/odom/global
+```
+
+Participant identities are converted to ROS-safe topic tokens by replacing
+characters outside `[A-Za-z0-9_]` with `_`. Use ROS-compatible LiveKit identities
+if the exact namespace matters.
 
 ## QoS Determination
 

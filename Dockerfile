@@ -57,11 +57,9 @@ RUN apt-get update && apt-get install -y \
 
 # ros-livekit-bridge dependencies
 RUN apt-get update && apt-get install -y \
-    ros-${ROS_DISTRO}-rosx-introspection
-
-# foxglove bridge
-RUN apt-get update && apt-get install -y \
-    ros-${ROS_DISTRO}-foxglove-bridge
+    ros-${ROS_DISTRO}-rosx-introspection \
+    ros-${ROS_DISTRO}-foxglove-bridge \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY ./setup-shell-env.sh /tmp/setup-shell-env.sh
 RUN chmod +x /tmp/setup-shell-env.sh && /tmp/setup-shell-env.sh && rm /tmp/setup-shell-env.sh

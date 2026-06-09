@@ -13,6 +13,26 @@ The devcontainer builds from the repo-root `Dockerfile` and overrides `WS_ROS=li
 
 External repos are tracked in `external.repos` using `vcstool`.
 
+## Git authentication from the devcontainer
+
+The devcontainer forwards an SSH agent socket to `/ssh-agent` and sets
+`SSH_AUTH_SOCK=/ssh-agent` so Git commands can use host credentials from
+inside the container. The checked-in mount uses Docker Desktop's host-services
+socket:
+
+```json
+"source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind"
+```
+
+This works when Docker exposes that socket and the host SSH agent has a
+GitHub-capable key loaded. On macOS with Docker Desktop, load the key before
+opening or rebuilding the devcontainer:
+
+```bash
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+ssh-add -l
+```
+
 ## CI Docker image cache
 
 CI tags Docker build images from an md5 hash of the repository files that

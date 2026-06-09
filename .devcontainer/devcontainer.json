@@ -22,7 +22,8 @@
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
     "QT_X11_NO_MITSHM": "1",
-    "CMAKE_EXPORT_COMPILE_COMMANDS": "1"
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "1",
+    "SSH_AUTH_SOCK": "/ssh-agent"
   },
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent"

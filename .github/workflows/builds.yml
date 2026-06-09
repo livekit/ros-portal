@@ -46,7 +46,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Build and test in devcontainer
+      - name: Setup devcontainer environment
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+
+      - name: Build packages
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -58,12 +66,6 @@ jobs:
               set -eo pipefail
               source /opt/ros/jazzy/setup.bash
               set -u
-              mkdir -p src/externals
-              if [ -f external.repos ]; then
-                vcs import --skip-existing src/externals < external.repos
-              fi
-              rosdep update
-              rosdep install --from-paths src --ignore-src -r -y
               colcon build
             '
 

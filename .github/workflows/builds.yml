@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Devcontainer CI (${{ matrix.target }})
+    name: Build and Unit Tests (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read

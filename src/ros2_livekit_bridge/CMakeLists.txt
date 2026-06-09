@@ -225,12 +225,25 @@ if(BUILD_TESTING)
   ament_auto_add_gtest(config_parser_test
     test/unit/config_parser_test.cpp
     src/config/config_parser.cpp
+    src/config/utils.cpp
   )
   if(TARGET config_parser_test)
     target_compile_definitions(config_parser_test PRIVATE
-      ROS2_LIVEKIT_BRIDGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+      ROS2_LIVEKIT_BRIDGE_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test"
     )
+    target_include_directories(config_parser_test PRIVATE src)
     target_link_libraries(config_parser_test
+      yaml-cpp::yaml-cpp
+    )
+  endif()
+
+  ament_auto_add_gtest(config_utils_test
+    test/config/test_utils.cpp
+    src/config/utils.cpp
+  )
+  if(TARGET config_utils_test)
+    target_include_directories(config_utils_test PRIVATE src)
+    target_link_libraries(config_utils_test
       yaml-cpp::yaml-cpp
     )
   endif()

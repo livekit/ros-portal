@@ -272,7 +272,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, ParsesFile) {
   const auto path =
-    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_SOURCE_DIR) /
+    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_TEST_DIR) /
     "config" / "test_config.yaml";
 
   const auto config = ConfigParser{}.parseFile(path);
@@ -439,7 +439,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, ParsesFromMissingFileThrowsConfigError) {
   const auto path =
-    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_SOURCE_DIR) /
+    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_TEST_DIR) /
     "config" / "does_not_exist.yaml";
 
   try {
@@ -452,9 +452,10 @@ TEST(ConfigParserTest, ParsesFromMissingFileThrowsConfigError) {
 }
 
 TEST(ConfigParserTest, ParsesMalformedFileThrowsConfigError) {
+  const auto unique = std::filesystem::file_time_type::clock::now()
+    .time_since_epoch().count();
   const auto path = std::filesystem::temp_directory_path() /
-    "ros2_livekit_bridge_malformed_config.yaml";
-  {
+    ("ros2_livekit_bridge_malformed_config_" + std::to_string(unique) + ".yaml");
     std::ofstream out(path);
     out << "ros_livekit_bridge: \"unterminated";
   }

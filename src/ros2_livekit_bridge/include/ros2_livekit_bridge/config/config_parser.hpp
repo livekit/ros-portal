@@ -17,9 +17,10 @@
 #ifndef ROS2_LIVEKIT_BRIDGE__CONFIG__CONFIG_PARSER_HPP_
 #define ROS2_LIVEKIT_BRIDGE__CONFIG__CONFIG_PARSER_HPP_
 
+#include "ros2_livekit_bridge/config/error.hpp"
+
 #include <filesystem>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -64,24 +65,6 @@ struct BridgeConfig
   RoomOptions room_options;
   std::vector<ServiceBridge> services;
   std::vector<TopicBridge> topics;
-};
-
-class ConfigError : public std::runtime_error
-{
-public:
-  ConfigError(
-    std::string context,
-    std::string expected,
-    std::string detail);
-
-  const std::string & context() const noexcept {return context_;}
-  const std::string & expected() const noexcept {return expected_;}
-  const std::string & detail() const noexcept {return detail_;}
-
-private:
-  std::string context_;
-  std::string expected_;
-  std::string detail_;
 };
 
 class ConfigParser

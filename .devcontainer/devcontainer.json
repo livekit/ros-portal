@@ -9,6 +9,9 @@
   },
   "workspaceFolder": "/livekit_ws",
   "workspaceMount": "source=${localWorkspaceFolder},target=/livekit_ws,type=bind",
+  "mounts": [
+    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind"
+  ],
   "remoteUser": "root",
   "init": true,
   "privileged": true,
@@ -20,6 +23,9 @@
     "DISPLAY": "${localEnv:DISPLAY}",
     "QT_X11_NO_MITSHM": "1",
     "CMAKE_EXPORT_COMPILE_COMMANDS": "1"
+  },
+  "remoteEnv": {
+    "SSH_AUTH_SOCK": "/ssh-agent"
   },
   "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && mkdir -p src/externals && if [ -f external.repos ]; then vcs import --skip-existing src/externals < external.repos; fi && rosdep update && rosdep install --from-paths src --ignore-src -r -y'",
   "postStartCommand": "bash -lc 'if [ -d src/externals ]; then for repo in src/externals/*; do if [ -d \"$repo/.git\" ]; then if [ -n \"$(git -C \"$repo\" status --porcelain)\" ]; then echo \"Skipping pull for $repo because it has local changes\"; elif ! git -C \"$repo\" symbolic-ref --quiet --short HEAD >/dev/null; then echo \"Skipping pull for $repo because it is detached HEAD\"; else git -C \"$repo\" pull --recurse-submodules; fi; fi; done; fi'",

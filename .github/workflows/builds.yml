@@ -84,51 +84,17 @@ jobs:
               GTEST_COLOR=1 build/ros2_livekit_bridge/ros2_livekit_bridge_unit_tests
             '
 
-      - name: Install LiveKit server
+      - name: Start livekit-server
+        id: livekit_server
+        uses: livekit/dev-server-action@61e2b4dcb170dd3591e0c9b0db3c3fe5db93b500
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Install livekit-cli
         run: |
           set -euxo pipefail
-          livekit_version="1.12.0"
-          case "$(uname -m)" in
-            x86_64) livekit_arch="amd64" ;;
-            aarch64 | arm64) livekit_arch="arm64" ;;
-            *) echo "::error::unsupported LiveKit server architecture: $(uname -m)"; exit 1 ;;
-          esac
-
-          archive="livekit_${livekit_version}_linux_${livekit_arch}.tar.gz"
-          url="https://github.com/livekit/livekit/releases/download/v${livekit_version}/${archive}"
-          install_dir="$(mktemp -d)"
-          curl -fsSL "$url" -o "${install_dir}/${archive}"
-          tar -xzf "${install_dir}/${archive}" -C "$install_dir"
-
-          livekit_binary="$(find "$install_dir" -type f -name livekit-server -perm -111 | head -n 1)"
-          if [ -z "$livekit_binary" ]; then
-            echo "::error::livekit-server binary not found in ${archive}"
-            find "$install_dir" -maxdepth 3 -type f
-            exit 1
-          fi
-
-          sudo install -m 0755 "$livekit_binary" /usr/local/bin/livekit-server
-          livekit-server --version
-
-      - name: Start LiveKit server
-        env:
-          LIVEKIT_CONFIG: "enable_data_tracks: true"
-        run: |
-          set -euxo pipefail
-          nohup livekit-server --dev > livekit-server.log 2>&1 &
-          echo $! > livekit-server.pid
-
-          for _ in {1..30}; do
-            if timeout 1 bash -c '</dev/tcp/127.0.0.1/7880' >/dev/null 2>&1; then
-              echo "livekit-server is ready"
-              exit 0
-            fi
-            sleep 1
-          done
-
-          echo "::error::livekit-server failed to start within 30s"
-          tail -n 200 livekit-server.log || true
-          exit 1
+          curl -sSL https://get.livekit.io/cli | bash
+          lk --version
 
       - name: Run integration tests
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -150,14 +116,6 @@ jobs:
               GTEST_COLOR=1 build/ros2_livekit_bridge/ros2_livekit_bridge_integration_tests
             '
 
-      - name: Stop LiveKit server
-        if: always()
-        run: |
-          if [ -f livekit-server.pid ]; then
-            kill "$(cat livekit-server.pid)" 2>/dev/null || true
-            rm -f livekit-server.pid
-          fi
-
       - name: Dump LiveKit server log on failure
         if: failure()
-        run: tail -n 500 livekit-server.log || true
+        run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true

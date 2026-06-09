@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <memory>
@@ -100,6 +101,34 @@ std::string escapedRegex(const std::string & value)
   return std::regex_replace(value, special_chars, R"(\$&)");
 }
 
+std::string sanitizeRosNameToken(const std::string & token)
+{
+  std::string sanitized;
+  sanitized.reserve(token.size());
+  for (const unsigned char ch : token) {
+    if (std::isalnum(ch) || ch == '_') {
+      sanitized.push_back(static_cast<char>(ch));
+    } else {
+      sanitized.push_back('_');
+    }
+  }
+
+  if (sanitized.empty()) {
+    return "participant";
+  }
+  if (std::isdigit(static_cast<unsigned char>(sanitized.front()))) {
+    sanitized.insert(sanitized.begin(), '_');
+  }
+  return sanitized;
+}
+
+std::string expectedInboundTopicName(
+  const std::string & participant_identity,
+  const std::string & source_topic)
+{
+  return "/" + sanitizeRosNameToken(participant_identity) + source_topic;
+}
+
 std::optional<std::string> findParticipantPrefixedTopic(
   const rclcpp::Node & node,
   const std::string & source_topic)
@@ -131,6 +160,10 @@ std_msgs::msg::String makeMessage(const std::string & data)
   return msg;
 }
 
+/// Pick two process-scoped ROS domain IDs for this test run.
+/// Uses PID-derived values to reduce cross-run DDS collisions while keeping
+/// graph A and graph B isolated from each other. Hard-coding domain IDs can
+/// make parallel runs interfere and introduce flaky discovery/message leakage.
 std::pair<std::size_t, std::size_t> testDomainIds()
 {
   const auto pid = static_cast<std::size_t>(::getpid());
@@ -180,6 +213,8 @@ protected:
     token_a_ = getenvString("LIVEKIT_TOKEN_A");
     token_b_ = getenvString("LIVEKIT_TOKEN_B");
     original_token_ = getenvString("LIVEKIT_TOKEN");
+    identity_a_ = getenvString("LIVEKIT_IDENTITY_A").value_or("bridge-test-a");
+    identity_b_ = getenvString("LIVEKIT_IDENTITY_B").value_or("bridge-test-b");
   }
 
   void TearDown() override
@@ -196,6 +231,8 @@ protected:
   std::optional<std::string> token_a_;
   std::optional<std::string> token_b_;
   std::optional<std::string> original_token_;
+  std::string identity_a_;
+  std::string identity_b_;
 };
 
 }  // namespace
@@ -316,6 +353,7 @@ TEST_F(
     publisher,
     const std::shared_ptr<rclcpp::Node> & receiver_node,
     const std::string & source_topic,
+    const std::string & expected_inbound_topic,
     const std::string & expected_payload) -> bool {
       if (!waitFor(
           [&]() {return publisher->get_subscription_count() > 0;},
@@ -347,6 +385,12 @@ TEST_F(
       if (*inbound_topic == source_topic) {
         ADD_FAILURE() << "Inbound topic was not participant-prefixed: "
                       << *inbound_topic;
+        return false;
+      }
+      if (*inbound_topic != expected_inbound_topic) {
+        ADD_FAILURE() << "Inbound topic did not use expected participant "
+                         "prefix. Expected "
+                      << expected_inbound_topic << ", got " << *inbound_topic;
         return false;
       }
 
@@ -395,12 +439,14 @@ TEST_F(
       publisher_a,
       robot_b_node,
       "/bridge_a/out",
+      expectedInboundTopicName(identity_a_, "/bridge_a/out"),
       "message from bridge a");
   const bool b_to_a =
     verify_direction(
       publisher_b,
       robot_a_node,
       "/bridge_b/out",
+      expectedInboundTopicName(identity_b_, "/bridge_b/out"),
       "message from bridge b");
 
   stop_executors();

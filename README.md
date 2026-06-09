@@ -63,6 +63,11 @@ git ls-remote origin HEAD
 CI sets `DEVCONTAINER_SSH_AUTH_SOCK` to a placeholder file because CI does not
 need SSH credentials inside the devcontainer.
 
+NOTE: on remote hosts the `.devcontainer/.env` file may not suffice and you may need to set the environment variable in your shell profile:
+```bash
+echo 'export DEVCONTAINER_SSH_AUTH_SOCK=/tmp/devcontainer-empty-ssh-agent' >> ~/.profile
+```
+
 ## CI Docker image cache
 
 CI tags Docker build images from an md5 hash of the repository files that

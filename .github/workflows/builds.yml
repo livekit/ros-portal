@@ -38,8 +38,6 @@ jobs:
             name: linux-x64
           - os: ubuntu-24.04-arm
             name: linux-arm64
-          - os: macos-26-xlarge
-            name: macos-arm64
 
     name: Build and Unit Tests (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -47,13 +45,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-
-      - name: Set up Docker on macOS
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          brew install docker colima
-          colima start --arch aarch64 --cpu 4 --memory 8 --disk 40
-          docker version
 
       - name: Build and test in devcontainer
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3

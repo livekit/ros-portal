@@ -13,6 +13,61 @@ The devcontainer builds from the repo-root `Dockerfile` and overrides `WS_ROS=li
 
 External repos are tracked in `external.repos` using `vcstool`.
 
+## Git authentication from the devcontainer
+
+The devcontainer forwards an SSH agent socket to `/ssh-agent` and sets
+`SSH_AUTH_SOCK=/ssh-agent` so Git commands can use host credentials from
+inside the container.
+
+Security note: SSH agent forwarding grants processes inside the container access
+to your SSH identities; only enable it for containers/workspaces you trust.
+
+By default, the devcontainer bind-mounts the host's `SSH_AUTH_SOCK`. If your
+host socket is not directly bind-mountable (for example macOS Docker Desktop
+host-services), set `DEVCONTAINER_SSH_AUTH_SOCK` to an explicit socket path that
+Docker can mount.
+
+Copy `.devcontainer/.env.example` to `.devcontainer/.env` and set
+`DEVCONTAINER_SSH_AUTH_SOCK` for your host. The Dev Containers extension reads
+`.devcontainer/.env` when resolving `${localEnv:...}` in `devcontainer.json`,
+including when Cursor is launched from the Dock.
+
+On macOS with Docker Desktop:
+
+```bash
+cp .devcontainer/.env.example .devcontainer/.env
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+ssh-add -l
+```
+
+Enable **Settings → General → Use SSH agent** in Docker Desktop. If the socket
+is missing, quit Docker Desktop and restart it from a terminal after loading
+your key: `open -a Docker`.
+
+On Linux, set `DEVCONTAINER_SSH_AUTH_SOCK` in `.devcontainer/.env` to your host
+agent socket path (`echo $SSH_AUTH_SOCK`), then load your key:
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+After setting the variable, open or rebuild the devcontainer. Inside the
+devcontainer, verify forwarding with:
+
+```bash
+ssh-add -l
+git ls-remote origin HEAD
+```
+
+CI sets `DEVCONTAINER_SSH_AUTH_SOCK` to a placeholder file because CI does not
+need SSH credentials inside the devcontainer.
+
+NOTE: on remote hosts the `.devcontainer/.env` file may not suffice and you may need to set the environment variable in your shell profile:
+```bash
+echo 'export DEVCONTAINER_SSH_AUTH_SOCK=/tmp/devcontainer-empty-ssh-agent' >> ~/.profile
+```
+
 ## CI Docker image cache
 
 CI tags Docker build images from an md5 hash of the repository files that

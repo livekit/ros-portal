@@ -62,3 +62,6 @@ rosbag*
 # Local SDK scratch/checkouts
 client-sdk-cpp-*/
 local-sdk-*/
+
+# Machine-specific devcontainer settings (e.g. macOS SSH agent path)
+.devcontainer/.env

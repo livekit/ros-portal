@@ -161,13 +161,11 @@ private:
   //! @brief The patterns for the topics
   std::vector<std::string> ros_topic_patterns_;
   //! @brief The compiled patterns for the topics
-  std::vector<std::regex> compiled_patterns_;
+  std::vector<std::regex> ros_topic_compiled_patterns_;
   //! @brief Remote LiveKit data track patterns allowed to be published into ROS.
-  std::vector<std::string> livekit_to_ros_allow_topic_patterns_;
+  std::vector<std::string> lk_topic_patterns_;
   //! @brief Compiled remote LiveKit data track allow patterns.
-  std::vector<std::regex> livekit_to_ros_allow_compiled_patterns_;
-  //! @brief Regex-to-message-type mappings for remote LiveKit data tracks.
-  std::vector<std::pair<std::regex, std::string>> livekit_to_ros_topic_types_;
+  std::vector<std::regex> lk_topic_compiled_patterns_;
 
   //! @brief The minimum QoS depth
   size_t min_qos_depth_;

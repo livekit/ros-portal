@@ -51,13 +51,13 @@ using ros2_livekit_bridge::test::setEnv;
 constexpr auto kGraphTimeout = 15s;
 constexpr auto kMessageTimeout = 20s;
 constexpr auto kPollInterval = 50ms;
+constexpr const char * kBidirectionalTopic = "/bridge/out";
 
 /// Create a ROS node options object for a bridge node
 /// @param context The ROS context to use for the node
 /// @param node_namespace The namespace to use for the node
 /// @param ros_topics The ROS topics to allow the bridge to publish to (ROS -> LiveKit)
-/// @param livekit_to_ros_allow_topics The LiveKit topics to allow the bridge to subscribe to (LiveKit -> ROS)
-/// @param livekit_to_ros_topic_types The LiveKit topic types to allow the bridge to subscribe to (LiveKit -> ROS)
+/// @param lk_topics The LiveKit topics to allow the bridge to subscribe to (LK -> ROS)
 /// @return A ROS node options object
 rclcpp::NodeOptions createBridgeOptions(
   // ROS args
@@ -65,8 +65,7 @@ rclcpp::NodeOptions createBridgeOptions(
   const std::string & node_namespace,
   // Bridge config param args
   const std::vector<std::string> & ros_topics,
-  const std::vector<std::string> & livekit_to_ros_allow_topics,
-  const std::vector<std::string> & livekit_to_ros_topic_types
+  const std::vector<std::string> & lk_topics
 )
 {
   return rclcpp::NodeOptions()
@@ -77,8 +76,7 @@ rclcpp::NodeOptions createBridgeOptions(
       rclcpp::Parameter("topic_polling_period_ms", 50),
       rclcpp::Parameter("ros_threads", 4),
       rclcpp::Parameter("ros_topics", ros_topics),
-      rclcpp::Parameter("livekit_to_ros_allow_topics", livekit_to_ros_allow_topics),
-      rclcpp::Parameter("livekit_to_ros_topic_types", livekit_to_ros_topic_types),
+      rclcpp::Parameter("lk_topics", lk_topics),
     });
 }
 
@@ -270,8 +268,9 @@ TEST_F(
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", *token_a_))
     << "Failed to set environment variable LIVEKIT_TOKEN";
   auto bridge_a = std::make_shared<Ros2LiveKitBridge>(
-    createBridgeOptions(graph_a.context(), "/bridge_a_node", {"/bridge_a/out"}, {"/bridge_b/out"},
-    {"/bridge_b/out=std_msgs/msg/String"}));
+    createBridgeOptions(
+      graph_a.context(), "/bridge_a_node",
+      {kBidirectionalTopic}, {kBidirectionalTopic}));
 
   std::cout << "------------Bridge A Created------------" << std::endl;
 
@@ -282,8 +281,9 @@ TEST_F(
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", *token_b_))
     << "Failed to set environment variable LIVEKIT_TOKEN";
   auto bridge_b = std::make_shared<Ros2LiveKitBridge>(
-    createBridgeOptions(graph_b.context(), "/bridge_b_node", {"/bridge_b/out"}, {"/bridge_a/out"},
-    {"/bridge_a/out=std_msgs/msg/String"}));
+    createBridgeOptions(
+      graph_b.context(), "/bridge_b_node",
+      {kBidirectionalTopic}, {kBidirectionalTopic}));
   std::cout << "------------Bridge B Created------------" << std::endl;
 
   // Each robot node is in the same ROS graph as its local bridge only.
@@ -335,18 +335,16 @@ TEST_F(
     };
 
   auto publisher_a =
-    robot_a_node->create_publisher<std_msgs::msg::String>("/bridge_a/out", 10);
+    robot_a_node->create_publisher<std_msgs::msg::String>(kBidirectionalTopic, 10);
   auto publisher_b =
-    robot_b_node->create_publisher<std_msgs::msg::String>("/bridge_b/out", 10);
+    robot_b_node->create_publisher<std_msgs::msg::String>(kBidirectionalTopic, 10);
 
   ASSERT_TRUE(waitFor(
       [&]() {
-        return topicExists(*robot_a_node, "/bridge_a/out") &&
-               topicExists(*robot_b_node, "/bridge_b/out");
+        return topicExists(*robot_a_node, kBidirectionalTopic) &&
+               topicExists(*robot_b_node, kBidirectionalTopic);
     },
     kGraphTimeout));
-  EXPECT_FALSE(topicExists(*robot_a_node, "/bridge_b/out"));
-  EXPECT_FALSE(topicExists(*robot_b_node, "/bridge_a/out"));
 
   const auto verify_direction =
     [&](const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>> &
@@ -389,7 +387,7 @@ TEST_F(
       }
       if (*inbound_topic != expected_inbound_topic) {
         ADD_FAILURE() << "Inbound topic did not use expected participant "
-                         "prefix. Expected "
+          "prefix. Expected "
                       << expected_inbound_topic << ", got " << *inbound_topic;
         return false;
       }
@@ -438,15 +436,15 @@ TEST_F(
     verify_direction(
       publisher_a,
       robot_b_node,
-      "/bridge_a/out",
-      expectedInboundTopicName(identity_a_, "/bridge_a/out"),
+      kBidirectionalTopic,
+      expectedInboundTopicName(identity_a_, kBidirectionalTopic),
       "message from bridge a");
   const bool b_to_a =
     verify_direction(
       publisher_b,
       robot_a_node,
-      "/bridge_b/out",
-      expectedInboundTopicName(identity_b_, "/bridge_b/out"),
+      kBidirectionalTopic,
+      expectedInboundTopicName(identity_b_, kBidirectionalTopic),
       "message from bridge b");
 
   stop_executors();

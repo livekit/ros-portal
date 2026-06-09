@@ -25,7 +25,6 @@
 #include <cstring>
 #include <optional>
 #include <stdexcept>
-#include <utility>
 
 #include <livekit/data_track_frame.h>
 #include <livekit/data_track_stream.h>
@@ -124,30 +123,6 @@ std::string sanitizeRosNameToken(const std::string & token)
   return sanitized;
 }
 
-std::optional<std::pair<std::string, std::string>> parseTopicTypeRule(
-  const std::string & rule)
-{
-  auto delimiter = rule.find(":=");
-  std::size_t delimiter_size = 2;
-  if (delimiter == std::string::npos) {
-    delimiter = rule.find('=');
-    delimiter_size = 1;
-  }
-  if (delimiter == std::string::npos) {
-    delimiter = rule.find(':');
-    delimiter_size = 1;
-  }
-  if (delimiter == std::string::npos || delimiter == 0 ||
-    delimiter + delimiter_size >= rule.size())
-  {
-    return std::nullopt;
-  }
-
-  return std::make_pair(
-    rule.substr(0, delimiter),
-    rule.substr(delimiter + delimiter_size));
-}
-
 } // namespace
 
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
@@ -159,15 +134,13 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
   const std::vector<std::string> kEmptyStringVec{};
   this->declare_parameter("ros_topics",
                           rclcpp::ParameterValue(kEmptyStringVec));
+  this->declare_parameter("lk_topics",
+                          rclcpp::ParameterValue(kEmptyStringVec));
   this->declare_parameter<int>("min_qos_depth",
                                static_cast<int>(DEFAULT_MIN_QOS_DEPTH));
   this->declare_parameter<int>("max_qos_depth",
                                static_cast<int>(DEFAULT_MAX_QOS_DEPTH));
   this->declare_parameter("best_effort_qos_topics",
-                          rclcpp::ParameterValue(kEmptyStringVec));
-  this->declare_parameter("livekit_to_ros_allow_topics",
-                          rclcpp::ParameterValue(kEmptyStringVec));
-  this->declare_parameter("livekit_to_ros_topic_types",
                           rclcpp::ParameterValue(kEmptyStringVec));
 
   room_name_ = this->get_parameter("room_name").as_string();
@@ -183,7 +156,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   ros_topic_patterns_ = this->get_parameter("ros_topics").as_string_array();
   std::vector<bridge_utils::PatternCompileError> pattern_errors;
-  compiled_patterns_ =
+  ros_topic_compiled_patterns_ =
     bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);
   logPatternCompileErrors(pattern_errors, this->get_logger());
 
@@ -194,44 +167,21 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
   logPatternCompileErrors(pattern_errors, this->get_logger());
 
-  livekit_to_ros_allow_topic_patterns_ =
-    this->get_parameter("livekit_to_ros_allow_topics").as_string_array();
+  lk_topic_patterns_ =
+    this->get_parameter("lk_topics").as_string_array();
   pattern_errors.clear();
-  livekit_to_ros_allow_compiled_patterns_ =
+  lk_topic_compiled_patterns_ =
     bridge_utils::compileRegexPatterns(
-      livekit_to_ros_allow_topic_patterns_, &pattern_errors);
+      lk_topic_patterns_, &pattern_errors);
   logPatternCompileErrors(pattern_errors, this->get_logger());
-
-  const auto topic_type_rules =
-    this->get_parameter("livekit_to_ros_topic_types").as_string_array();
-  for (const auto & rule : topic_type_rules) {
-    const auto parsed = parseTopicTypeRule(rule);
-    if (!parsed) {
-      RCLCPP_ERROR(
-        this->get_logger(),
-        "Invalid livekit_to_ros_topic_types rule '%s'; expected '<regex>=<msg_type>'",
-        rule.c_str());
-      continue;
-    }
-
-    try {
-      livekit_to_ros_topic_types_.emplace_back(
-        std::regex(parsed->first, std::regex::ECMAScript), parsed->second);
-    } catch (const std::regex_error & e) {
-      RCLCPP_ERROR(
-        this->get_logger(),
-        "Invalid livekit_to_ros_topic_types regex '%s': %s",
-        parsed->first.c_str(), e.what());
-    }
-  }
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu ROS topic "
               "patterns, %zu LiveKit-to-ROS topic patterns, QoS depth range: "
               "[%zu, %zu]",
               room_name_.c_str(), topic_polling_period_ms_,
-              compiled_patterns_.size(),
-              livekit_to_ros_allow_compiled_patterns_.size(),
+              ros_topic_compiled_patterns_.size(),
+              lk_topic_compiled_patterns_.size(),
               min_qos_depth_, max_qos_depth_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
@@ -275,7 +225,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     room_->setDelegate(this);
 
     if (room_->connect(livekit_url, livekit_token, room_options)) {
-      RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room.");
+      RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room: '%s'", room_name_.c_str());
     } else {
       room_.reset();
       livekit::shutdown();
@@ -284,7 +234,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     }
   }
 
-  RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics");
+  RCLCPP_DEBUG(this->get_logger(), "Creating timer for polling topics");
 
   poll_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(topic_polling_period_ms_),
@@ -585,7 +535,7 @@ void Ros2LiveKitBridge::onDataTrackPublished(
     RCLCPP_WARN(
       this->get_logger(),
       "Ignoring LiveKit data track '%s' from '%s' because no "
-      "livekit_to_ros_topic_types rule resolved its ROS message type",
+      "configured type rule or ROS graph lookup resolved its ROS message type",
       track_name.c_str(), event.track->publisherIdentity().c_str());
     return;
   }
@@ -714,26 +664,36 @@ void Ros2LiveKitBridge::stopInboundDataTrack(const std::string & sid)
 
 bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
 {
-  return bridge_utils::matchesAnyPattern(topic_name, compiled_patterns_);
+  return bridge_utils::matchesAnyPattern(topic_name, ros_topic_compiled_patterns_);
 }
 
 bool Ros2LiveKitBridge::matchesLiveKitToRosTopic(
   const std::string & track_name) const
 {
   return bridge_utils::matchesAnyPattern(
-    normalizeTrackTopicName(track_name), livekit_to_ros_allow_compiled_patterns_);
+    normalizeTrackTopicName(track_name), lk_topic_compiled_patterns_);
 }
 
 std::optional<std::string> Ros2LiveKitBridge::liveKitToRosTopicType(
   const std::string & track_name) const
 {
   const std::string normalized_track_name = normalizeTrackTopicName(track_name);
-  for (const auto & [pattern, topic_type] : livekit_to_ros_topic_types_) {
-    if (std::regex_match(normalized_track_name, pattern)) {
-      return topic_type;
-    }
+  // Infer inbound type from local ROS graph only.
+  const auto topics = this->get_topic_names_and_types();
+  const auto topic_it = topics.find(normalized_track_name);
+  if (topic_it == topics.end() || topic_it->second.empty()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+
+  if (topic_it->second.size() > 1U) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Inbound track '%s' matched topic '%s' with multiple ROS types; using "
+      "first discovered type '%s'.",
+      track_name.c_str(), normalized_track_name.c_str(),
+      topic_it->second.front().c_str());
+  }
+  return topic_it->second.front();
 }
 
 std::string Ros2LiveKitBridge::liveKitToRosTopicName(

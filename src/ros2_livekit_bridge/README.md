@@ -58,8 +58,9 @@ publisher. Consumers need the matching `.msg` definition (or any IDL/CDR-aware
 deserializer) to decode it.
 
 For LiveKit-to-ROS data tracks, the track name does not currently include ROS
-message type metadata. Configure `livekit_to_ros_topic_types` so the bridge can
-create the matching `rclcpp::GenericPublisher`.
+message type metadata. The bridge resolves inbound message type using local ROS
+graph lookup for the same topic name before creating the
+`rclcpp::GenericPublisher`.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -110,8 +111,7 @@ Parameters are loaded from `config/ros2_livekit_bridge_params.yaml`:
 | `min_qos_depth`            | int              | `1`     | Lower bound for subscriber history depth. |
 | `max_qos_depth`            | int              | `25`    | Upper bound for subscriber history depth. |
 | `best_effort_qos_topics`   | list of strings  | `[]`    | Regex patterns for topics forced to BEST_EFFORT reliability. |
-| `livekit_to_ros_allow_topics` | list of strings | `[]` | Remote LiveKit data track names allowed to be published into ROS. |
-| `livekit_to_ros_topic_types` | list of strings | `[]` | Rules in the form `<track-regex>=<ros-msg-type>` used to create inbound generic ROS publishers. |
+| `lk_topics` | list of strings | `[]` | Remote LiveKit data track names allowed to be published into ROS (LK -> ROS). |
 
 LiveKit credentials are intentionally not loaded from the config file. Set
 `LIVEKIT_URL` and `LIVEKIT_TOKEN` in the node environment.

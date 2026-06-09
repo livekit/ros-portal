@@ -20,8 +20,14 @@
 
     # ECMAScript regex patterns matched against full topic names.
     # Examples: "/lidar/points" (exact), "/tf.*" (prefix match), "/camera/.*" (namespace match)
+
+    # ROS -> LiveKit topics from local ROS graph allowed for outbound forwarding.
     ros_topics: ["/rgbd_camera/image", "/laser_scan", "/lidar/points", "/odom", "/battery_state", "/tf.*", "/test/.*"]
 
+    # LiveKit -> ROS topics from remote ROS graphs allowed for inbound forwarding.
+    # Note: Inbound ROS topics are prefixed with the remote participant identity:
+    #   participant "robot_b" + data track "/odom/global" -> "/robot_b/odom/global"
+    lk_topics: ["/odom/global", "/test/robot_status"]
 
     # QoS depth bounds. Subscriber depth is the sum of all publisher depths, clamped to this range.
     min_qos_depth: 1
@@ -30,12 +36,3 @@
     # Topics matching these regex patterns are forced to BEST_EFFORT reliability regardless
     # of what the publishers advertise. Useful for topics with unreliable transports.
     # Omit or comment out to use default (no overrides -- QoS is inferred from publishers).
-    # best_effort_qos_topics: ["/camera/.*", "/lidar/.*"]
-
-    # Remote LiveKit data tracks allowed to be published back into ROS.
-    # Inbound ROS topics are prefixed with the remote participant identity:
-    #   participant "robot_b" + data track "/odom/global" -> "/robot_b/odom/global"
-    livekit_to_ros_allow_topics: ["/odom/global", "/test/robot_status"]
-    livekit_to_ros_topic_types:
-      - "/odom/global=nav_msgs/msg/Odometry"
-      - "/test/robot_status=custom_msgs/msg/RobotStatus"

@@ -17,10 +17,10 @@ External repos are tracked in `external.repos` using `vcstool`.
 
 The devcontainer forwards an SSH agent socket to `/ssh-agent` and sets
 `SSH_AUTH_SOCK=/ssh-agent` so Git commands can use host credentials from
-inside the container. Before opening the devcontainer, set
-`DEVCONTAINER_SSH_AUTH_SOCK` on the host to a socket path that Docker can bind
-mount. If this variable is not set, the devcontainer defaults to Docker
-Desktop's `/run/host-services/ssh-auth.sock`.
+inside the container. By default, the devcontainer bind-mounts the host's `SSH_AUTH_SOCK`. If your
+host socket is not directly bind-mountable (for example macOS Docker Desktop
+host-services), set `DEVCONTAINER_SSH_AUTH_SOCK` to an explicit socket path that
+Docker can mount.
 
 On macOS with Docker Desktop, use Docker Desktop's host-services socket and
 load your key into the host agent. Setting `DEVCONTAINER_SSH_AUTH_SOCK` is
@@ -33,12 +33,12 @@ ssh-add --apple-use-keychain ~/.ssh/id_ed25519
 ssh-add -l
 ```
 
-On Linux, point `DEVCONTAINER_SSH_AUTH_SOCK` at the host SSH agent socket:
+On Linux, ensure `SSH_AUTH_SOCK` points to your host SSH agent socket (this is
+the default mount source):
 
 ```bash
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
-export DEVCONTAINER_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 ```
 
 If the devcontainer is launched from a desktop app, make sure that app sees the

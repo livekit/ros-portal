@@ -27,28 +27,30 @@ host socket is not directly bind-mountable (for example macOS Docker Desktop
 host-services), set `DEVCONTAINER_SSH_AUTH_SOCK` to an explicit socket path that
 Docker can mount.
 
-On macOS with Docker Desktop, use Docker Desktop's host-services socket and
-load your key into the host agent. Setting `DEVCONTAINER_SSH_AUTH_SOCK` is
-optional on macOS, but useful when launching the devcontainer tooling from a
-shell:
+Copy `.devcontainer/.env.example` to `.devcontainer/.env` and set
+`DEVCONTAINER_SSH_AUTH_SOCK` for your host. The Dev Containers extension reads
+`.devcontainer/.env` when resolving `${localEnv:...}` in `devcontainer.json`,
+including when Cursor is launched from the Dock.
+
+On macOS with Docker Desktop:
 
 ```bash
-export DEVCONTAINER_SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
+cp .devcontainer/.env.example .devcontainer/.env
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519
 ssh-add -l
 ```
 
-On Linux, ensure `SSH_AUTH_SOCK` points to your host SSH agent socket (this is
-the default mount source):
+Enable **Settings → General → Use SSH agent** in Docker Desktop. If the socket
+is missing, quit Docker Desktop and restart it from a terminal after loading
+your key: `open -a Docker`.
+
+On Linux, set `DEVCONTAINER_SSH_AUTH_SOCK` in `.devcontainer/.env` to your host
+agent socket path (`echo $SSH_AUTH_SOCK`), then load your key:
 
 ```bash
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 ```
-
-If the devcontainer is launched from a desktop app, make sure that app sees the
-environment variable. A variable exported in one terminal is only inherited by
-processes launched from that terminal.
 
 After setting the variable, open or rebuild the devcontainer. Inside the
 devcontainer, verify forwarding with:

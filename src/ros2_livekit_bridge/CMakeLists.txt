@@ -31,7 +31,10 @@ ament_auto_find_build_dependencies(REQUIRED
   nav_msgs
   rclcpp
   sensor_msgs
-  std_msgs)
+  std_msgs
+  yaml_cpp_vendor)
+
+find_package(yaml-cpp REQUIRED)
 
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
@@ -219,6 +222,19 @@ if(BUILD_TESTING)
     src/utils/image_conversion.cpp
   )
 
+  ament_auto_add_gtest(config_parser_test
+    test/unit/config_parser_test.cpp
+    src/config/config_parser.cpp
+  )
+  if(TARGET config_parser_test)
+    target_compile_definitions(config_parser_test PRIVATE
+      ROS2_LIVEKIT_BRIDGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    target_link_libraries(config_parser_test
+      yaml-cpp::yaml-cpp
+    )
+  endif()
+
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
@@ -248,4 +264,4 @@ if(BUILD_INTEGRATION_TESTS)
   )
 endif()
 
-ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch schema)

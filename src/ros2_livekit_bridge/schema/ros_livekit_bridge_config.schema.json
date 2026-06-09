@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://livekit.io/schemas/ros_livekit_bridge_config.schema.json",
+  "title": "ROS LiveKit Bridge Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ros_livekit_bridge"],
+  "properties": {
+    "ros_livekit_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "const": "0.0.1"
+        },
+        "room_options": {
+          "$ref": "#/$defs/roomOptions"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/serviceBridge"
+          }
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/topicBridge"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "direction": {
+      "enum": ["in", "out", "bidirectional"]
+    },
+    "serviceDirection": {
+      "enum": ["in", "out"]
+    },
+    "nonemptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "roomOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "join_retries": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "videoOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bitrate_kbps": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "codec": {
+          "$ref": "#/$defs/nonemptyString"
+        }
+      }
+    },
+    "serviceBridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "direction", "participant"],
+      "properties": {
+        "service": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "direction": {
+          "$ref": "#/$defs/serviceDirection"
+        },
+        "participant": {
+          "$ref": "#/$defs/nonemptyString"
+        }
+      }
+    },
+    "topicBridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "direction"],
+      "properties": {
+        "topic": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "direction": {
+          "$ref": "#/$defs/direction"
+        },
+        "video_options": {
+          "$ref": "#/$defs/videoOptions"
+        }
+      }
+    }
+  }
+}

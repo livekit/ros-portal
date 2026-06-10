@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     python3-opencv \
     python3-vcstool \
     git \
+    git-lfs \
     zsh \
     nano \
     iputils-ping \
@@ -35,6 +36,8 @@ RUN apt-get update && apt-get install -y \
     clangd \
     curl \
     jq
+
+RUN git lfs install --system
 
 # Install LiveKit CLI
 RUN curl -sSL https://get.livekit.io/cli | bash
@@ -54,7 +57,9 @@ RUN apt-get update && apt-get install -y \
 
 # ros-livekit-bridge dependencies
 RUN apt-get update && apt-get install -y \
-    ros-${ROS_DISTRO}-rosx-introspection
+    ros-${ROS_DISTRO}-rosx-introspection \
+    ros-${ROS_DISTRO}-foxglove-bridge \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY ./setup-shell-env.sh /tmp/setup-shell-env.sh
 RUN chmod +x /tmp/setup-shell-env.sh && /tmp/setup-shell-env.sh && rm /tmp/setup-shell-env.sh

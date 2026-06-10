@@ -299,12 +299,21 @@ def make_template_context(model: SchemaModel) -> dict[str, Any]:
         "allowed_field_set": allowed_field_set,
         "all_specs": [*model.object_specs, model.root_spec],
         "const_values": collect_const_values(model),
+        "const_value_name": const_value_name,
+        "cpp_bool": cpp_bool,
+        "enum_allowed_values": lambda type_info: enum_allowed_values(type_info, model),
         "enum_constant_name": enum_constant_name,
+        "enum_cpp_name": lambda type_info: model.enum_defs[
+            model.enum_canonical[type_info.enum_schema_name]].cpp_name,
         "field_constants": collect_field_constants(model),
         "guard": "ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__CONFIG_PARSER_HPP_",
+        "integer_expected": integer_expected,
+        "integer_minimum_args": integer_minimum_args,
         "model": model,
-        "parse_field_lines": lambda spec, field: render_field_parse(spec, field, model),
+        "number_expected": number_expected,
+        "number_minimum_args": number_minimum_args,
         "prologue": HEADER_PROLOGUE.rstrip(),
+        "requires_nonempty": requires_nonempty,
         "root_const": f"k{pascal_case(model.root_key)}",
     }
 
@@ -358,178 +367,6 @@ def allowed_field_set(spec: ObjectSpec) -> str:
         return "{}"
     values = ", ".join(f"std::string({field_spec.const_name})" for field_spec in spec.fields)
     return "{" + values + "}"
-
-
-def render_field_parse(
-        spec: ObjectSpec,
-        field_spec: FieldSpec,
-        model: SchemaModel) -> list[str]:
-    type_info = field_spec.type_info
-    path_expr = f"utils::fieldPath(path, {field_spec.const_name})"
-    if field_spec.required:
-        return render_required_field(spec, field_spec, type_info, path_expr, model)
-
-    lines = [f"  if (const auto {field_spec.member_name} = node[{field_spec.const_name}.data()]) {{"]
-    assignment = render_optional_assignment(
-        f"value.{field_spec.member_name}",
-        field_spec.member_name,
-        type_info,
-        path_expr,
-        model)
-    lines.extend(f"    {line}" for line in assignment)
-    lines.append("  }")
-    return lines
-
-
-def render_required_field(
-        spec: ObjectSpec,
-        field_spec: FieldSpec,
-        type_info: TypeInfo,
-        path_expr: str,
-        model: SchemaModel) -> list[str]:
-    target = f"value.{field_spec.member_name}"
-    key = field_spec.const_name
-    if type_info.kind == "const_string":
-        const_name = const_value_name(spec.cpp_name, field_spec.yaml_name)
-        return [
-            f"  {target} = requiredStringField(node, {key}, path, false);",
-            f"  if ({target} != {const_name}) {{",
-            "    utils::fail(",
-            f"      {path_expr}, node[{key}.data()],",
-            f"      std::string(\"'\") + std::string({const_name}) + \"'\",",
-            f"      \"found '\" + {target} + \"'\");",
-            "  }",
-        ]
-    if type_info.kind == "string":
-        return [
-            f"  {target} = requiredStringField(",
-            f"    node, {key}, path, {cpp_bool(requires_nonempty(type_info.schema))});",
-        ]
-    if type_info.kind == "integer":
-        return [
-            f"  if (!node[{key}.data()]) {{",
-            f"    utils::failMissing({path_expr}, \"{integer_expected(type_info.schema)}\");",
-            "  }",
-            f"  {target} = parseIntegerValue(",
-            f"    node[{key}.data()], {path_expr}, {integer_minimum_args(type_info.schema)});",
-        ]
-    if type_info.kind == "number":
-        return [
-            f"  if (!node[{key}.data()]) {{",
-            f"    utils::failMissing({path_expr}, \"{number_expected(type_info.schema)}\");",
-            "  }",
-            f"  {target} = parseNumberValue(",
-            f"    node[{key}.data()], {path_expr}, {number_minimum_args(type_info.schema)});",
-        ]
-    if type_info.kind == "boolean":
-        return [
-            f"  if (!node[{key}.data()]) {{",
-            f"    utils::failMissing({path_expr}, \"boolean\");",
-            "  }",
-            f"  {target} = parseBooleanValue(node[{key}.data()], {path_expr});",
-        ]
-    if type_info.kind == "enum":
-        enum = model.enum_defs[model.enum_canonical[type_info.enum_schema_name or ""]]
-        return [
-            f"  {target} = required{enum.cpp_name}(",
-            f"    node[{key}.data()], {path_expr}, {enum_allowed_values(type_info, model)});",
-        ]
-    if type_info.kind == "object":
-        return [
-            f"  if (!node[{key}.data()]) {{",
-            f"    utils::failMissing({path_expr}, \"map\");",
-            "  }",
-            f"  {target} = parse{type_info.cpp_type}(node[{key}.data()], {path_expr});",
-        ]
-    if type_info.kind == "array":
-        return [
-            f"  if (!node[{key}.data()]) {{",
-            f"    utils::failMissing({path_expr}, \"sequence\");",
-            "  }",
-            *render_array_assignment(target, f"node[{key}.data()]", type_info, path_expr, model),
-        ]
-    fail(f"unsupported required field kind {type_info.kind!r}")
-
-
-def render_optional_assignment(
-        target: str,
-        node_name: str,
-        type_info: TypeInfo,
-        path_expr: str,
-        model: SchemaModel) -> list[str]:
-    if type_info.kind == "const_string":
-        fail("optional const fields are not supported")
-    if type_info.kind == "string":
-        return [
-            f"{target} = parseStringValue(",
-            f"  {node_name}, {path_expr}, {cpp_bool(requires_nonempty(type_info.schema))});",
-        ]
-    if type_info.kind == "integer":
-        return [
-            f"{target} = parseIntegerValue(",
-            f"  {node_name}, {path_expr}, {integer_minimum_args(type_info.schema)});",
-        ]
-    if type_info.kind == "number":
-        return [
-            f"{target} = parseNumberValue(",
-            f"  {node_name}, {path_expr}, {number_minimum_args(type_info.schema)});",
-        ]
-    if type_info.kind == "boolean":
-        return [f"{target} = parseBooleanValue({node_name}, {path_expr});"]
-    if type_info.kind == "enum":
-        enum = model.enum_defs[model.enum_canonical[type_info.enum_schema_name or ""]]
-        return [
-            f"{target} = parse{enum.cpp_name}(",
-            f"  {node_name}, {path_expr}, {enum_allowed_values(type_info, model)});",
-        ]
-    if type_info.kind == "object":
-        return [f"{target} = parse{type_info.cpp_type}({node_name}, {path_expr});"]
-    if type_info.kind == "array":
-        return render_array_assignment(target, node_name, type_info, path_expr, model)
-    fail(f"unsupported optional field kind {type_info.kind!r}")
-
-
-def render_array_assignment(
-        target: str,
-        node_expr: str,
-        type_info: TypeInfo,
-        path_expr: str,
-        model: SchemaModel) -> list[str]:
-    if not type_info.array_item:
-        fail("array schema is missing items")
-    item = type_info.array_item
-    lines = [
-        f"utils::requireSequence({node_expr}, {path_expr});",
-        f"{target}.clear();",
-        f"{target}.reserve({node_expr}.size());",
-        f"for (std::size_t i = 0; i < {node_expr}.size(); ++i) {{",
-        f"  const auto item_path = {path_expr} + \"[\" + std::to_string(i) + \"]\";",
-    ]
-    if item.kind == "object":
-        lines.append(f"  {target}.push_back(parse{item.cpp_type}({node_expr}[i], item_path));")
-    elif item.kind == "string":
-        lines.append(
-            f"  {target}.push_back(parseStringValue({node_expr}[i], item_path, "
-            f"{cpp_bool(requires_nonempty(item.schema))}));")
-    elif item.kind == "integer":
-        lines.append(
-            f"  {target}.push_back(parseIntegerValue("
-            f"{node_expr}[i], item_path, {integer_minimum_args(item.schema)}));")
-    elif item.kind == "number":
-        lines.append(
-            f"  {target}.push_back(parseNumberValue("
-            f"{node_expr}[i], item_path, {number_minimum_args(item.schema)}));")
-    elif item.kind == "boolean":
-        lines.append(f"  {target}.push_back(parseBooleanValue({node_expr}[i], item_path));")
-    elif item.kind == "enum":
-        enum = model.enum_defs[model.enum_canonical[item.enum_schema_name or ""]]
-        lines.append(
-            f"  {target}.push_back(parse{enum.cpp_name}("
-            f"{node_expr}[i], item_path, {enum_allowed_values(item, model)}));")
-    else:
-        fail(f"unsupported array item kind {item.kind!r}")
-    lines.append("}")
-    return lines
 
 
 def enum_allowed_values(type_info: TypeInfo, model: SchemaModel) -> str:

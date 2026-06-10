@@ -52,7 +52,7 @@ the generated C++ shape or supporting a new schema feature.
 validation helpers out of the generated code. They handle common operations such
 as:
 
-- building readable field paths like `$.ros_topics`
+- building readable field paths like `$.ros2_livekit_bridge.topics`
 - adding line and column context to errors
 - checking map and sequence nodes
 - converting scalar values

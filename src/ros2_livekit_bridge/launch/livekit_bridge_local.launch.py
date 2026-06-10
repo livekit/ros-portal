@@ -32,11 +32,11 @@ def _as_bool(value: str) -> bool:
     return value.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
-def _room_name_from_params(config_path: Path) -> str:
+def _room_name_from_config(config_path: Path) -> str:
     text = config_path.read_text(encoding='utf-8')
     match = re.search(r'^\s*room_name:\s*["\']?([^"\'\s#]+)', text, re.MULTILINE)
     if not match:
-        raise RuntimeError(f'Could not find ros__parameters.room_name in {config_path}')
+        raise RuntimeError(f'Could not find ros2_livekit_bridge.room_name in {config_path}')
     return match.group(1)
 
 
@@ -81,7 +81,7 @@ def _launch_setup(context, *args, **kwargs):
     valid_for = LaunchConfiguration('token_valid_for').perform(context)
     use_dev_credentials = _as_bool(LaunchConfiguration('use_dev_credentials').perform(context))
 
-    room_name = _room_name_from_params(config_path)
+    room_name = _room_name_from_config(config_path)
     token = _mint_token(room_name, identity, valid_for, use_dev_credentials)
 
     return [
@@ -92,7 +92,7 @@ def _launch_setup(context, *args, **kwargs):
             executable='ros2_livekit_bridge_node',
             name='ros2_livekit_bridge',
             output='screen',
-            parameters=[str(config_path)],
+            parameters=[{'config_path': str(config_path)}],
             arguments=['--ros-args', '--disable-external-lib-logs'],
         ),
     ]
@@ -102,7 +102,7 @@ def generate_launch_description():
     default_config = PathJoinSubstitution([
         FindPackageShare('ros2_livekit_bridge'),
         'config',
-        'ros2_livekit_bridge_params.yaml',
+        'ros2_livekit_bridge.yaml',
     ])
 
     return LaunchDescription([

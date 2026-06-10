@@ -27,6 +27,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
 
 HEADER_PROLOGUE = """/*
  * Copyright 2026 LiveKit
@@ -46,7 +48,6 @@ HEADER_PROLOGUE = """/*
 
 // This file is generated from schema/ros_livekit_bridge_config.schema.json.
 // Do not edit by hand.
-
 """
 
 
@@ -293,139 +294,30 @@ def object_dependencies(spec: ObjectSpec) -> set[str]:
     return deps
 
 
-def generate_header(model: SchemaModel) -> str:
-    lines = [HEADER_PROLOGUE.rstrip(), ""]
-    guard = "ROS2_LIVEKIT_BRIDGE__CONFIG__CONFIG_PARSER_HPP_"
-    lines.extend([
-        f"#ifndef {guard}",
-        f"#define {guard}",
-        "",
-        "#include \"ros2_livekit_bridge/config/error.hpp\"",
-        "",
-        "#include <filesystem>",
-        "#include <optional>",
-        "#include <string>",
-        "#include <vector>",
-        "",
-        "namespace ros2_livekit_bridge::config",
-        "{",
-        "",
-    ])
-
-    for enum in model.canonical_enums:
-        lines.append(f"enum class {enum.cpp_name}")
-        lines.append("{")
-        for value in enum.values:
-            lines.append(f"  {enum_value_name(value)},")
-        lines.append("};")
-        lines.append("")
-
-    for spec in [*model.object_specs, model.root_spec]:
-        lines.extend(render_struct(spec))
-        lines.append("")
-
-    lines.extend([
-        "class ConfigParser",
-        "{",
-        "public:",
-        "  BridgeConfig parseFile(const std::filesystem::path & path) const;",
-        "  BridgeConfig parseString(const std::string & yaml) const;",
-        "};",
-        "",
-    ])
-
-    for enum in model.canonical_enums:
-        lines.append(f"const char * toString({enum.cpp_name} value);")
-    lines.extend([
-        "",
-        "} // namespace ros2_livekit_bridge::config",
-        "",
-        f"#endif // {guard}",
-        "",
-    ])
-    return "\n".join(lines)
+def make_template_context(model: SchemaModel) -> dict[str, Any]:
+    return {
+        "allowed_field_set": allowed_field_set,
+        "all_specs": [*model.object_specs, model.root_spec],
+        "const_values": collect_const_values(model),
+        "enum_constant_name": enum_constant_name,
+        "field_constants": collect_field_constants(model),
+        "guard": "ROS2_LIVEKIT_BRIDGE__CONFIG__CONFIG_PARSER_HPP_",
+        "model": model,
+        "parse_field_lines": lambda spec, field: render_field_parse(spec, field, model),
+        "prologue": HEADER_PROLOGUE.rstrip(),
+        "root_const": f"k{pascal_case(model.root_key)}",
+    }
 
 
-def render_struct(spec: ObjectSpec) -> list[str]:
-    lines = [f"struct {spec.cpp_name}", "{"]
-    for field_spec in spec.fields:
-        lines.append(f"  {field_spec.member_type} {field_spec.member_name};")
-    lines.append("};")
-    return lines
-
-
-def generate_source(model: SchemaModel) -> str:
-    lines = [HEADER_PROLOGUE.rstrip(), ""]
-    lines.extend([
-        "#include \"ros2_livekit_bridge/config/config_parser.hpp\"",
-        "",
-        "#include \"config/utils.hpp\"",
-        "",
-        "#include <yaml-cpp/yaml.h>",
-        "",
-        "#include <cstddef>",
-        "#include <initializer_list>",
-        "#include <set>",
-        "#include <sstream>",
-        "#include <string>",
-        "#include <string_view>",
-        "",
-        "namespace ros2_livekit_bridge::config",
-        "{",
-        "namespace",
-        "{",
-        "",
-        "constexpr std::string_view kRootPath = \"$\";",
-    ])
-
-    for yaml_name, const_name in collect_field_constants(model):
-        lines.append(f"constexpr std::string_view {const_name} = \"{yaml_name}\";")
-    for const_name, const_value in collect_const_values(model):
-        lines.append(f"constexpr std::string_view {const_name} = \"{const_value}\";")
-    for enum in model.canonical_enums:
-        for value in enum.values:
-            lines.append(
-                f"constexpr std::string_view k{enum.cpp_name}{enum_value_name(value)} = \"{value}\";")
-    lines.append("")
-
-    lines.extend(render_helpers())
-
-    for enum in model.canonical_enums:
-        lines.extend(render_enum_parser(enum, model))
-        lines.append("")
-
-    for spec in [*model.object_specs, model.root_spec]:
-        lines.extend(render_object_parser(spec, model))
-        lines.append("")
-
-    lines.extend(render_parse_root(model))
-    lines.extend([
-        "} // namespace",
-        "",
-        "BridgeConfig ConfigParser::parseFile(const std::filesystem::path & path) const",
-        "{",
-        "  try {",
-        "    return parseRoot(YAML::LoadFile(path.string()));",
-        "  } catch (const YAML::Exception & e) {",
-        "    throw ConfigError(path.string(), \"valid YAML config\", e.what());",
-        "  }",
-        "}",
-        "",
-        "BridgeConfig ConfigParser::parseString(const std::string & yaml) const",
-        "{",
-        "  try {",
-        "    return parseRoot(YAML::Load(yaml));",
-        "  } catch (const YAML::Exception & e) {",
-        "    throw ConfigError(\"<string>\", \"valid YAML config\", e.what());",
-        "  }",
-        "}",
-        "",
-    ])
-    for enum in model.canonical_enums:
-        lines.extend(render_to_string(enum))
-        lines.append("")
-    lines.extend(["} // namespace ros2_livekit_bridge::config", ""])
-    return "\n".join(lines)
+def render_template(template_dir: Path, template_name: str, model: SchemaModel) -> str:
+    env = Environment(
+        loader=FileSystemLoader(template_dir),
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True)
+    env.filters["enum_value_name"] = enum_value_name
+    return env.get_template(template_name).render(**make_template_context(model))
 
 
 def collect_field_constants(model: SchemaModel) -> list[tuple[str, str]]:
@@ -457,185 +349,8 @@ def const_value_name(spec_name: str, field_name: str) -> str:
     return f"k{spec_name}{pascal_case(field_name)}"
 
 
-def render_helpers() -> list[str]:
-    return [
-        "std::string expectedStringValues(std::initializer_list<std::string_view> values)",
-        "{",
-        "  std::ostringstream expected;",
-        "  std::size_t index = 0;",
-        "  for (auto it = values.begin(); it != values.end(); ++it) {",
-        "    if (index > 0) {",
-        "      expected << (index + 1 == values.size() ?",
-        "        (values.size() == 2 ? \" or \" : \", or \") : \", \");",
-        "    }",
-        "    expected << \"'\" << *it << \"'\";",
-        "    ++index;",
-        "  }",
-        "  return expected.str();",
-        "}",
-        "",
-        "bool contains(std::initializer_list<std::string_view> values, const std::string & value)",
-        "{",
-        "  for (const auto allowed : values) {",
-        "    if (value == allowed) {",
-        "      return true;",
-        "    }",
-        "  }",
-        "  return false;",
-        "}",
-        "",
-        "std::string parseStringValue(",
-        "  const YAML::Node & node,",
-        "  const std::string & path,",
-        "  bool require_nonempty)",
-        "{",
-        "  const auto value = utils::scalarString(node, path);",
-        "  if (require_nonempty && value.empty()) {",
-        "    utils::fail(path, node, \"nonempty string\", \"found empty string\");",
-        "  }",
-        "  return value;",
-        "}",
-        "",
-        "std::string requiredStringField(",
-        "  const YAML::Node & node,",
-        "  std::string_view key,",
-        "  const std::string & path,",
-        "  bool require_nonempty)",
-        "{",
-        "  const auto value = node[key.data()];",
-        "  const auto value_path = utils::fieldPath(path, key);",
-        "  if (!value) {",
-        "    utils::failMissing(value_path, require_nonempty ? \"nonempty string\" : \"string\");",
-        "  }",
-    "  return parseStringValue(value, value_path, require_nonempty);",
-    "}",
-    "",
-    "int parseIntegerValue(",
-    "  const YAML::Node & node,",
-    "  const std::string & path,",
-    "  bool has_minimum,",
-    "  int minimum,",
-    "  const std::string & expected)",
-    "{",
-    "  if (!node || !node.IsScalar()) {",
-    "    utils::fail(path, node, expected, \"found non-scalar value\");",
-    "  }",
-    "",
-    "  int value = 0;",
-    "  try {",
-    "    value = node.as<int>();",
-    "  } catch (const YAML::Exception & e) {",
-    "    utils::fail(path, node, expected, e.what());",
-    "  }",
-    "",
-    "  if (has_minimum && value < minimum) {",
-    "    utils::fail(",
-    "      path, node, expected,",
-    "      minimum == 1 ? \"value must be greater than zero\" :",
-    "      \"value must be at least \" + std::to_string(minimum));",
-    "  }",
-    "  return value;",
-    "}",
-    "",
-    "[[maybe_unused]] double parseNumberValue(",
-    "  const YAML::Node & node,",
-    "  const std::string & path,",
-    "  bool has_minimum,",
-    "  double minimum,",
-    "  const std::string & expected)",
-    "{",
-    "  if (!node || !node.IsScalar()) {",
-    "    utils::fail(path, node, expected, \"found non-scalar value\");",
-    "  }",
-    "",
-    "  double value = 0.0;",
-    "  try {",
-    "    value = node.as<double>();",
-    "  } catch (const YAML::Exception & e) {",
-    "    utils::fail(path, node, expected, e.what());",
-    "  }",
-    "",
-    "  if (has_minimum && value < minimum) {",
-    "    utils::fail(",
-    "      path, node, expected,",
-    "      \"value must be at least \" + std::to_string(minimum));",
-    "  }",
-    "  return value;",
-    "}",
-    "",
-    "[[maybe_unused]] bool parseBooleanValue(const YAML::Node & node, const std::string & path)",
-    "{",
-    "  if (!node || !node.IsScalar()) {",
-    "    utils::fail(path, node, \"boolean\", \"found non-scalar value\");",
-    "  }",
-    "",
-    "  try {",
-    "    return node.as<bool>();",
-    "  } catch (const YAML::Exception & e) {",
-    "    utils::fail(path, node, \"boolean\", e.what());",
-    "  }",
-    "}",
-    "",
-  ]
-
-
-def render_enum_parser(enum: EnumSpec, model: SchemaModel) -> list[str]:
-    return [
-        f"{enum.cpp_name} parse{enum.cpp_name}(",
-        "  const YAML::Node & node,",
-        "  const std::string & path,",
-        "  std::initializer_list<std::string_view> allowed)",
-        "{",
-        "  const auto value = utils::scalarString(node, path);",
-        "  if (!contains(allowed, value)) {",
-        "    utils::fail(path, node, expectedStringValues(allowed), \"found '\" + value + \"'\");",
-        "  }",
-        *render_enum_value_returns(enum),
-        "  utils::fail(path, node, expectedStringValues(allowed), \"found '\" + value + \"'\");",
-        "}",
-        "",
-        f"{enum.cpp_name} required{enum.cpp_name}(",
-        "  const YAML::Node & node,",
-        "  const std::string & path,",
-        "  std::initializer_list<std::string_view> allowed)",
-        "{",
-        "  if (!node) {",
-        "    utils::failMissing(path, expectedStringValues(allowed));",
-        "  }",
-        f"  return parse{enum.cpp_name}(node, path, allowed);",
-        "}",
-    ]
-
-
-def render_enum_value_returns(enum: EnumSpec) -> list[str]:
-    lines: list[str] = []
-    for value in enum.values:
-        lines.extend([
-            f"  if (value == k{enum.cpp_name}{enum_value_name(value)}) {{",
-            f"    return {enum.cpp_name}::{enum_value_name(value)};",
-            "  }",
-        ])
-    return lines
-
-
-def render_object_parser(spec: ObjectSpec, model: SchemaModel) -> list[str]:
-    lines = [
-        f"{spec.cpp_name} {spec.parse_name}(const YAML::Node & node, const std::string & path)",
-        "{",
-        "  utils::rejectUnknownFields(",
-        "    node,",
-        f"    {allowed_field_set(spec)},",
-        "    path);",
-        "",
-        f"  {spec.cpp_name} value;",
-    ]
-    for field_spec in spec.fields:
-        lines.extend(render_field_parse(spec, field_spec, model))
-    lines.extend([
-        "  return value;",
-        "}",
-    ])
-    return lines
+def enum_constant_name(enum: EnumSpec, value: str) -> str:
+    return f"k{enum.cpp_name}{enum_value_name(value)}"
 
 
 def allowed_field_set(spec: ObjectSpec) -> str:
@@ -817,51 +532,12 @@ def render_array_assignment(
     return lines
 
 
-def render_parse_root(model: SchemaModel) -> list[str]:
-    root_const = f"k{pascal_case(model.root_key)}"
-    return [
-        "BridgeConfig parseRoot(const YAML::Node & root)",
-        "{",
-        "  const std::string root_path(kRootPath);",
-        f"  const std::string bridge_path = utils::fieldPath(root_path, {root_const});",
-        "",
-        f"  utils::rejectUnknownFields(root, {{std::string({root_const})}}, root_path);",
-        "",
-        f"  const auto bridge_node = root[{root_const}.data()];",
-        "  if (!bridge_node) {",
-        "    utils::failMissing(bridge_path, \"map\");",
-        "  }",
-        "  return parseBridgeConfig(bridge_node, bridge_path);",
-        "}",
-        "",
-    ]
-
-
-def render_to_string(enum: EnumSpec) -> list[str]:
-    lines = [
-        f"const char * toString({enum.cpp_name} value)",
-        "{",
-        "  switch (value) {",
-    ]
-    for enum_value in enum.values:
-        lines.extend([
-            f"    case {enum.cpp_name}::{enum_value_name(enum_value)}:",
-            f"      return k{enum.cpp_name}{enum_value_name(enum_value)}.data();",
-        ])
-    lines.extend([
-        "  }",
-        "  return \"unknown\";",
-        "}",
-    ])
-    return lines
-
-
 def enum_allowed_values(type_info: TypeInfo, model: SchemaModel) -> str:
     if not type_info.enum_schema_name:
         fail("enum type info missing schema name")
     values = model.enum_defs[type_info.enum_schema_name].values
     canonical = model.enum_defs[model.enum_canonical[type_info.enum_schema_name]]
-    constants = ", ".join(f"k{canonical.cpp_name}{enum_value_name(value)}" for value in values)
+    constants = ", ".join(enum_constant_name(canonical, value) for value in values)
     return "{" + constants + "}"
 
 
@@ -960,6 +636,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--schema", required=True, type=Path)
     parser.add_argument("--header", required=True, type=Path)
     parser.add_argument("--source", required=True, type=Path)
+    parser.add_argument(
+        "--template-dir",
+        type=Path,
+        default=Path(__file__).resolve().parent / "templates")
     return parser.parse_args()
 
 
@@ -967,8 +647,12 @@ def main() -> None:
     args = parse_args()
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     model = SchemaModel(schema)
-    write_if_changed(args.header, generate_header(model))
-    write_if_changed(args.source, generate_source(model))
+    write_if_changed(
+        args.header,
+        render_template(args.template_dir, "config_parser.hpp.j2", model))
+    write_if_changed(
+        args.source,
+        render_template(args.template_dir, "config_parser.cpp.j2", model))
 
 
 if __name__ == "__main__":

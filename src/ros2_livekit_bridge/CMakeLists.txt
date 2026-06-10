@@ -37,8 +37,21 @@ ament_auto_find_build_dependencies(REQUIRED
 find_package(yaml-cpp REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" -c "import jinja2"
+  RESULT_VARIABLE _jinja2_result
+)
+if(NOT _jinja2_result EQUAL 0)
+  message(FATAL_ERROR
+    "Python module jinja2 is required to generate config_parser.hpp/cpp. "
+    "Install python3-jinja2.")
+endif()
+
 set(CONFIG_SCHEMA
   "${CMAKE_CURRENT_SOURCE_DIR}/schema/ros_livekit_bridge_config.schema.json")
+set(CONFIG_PARSER_TEMPLATES
+  "${CMAKE_CURRENT_SOURCE_DIR}/scripts/templates/config_parser.hpp.j2"
+  "${CMAKE_CURRENT_SOURCE_DIR}/scripts/templates/config_parser.cpp.j2")
 set(CONFIG_PARSER_GENERATED_DIR
   "${CMAKE_CURRENT_BINARY_DIR}/generated/config_parser")
 set(CONFIG_PARSER_GENERATED_INCLUDE_DIR
@@ -61,6 +74,7 @@ add_custom_command(
   DEPENDS
     "${CONFIG_SCHEMA}"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_config_parser.py"
+    ${CONFIG_PARSER_TEMPLATES}
   COMMENT "Generating config parser from JSON schema"
   VERBATIM
 )

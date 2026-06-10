@@ -1,0 +1,246 @@
+{{ prologue }}
+
+#include "ros2_livekit_bridge/config/config_parser.hpp"
+
+#include "config/utils.hpp"
+
+#include <yaml-cpp/yaml.h>
+
+#include <cstddef>
+#include <initializer_list>
+#include <set>
+#include <sstream>
+#include <string>
+#include <string_view>
+
+namespace ros2_livekit_bridge::config
+{
+namespace
+{
+
+constexpr std::string_view kRootPath = "$";
+{% for yaml_name, const_name in field_constants %}
+constexpr std::string_view {{ const_name }} = "{{ yaml_name }}";
+{% endfor %}
+{% for const_name, const_value in const_values %}
+constexpr std::string_view {{ const_name }} = "{{ const_value }}";
+{% endfor %}
+{% for enum in model.canonical_enums %}
+{% for value in enum.values %}
+constexpr std::string_view {{ enum_constant_name(enum, value) }} = "{{ value }}";
+{% endfor %}
+{% endfor %}
+
+std::string expectedStringValues(std::initializer_list<std::string_view> values)
+{
+  std::ostringstream expected;
+  std::size_t index = 0;
+  for (auto it = values.begin(); it != values.end(); ++it) {
+    if (index > 0) {
+      expected << (index + 1 == values.size() ?
+        (values.size() == 2 ? " or " : ", or ") : ", ");
+    }
+    expected << "'" << *it << "'";
+    ++index;
+  }
+  return expected.str();
+}
+
+bool contains(std::initializer_list<std::string_view> values, const std::string & value)
+{
+  for (const auto allowed : values) {
+    if (value == allowed) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string parseStringValue(
+  const YAML::Node & node,
+  const std::string & path,
+  bool require_nonempty)
+{
+  const auto value = utils::scalarString(node, path);
+  if (require_nonempty && value.empty()) {
+    utils::fail(path, node, "nonempty string", "found empty string");
+  }
+  return value;
+}
+
+std::string requiredStringField(
+  const YAML::Node & node,
+  std::string_view key,
+  const std::string & path,
+  bool require_nonempty)
+{
+  const auto value = node[key.data()];
+  const auto value_path = utils::fieldPath(path, key);
+  if (!value) {
+    utils::failMissing(value_path, require_nonempty ? "nonempty string" : "string");
+  }
+  return parseStringValue(value, value_path, require_nonempty);
+}
+
+int parseIntegerValue(
+  const YAML::Node & node,
+  const std::string & path,
+  bool has_minimum,
+  int minimum,
+  const std::string & expected)
+{
+  if (!node || !node.IsScalar()) {
+    utils::fail(path, node, expected, "found non-scalar value");
+  }
+
+  int value = 0;
+  try {
+    value = node.as<int>();
+  } catch (const YAML::Exception & e) {
+    utils::fail(path, node, expected, e.what());
+  }
+
+  if (has_minimum && value < minimum) {
+    utils::fail(
+      path, node, expected,
+      minimum == 1 ? "value must be greater than zero" :
+      "value must be at least " + std::to_string(minimum));
+  }
+  return value;
+}
+
+[[maybe_unused]] double parseNumberValue(
+  const YAML::Node & node,
+  const std::string & path,
+  bool has_minimum,
+  double minimum,
+  const std::string & expected)
+{
+  if (!node || !node.IsScalar()) {
+    utils::fail(path, node, expected, "found non-scalar value");
+  }
+
+  double value = 0.0;
+  try {
+    value = node.as<double>();
+  } catch (const YAML::Exception & e) {
+    utils::fail(path, node, expected, e.what());
+  }
+
+  if (has_minimum && value < minimum) {
+    utils::fail(
+      path, node, expected,
+      "value must be at least " + std::to_string(minimum));
+  }
+  return value;
+}
+
+[[maybe_unused]] bool parseBooleanValue(const YAML::Node & node, const std::string & path)
+{
+  if (!node || !node.IsScalar()) {
+    utils::fail(path, node, "boolean", "found non-scalar value");
+  }
+
+  try {
+    return node.as<bool>();
+  } catch (const YAML::Exception & e) {
+    utils::fail(path, node, "boolean", e.what());
+  }
+}
+
+{% for enum in model.canonical_enums %}
+{{ enum.cpp_name }} parse{{ enum.cpp_name }}(
+  const YAML::Node & node,
+  const std::string & path,
+  std::initializer_list<std::string_view> allowed)
+{
+  const auto value = utils::scalarString(node, path);
+  if (!contains(allowed, value)) {
+    utils::fail(path, node, expectedStringValues(allowed), "found '" + value + "'");
+  }
+{% for value in enum.values %}
+  if (value == {{ enum_constant_name(enum, value) }}) {
+    return {{ enum.cpp_name }}::{{ value | enum_value_name }};
+  }
+{% endfor %}
+  utils::fail(path, node, expectedStringValues(allowed), "found '" + value + "'");
+}
+
+{{ enum.cpp_name }} required{{ enum.cpp_name }}(
+  const YAML::Node & node,
+  const std::string & path,
+  std::initializer_list<std::string_view> allowed)
+{
+  if (!node) {
+    utils::failMissing(path, expectedStringValues(allowed));
+  }
+  return parse{{ enum.cpp_name }}(node, path, allowed);
+}
+
+{% endfor %}
+{% for spec in all_specs %}
+{{ spec.cpp_name }} {{ spec.parse_name }}(const YAML::Node & node, const std::string & path)
+{
+  utils::rejectUnknownFields(
+    node,
+    {{ allowed_field_set(spec) }},
+    path);
+
+  {{ spec.cpp_name }} value;
+{% for field in spec.fields %}
+{% for line in parse_field_lines(spec, field) %}
+{{ line }}
+{% endfor %}
+{% endfor %}
+  return value;
+}
+
+{% endfor %}
+BridgeConfig parseRoot(const YAML::Node & root)
+{
+  const std::string root_path(kRootPath);
+  const std::string bridge_path = utils::fieldPath(root_path, {{ root_const }});
+
+  utils::rejectUnknownFields(root, {std::string({{ root_const }})}, root_path);
+
+  const auto bridge_node = root[{{ root_const }}.data()];
+  if (!bridge_node) {
+    utils::failMissing(bridge_path, "map");
+  }
+  return parseBridgeConfig(bridge_node, bridge_path);
+}
+
+} // namespace
+
+BridgeConfig ConfigParser::parseFile(const std::filesystem::path & path) const
+{
+  try {
+    return parseRoot(YAML::LoadFile(path.string()));
+  } catch (const YAML::Exception & e) {
+    throw ConfigError(path.string(), "valid YAML config", e.what());
+  }
+}
+
+BridgeConfig ConfigParser::parseString(const std::string & yaml) const
+{
+  try {
+    return parseRoot(YAML::Load(yaml));
+  } catch (const YAML::Exception & e) {
+    throw ConfigError("<string>", "valid YAML config", e.what());
+  }
+}
+
+{% for enum in model.canonical_enums %}
+const char * toString({{ enum.cpp_name }} value)
+{
+  switch (value) {
+{% for enum_value in enum.values %}
+    case {{ enum.cpp_name }}::{{ enum_value | enum_value_name }}:
+      return {{ enum_constant_name(enum, enum_value) }}.data();
+{% endfor %}
+  }
+  return "unknown";
+}
+
+{% endfor %}
+} // namespace ros2_livekit_bridge::config

@@ -1,0 +1,975 @@
+#!/usr/bin/env python3
+#
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# flake8: noqa
+
+"""Generate config_parser.hpp/cpp from ros_livekit_bridge_config.schema.json."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass, field
+import json
+from pathlib import Path
+import re
+from typing import Any
+
+
+HEADER_PROLOGUE = """/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// This file is generated from schema/ros_livekit_bridge_config.schema.json.
+// Do not edit by hand.
+
+"""
+
+
+@dataclass(frozen=True)
+class EnumSpec:
+    schema_name: str
+    cpp_name: str
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypeInfo:
+    cpp_type: str
+    kind: str
+    schema: dict[str, Any]
+    ref_name: str | None = None
+    enum_schema_name: str | None = None
+    array_item: "TypeInfo | None" = None
+
+
+@dataclass
+class FieldSpec:
+    yaml_name: str
+    member_name: str
+    const_name: str
+    type_info: TypeInfo
+    required: bool
+    member_type: str
+
+
+@dataclass
+class ObjectSpec:
+    schema_name: str
+    cpp_name: str
+    parse_name: str
+    fields: list[FieldSpec] = field(default_factory=list)
+
+
+class SchemaModel:
+    def __init__(self, schema: dict[str, Any]) -> None:
+        self.schema = schema
+        self.defs = schema.get("$defs", {})
+        self.enum_defs = self._collect_enum_defs()
+        self.enum_canonical = self._canonicalize_enum_defs()
+        self.canonical_enums = self._collect_canonical_enums()
+        self.object_specs: list[ObjectSpec] = []
+        self.root_key = self._find_root_config_key()
+        self.root_spec = self._build_object_spec(
+            self.schema["properties"][self.root_key],
+            schema_name=self.root_key,
+            cpp_name="BridgeConfig",
+            parse_name="parseBridgeConfig",
+            depth=1)
+        self._build_def_object_specs()
+
+    def _collect_enum_defs(self) -> dict[str, EnumSpec]:
+        enums: dict[str, EnumSpec] = {}
+        for name, definition in self.defs.items():
+            if "enum" not in definition:
+                continue
+            enums[name] = EnumSpec(
+                schema_name=name,
+                cpp_name=pascal_case(name),
+                values=tuple(str(value) for value in definition["enum"]))
+        return enums
+
+    def _canonicalize_enum_defs(self) -> dict[str, str]:
+        canonical: dict[str, str] = {}
+        for name, enum in self.enum_defs.items():
+            enum_values = set(enum.values)
+            supersets = [
+                candidate
+                for candidate, candidate_enum in self.enum_defs.items()
+                if candidate != name and enum_values < set(candidate_enum.values)
+            ]
+            if supersets:
+                supersets.sort(key=lambda candidate: len(self.enum_defs[candidate].values))
+                canonical[name] = supersets[0]
+            else:
+                canonical[name] = name
+        return canonical
+
+    def _collect_canonical_enums(self) -> list[EnumSpec]:
+        names = []
+        for canonical_name in self.enum_canonical.values():
+            if canonical_name not in names:
+                names.append(canonical_name)
+        return [self.enum_defs[name] for name in names]
+
+    def _find_root_config_key(self) -> str:
+        properties = self.schema.get("properties", {})
+        if len(properties) != 1:
+            fail("expected root schema to contain exactly one config object property")
+        key, value = next(iter(properties.items()))
+        if resolve_type(value, self.defs).get("type") != "object":
+            fail(f"expected root property {key!r} to be an object")
+        return key
+
+    def _build_def_object_specs(self) -> None:
+        by_name: dict[str, ObjectSpec] = {}
+        for name, definition in self.defs.items():
+            if resolve_type(definition, self.defs).get("type") != "object":
+                continue
+            by_name[name] = self._build_object_spec(
+                definition,
+                schema_name=name,
+                cpp_name=pascal_case(name),
+                parse_name=f"parse{pascal_case(name)}",
+                depth=2)
+
+        pending = dict(by_name)
+        emitted: set[str] = set()
+        while pending:
+            progressed = False
+            for name, spec in list(pending.items()):
+                deps = object_dependencies(spec)
+                if deps <= emitted:
+                    self.object_specs.append(spec)
+                    emitted.add(name)
+                    del pending[name]
+                    progressed = True
+            if not progressed:
+                cycle = ", ".join(sorted(pending))
+                fail(f"unsupported cycle in object schema definitions: {cycle}")
+
+    def _build_object_spec(
+            self,
+            schema: dict[str, Any],
+            *,
+            schema_name: str,
+            cpp_name: str,
+            parse_name: str,
+            depth: int) -> ObjectSpec:
+        schema = resolve_type(schema, self.defs)
+        if schema.get("type") != "object":
+            fail(f"expected {schema_name} to be an object schema")
+
+        required = set(schema.get("required", []))
+        spec = ObjectSpec(schema_name=schema_name, cpp_name=cpp_name, parse_name=parse_name)
+        for yaml_name, property_schema in schema.get("properties", {}).items():
+            type_info = self.type_info(property_schema)
+            member_type = member_type_for(
+                type_info,
+                required=yaml_name in required,
+                parent_depth=depth)
+            spec.fields.append(FieldSpec(
+                yaml_name=yaml_name,
+                member_name=snake_case(yaml_name),
+                const_name=f"k{pascal_case(yaml_name)}",
+                type_info=type_info,
+                required=yaml_name in required,
+                member_type=member_type))
+        return spec
+
+    def type_info(self, schema: dict[str, Any]) -> TypeInfo:
+        ref = schema.get("$ref")
+        if ref:
+            name = ref_name(ref)
+            definition = resolve_ref(ref, self.defs)
+            resolved = resolve_type(definition, self.defs)
+            if name in self.enum_defs:
+                canonical_name = self.enum_canonical[name]
+                return TypeInfo(
+                    cpp_type=self.enum_defs[canonical_name].cpp_name,
+                    kind="enum",
+                    schema=definition,
+                    ref_name=name,
+                    enum_schema_name=name)
+            if resolved.get("type") == "object":
+                return TypeInfo(
+                    cpp_type=pascal_case(name),
+                    kind="object",
+                    schema=resolved,
+                    ref_name=name)
+            if resolved.get("type") in {"string", "integer", "number", "boolean"}:
+                return TypeInfo(
+                    cpp_type=cpp_scalar_type(resolved),
+                    kind=resolved["type"],
+                    schema=resolved,
+                    ref_name=name)
+            fail(f"unsupported $ref target {ref!r}")
+
+        resolved = resolve_type(schema, self.defs)
+        if "const" in resolved:
+            const_value = resolved["const"]
+            if not isinstance(const_value, str):
+                fail("only string const schema values are supported")
+            return TypeInfo(cpp_type="std::string", kind="const_string", schema=resolved)
+        if "enum" in resolved:
+            fail("inline enum schemas are not supported; define them under $defs")
+        schema_type = resolved.get("type")
+        if schema_type == "array":
+            item = self.type_info(resolved["items"])
+            return TypeInfo(
+                cpp_type=f"std::vector<{item.cpp_type}>",
+                kind="array",
+                schema=resolved,
+                array_item=item)
+        if schema_type == "object":
+            fail("inline object schemas are not supported; define them under $defs")
+        if schema_type in {"string", "integer", "number", "boolean"}:
+            return TypeInfo(cpp_type=cpp_scalar_type(resolved), kind=schema_type, schema=resolved)
+        fail(f"unsupported schema type {schema_type!r}")
+
+
+def cpp_scalar_type(schema: dict[str, Any]) -> str:
+    schema_type = schema.get("type")
+    if schema_type == "string":
+        return "std::string"
+    if schema_type == "integer":
+        return "int"
+    if schema_type == "number":
+        return "double"
+    if schema_type == "boolean":
+        return "bool"
+    fail(f"unsupported scalar schema type {schema_type!r}")
+
+
+def member_type_for(
+    type_info: TypeInfo,
+    *,
+    required: bool,
+    parent_depth: int) -> str:
+    if required or type_info.kind == "array":
+        return type_info.cpp_type
+    if type_info.kind == "object" and parent_depth == 1:
+        return type_info.cpp_type
+    return f"std::optional<{type_info.cpp_type}>"
+
+
+def object_dependencies(spec: ObjectSpec) -> set[str]:
+    deps = set()
+    for field_spec in spec.fields:
+        type_info = field_spec.type_info
+        if type_info.kind == "object" and type_info.ref_name:
+            deps.add(type_info.ref_name)
+        if (
+                type_info.kind == "array" and
+                type_info.array_item and
+                type_info.array_item.kind == "object" and
+                type_info.array_item.ref_name):
+            deps.add(type_info.array_item.ref_name)
+    deps.discard(spec.schema_name)
+    return deps
+
+
+def generate_header(model: SchemaModel) -> str:
+    lines = [HEADER_PROLOGUE.rstrip(), ""]
+    guard = "ROS2_LIVEKIT_BRIDGE__CONFIG__CONFIG_PARSER_HPP_"
+    lines.extend([
+        f"#ifndef {guard}",
+        f"#define {guard}",
+        "",
+        "#include \"ros2_livekit_bridge/config/error.hpp\"",
+        "",
+        "#include <filesystem>",
+        "#include <optional>",
+        "#include <string>",
+        "#include <vector>",
+        "",
+        "namespace ros2_livekit_bridge::config",
+        "{",
+        "",
+    ])
+
+    for enum in model.canonical_enums:
+        lines.append(f"enum class {enum.cpp_name}")
+        lines.append("{")
+        for value in enum.values:
+            lines.append(f"  {enum_value_name(value)},")
+        lines.append("};")
+        lines.append("")
+
+    for spec in [*model.object_specs, model.root_spec]:
+        lines.extend(render_struct(spec))
+        lines.append("")
+
+    lines.extend([
+        "class ConfigParser",
+        "{",
+        "public:",
+        "  BridgeConfig parseFile(const std::filesystem::path & path) const;",
+        "  BridgeConfig parseString(const std::string & yaml) const;",
+        "};",
+        "",
+    ])
+
+    for enum in model.canonical_enums:
+        lines.append(f"const char * toString({enum.cpp_name} value);")
+    lines.extend([
+        "",
+        "} // namespace ros2_livekit_bridge::config",
+        "",
+        f"#endif // {guard}",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def render_struct(spec: ObjectSpec) -> list[str]:
+    lines = [f"struct {spec.cpp_name}", "{"]
+    for field_spec in spec.fields:
+        lines.append(f"  {field_spec.member_type} {field_spec.member_name};")
+    lines.append("};")
+    return lines
+
+
+def generate_source(model: SchemaModel) -> str:
+    lines = [HEADER_PROLOGUE.rstrip(), ""]
+    lines.extend([
+        "#include \"ros2_livekit_bridge/config/config_parser.hpp\"",
+        "",
+        "#include \"config/utils.hpp\"",
+        "",
+        "#include <yaml-cpp/yaml.h>",
+        "",
+        "#include <cstddef>",
+        "#include <initializer_list>",
+        "#include <set>",
+        "#include <sstream>",
+        "#include <string>",
+        "#include <string_view>",
+        "",
+        "namespace ros2_livekit_bridge::config",
+        "{",
+        "namespace",
+        "{",
+        "",
+        "constexpr std::string_view kRootPath = \"$\";",
+    ])
+
+    for yaml_name, const_name in collect_field_constants(model):
+        lines.append(f"constexpr std::string_view {const_name} = \"{yaml_name}\";")
+    for const_name, const_value in collect_const_values(model):
+        lines.append(f"constexpr std::string_view {const_name} = \"{const_value}\";")
+    for enum in model.canonical_enums:
+        for value in enum.values:
+            lines.append(
+                f"constexpr std::string_view k{enum.cpp_name}{enum_value_name(value)} = \"{value}\";")
+    lines.append("")
+
+    lines.extend(render_helpers())
+
+    for enum in model.canonical_enums:
+        lines.extend(render_enum_parser(enum, model))
+        lines.append("")
+
+    for spec in [*model.object_specs, model.root_spec]:
+        lines.extend(render_object_parser(spec, model))
+        lines.append("")
+
+    lines.extend(render_parse_root(model))
+    lines.extend([
+        "} // namespace",
+        "",
+        "BridgeConfig ConfigParser::parseFile(const std::filesystem::path & path) const",
+        "{",
+        "  try {",
+        "    return parseRoot(YAML::LoadFile(path.string()));",
+        "  } catch (const YAML::Exception & e) {",
+        "    throw ConfigError(path.string(), \"valid YAML config\", e.what());",
+        "  }",
+        "}",
+        "",
+        "BridgeConfig ConfigParser::parseString(const std::string & yaml) const",
+        "{",
+        "  try {",
+        "    return parseRoot(YAML::Load(yaml));",
+        "  } catch (const YAML::Exception & e) {",
+        "    throw ConfigError(\"<string>\", \"valid YAML config\", e.what());",
+        "  }",
+        "}",
+        "",
+    ])
+    for enum in model.canonical_enums:
+        lines.extend(render_to_string(enum))
+        lines.append("")
+    lines.extend(["} // namespace ros2_livekit_bridge::config", ""])
+    return "\n".join(lines)
+
+
+def collect_field_constants(model: SchemaModel) -> list[tuple[str, str]]:
+    fields: list[tuple[str, str]] = [(model.root_key, f"k{pascal_case(model.root_key)}")]
+    seen = {model.root_key}
+    for spec in [*model.object_specs, model.root_spec]:
+        for field_spec in spec.fields:
+            if field_spec.yaml_name in seen:
+                continue
+            seen.add(field_spec.yaml_name)
+            fields.append((field_spec.yaml_name, field_spec.const_name))
+    return fields
+
+
+def collect_const_values(model: SchemaModel) -> list[tuple[str, str]]:
+    values: list[tuple[str, str]] = []
+    for spec in [*model.object_specs, model.root_spec]:
+        for field_spec in spec.fields:
+            if field_spec.type_info.kind != "const_string":
+                continue
+            value = str(field_spec.type_info.schema["const"])
+            values.append((const_value_name(spec.cpp_name, field_spec.yaml_name), value))
+    return values
+
+
+def const_value_name(spec_name: str, field_name: str) -> str:
+    if field_name == "version":
+        return "kConfigVersion"
+    return f"k{spec_name}{pascal_case(field_name)}"
+
+
+def render_helpers() -> list[str]:
+    return [
+        "std::string expectedStringValues(std::initializer_list<std::string_view> values)",
+        "{",
+        "  std::ostringstream expected;",
+        "  std::size_t index = 0;",
+        "  for (auto it = values.begin(); it != values.end(); ++it) {",
+        "    if (index > 0) {",
+        "      expected << (index + 1 == values.size() ?",
+        "        (values.size() == 2 ? \" or \" : \", or \") : \", \");",
+        "    }",
+        "    expected << \"'\" << *it << \"'\";",
+        "    ++index;",
+        "  }",
+        "  return expected.str();",
+        "}",
+        "",
+        "bool contains(std::initializer_list<std::string_view> values, const std::string & value)",
+        "{",
+        "  for (const auto allowed : values) {",
+        "    if (value == allowed) {",
+        "      return true;",
+        "    }",
+        "  }",
+        "  return false;",
+        "}",
+        "",
+        "std::string parseStringValue(",
+        "  const YAML::Node & node,",
+        "  const std::string & path,",
+        "  bool require_nonempty)",
+        "{",
+        "  const auto value = utils::scalarString(node, path);",
+        "  if (require_nonempty && value.empty()) {",
+        "    utils::fail(path, node, \"nonempty string\", \"found empty string\");",
+        "  }",
+        "  return value;",
+        "}",
+        "",
+        "std::string requiredStringField(",
+        "  const YAML::Node & node,",
+        "  std::string_view key,",
+        "  const std::string & path,",
+        "  bool require_nonempty)",
+        "{",
+        "  const auto value = node[key.data()];",
+        "  const auto value_path = utils::fieldPath(path, key);",
+        "  if (!value) {",
+        "    utils::failMissing(value_path, require_nonempty ? \"nonempty string\" : \"string\");",
+        "  }",
+    "  return parseStringValue(value, value_path, require_nonempty);",
+    "}",
+    "",
+    "int parseIntegerValue(",
+    "  const YAML::Node & node,",
+    "  const std::string & path,",
+    "  bool has_minimum,",
+    "  int minimum,",
+    "  const std::string & expected)",
+    "{",
+    "  if (!node || !node.IsScalar()) {",
+    "    utils::fail(path, node, expected, \"found non-scalar value\");",
+    "  }",
+    "",
+    "  int value = 0;",
+    "  try {",
+    "    value = node.as<int>();",
+    "  } catch (const YAML::Exception & e) {",
+    "    utils::fail(path, node, expected, e.what());",
+    "  }",
+    "",
+    "  if (has_minimum && value < minimum) {",
+    "    utils::fail(",
+    "      path, node, expected,",
+    "      minimum == 1 ? \"value must be greater than zero\" :",
+    "      \"value must be at least \" + std::to_string(minimum));",
+    "  }",
+    "  return value;",
+    "}",
+    "",
+    "[[maybe_unused]] double parseNumberValue(",
+    "  const YAML::Node & node,",
+    "  const std::string & path,",
+    "  bool has_minimum,",
+    "  double minimum,",
+    "  const std::string & expected)",
+    "{",
+    "  if (!node || !node.IsScalar()) {",
+    "    utils::fail(path, node, expected, \"found non-scalar value\");",
+    "  }",
+    "",
+    "  double value = 0.0;",
+    "  try {",
+    "    value = node.as<double>();",
+    "  } catch (const YAML::Exception & e) {",
+    "    utils::fail(path, node, expected, e.what());",
+    "  }",
+    "",
+    "  if (has_minimum && value < minimum) {",
+    "    utils::fail(",
+    "      path, node, expected,",
+    "      \"value must be at least \" + std::to_string(minimum));",
+    "  }",
+    "  return value;",
+    "}",
+    "",
+    "[[maybe_unused]] bool parseBooleanValue(const YAML::Node & node, const std::string & path)",
+    "{",
+    "  if (!node || !node.IsScalar()) {",
+    "    utils::fail(path, node, \"boolean\", \"found non-scalar value\");",
+    "  }",
+    "",
+    "  try {",
+    "    return node.as<bool>();",
+    "  } catch (const YAML::Exception & e) {",
+    "    utils::fail(path, node, \"boolean\", e.what());",
+    "  }",
+    "}",
+    "",
+  ]
+
+
+def render_enum_parser(enum: EnumSpec, model: SchemaModel) -> list[str]:
+    return [
+        f"{enum.cpp_name} parse{enum.cpp_name}(",
+        "  const YAML::Node & node,",
+        "  const std::string & path,",
+        "  std::initializer_list<std::string_view> allowed)",
+        "{",
+        "  const auto value = utils::scalarString(node, path);",
+        "  if (!contains(allowed, value)) {",
+        "    utils::fail(path, node, expectedStringValues(allowed), \"found '\" + value + \"'\");",
+        "  }",
+        *render_enum_value_returns(enum),
+        "  utils::fail(path, node, expectedStringValues(allowed), \"found '\" + value + \"'\");",
+        "}",
+        "",
+        f"{enum.cpp_name} required{enum.cpp_name}(",
+        "  const YAML::Node & node,",
+        "  const std::string & path,",
+        "  std::initializer_list<std::string_view> allowed)",
+        "{",
+        "  if (!node) {",
+        "    utils::failMissing(path, expectedStringValues(allowed));",
+        "  }",
+        f"  return parse{enum.cpp_name}(node, path, allowed);",
+        "}",
+    ]
+
+
+def render_enum_value_returns(enum: EnumSpec) -> list[str]:
+    lines: list[str] = []
+    for value in enum.values:
+        lines.extend([
+            f"  if (value == k{enum.cpp_name}{enum_value_name(value)}) {{",
+            f"    return {enum.cpp_name}::{enum_value_name(value)};",
+            "  }",
+        ])
+    return lines
+
+
+def render_object_parser(spec: ObjectSpec, model: SchemaModel) -> list[str]:
+    lines = [
+        f"{spec.cpp_name} {spec.parse_name}(const YAML::Node & node, const std::string & path)",
+        "{",
+        "  utils::rejectUnknownFields(",
+        "    node,",
+        f"    {allowed_field_set(spec)},",
+        "    path);",
+        "",
+        f"  {spec.cpp_name} value;",
+    ]
+    for field_spec in spec.fields:
+        lines.extend(render_field_parse(spec, field_spec, model))
+    lines.extend([
+        "  return value;",
+        "}",
+    ])
+    return lines
+
+
+def allowed_field_set(spec: ObjectSpec) -> str:
+    if not spec.fields:
+        return "{}"
+    values = ", ".join(f"std::string({field_spec.const_name})" for field_spec in spec.fields)
+    return "{" + values + "}"
+
+
+def render_field_parse(
+        spec: ObjectSpec,
+        field_spec: FieldSpec,
+        model: SchemaModel) -> list[str]:
+    type_info = field_spec.type_info
+    path_expr = f"utils::fieldPath(path, {field_spec.const_name})"
+    if field_spec.required:
+        return render_required_field(spec, field_spec, type_info, path_expr, model)
+
+    lines = [f"  if (const auto {field_spec.member_name} = node[{field_spec.const_name}.data()]) {{"]
+    assignment = render_optional_assignment(
+        f"value.{field_spec.member_name}",
+        field_spec.member_name,
+        type_info,
+        path_expr,
+        model)
+    lines.extend(f"    {line}" for line in assignment)
+    lines.append("  }")
+    return lines
+
+
+def render_required_field(
+        spec: ObjectSpec,
+        field_spec: FieldSpec,
+        type_info: TypeInfo,
+        path_expr: str,
+        model: SchemaModel) -> list[str]:
+    target = f"value.{field_spec.member_name}"
+    key = field_spec.const_name
+    if type_info.kind == "const_string":
+        const_name = const_value_name(spec.cpp_name, field_spec.yaml_name)
+        return [
+            f"  {target} = requiredStringField(node, {key}, path, false);",
+            f"  if ({target} != {const_name}) {{",
+            "    utils::fail(",
+            f"      {path_expr}, node[{key}.data()],",
+            f"      std::string(\"'\") + std::string({const_name}) + \"'\",",
+            f"      \"found '\" + {target} + \"'\");",
+            "  }",
+        ]
+    if type_info.kind == "string":
+        return [
+            f"  {target} = requiredStringField(",
+            f"    node, {key}, path, {cpp_bool(requires_nonempty(type_info.schema))});",
+        ]
+    if type_info.kind == "integer":
+        return [
+            f"  if (!node[{key}.data()]) {{",
+            f"    utils::failMissing({path_expr}, \"{integer_expected(type_info.schema)}\");",
+            "  }",
+            f"  {target} = parseIntegerValue(",
+            f"    node[{key}.data()], {path_expr}, {integer_minimum_args(type_info.schema)});",
+        ]
+    if type_info.kind == "number":
+        return [
+            f"  if (!node[{key}.data()]) {{",
+            f"    utils::failMissing({path_expr}, \"{number_expected(type_info.schema)}\");",
+            "  }",
+            f"  {target} = parseNumberValue(",
+            f"    node[{key}.data()], {path_expr}, {number_minimum_args(type_info.schema)});",
+        ]
+    if type_info.kind == "boolean":
+        return [
+            f"  if (!node[{key}.data()]) {{",
+            f"    utils::failMissing({path_expr}, \"boolean\");",
+            "  }",
+            f"  {target} = parseBooleanValue(node[{key}.data()], {path_expr});",
+        ]
+    if type_info.kind == "enum":
+        enum = model.enum_defs[model.enum_canonical[type_info.enum_schema_name or ""]]
+        return [
+            f"  {target} = required{enum.cpp_name}(",
+            f"    node[{key}.data()], {path_expr}, {enum_allowed_values(type_info, model)});",
+        ]
+    if type_info.kind == "object":
+        return [
+            f"  if (!node[{key}.data()]) {{",
+            f"    utils::failMissing({path_expr}, \"map\");",
+            "  }",
+            f"  {target} = parse{type_info.cpp_type}(node[{key}.data()], {path_expr});",
+        ]
+    if type_info.kind == "array":
+        return [
+            f"  if (!node[{key}.data()]) {{",
+            f"    utils::failMissing({path_expr}, \"sequence\");",
+            "  }",
+            *render_array_assignment(target, f"node[{key}.data()]", type_info, path_expr, model),
+        ]
+    fail(f"unsupported required field kind {type_info.kind!r}")
+
+
+def render_optional_assignment(
+        target: str,
+        node_name: str,
+        type_info: TypeInfo,
+        path_expr: str,
+        model: SchemaModel) -> list[str]:
+    if type_info.kind == "const_string":
+        fail("optional const fields are not supported")
+    if type_info.kind == "string":
+        return [
+            f"{target} = parseStringValue(",
+            f"  {node_name}, {path_expr}, {cpp_bool(requires_nonempty(type_info.schema))});",
+        ]
+    if type_info.kind == "integer":
+        return [
+            f"{target} = parseIntegerValue(",
+            f"  {node_name}, {path_expr}, {integer_minimum_args(type_info.schema)});",
+        ]
+    if type_info.kind == "number":
+        return [
+            f"{target} = parseNumberValue(",
+            f"  {node_name}, {path_expr}, {number_minimum_args(type_info.schema)});",
+        ]
+    if type_info.kind == "boolean":
+        return [f"{target} = parseBooleanValue({node_name}, {path_expr});"]
+    if type_info.kind == "enum":
+        enum = model.enum_defs[model.enum_canonical[type_info.enum_schema_name or ""]]
+        return [
+            f"{target} = parse{enum.cpp_name}(",
+            f"  {node_name}, {path_expr}, {enum_allowed_values(type_info, model)});",
+        ]
+    if type_info.kind == "object":
+        return [f"{target} = parse{type_info.cpp_type}({node_name}, {path_expr});"]
+    if type_info.kind == "array":
+        return render_array_assignment(target, node_name, type_info, path_expr, model)
+    fail(f"unsupported optional field kind {type_info.kind!r}")
+
+
+def render_array_assignment(
+        target: str,
+        node_expr: str,
+        type_info: TypeInfo,
+        path_expr: str,
+        model: SchemaModel) -> list[str]:
+    if not type_info.array_item:
+        fail("array schema is missing items")
+    item = type_info.array_item
+    lines = [
+        f"utils::requireSequence({node_expr}, {path_expr});",
+        f"{target}.clear();",
+        f"{target}.reserve({node_expr}.size());",
+        f"for (std::size_t i = 0; i < {node_expr}.size(); ++i) {{",
+        f"  const auto item_path = {path_expr} + \"[\" + std::to_string(i) + \"]\";",
+    ]
+    if item.kind == "object":
+        lines.append(f"  {target}.push_back(parse{item.cpp_type}({node_expr}[i], item_path));")
+    elif item.kind == "string":
+        lines.append(
+            f"  {target}.push_back(parseStringValue({node_expr}[i], item_path, "
+            f"{cpp_bool(requires_nonempty(item.schema))}));")
+    elif item.kind == "integer":
+        lines.append(
+            f"  {target}.push_back(parseIntegerValue("
+            f"{node_expr}[i], item_path, {integer_minimum_args(item.schema)}));")
+    elif item.kind == "number":
+        lines.append(
+            f"  {target}.push_back(parseNumberValue("
+            f"{node_expr}[i], item_path, {number_minimum_args(item.schema)}));")
+    elif item.kind == "boolean":
+        lines.append(f"  {target}.push_back(parseBooleanValue({node_expr}[i], item_path));")
+    elif item.kind == "enum":
+        enum = model.enum_defs[model.enum_canonical[item.enum_schema_name or ""]]
+        lines.append(
+            f"  {target}.push_back(parse{enum.cpp_name}("
+            f"{node_expr}[i], item_path, {enum_allowed_values(item, model)}));")
+    else:
+        fail(f"unsupported array item kind {item.kind!r}")
+    lines.append("}")
+    return lines
+
+
+def render_parse_root(model: SchemaModel) -> list[str]:
+    root_const = f"k{pascal_case(model.root_key)}"
+    return [
+        "BridgeConfig parseRoot(const YAML::Node & root)",
+        "{",
+        "  const std::string root_path(kRootPath);",
+        f"  const std::string bridge_path = utils::fieldPath(root_path, {root_const});",
+        "",
+        f"  utils::rejectUnknownFields(root, {{std::string({root_const})}}, root_path);",
+        "",
+        f"  const auto bridge_node = root[{root_const}.data()];",
+        "  if (!bridge_node) {",
+        "    utils::failMissing(bridge_path, \"map\");",
+        "  }",
+        "  return parseBridgeConfig(bridge_node, bridge_path);",
+        "}",
+        "",
+    ]
+
+
+def render_to_string(enum: EnumSpec) -> list[str]:
+    lines = [
+        f"const char * toString({enum.cpp_name} value)",
+        "{",
+        "  switch (value) {",
+    ]
+    for enum_value in enum.values:
+        lines.extend([
+            f"    case {enum.cpp_name}::{enum_value_name(enum_value)}:",
+            f"      return k{enum.cpp_name}{enum_value_name(enum_value)}.data();",
+        ])
+    lines.extend([
+        "  }",
+        "  return \"unknown\";",
+        "}",
+    ])
+    return lines
+
+
+def enum_allowed_values(type_info: TypeInfo, model: SchemaModel) -> str:
+    if not type_info.enum_schema_name:
+        fail("enum type info missing schema name")
+    values = model.enum_defs[type_info.enum_schema_name].values
+    canonical = model.enum_defs[model.enum_canonical[type_info.enum_schema_name]]
+    constants = ", ".join(f"k{canonical.cpp_name}{enum_value_name(value)}" for value in values)
+    return "{" + constants + "}"
+
+
+def requires_nonempty(schema: dict[str, Any]) -> bool:
+    return int(schema.get("minLength", 0)) > 0
+
+
+def integer_expected(schema: dict[str, Any]) -> str:
+    minimum = schema.get("minimum")
+    if minimum is None:
+        return "integer"
+    if int(minimum) == 1:
+        return "positive integer"
+    return f"integer >= {int(minimum)}"
+
+
+def integer_minimum_args(schema: dict[str, Any]) -> str:
+    minimum = schema.get("minimum")
+    if minimum is None:
+        return f"false, 0, \"{integer_expected(schema)}\""
+    return f"true, {int(minimum)}, \"{integer_expected(schema)}\""
+
+
+def number_expected(schema: dict[str, Any]) -> str:
+    minimum = schema.get("minimum")
+    if minimum is None:
+        return "number"
+    return f"number >= {float(minimum):g}"
+
+
+def number_minimum_args(schema: dict[str, Any]) -> str:
+    minimum = schema.get("minimum")
+    if minimum is None:
+        return f"false, 0.0, \"{number_expected(schema)}\""
+    return f"true, {float(minimum):g}, \"{number_expected(schema)}\""
+
+
+def cpp_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def resolve_type(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
+    if "$ref" in schema:
+        return resolve_type(resolve_ref(schema["$ref"], defs), defs)
+    return schema
+
+
+def resolve_ref(ref: str, defs: dict[str, Any]) -> dict[str, Any]:
+    name = ref_name(ref)
+    if name not in defs:
+        fail(f"unsupported or unknown schema reference {ref!r}")
+    return defs[name]
+
+
+def ref_name(ref: str) -> str:
+    prefix = "#/$defs/"
+    if not ref.startswith(prefix):
+        fail(f"only local $defs references are supported, got {ref!r}")
+    return ref[len(prefix):]
+
+
+def pascal_case(name: str) -> str:
+    words = re.findall(r"[A-Za-z0-9]+", name)
+    if not words:
+        fail(f"cannot derive C++ identifier from {name!r}")
+    return "".join(word[:1].upper() + word[1:] for word in words)
+
+
+def snake_case(name: str) -> str:
+    name = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+    name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    name = re.sub(r"[^A-Za-z0-9]+", "_", name)
+    return name.lower().strip("_")
+
+
+def enum_value_name(value: str) -> str:
+    name = pascal_case(value)
+    if name[0].isdigit():
+        name = f"Value{name}"
+    return name
+
+
+def fail(message: str) -> None:
+    raise RuntimeError(f"config parser generation failed: {message}")
+
+
+def write_if_changed(path: Path, contents: str) -> None:
+    if path.exists() and path.read_text(encoding="utf-8") == contents:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--schema", required=True, type=Path)
+    parser.add_argument("--header", required=True, type=Path)
+    parser.add_argument("--source", required=True, type=Path)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    schema = json.loads(args.schema.read_text(encoding="utf-8"))
+    model = SchemaModel(schema)
+    write_if_changed(args.header, generate_header(model))
+    write_if_changed(args.source, generate_source(model))
+
+
+if __name__ == "__main__":
+    main()

@@ -458,6 +458,7 @@ TEST(ConfigParserTest, ParsesMalformedFileThrowsConfigError) {
     ("ros2_livekit_bridge_malformed_config_" + std::to_string(unique) + ".yaml");
   std::ofstream out(path);
   out << "ros_livekit_bridge: \"unterminated";
+  out.close();
 
   try {
     (void)ConfigParser{}.parseFile(path);

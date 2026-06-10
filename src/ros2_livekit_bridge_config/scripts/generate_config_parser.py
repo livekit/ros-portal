@@ -16,7 +16,7 @@
 
 # flake8: noqa
 
-"""Generate config_parser.hpp/cpp from ros_livekit_bridge_config.schema.json."""
+"""Generate config_parser.hpp/cpp from ros2_livekit_bridge_config.schema.json."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ HEADER_PROLOGUE = """/*
  * limitations under the License.
  */
 
-// This file is generated from schema/ros_livekit_bridge_config.schema.json.
+// This file is generated from schema/ros2_livekit_bridge_config.schema.json.
 // Do not edit by hand.
 """
 

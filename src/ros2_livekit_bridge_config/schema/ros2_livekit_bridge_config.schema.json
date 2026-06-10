@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://livekit.io/schemas/ros_livekit_bridge_config.schema.json",
+  "$id": "https://livekit.io/schemas/ros2_livekit_bridge_config.schema.json",
   "title": "ROS LiveKit Bridge Config",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ros_livekit_bridge"],
+  "required": ["ros2_livekit_bridge"],
   "properties": {
-    "ros_livekit_bridge": {
+    "ros2_livekit_bridge": {
       "type": "object",
       "additionalProperties": false,
       "required": ["version"],

@@ -5,12 +5,12 @@ Schema-driven YAML configuration parser and config type definitions for
 
 The JSON schema is the source of truth for the C++ config structs used by the
 bridge. `BridgeConfig`, its nested structs, enums, and parser are generated from
-`schema/ros_livekit_bridge_config.schema.json`; the main bridge package depends
+`schema/ros2_livekit_bridge_config.schema.json`; the main bridge package depends
 on this package and consumes those generated types directly.
 
 ## Package Layout
 
-- `schema/ros_livekit_bridge_config.schema.json`: source of truth for the YAML
+- `schema/ros2_livekit_bridge_config.schema.json`: source of truth for the YAML
   config structure and the generated C++ structs used by the bridge.
 - `scripts/generate_config_parser.py`: reads the schema and builds a small model
   of the config types, fields, enums, and parser functions.
@@ -29,7 +29,7 @@ on this package and consumes those generated types directly.
 ## Code Generation
 
 CMake runs `scripts/generate_config_parser.py` during the build. The generator
-loads `schema/ros_livekit_bridge_config.schema.json`, renders the `.hpp.j2` and
+loads `schema/ros2_livekit_bridge_config.schema.json`, renders the `.hpp.j2` and
 `.cpp.j2` templates, and writes generated files under the build directory:
 
 - `generated/config_parser/include/ros2_livekit_bridge_config/config/config_parser.hpp`

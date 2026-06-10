@@ -37,8 +37,8 @@ YAML::Node node(const std::string & yaml)
 TEST(ConfigUtilsTest, FieldPathJoinsWithDot) {
   EXPECT_EQ(fieldPath("$", "version"), "$.version");
   EXPECT_EQ(
-    fieldPath("$.ros_livekit_bridge", "topics"),
-    "$.ros_livekit_bridge.topics");
+    fieldPath("$.ros2_livekit_bridge", "topics"),
+    "$.ros2_livekit_bridge.topics");
   EXPECT_EQ(fieldPath("", "x"), ".x");
 }
 

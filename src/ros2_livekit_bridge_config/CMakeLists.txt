@@ -41,7 +41,7 @@ if(NOT _jinja2_result EQUAL 0)
 endif()
 
 set(CONFIG_SCHEMA
-  "${CMAKE_CURRENT_SOURCE_DIR}/schema/ros_livekit_bridge_config.schema.json")
+  "${CMAKE_CURRENT_SOURCE_DIR}/schema/ros2_livekit_bridge_config.schema.json")
 set(CONFIG_PARSER_TEMPLATES
   "${CMAKE_CURRENT_SOURCE_DIR}/scripts/templates/config_parser.hpp.j2"
   "${CMAKE_CURRENT_SOURCE_DIR}/scripts/templates/config_parser.cpp.j2")

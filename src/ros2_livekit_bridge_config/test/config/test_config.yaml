@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../schema/ros_livekit_bridge_config.schema.json
+# yaml-language-server: $schema=../../schema/ros2_livekit_bridge_config.schema.json
 # Copyright 2026 LiveKit
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   room_name: "robo_room"
   topic_polling_period_ms: 500

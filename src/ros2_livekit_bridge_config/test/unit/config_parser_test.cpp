@@ -46,7 +46,7 @@ void expectInvalid(const std::string & yaml, const std::string & expected_text)
 
 TEST(ConfigParserTest, ParsesMinimalConfig) {
   const auto config = parse(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
 )");
 
@@ -63,7 +63,7 @@ TEST(ConfigParserTest, ParsesFullConfig) {
   const auto config =
     parse(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   room_name: "robo_room"
   topic_polling_period_ms: 500
@@ -119,7 +119,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsUnknownRootField) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
 extra: true
 )", "unknown field 'extra'");
@@ -128,7 +128,7 @@ extra: true
 TEST(ConfigParserTest, RejectsMisspelledParticipantField) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/provide_status"
@@ -140,14 +140,14 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsUnsupportedVersion) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.2"
 )", "expected '0.0.1'");
 }
 
 TEST(ConfigParserTest, RejectsWrongScalarType) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version:
     major: 0
 )", "expected string");
@@ -156,7 +156,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsWrongSequenceType) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     topic: "/odom"
@@ -167,7 +167,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsWrongMapType) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   room_options:
     - join_retries
@@ -177,7 +177,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsInvalidServiceDirection) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -190,7 +190,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsInvalidTopicDirection) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: "/teleop_cmd"
@@ -202,7 +202,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsMissingServiceParticipant) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -213,7 +213,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsMissingTopicName) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - direction: "out"
@@ -223,7 +223,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsEmptyTopicName) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: ""
@@ -234,7 +234,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsInvalidJoinRetries) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   room_options:
     join_retries: 0
@@ -244,7 +244,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsInvalidVideoBitrate) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: "/camera/image_raw"
@@ -258,7 +258,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsEmptyCodec) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: "/camera/image_raw"
@@ -272,7 +272,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsAudioOptions) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: "/mic/audio_left"
@@ -305,7 +305,7 @@ TEST(ConfigParserTest, ParsesFile) {
 TEST(ConfigParserTest, ParsesEmptySequences) {
   const auto config =
     parse(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services: []
   topics: []
@@ -318,12 +318,12 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, ConfigErrorExposesStructuredFields) {
   try {
     (void)parse(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.2"
 )");
     FAIL() << "Expected ConfigError";
   } catch (const ConfigError & e) {
-    EXPECT_EQ(e.context(), "$.ros_livekit_bridge.version at line 3, column 12");
+    EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.version at line 3, column 12");
     EXPECT_EQ(e.expected(), "'0.0.1'");
     EXPECT_EQ(e.detail(), "found '0.0.2'");
   }
@@ -332,7 +332,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, ErrorContextIncludesLineAndColumn) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: "/teleop_cmd"
@@ -344,14 +344,14 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, MissingFieldErrorHasNoLineColumn) {
   try {
     (void)parse(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - direction: "out"
 )");
     FAIL() << "Expected ConfigError";
   } catch (const ConfigError & e) {
-    EXPECT_EQ(e.context(), "$.ros_livekit_bridge.topics[0].topic");
+    EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.topics[0].topic");
     EXPECT_EQ(e.detail(), "missing required field");
     EXPECT_EQ(std::string(e.what()).find("at line"), std::string::npos)
       << e.what();
@@ -360,7 +360,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsMalformedYamlString) {
   try {
-    (void)parse("ros_livekit_bridge: \"unterminated");
+    (void)parse("ros2_livekit_bridge: \"unterminated");
     FAIL() << "Expected ConfigError";
   } catch (const ConfigError & e) {
     EXPECT_EQ(e.context(), "<string>");
@@ -384,7 +384,7 @@ unrelated: true
 
 TEST(ConfigParserTest, RejectsMissingVersion) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   room_options:
     join_retries: 3
 )", "missing required field");
@@ -393,7 +393,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsMissingServiceDirection) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -404,7 +404,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsMissingTopicDirection) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topics:
     - topic: "/odom"
@@ -414,7 +414,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsEmptyServiceName) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: ""
@@ -427,7 +427,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsEmptyParticipant) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -440,7 +440,7 @@ ros_livekit_bridge:
 TEST(ConfigParserTest, RejectsNonIntegerJoinRetries) {
   expectInvalid(
         R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   room_options:
     join_retries: "three"
@@ -449,7 +449,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsEmptyRoomName) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   room_name: ""
 )", "expected nonempty string");
@@ -457,7 +457,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   topic_polling_period_ms: 0
 )", "expected positive integer");
@@ -465,7 +465,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsInvalidRosThreads) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   ros_threads: -1
 )", "expected integer >= 0");
@@ -473,7 +473,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsNonScalarMapKey) {
   expectInvalid(R"(
-ros_livekit_bridge:
+ros2_livekit_bridge:
   version: "0.0.1"
   ? [complex, key]
   : true
@@ -500,7 +500,7 @@ TEST(ConfigParserTest, ParsesMalformedFileThrowsConfigError) {
   const auto path = std::filesystem::temp_directory_path() /
     ("ros2_livekit_bridge_malformed_config_" + std::to_string(unique) + ".yaml");
   std::ofstream out(path);
-  out << "ros_livekit_bridge: \"unterminated";
+  out << "ros2_livekit_bridge: \"unterminated";
   out.close();
 
   try {

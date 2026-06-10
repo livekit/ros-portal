@@ -51,17 +51,23 @@ ros_livekit_bridge:
 )");
 
   EXPECT_EQ(config.version, "0.0.1");
+  EXPECT_FALSE(config.room_name.has_value());
+  EXPECT_FALSE(config.topic_polling_period_ms.has_value());
+  EXPECT_FALSE(config.ros_threads.has_value());
   EXPECT_FALSE(config.room_options.join_retries.has_value());
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());
 }
 
-TEST(ConfigParserTest, ParsesFullV1Config) {
+TEST(ConfigParserTest, ParsesFullConfig) {
   const auto config =
     parse(
         R"(
 ros_livekit_bridge:
   version: "0.0.1"
+  room_name: "robo_room"
+  topic_polling_period_ms: 500
+  ros_threads: 4
   room_options:
     join_retries: 3
   services:
@@ -82,6 +88,13 @@ ros_livekit_bridge:
     - topic: "/teleop_cmd"
       direction: "in"
 )");
+
+  ASSERT_TRUE(config.room_name.has_value());
+  EXPECT_EQ(*config.room_name, "robo_room");
+  ASSERT_TRUE(config.topic_polling_period_ms.has_value());
+  EXPECT_EQ(*config.topic_polling_period_ms, 500);
+  ASSERT_TRUE(config.ros_threads.has_value());
+  EXPECT_EQ(*config.ros_threads, 4);
 
   ASSERT_TRUE(config.room_options.join_retries.has_value());
   EXPECT_EQ(*config.room_options.join_retries, 3);
@@ -278,6 +291,12 @@ TEST(ConfigParserTest, ParsesFile) {
   const auto config = ConfigParser{}.parseFile(path);
 
   EXPECT_EQ(config.version, "0.0.1");
+  ASSERT_TRUE(config.room_name.has_value());
+  EXPECT_EQ(*config.room_name, "robo_room");
+  ASSERT_TRUE(config.topic_polling_period_ms.has_value());
+  EXPECT_EQ(*config.topic_polling_period_ms, 500);
+  ASSERT_TRUE(config.ros_threads.has_value());
+  EXPECT_EQ(*config.ros_threads, 4);
   ASSERT_EQ(config.services.size(), 2u);
   ASSERT_EQ(config.topics.size(), 6u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");
@@ -426,6 +445,30 @@ ros_livekit_bridge:
   room_options:
     join_retries: "three"
 )", "expected positive integer");
+}
+
+TEST(ConfigParserTest, RejectsEmptyRoomName) {
+  expectInvalid(R"(
+ros_livekit_bridge:
+  version: "0.0.1"
+  room_name: ""
+)", "expected nonempty string");
+}
+
+TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {
+  expectInvalid(R"(
+ros_livekit_bridge:
+  version: "0.0.1"
+  topic_polling_period_ms: 0
+)", "expected positive integer");
+}
+
+TEST(ConfigParserTest, RejectsInvalidRosThreads) {
+  expectInvalid(R"(
+ros_livekit_bridge:
+  version: "0.0.1"
+  ros_threads: -1
+)", "expected integer >= 0");
 }
 
 TEST(ConfigParserTest, RejectsNonScalarMapKey) {

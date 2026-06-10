@@ -24,9 +24,11 @@
 namespace ros2_livekit_bridge_config
 {
 
-// Raised when a config document does not match the expected schema. Carries the
-// structured location (context), what was expected, and an optional detail in
-// addition to the formatted what() message.
+// Raised when a config document does not match the expected schema. Essentially
+// a wrapper around yaml-cpp exception content and schema validation failures:
+// carries the structured location (context), what was expected, and an
+// optional detail (often YAML::Exception::what()) in addition to the formatted
+// what() message.
 class ConfigError : public std::runtime_error
 {
 public:
@@ -41,9 +43,9 @@ public:
   {
   }
 
-  const std::string & context() const noexcept {return context_;}
-  const std::string & expected() const noexcept {return expected_;}
-  const std::string & detail() const noexcept {return detail_;}
+  const std::string & context() const {return context_;}
+  const std::string & expected() const {return expected_;}
+  const std::string & detail() const {return detail_;}
 
 private:
   static std::string formatMessage(

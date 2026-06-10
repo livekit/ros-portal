@@ -109,7 +109,7 @@ int parseIntegerValue(
   return value;
 }
 
-[[maybe_unused]] double parseNumberValue(
+double parseNumberValue(
   const YAML::Node & node,
   const std::string & path,
   bool has_minimum,
@@ -135,7 +135,7 @@ int parseIntegerValue(
   return value;
 }
 
-[[maybe_unused]] bool parseBooleanValue(const YAML::Node & node, const std::string & path)
+bool parseBooleanValue(const YAML::Node & node, const std::string & path)
 {
   if (!node || !node.IsScalar()) {
     utils::fail(path, node, "boolean", "found non-scalar value");

@@ -456,9 +456,8 @@ TEST(ConfigParserTest, ParsesMalformedFileThrowsConfigError) {
     .time_since_epoch().count();
   const auto path = std::filesystem::temp_directory_path() /
     ("ros2_livekit_bridge_malformed_config_" + std::to_string(unique) + ".yaml");
-    std::ofstream out(path);
-    out << "ros_livekit_bridge: \"unterminated";
-  }
+  std::ofstream out(path);
+  out << "ros_livekit_bridge: \"unterminated";
 
   try {
     (void)ConfigParser{}.parseFile(path);

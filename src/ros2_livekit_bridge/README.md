@@ -91,32 +91,10 @@ deserializer) to decode it.
 
 ## Configuration
 
-Parameters are loaded from `config/ros2_livekit_bridge_params.yaml`:
-
-| Parameter                  | Type             | Default | Description |
-|----------------------------|------------------|---------|-------------|
-| `room_name`                | string           | `""`    | LiveKit room name (unused for now). |
-| `topic_polling_period_ms`  | int              | `500`   | Interval in milliseconds between graph polls. |
-| `ros_threads`              | int              | `0`     | Number of threads for the ROS2 executor. The default 0 will use the number of cpu cores found instead|
-| `ros_topics`               | list of strings  | `[]`    | ECMAScript regex patterns matched against full topic names. |
-| `min_qos_depth`            | int              | `1`     | Lower bound for subscriber history depth. |
-| `max_qos_depth`            | int              | `25`    | Upper bound for subscriber history depth. |
-| `best_effort_qos_topics`   | list of strings  | `[]`    | Regex patterns for topics forced to BEST_EFFORT reliability. |
-
-LiveKit credentials are intentionally not loaded from the config file. Set
-`LIVEKIT_URL` and `LIVEKIT_TOKEN` in the node environment.
-
-### Topic pattern examples
-
-Patterns are full ECMAScript regular expressions tested with `std::regex_match`
-(i.e. the pattern must match the **entire** topic name):
-
-| Pattern              | Matches                                      |
-|----------------------|----------------------------------------------|
-| `/lidar/points`      | Exactly `/lidar/points`                      |
-| `/tf.*`              | `/tf`, `/tf_static`, `/tf_anything`          |
-| `/camera/.*`         | `/camera/image_raw`, `/camera/camera_info`   |
-| `/robot[0-9]+/odom`  | `/robot1/odom`, `/robot42/odom`              |
+Bridge settings are loaded from `config/ros2_livekit_bridge.yaml` using the
+schema-driven `ros2_livekit_bridge_config` parser. Launch files pass this path
+to the node with the `config_path` ROS parameter. See the
+[configuration guide](../../docs/configuration.md) for the supported schema.
 
 ## QoS Determination
 
@@ -167,10 +145,10 @@ source ros/install/setup.bash
 export LIVEKIT_URL=<url>
 export LIVEKIT_TOKEN=<token>
 
-# With parameters from the default config file:
+# With the default config file:
 ros2 run ros2_livekit_bridge ros2_livekit_bridge_node \
-  --ros-args --params-file \
-  $(ros2 pkg prefix ros2_livekit_bridge)/share/ros2_livekit_bridge/config/ros2_livekit_bridge_params.yaml
+  --ros-args -p config_path:=\
+$(ros2 pkg prefix ros2_livekit_bridge)/share/ros2_livekit_bridge/config/ros2_livekit_bridge.yaml
 
 # Or via the launch file:
 ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
@@ -185,7 +163,7 @@ ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
 
 ```bash
 # launch with gdb
-   gdb --args /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/lib/ros2_livekit_bridge/ros2_livekit_bridge_node --ros-args -r __node:=ros2_livekit_bridge --params-file /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/share/ros2_livekit_bridge/config/ros2_livekit_bridge_params.yaml
+   gdb --args /home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/lib/ros2_livekit_bridge/ros2_livekit_bridge_node --ros-args -r __node:=ros2_livekit_bridge -p config_path:=/home/jetson/workspaces/client-sdk-cpp/ros/install/ros2_livekit_bridge/share/ros2_livekit_bridge/config/ros2_livekit_bridge.yaml
 ```
 
 ## Current Limitations

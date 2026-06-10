@@ -17,10 +17,12 @@
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <stdexcept>
 
 #include <livekit/livekit.h>
@@ -33,7 +35,10 @@ namespace
 {
 
 namespace bridge_utils = ::livekit::ros_bridge::utils;
+namespace bridge_config = ::ros2_livekit_bridge_config;
 
+constexpr int DEFAULT_TOPIC_POLLING_PERIOD_MS = 500;
+constexpr int DEFAULT_ROS_THREADS = 4;
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
@@ -84,17 +89,48 @@ void logPatternCompileErrors(
   }
 }
 
+bridge_config::BridgeConfig parseBridgeConfig(
+  const std::filesystem::path & path, rclcpp::Logger logger)
+{
+  if (path.empty()) {
+    throw std::invalid_argument(
+            "config_path parameter must point to a ros2_livekit_bridge config "
+            "YAML file");
+  }
+
+  try {
+    return bridge_config::ConfigParser{}.parseFile(path);
+  } catch (const std::exception & e) {
+    RCLCPP_FATAL(logger, "Failed to parse config '%s': %s",
+                 path.string().c_str(), e.what());
+    throw;
+  }
+}
+
+std::vector<std::string> outgoingTopicPatterns(
+  const bridge_config::BridgeConfig & config)
+{
+  std::vector<std::string> patterns;
+  patterns.reserve(config.topics.size());
+
+  for (const auto & topic_config : config.topics) {
+    if (topic_config.direction == bridge_config::Direction::Out ||
+      topic_config.direction == bridge_config::Direction::Bidirectional)
+    {
+      patterns.push_back(topic_config.topic);
+    }
+  }
+
+  return patterns;
+}
+
 } // namespace
 
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ros2_livekit_bridge", options)
 {
-  this->declare_parameter<std::string>("room_name", "");
-  this->declare_parameter<int>("topic_polling_period_ms", 500);
-  this->declare_parameter<int>("ros_threads", 0);
+  this->declare_parameter<std::string>("config_path", "");
   const std::vector<std::string> kEmptyStringVec{};
-  this->declare_parameter("ros_topics",
-                          rclcpp::ParameterValue(kEmptyStringVec));
   this->declare_parameter<int>("min_qos_depth",
                                static_cast<int>(DEFAULT_MIN_QOS_DEPTH));
   this->declare_parameter<int>("max_qos_depth",
@@ -102,10 +138,14 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
   this->declare_parameter("best_effort_qos_topics",
                           rclcpp::ParameterValue(kEmptyStringVec));
 
-  room_name_ = this->get_parameter("room_name").as_string();
+  const auto config_path = std::filesystem::path(
+    this->get_parameter("config_path").as_string());
+  const auto config = parseBridgeConfig(config_path, this->get_logger());
+
+  room_name_ = config.room_name;
   topic_polling_period_ms_ =
-    this->get_parameter("topic_polling_period_ms").as_int();
-  ros_threads_ = this->get_parameter("ros_threads").as_int();
+    config.topic_polling_period_ms.value_or(DEFAULT_TOPIC_POLLING_PERIOD_MS);
+  ros_threads_ = config.ros_threads.value_or(DEFAULT_ROS_THREADS);
 
   reentrant_callback_group_ =
     this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -113,7 +153,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ =
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
-  ros_topic_patterns_ = this->get_parameter("ros_topics").as_string_array();
+  ros_topic_patterns_ = outgoingTopicPatterns(config);
   std::vector<bridge_utils::PatternCompileError> pattern_errors;
   compiled_patterns_ =
     bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);

@@ -16,7 +16,7 @@
 
 #include "config/utils.hpp"
 
-#include "ros2_livekit_bridge/config/error.hpp"
+#include "ros2_livekit_bridge_config/config/error.hpp"
 
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
@@ -24,7 +24,7 @@
 #include <set>
 #include <string>
 
-namespace ros2_livekit_bridge::config::utils
+namespace ros2_livekit_bridge_config::utils
 {
 namespace
 {
@@ -167,4 +167,4 @@ TEST(ConfigUtilsTest, RejectUnknownFieldsRejectsNonMap) {
 }
 
 } // namespace
-} // namespace ros2_livekit_bridge::config::utils
+} // namespace ros2_livekit_bridge_config::utils

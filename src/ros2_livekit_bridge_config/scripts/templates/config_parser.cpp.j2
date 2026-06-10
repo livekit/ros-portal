@@ -1,6 +1,6 @@
 {{ prologue }}
 
-#include "ros2_livekit_bridge/config/config_parser.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 #include "config/utils.hpp"
 
@@ -13,7 +13,7 @@
 #include <string>
 #include <string_view>
 
-namespace ros2_livekit_bridge::config
+namespace ros2_livekit_bridge_config
 {
 namespace
 {
@@ -243,4 +243,4 @@ const char * toString({{ enum.cpp_name }} value)
 }
 
 {% endfor %}
-} // namespace ros2_livekit_bridge::config
+} // namespace ros2_livekit_bridge_config

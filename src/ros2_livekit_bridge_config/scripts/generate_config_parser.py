@@ -301,7 +301,7 @@ def make_template_context(model: SchemaModel) -> dict[str, Any]:
         "const_values": collect_const_values(model),
         "enum_constant_name": enum_constant_name,
         "field_constants": collect_field_constants(model),
-        "guard": "ROS2_LIVEKIT_BRIDGE__CONFIG__CONFIG_PARSER_HPP_",
+        "guard": "ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__CONFIG_PARSER_HPP_",
         "model": model,
         "parse_field_lines": lambda spec, field: render_field_parse(spec, field, model),
         "prologue": HEADER_PROLOGUE.rstrip(),

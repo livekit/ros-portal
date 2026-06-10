@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/config/config_parser.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 #include <gtest/gtest.h>
 
@@ -23,7 +23,7 @@
 #include <fstream>
 #include <string>
 
-namespace ros2_livekit_bridge::config
+namespace ros2_livekit_bridge_config
 {
 namespace
 {
@@ -272,7 +272,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, ParsesFile) {
   const auto path =
-    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_TEST_DIR) /
+    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR) /
     "config" / "test_config.yaml";
 
   const auto config = ConfigParser{}.parseFile(path);
@@ -439,7 +439,7 @@ ros_livekit_bridge:
 
 TEST(ConfigParserTest, ParsesFromMissingFileThrowsConfigError) {
   const auto path =
-    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_TEST_DIR) /
+    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR) /
     "config" / "does_not_exist.yaml";
 
   try {
@@ -477,4 +477,4 @@ TEST(ConfigParserTest, ConvertsDirectionToString) {
 }
 
 } // namespace
-} // namespace ros2_livekit_bridge::config
+} // namespace ros2_livekit_bridge_config

@@ -23,6 +23,7 @@ ENV WS=/${WS_ROS}
 WORKDIR ${WS}
 
 RUN apt update && apt install -y \
+    python3-jinja2 \
     python3-pip \
     python3-opencv \
     python3-vcstool \

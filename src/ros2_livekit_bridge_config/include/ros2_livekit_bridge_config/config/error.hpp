@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef ROS2_LIVEKIT_BRIDGE__CONFIG__ERROR_HPP_
-#define ROS2_LIVEKIT_BRIDGE__CONFIG__ERROR_HPP_
+#ifndef ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__ERROR_HPP_
+#define ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__ERROR_HPP_
 
 #include <stdexcept>
 #include <string>
 #include <utility>
 
-namespace ros2_livekit_bridge::config
+namespace ros2_livekit_bridge_config
 {
 
 // Raised when a config document does not match the expected schema. Carries the
@@ -63,6 +63,6 @@ private:
   std::string detail_;
 };
 
-} // namespace ros2_livekit_bridge::config
+} // namespace ros2_livekit_bridge_config
 
-#endif // ROS2_LIVEKIT_BRIDGE__CONFIG__ERROR_HPP_
+#endif // ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__ERROR_HPP_

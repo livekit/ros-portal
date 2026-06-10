@@ -16,12 +16,12 @@
 
 #include "config/utils.hpp"
 
-#include "ros2_livekit_bridge/config/error.hpp"
+#include "ros2_livekit_bridge_config/config/error.hpp"
 
 #include <sstream>
 #include <string>
 
-namespace ros2_livekit_bridge::config::utils
+namespace ros2_livekit_bridge_config::utils
 {
 
 std::string fieldPath(const std::string & path, std::string_view field)
@@ -146,4 +146,4 @@ void rejectUnknownFields(
   }
 }
 
-} // namespace ros2_livekit_bridge::config::utils
+} // namespace ros2_livekit_bridge_config::utils

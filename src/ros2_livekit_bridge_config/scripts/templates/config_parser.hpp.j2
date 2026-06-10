@@ -3,14 +3,14 @@
 #ifndef {{ guard }}
 #define {{ guard }}
 
-#include "ros2_livekit_bridge/config/error.hpp"
+#include "ros2_livekit_bridge_config/config/error.hpp"
 
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
-namespace ros2_livekit_bridge::config
+namespace ros2_livekit_bridge_config
 {
 
 {% for enum in model.canonical_enums %}
@@ -42,6 +42,6 @@ public:
 const char * toString({{ enum.cpp_name }} value);
 {% endfor %}
 
-} // namespace ros2_livekit_bridge::config
+} // namespace ros2_livekit_bridge_config
 
 #endif // {{ guard }}

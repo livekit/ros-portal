@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ROS2_LIVEKIT_BRIDGE__CONFIG__UTILS_HPP_
-#define ROS2_LIVEKIT_BRIDGE__CONFIG__UTILS_HPP_
+#ifndef ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__UTILS_HPP_
+#define ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__UTILS_HPP_
 
 #include <yaml-cpp/yaml.h>
 
@@ -28,7 +28,7 @@
 // human-readable location when the document does not match expectations. They
 // are intentionally free of any BridgeConfig schema knowledge so they can be
 // unit tested and reused independently of the config layout.
-namespace ros2_livekit_bridge::config::utils
+namespace ros2_livekit_bridge_config::utils
 {
 
 // Joins a parent path and a field name into a dotted path (e.g. "$.topics").
@@ -74,6 +74,6 @@ void rejectUnknownFields(
   const std::set<std::string> & allowed,
   const std::string & path);
 
-} // namespace ros2_livekit_bridge::config::utils
+} // namespace ros2_livekit_bridge_config::utils
 
-#endif // ROS2_LIVEKIT_BRIDGE__CONFIG__UTILS_HPP_
+#endif // ROS2_LIVEKIT_BRIDGE_CONFIG__CONFIG__UTILS_HPP_

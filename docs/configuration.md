@@ -3,6 +3,12 @@ The bridge reads the YAML config once on node startup and builds an immutable
 snapshot of the user specified config. Pass the file path with the node's
 `config_path` ROS parameter.
 
+## Credentials
+
+LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
+`LIVEKIT_TOKEN` in the node environment.
+
+
 ## Minimal Config
 
 ```yaml
@@ -64,8 +70,3 @@ matched against the full topic name.
 | `codec` | string | no | Video codec name. Must be non-empty when set. |
 
 Audio options are not part of config version `0.0.1`.
-
-## Credentials
-
-LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
-`LIVEKIT_TOKEN` in the node environment.

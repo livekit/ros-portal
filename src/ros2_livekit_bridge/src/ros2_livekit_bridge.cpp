@@ -91,6 +91,7 @@ bridge_config::BridgeConfig parseBridgeConfig(
   const std::filesystem::path & path, rclcpp::Logger logger)
 {
   if (path.empty()) {
+    RCLCPP_FATAL(logger, "config_path parameter is empty");
     throw std::invalid_argument(
             "config_path parameter must point to a ros2_livekit_bridge config "
             "YAML file");

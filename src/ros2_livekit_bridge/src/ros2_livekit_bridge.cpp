@@ -16,18 +16,14 @@
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
+#include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
-#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 #include <chrono>
-#include <cstdlib>
-#include <cstring>
 #include <exception>
 #include <filesystem>
-#include <optional>
 
 #include <livekit/livekit.h>
-#include <livekit/video_frame.h>
 
 namespace ros2_livekit_bridge
 {
@@ -35,93 +31,11 @@ namespace ros2_livekit_bridge
 namespace
 {
 
-namespace bridge_utils = ::livekit::ros_bridge::utils;
-namespace bridge_config = ::ros2_livekit_bridge_config;
+namespace ros_bridge_utils = ::livekit::ros_bridge::utils;
 
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
-
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
-  int width, int height,
-  const std::uint8_t *rgba,
-  std::size_t rgba_size)
-{
-  const std::size_t expected_size =
-    static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
-  if (rgba_size != expected_size) {
-    return std::nullopt;
-  }
-
-  auto frame = livekit::VideoFrame::create(width, height,
-                                           livekit::VideoBufferType::RGBA);
-  std::memcpy(frame.data(), rgba, rgba_size);
-  return frame;
-}
-
-/**
- * @brief Resolve a credential from an environment variable.
- * @param env_var_name The name of the environment variable
- * @param source The source of the credential. This is set to a
- * human-readable label of the source.
- * @return The resolved credential
- */
-std::string resolveEnvironmentCredential(
-  const std::string & env_var_name,
-  std::string & source)
-{
-  const char *env_val = std::getenv(env_var_name.c_str());
-  if (env_val && env_val[0] != '\0') {
-    source = "environment variable " + env_var_name;
-    return std::string(env_val);
-  }
-  source = "none";
-  return {};
-}
-
-void logPatternCompileErrors(
-  const std::vector<bridge_utils::PatternCompileError> & errors,
-  rclcpp::Logger logger)
-{
-  for (const auto & error : errors) {
-    RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s",
-                 error.pattern.c_str(), error.message.c_str());
-  }
-}
-
-std::optional<bridge_config::BridgeConfig>
-parseBridgeConfig(const std::filesystem::path & path, rclcpp::Logger logger)
-{
-  if (path.empty()) {
-    RCLCPP_FATAL(logger, "config_path parameter is empty");
-    return std::nullopt;
-  }
-
-  try {
-    return bridge_config::ConfigParser{}.parseFile(path);
-  } catch (const std::exception & e) {
-    RCLCPP_FATAL(logger, "Failed to parse config '%s': %s",
-                 path.string().c_str(), e.what());
-    return std::nullopt;
-  }
-}
-
-std::vector<std::string>
-outgoingTopicPatterns(const bridge_config::BridgeConfig & config)
-{
-  std::vector<std::string> patterns;
-  patterns.reserve(config.topics.size());
-
-  for (const auto & topic_config : config.topics) {
-    if (topic_config.direction == bridge_config::Direction::Out ||
-      topic_config.direction == bridge_config::Direction::Bidirectional)
-    {
-      patterns.push_back(topic_config.topic);
-    }
-  }
-
-  return patterns;
-}
 
 } // namespace
 
@@ -149,7 +63,8 @@ bool Ros2LiveKitBridge::initialize()
 
   const auto config_path =
     std::filesystem::path(this->get_parameter("config_path").as_string());
-  const auto config = parseBridgeConfig(config_path, this->get_logger());
+  const auto config =
+    ros_bridge_utils::parseBridgeConfig(config_path, this->get_logger());
   if (!config) {
     return false;
   }
@@ -164,18 +79,18 @@ bool Ros2LiveKitBridge::initialize()
     static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ =
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
-  ros_topic_patterns_ = outgoingTopicPatterns(*config);
-  std::vector<bridge_utils::PatternCompileError> pattern_errors;
+  ros_topic_patterns_ = ros_bridge_utils::outgoingTopicPatterns(*config);
+  std::vector<ros_bridge_utils::PatternCompileError> pattern_errors;
   compiled_patterns_ =
-    bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);
-  logPatternCompileErrors(pattern_errors, this->get_logger());
+    ros_bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);
+  ros_bridge_utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
   auto best_effort_topics =
     this->get_parameter("best_effort_qos_topics").as_string_array();
   pattern_errors.clear();
   best_effort_qos_topic_patterns_ =
-    bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
-  logPatternCompileErrors(pattern_errors, this->get_logger());
+    ros_bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
+  ros_bridge_utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu topic patterns, "
@@ -188,9 +103,9 @@ bool Ros2LiveKitBridge::initialize()
   // ----- Resolve LiveKit credentials from environment variables only -----
   std::string url_source, token_source;
   const std::string livekit_url =
-    resolveEnvironmentCredential("LIVEKIT_URL", url_source);
+    ros_bridge_utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
   const std::string livekit_token =
-    resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
+    ros_bridge_utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s",
               url_source.c_str());
@@ -454,9 +369,9 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
         static_cast<std::int64_t>(stamp.nanosec) / 1'000;
 
       if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
-        auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
-                                      static_cast<int>(msg->height),
-                                      msg->data.data(), msg->data.size());
+        auto frame = ros_bridge_utils::makeRgbaVideoFrame(
+          static_cast<int>(msg->width), static_cast<int>(msg->height),
+          msg->data.data(), msg->data.size());
         if (!frame) {
           RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 5000,
@@ -468,14 +383,14 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 
         state.source->captureFrame(*frame, timestamp_us);
       } else {
-        if (!bridge_utils::convertToRgba(*msg, state.rgba_buf)) {
+        if (!ros_bridge_utils::convertToRgba(*msg, state.rgba_buf)) {
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                              "Unsupported image encoding '%s' on topic '%s'",
                              msg->encoding.c_str(), topic_name.c_str());
           return;
         }
 
-        auto frame = makeRgbaVideoFrame(
+        auto frame = ros_bridge_utils::makeRgbaVideoFrame(
           static_cast<int>(msg->width), static_cast<int>(msg->height),
           state.rgba_buf.data(), state.rgba_buf.size());
         if (!frame) {
@@ -503,7 +418,7 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 
 bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
 {
-  return bridge_utils::matchesAnyPattern(topic_name, compiled_patterns_);
+  return ros_bridge_utils::matchesAnyPattern(topic_name, compiled_patterns_);
 }
 
 rclcpp::QoS
@@ -549,7 +464,7 @@ Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
   // Reliability: force best-effort if topic matches the override list,
   // otherwise use RELIABLE only when every publisher offers it (mixed policies
   // fall back to best-effort so we can connect to all publishers).
-  if (bridge_utils::matchesAnyPattern(topic_name,
+  if (ros_bridge_utils::matchesAnyPattern(topic_name,
                                       best_effort_qos_topic_patterns_))
   {
     qos.best_effort();

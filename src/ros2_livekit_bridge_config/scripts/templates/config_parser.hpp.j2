@@ -26,7 +26,7 @@ enum class {{ enum.cpp_name }}
 struct {{ spec.cpp_name }}
 {
 {% for field in spec.fields %}
-  {{ field.member_type }} {{ field.member_name }};
+  {{ field.member_type }} {{ field.member_name }}{{ default_initializer(field) }};
 {% endfor %}
 };
 

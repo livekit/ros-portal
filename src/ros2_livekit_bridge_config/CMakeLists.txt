@@ -135,7 +135,7 @@ endif()
 
 install(
   DIRECTORY "${CONFIG_PARSER_GENERATED_INCLUDE_DIR}/"
-  DESTINATION "include"
+  DESTINATION "include/${PROJECT_NAME}"
 )
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE schema)

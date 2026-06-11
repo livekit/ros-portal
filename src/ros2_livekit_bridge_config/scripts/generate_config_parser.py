@@ -76,6 +76,7 @@ class FieldSpec:
     type_info: TypeInfo
     required: bool
     member_type: str
+    default_value: Any | None = None
 
 
 @dataclass
@@ -192,14 +193,16 @@ class SchemaModel:
             member_type = member_type_for(
                 type_info,
                 required=yaml_name in required,
-                parent_depth=depth)
+                parent_depth=depth,
+                has_default="default" in property_schema)
             spec.fields.append(FieldSpec(
                 yaml_name=yaml_name,
                 member_name=snake_case(yaml_name),
                 const_name=f"k{pascal_case(yaml_name)}",
                 type_info=type_info,
                 required=yaml_name in required,
-                member_type=member_type))
+                member_type=member_type,
+                default_value=property_schema.get("default")))
         return spec
 
     def type_info(self, schema: dict[str, Any]) -> TypeInfo:
@@ -270,8 +273,9 @@ def member_type_for(
     type_info: TypeInfo,
     *,
     required: bool,
-    parent_depth: int) -> str:
-    if required or type_info.kind == "array":
+    parent_depth: int,
+    has_default: bool) -> str:
+    if required or has_default or type_info.kind == "array":
         return type_info.cpp_type
     if type_info.kind == "object" and parent_depth == 1:
         return type_info.cpp_type
@@ -301,6 +305,7 @@ def make_template_context(model: SchemaModel) -> dict[str, Any]:
         "const_values": collect_const_values(model),
         "const_value_name": const_value_name,
         "cpp_bool": cpp_bool,
+        "default_initializer": default_initializer,
         "enum_allowed_values": lambda type_info: enum_allowed_values(type_info, model),
         "enum_constant_name": enum_constant_name,
         "enum_cpp_name": lambda type_info: model.enum_defs[
@@ -414,6 +419,42 @@ def number_minimum_args(schema: dict[str, Any]) -> str:
 
 def cpp_bool(value: bool) -> str:
     return "true" if value else "false"
+
+
+def default_initializer(field_spec: FieldSpec) -> str:
+    if field_spec.default_value is None:
+        return ""
+    return f" = {cpp_default_literal(field_spec.type_info, field_spec.default_value)}"
+
+
+def cpp_default_literal(type_info: TypeInfo, value: Any) -> str:
+    if type_info.kind in {"integer", "number"}:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            fail(f"default for {type_info.cpp_type} must be numeric")
+        return str(value)
+    if type_info.kind == "boolean":
+        if not isinstance(value, bool):
+            fail("default for bool must be boolean")
+        return cpp_bool(value)
+    if type_info.kind in {"string", "const_string"}:
+        if not isinstance(value, str):
+            fail("default for string must be a string")
+        return f"\"{cpp_string_literal(value)}\""
+    if type_info.kind == "enum":
+        if not isinstance(value, str):
+            fail("default for enum must be a string")
+        return f"{type_info.cpp_type}::{enum_value_name(value)}"
+    fail(f"defaults are not supported for {type_info.kind} fields")
+
+
+def cpp_string_literal(value: str) -> str:
+    return (
+        value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t"))
 
 
 def resolve_type(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:

@@ -28,10 +28,13 @@
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -56,29 +59,70 @@ constexpr const char * kBidirectionalTopic = "/bridge/out";
 /// Create a ROS node options object for a bridge node
 /// @param context The ROS context to use for the node
 /// @param node_namespace The namespace to use for the node
-/// @param ros_topics The ROS topics to allow the bridge to publish to (ROS -> LiveKit)
-/// @param lk_topics The LiveKit topics to allow the bridge to subscribe to (LK -> ROS)
+/// @param config_path Path to bridge YAML configuration.
 /// @return A ROS node options object
 rclcpp::NodeOptions createBridgeOptions(
   // ROS args
   const rclcpp::Context::SharedPtr & context,
   const std::string & node_namespace,
-  // Bridge config param args
-  const std::vector<std::string> & ros_topics,
-  const std::vector<std::string> & lk_topics
+  const std::string & config_path
 )
 {
   return rclcpp::NodeOptions()
          .context(context)
          .arguments({"--ros-args", "-r", "__ns:=" + node_namespace})
          .parameter_overrides({
-      rclcpp::Parameter("room_name", "integration_test"),
-      rclcpp::Parameter("topic_polling_period_ms", 50),
-      rclcpp::Parameter("ros_threads", 4),
-      rclcpp::Parameter("ros_topics", ros_topics),
-      rclcpp::Parameter("lk_topics", lk_topics),
+      rclcpp::Parameter("config_path", config_path),
     });
 }
+
+std::string bridgeConfigYaml(
+  const std::string & room_name,
+  const std::string & topic_pattern)
+{
+  std::ostringstream stream;
+  stream
+    << "ros2_livekit_bridge:\n"
+    << "  version: \"0.0.1\"\n"
+    << "  room_name: \"" << room_name << "\"\n"
+    << "  topic_polling_period_ms: 50\n"
+    << "  ros_threads: 4\n"
+    << "  topics:\n"
+    << "    - topic: \"" << topic_pattern << "\"\n"
+    << "      direction: \"bidirectional\"\n";
+  return stream.str();
+}
+
+class TemporaryConfigFile
+{
+public:
+  explicit TemporaryConfigFile(const std::string & contents)
+  : path_(makePath())
+  {
+    std::ofstream out(path_);
+    out << contents;
+  }
+
+  ~TemporaryConfigFile()
+  {
+    std::error_code error;
+    std::filesystem::remove(path_, error);
+  }
+
+  const std::filesystem::path & path() const {return path_;}
+
+private:
+  static std::filesystem::path makePath()
+  {
+    const auto unique =
+      std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+           ("ros2_livekit_bridge_bridge_test_e2e_" +
+           std::to_string(unique) + ".yaml");
+  }
+
+  std::filesystem::path path_;
+};
 
 template<typename Predicate>
 bool waitFor(Predicate && predicate, std::chrono::milliseconds timeout)
@@ -211,6 +255,7 @@ protected:
     token_a_ = getenvString("LIVEKIT_TOKEN_A");
     token_b_ = getenvString("LIVEKIT_TOKEN_B");
     original_token_ = getenvString("LIVEKIT_TOKEN");
+    original_livekit_url_ = getenvString("LIVEKIT_URL");
     identity_a_ = getenvString("LIVEKIT_IDENTITY_A").value_or("bridge-test-a");
     identity_b_ = getenvString("LIVEKIT_IDENTITY_B").value_or("bridge-test-b");
   }
@@ -218,6 +263,7 @@ protected:
   void TearDown() override
   {
     restoreEnv("LIVEKIT_TOKEN", original_token_);
+    restoreEnv("LIVEKIT_URL", original_livekit_url_);
   }
 
   bool configured() const
@@ -229,6 +275,7 @@ protected:
   std::optional<std::string> token_a_;
   std::optional<std::string> token_b_;
   std::optional<std::string> original_token_;
+  std::optional<std::string> original_livekit_url_;
   std::string identity_a_;
   std::string identity_b_;
 };
@@ -256,6 +303,9 @@ TEST_F(
     "ROS graph A domain_id=" + std::to_string(graph_a.domain_id()) +
     ", ROS graph B domain_id=" + std::to_string(graph_b.domain_id()));
 
+  TemporaryConfigFile config_file{
+    bridgeConfigYaml("integration_test", kBidirectionalTopic)};
+
   // Context for the below setup: right now the bridge config only accepts a LIVEKIT_TOKEN
   // env var, since only a single bridge is needed on a compute in production. Instead of
   // adding another parameter for testing, reassign the A/B tokens to the individual bridges
@@ -267,10 +317,12 @@ TEST_F(
   // Forward LK_TOKEN_A to Bridge A and instantiate the bridge
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", *token_a_))
     << "Failed to set environment variable LIVEKIT_TOKEN";
+  ASSERT_TRUE(setEnv("LIVEKIT_URL", *livekit_url_))
+    << "Failed to set environment variable LIVEKIT_URL";
   auto bridge_a = std::make_shared<Ros2LiveKitBridge>(
     createBridgeOptions(
-      graph_a.context(), "/bridge_a_node",
-      {kBidirectionalTopic}, {kBidirectionalTopic}));
+      graph_a.context(), "/bridge_a_node", config_file.path().string()));
+  ASSERT_TRUE(bridge_a->initialize());
 
   std::cout << "------------Bridge A Created------------" << std::endl;
 
@@ -280,10 +332,12 @@ TEST_F(
   // Forward LK_TOKEN_B to Bridge B and instantiate the bridge
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", *token_b_))
     << "Failed to set environment variable LIVEKIT_TOKEN";
+  ASSERT_TRUE(setEnv("LIVEKIT_URL", *livekit_url_))
+    << "Failed to set environment variable LIVEKIT_URL";
   auto bridge_b = std::make_shared<Ros2LiveKitBridge>(
     createBridgeOptions(
-      graph_b.context(), "/bridge_b_node",
-      {kBidirectionalTopic}, {kBidirectionalTopic}));
+      graph_b.context(), "/bridge_b_node", config_file.path().string()));
+  ASSERT_TRUE(bridge_b->initialize());
   std::cout << "------------Bridge B Created------------" << std::endl;
 
   // Each robot node is in the same ROS graph as its local bridge only.

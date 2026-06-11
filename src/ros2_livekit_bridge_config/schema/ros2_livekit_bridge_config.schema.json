@@ -9,14 +9,13 @@
     "ros2_livekit_bridge": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version"],
+      "required": ["version", "room_name"],
       "properties": {
         "version": {
           "const": "0.0.1"
         },
         "room_name": {
-          "$ref": "#/$defs/nonemptyString",
-          "default": "robo_room"
+          "$ref": "#/$defs/nonemptyString"
         },
         "topic_polling_period_ms": {
           "$ref": "#/$defs/positiveInteger",

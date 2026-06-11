@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# Copyright 2026 LiveKit
+
+ros2_livekit_bridge:
+  version: "0.0.1"
+  room_name: "robo_room"
+  topic_polling_period_ms: 500
+  ros_threads: 4
+
+  topics:
+    - topic: "/rgbd_camera/image"
+      direction: "out"
+
+    - topic: "/laser_scan"
+      direction: "out"
+
+    - topic: "/lidar/points"
+      direction: "out"
+
+    - topic: "/odom"
+      direction: "out"
+
+    - topic: "/battery_state"
+      direction: "out"
+
+    - topic: "/tf.*"
+      direction: "out"
+
+    - topic: "/test/.*"
+      direction: "out"

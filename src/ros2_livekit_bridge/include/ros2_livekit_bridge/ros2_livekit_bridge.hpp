@@ -62,6 +62,13 @@ public:
     const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~Ros2LiveKitBridge() override;
 
+  /**
+   * @brief Initialize bridge configuration, LiveKit connection, and polling.
+   * @return True if initialization completed, false for expected startup
+   * failures that have already been logged.
+   */
+  bool initialize();
+
   int ros_threads() const {return ros_threads_;}
 
 private:
@@ -158,14 +165,14 @@ private:
   std::string room_name_;
   //! @brief The period for polling the topics
   int topic_polling_period_ms_;
-  //! @brief The patterns for the topics
-  std::vector<std::string> ros_topic_patterns_;
-  //! @brief The compiled patterns for the topics
-  std::vector<std::regex> ros_topic_compiled_patterns_;
-  //! @brief Remote LiveKit data track patterns allowed to be published into ROS.
-  std::vector<std::string> lk_topic_patterns_;
-  //! @brief Compiled remote LiveKit data track allow patterns.
-  std::vector<std::regex> lk_topic_compiled_patterns_;
+  //! @brief Topic patterns allowed from ROS to LiveKit.
+  std::vector<std::string> outgoing_topic_patterns_;
+  //! @brief Compiled ROS->LiveKit allow patterns.
+  std::vector<std::regex> outgoing_topic_compiled_patterns_;
+  //! @brief Topic patterns allowed from LiveKit to ROS.
+  std::vector<std::string> incoming_topic_patterns_;
+  //! @brief Compiled LiveKit->ROS allow patterns.
+  std::vector<std::regex> incoming_topic_compiled_patterns_;
 
   //! @brief The minimum QoS depth
   size_t min_qos_depth_;
@@ -176,6 +183,8 @@ private:
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
   int ros_threads_;
+  //! @brief Tracks whether bridge initialization has completed.
+  bool initialized_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics

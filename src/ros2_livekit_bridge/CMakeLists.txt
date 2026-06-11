@@ -30,6 +30,7 @@ ament_auto_find_build_dependencies(REQUIRED
   geometry_msgs
   nav_msgs
   rclcpp
+  ros2_livekit_bridge_config
   sensor_msgs
   std_msgs)
 

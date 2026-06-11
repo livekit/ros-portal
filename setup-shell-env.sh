@@ -67,6 +67,11 @@ cbps()
     cd "\${WS}" && sros && colcon build --packages-select "\$@" && sros
 }
 
+cbtpu()
+{
+    cd "\${WS}" && sros && colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
+}
+
 if [ -n "\${ZSH_VERSION:-}" ]; then
     PROMPT='(ros-livekit) %n@%m:%~ %# '
 else

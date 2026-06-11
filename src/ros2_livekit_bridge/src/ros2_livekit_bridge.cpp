@@ -37,8 +37,6 @@ namespace
 namespace bridge_utils = ::livekit::ros_bridge::utils;
 namespace bridge_config = ::ros2_livekit_bridge_config;
 
-constexpr int DEFAULT_TOPIC_POLLING_PERIOD_MS = 500;
-constexpr int DEFAULT_ROS_THREADS = 4;
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
@@ -143,9 +141,8 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
   const auto config = parseBridgeConfig(config_path, this->get_logger());
 
   room_name_ = config.room_name;
-  topic_polling_period_ms_ =
-    config.topic_polling_period_ms.value_or(DEFAULT_TOPIC_POLLING_PERIOD_MS);
-  ros_threads_ = config.ros_threads.value_or(DEFAULT_ROS_THREADS);
+  topic_polling_period_ms_ = config.topic_polling_period_ms;
+  ros_threads_ = config.ros_threads;
 
   reentrant_callback_group_ =
     this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);

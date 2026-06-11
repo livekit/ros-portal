@@ -53,8 +53,8 @@ ros2_livekit_bridge:
 
   EXPECT_EQ(config.version, "0.0.1");
   EXPECT_EQ(config.room_name, "robo_room");
-  EXPECT_FALSE(config.topic_polling_period_ms.has_value());
-  EXPECT_FALSE(config.ros_threads.has_value());
+  EXPECT_EQ(config.topic_polling_period_ms, 500);
+  EXPECT_EQ(config.ros_threads, 4);
   EXPECT_FALSE(config.room_options.join_retries.has_value());
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());
@@ -91,10 +91,8 @@ ros2_livekit_bridge:
 )");
 
   EXPECT_EQ(config.room_name, "robo_room");
-  ASSERT_TRUE(config.topic_polling_period_ms.has_value());
-  EXPECT_EQ(*config.topic_polling_period_ms, 500);
-  ASSERT_TRUE(config.ros_threads.has_value());
-  EXPECT_EQ(*config.ros_threads, 4);
+  EXPECT_EQ(config.topic_polling_period_ms, 500);
+  EXPECT_EQ(config.ros_threads, 4);
 
   ASSERT_TRUE(config.room_options.join_retries.has_value());
   EXPECT_EQ(*config.room_options.join_retries, 3);
@@ -313,10 +311,8 @@ TEST(ConfigParserTest, ParsesFile) {
 
   EXPECT_EQ(config.version, "0.0.1");
   EXPECT_EQ(config.room_name, "robo_room");
-  ASSERT_TRUE(config.topic_polling_period_ms.has_value());
-  EXPECT_EQ(*config.topic_polling_period_ms, 500);
-  ASSERT_TRUE(config.ros_threads.has_value());
-  EXPECT_EQ(*config.ros_threads, 4);
+  EXPECT_EQ(config.topic_polling_period_ms, 500);
+  EXPECT_EQ(config.ros_threads, 4);
   ASSERT_EQ(config.services.size(), 2u);
   ASSERT_EQ(config.topics.size(), 6u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");

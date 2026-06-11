@@ -192,7 +192,12 @@ set_target_properties(ros2_livekit_bridge_node PROPERTIES
 )
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
+
+  ament_add_pytest_test(livekit_bridge_local_launch_test
+    test/launch/test_livekit_bridge_local_launch.py
+  )
 
   ament_auto_add_gtest(livekit_connect_node_test
     test/integration/livekit_connect_node.cpp
@@ -231,6 +236,24 @@ if(BUILD_TESTING)
       ${LIVEKIT_EXTRA_LINK_LIBS}
     )
     set_target_properties(ros_utils_test PROPERTIES
+      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    )
+  endif()
+
+  ament_auto_add_gtest(bridge_config_path_test
+    test/unit/bridge_config_path_test.cpp
+    src/ros2_livekit_bridge.cpp
+    src/utils/image_conversion.cpp
+    src/utils/ros_utils.cpp
+    src/utils/topic_matcher.cpp
+  )
+  if(TARGET bridge_config_path_test)
+    target_link_libraries(bridge_config_path_test
+      "${LIVEKIT_CORE_TARGET}"
+      ${LIVEKIT_EXTRA_LINK_LIBS}
+    )
+    set_target_properties(bridge_config_path_test PROPERTIES
       BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
       INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
     )

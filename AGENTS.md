@@ -36,4 +36,4 @@ with existing package structure.
 
 - Follow ROS2 formatting and linting standards.
 - Add the LiveKit copyright header with the correct year to new code files.
-
+- Prefer the constructor initializer list rather than variable declaration and assignment in the constructor body.

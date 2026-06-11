@@ -22,8 +22,9 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
-#include <stdexcept>
+#include <optional>
 
 #include <livekit/livekit.h>
 #include <livekit/video_frame.h>
@@ -52,8 +53,8 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
     return std::nullopt;
   }
 
-  auto frame =
-    livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
+  auto frame = livekit::VideoFrame::create(width, height,
+                                           livekit::VideoBufferType::RGBA);
   std::memcpy(frame.data(), rgba, rgba_size);
   return frame;
 }
@@ -66,7 +67,8 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
  * @return The resolved credential
  */
 std::string resolveEnvironmentCredential(
-  const std::string & env_var_name, std::string & source)
+  const std::string & env_var_name,
+  std::string & source)
 {
   const char *env_val = std::getenv(env_var_name.c_str());
   if (env_val && env_val[0] != '\0') {
@@ -87,14 +89,12 @@ void logPatternCompileErrors(
   }
 }
 
-bridge_config::BridgeConfig parseBridgeConfig(
-  const std::filesystem::path & path, rclcpp::Logger logger)
+std::optional<bridge_config::BridgeConfig>
+parseBridgeConfig(const std::filesystem::path & path, rclcpp::Logger logger)
 {
   if (path.empty()) {
     RCLCPP_FATAL(logger, "config_path parameter is empty");
-    throw std::invalid_argument(
-            "config_path parameter must point to a ros2_livekit_bridge config "
-            "YAML file");
+    return std::nullopt;
   }
 
   try {
@@ -102,12 +102,12 @@ bridge_config::BridgeConfig parseBridgeConfig(
   } catch (const std::exception & e) {
     RCLCPP_FATAL(logger, "Failed to parse config '%s': %s",
                  path.string().c_str(), e.what());
-    throw;
+    return std::nullopt;
   }
 }
 
-std::vector<std::string> outgoingTopicPatterns(
-  const bridge_config::BridgeConfig & config)
+std::vector<std::string>
+outgoingTopicPatterns(const bridge_config::BridgeConfig & config)
 {
   std::vector<std::string> patterns;
   patterns.reserve(config.topics.size());
@@ -126,7 +126,9 @@ std::vector<std::string> outgoingTopicPatterns(
 } // namespace
 
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
-: rclcpp::Node("ros2_livekit_bridge", options)
+: rclcpp::Node("ros2_livekit_bridge", options), topic_polling_period_ms_(0),
+  min_qos_depth_(0), max_qos_depth_(0), ros_threads_(0),
+  initialized_(false)
 {
   this->declare_parameter<std::string>("config_path", "");
   const std::vector<std::string> kEmptyStringVec{};
@@ -136,14 +138,25 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
                                static_cast<int>(DEFAULT_MAX_QOS_DEPTH));
   this->declare_parameter("best_effort_qos_topics",
                           rclcpp::ParameterValue(kEmptyStringVec));
+}
 
-  const auto config_path = std::filesystem::path(
-    this->get_parameter("config_path").as_string());
+bool Ros2LiveKitBridge::initialize()
+{
+  if (initialized_) {
+    RCLCPP_WARN(this->get_logger(), "Bridge is already initialized");
+    return true;
+  }
+
+  const auto config_path =
+    std::filesystem::path(this->get_parameter("config_path").as_string());
   const auto config = parseBridgeConfig(config_path, this->get_logger());
+  if (!config) {
+    return false;
+  }
 
-  room_name_ = config.room_name;
-  topic_polling_period_ms_ = config.topic_polling_period_ms;
-  ros_threads_ = config.ros_threads;
+  room_name_ = config->room_name;
+  topic_polling_period_ms_ = config->topic_polling_period_ms;
+  ros_threads_ = config->ros_threads;
 
   reentrant_callback_group_ =
     this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -151,7 +164,7 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
     static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ =
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
-  ros_topic_patterns_ = outgoingTopicPatterns(config);
+  ros_topic_patterns_ = outgoingTopicPatterns(*config);
   std::vector<bridge_utils::PatternCompileError> pattern_errors;
   compiled_patterns_ =
     bridge_utils::compileRegexPatterns(ros_topic_patterns_, &pattern_errors);
@@ -215,7 +228,8 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
       room_.reset();
       livekit::shutdown();
       sdk_initialized_ = false;
-      RCLCPP_ERROR(this->get_logger(), "Failed to connect to LiveKit room.");
+      RCLCPP_FATAL(this->get_logger(), "Failed to connect to LiveKit room.");
+      return false;
     }
   }
 
@@ -225,6 +239,9 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
       std::chrono::milliseconds(topic_polling_period_ms_),
       std::bind(&Ros2LiveKitBridge::pollTopics, this),
       reentrant_callback_group_);
+
+  initialized_ = true && sdk_initialized_;
+  return initialized_;
 }
 
 Ros2LiveKitBridge::~Ros2LiveKitBridge()
@@ -260,7 +277,7 @@ void Ros2LiveKitBridge::pollTopics()
 
     const auto & topic_type = topic_types.front();
     RCLCPP_INFO(this->get_logger(), "Discovered matching topic: '%s' [%s]",
-                  topic_name.c_str(), topic_type.c_str());
+                topic_name.c_str(), topic_type.c_str());
     createSubscriber(topic_name, topic_type);
   }
 }
@@ -307,8 +324,8 @@ void Ros2LiveKitBridge::createDataSubscriber(
           return;
         }
 
-        // TODO: When C++ SDK supports it, input encoding type (CDR) and schema of message (JSON) to this call
-        // Data track options (struct?)
+      // TODO: When C++ SDK supports it, input encoding type (CDR) and schema of
+      // message (JSON) to this call Data track options (struct?)
         const auto publish_result = participant->publishDataTrack(topic_name);
         if (!publish_result) {
           const auto & error = publish_result.error();
@@ -358,9 +375,9 @@ void Ros2LiveKitBridge::createDataSubscriber(
   } catch (...) {
     data_topic_states_.erase(topic_name);
     RCLCPP_ERROR(
-      this->get_logger(),
-      "Unknown exception creating generic subscription for '%s' [%s]",
-      topic_name.c_str(), topic_type.c_str());
+        this->get_logger(),
+        "Unknown exception creating generic subscription for '%s' [%s]",
+        topic_name.c_str(), topic_type.c_str());
     return;
   }
 
@@ -458,17 +475,15 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
           return;
         }
 
-        auto frame = makeRgbaVideoFrame(static_cast<int>(msg->width),
-                                      static_cast<int>(msg->height),
-                                      state.rgba_buf.data(),
-                                      state.rgba_buf.size());
+        auto frame = makeRgbaVideoFrame(
+          static_cast<int>(msg->width), static_cast<int>(msg->height),
+          state.rgba_buf.data(), state.rgba_buf.size());
         if (!frame) {
           RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 5000,
             "Skipping converted image on topic '%s' because RGBA buffer size "
             "%zu does not match %ux%u geometry",
-            topic_name.c_str(), state.rgba_buf.size(), msg->width,
-            msg->height);
+            topic_name.c_str(), state.rgba_buf.size(), msg->width, msg->height);
           return;
         }
 
@@ -534,8 +549,8 @@ Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
   // Reliability: force best-effort if topic matches the override list,
   // otherwise use RELIABLE only when every publisher offers it (mixed policies
   // fall back to best-effort so we can connect to all publishers).
-  if (bridge_utils::matchesAnyPattern(
-      topic_name, best_effort_qos_topic_patterns_))
+  if (bridge_utils::matchesAnyPattern(topic_name,
+                                      best_effort_qos_topic_patterns_))
   {
     qos.best_effort();
   } else if (!publisher_info.empty() &&

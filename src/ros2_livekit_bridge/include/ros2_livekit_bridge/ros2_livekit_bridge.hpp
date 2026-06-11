@@ -54,6 +54,13 @@ public:
     const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~Ros2LiveKitBridge() override;
 
+  /**
+   * @brief Initialize bridge configuration, LiveKit connection, and polling.
+   * @return True if initialization completed, false for expected startup
+   * failures that have already been logged.
+   */
+  bool initialize();
+
   int ros_threads() const {return ros_threads_;}
 
 private:
@@ -132,6 +139,8 @@ private:
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
   int ros_threads_;
+  //! @brief Tracks whether bridge initialization has completed.
+  bool initialized_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics

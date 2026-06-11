@@ -418,7 +418,7 @@ ros2_livekit_bridge:
 )", "missing required field");
 }
 
-TEST(ConfigParserTest, RejectsMissingRoomName) {
+TEST(ConfigParserTest, RejectsMissingRequiredFields) {
   try {
     (void)parse(R"(
 ros2_livekit_bridge:

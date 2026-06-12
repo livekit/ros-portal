@@ -51,6 +51,7 @@ using ros2_livekit_bridge::test::waitFor;
 
 constexpr auto kGraphTimeout = 15s;
 constexpr auto kMessageTimeout = 20s;
+constexpr auto kNegativeAssertionTimeout = 3s;
 constexpr const char * kBidirectionalTopic = "/bridge/out";
 
 /// Create a ROS node options object for a bridge node
@@ -293,8 +294,12 @@ protected:
         }
       });
 
-    const auto deadline = std::chrono::steady_clock::now() + kGraphTimeout;
-    while (std::chrono::steady_clock::now() < deadline) {
+    const auto deadline =
+      std::chrono::steady_clock::now() + kNegativeAssertionTimeout;
+    while (
+      std::chrono::steady_clock::now() < deadline &&
+      !received_forbidden_payload.load())
+    {
       publisher->publish(makeMessage(payload));
       std::this_thread::sleep_for(100ms);
     }

@@ -169,6 +169,5 @@ TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
     patterns,
     (std::vector<std::string>{"/teleop_cmd", "/odom"}));
 }
-
 } // namespace
 } // namespace livekit::ros_bridge::utils

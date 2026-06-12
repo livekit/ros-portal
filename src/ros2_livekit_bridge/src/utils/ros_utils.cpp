@@ -124,5 +124,4 @@ incomingTopicPatterns(const bridge_config::BridgeConfig & config)
 
   return patterns;
 }
-
 } // namespace livekit::ros_bridge::utils

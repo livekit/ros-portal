@@ -56,7 +56,6 @@ outgoingTopicPatterns(
 std::vector<std::string>
 incomingTopicPatterns(
   const ros2_livekit_bridge_config::BridgeConfig & config);
-
 } // namespace livekit::ros_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

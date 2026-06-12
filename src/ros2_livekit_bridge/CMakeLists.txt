@@ -248,6 +248,39 @@ if(BUILD_TESTING)
     )
   endif()
 
+  ament_auto_add_gtest(ros_utils_test
+    test/unit/test_ros_utils.cpp
+    src/utils/ros_utils.cpp
+  )
+  if(TARGET ros_utils_test)
+    target_link_libraries(ros_utils_test
+      "${LIVEKIT_CORE_TARGET}"
+      ${LIVEKIT_EXTRA_LINK_LIBS}
+    )
+    set_target_properties(ros_utils_test PROPERTIES
+      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    )
+  endif()
+
+  ament_auto_add_gtest(bridge_config_path_test
+    test/unit/bridge_config_path_test.cpp
+    src/ros2_livekit_bridge.cpp
+    src/utils/image_conversion.cpp
+    src/utils/ros_utils.cpp
+    src/utils/topic_matcher.cpp
+  )
+  if(TARGET bridge_config_path_test)
+    target_link_libraries(bridge_config_path_test
+      "${LIVEKIT_CORE_TARGET}"
+      ${LIVEKIT_EXTRA_LINK_LIBS}
+    )
+    set_target_properties(bridge_config_path_test PROPERTIES
+      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    )
+  endif()
+
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()

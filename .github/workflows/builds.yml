@@ -85,8 +85,8 @@ jobs:
               source install/setup.bash
               set -u
 
-              test -x build/ros2_livekit_bridge/unit/ros2_livekit_bridge_integration_tests
-              GTEST_COLOR=1 build/ros2_livekit_bridge/unit/ros2_livekit_bridge_integration_tests
+              test -x build/ros2_livekit_bridge/tests/ros2_livekit_bridge_integration_tests
+              GTEST_COLOR=1 build/ros2_livekit_bridge/tests/ros2_livekit_bridge_integration_tests
             '
 
       - name: Start livekit-server

@@ -16,8 +16,8 @@
 # Generate two LiveKit access tokens via `lk` and set the environment variables
 # required by the ROS bridge participant-ID integration test.
 #
-#   source src/ros2_livekit_bridge/test/token_helpers/set_test_tokens.bash
-#   eval "$(bash src/ros2_livekit_bridge/test/token_helpers/set_test_tokens.bash)"
+#   source .token_helpers/set_test_tokens.bash
+#   eval "$(bash .token_helpers/set_test_tokens.bash)"
 #
 # Exports:
 #   LIVEKIT_URL

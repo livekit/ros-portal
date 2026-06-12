@@ -199,32 +199,46 @@ if(BUILD_TESTING)
     test/launch/test_livekit_bridge_local_launch.py
   )
 
-  ament_auto_add_gtest(livekit_connect_node_test
-    test/integration/livekit_connect_node.cpp
+  ament_auto_add_gtest(ros2_livekit_bridge_unit_tests
+    test/unit/image_conversion_test.cpp
+    test/unit/topic_matcher_test.cpp
+    test/unit/test_ros_utils.cpp
+    test/unit/bridge_config_path_test.cpp
+    src/ros2_livekit_bridge.cpp
+    src/utils/image_conversion.cpp
+    src/utils/ros_utils.cpp
+    src/utils/topic_matcher.cpp
   )
-  if(TARGET livekit_connect_node_test)
-    target_compile_definitions(livekit_connect_node_test PRIVATE
-      LIVEKIT_CONNECT_NODE_TEST
-    )
-    target_link_libraries(livekit_connect_node_test
+  if(TARGET ros2_livekit_bridge_unit_tests)
+    target_link_libraries(ros2_livekit_bridge_unit_tests
       "${LIVEKIT_CORE_TARGET}"
       ${LIVEKIT_EXTRA_LINK_LIBS}
     )
-    set_target_properties(livekit_connect_node_test PROPERTIES
+    set_target_properties(ros2_livekit_bridge_unit_tests PROPERTIES
       BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
       INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
     )
   endif()
 
-  ament_auto_add_gtest(topic_matcher_test
-    test/unit/topic_matcher_test.cpp
-    src/utils/topic_matcher.cpp
+  ament_auto_add_gtest(ros2_livekit_bridge_integration_tests
+    test/integration/livekit_connect_node.cpp
   )
-
-  ament_auto_add_gtest(image_conversion_test
-    test/unit/image_conversion_test.cpp
-    src/utils/image_conversion.cpp
-  )
+  if(TARGET ros2_livekit_bridge_integration_tests)
+    target_compile_definitions(ros2_livekit_bridge_integration_tests PRIVATE
+      LIVEKIT_CONNECT_NODE_TEST
+    )
+    target_link_libraries(ros2_livekit_bridge_integration_tests
+      "${LIVEKIT_CORE_TARGET}"
+      ${LIVEKIT_EXTRA_LINK_LIBS}
+    )
+    set_target_properties(ros2_livekit_bridge_integration_tests PROPERTIES
+      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    )
+    set_tests_properties(ros2_livekit_bridge_integration_tests PROPERTIES
+      TIMEOUT 240
+    )
+  endif()
 
   ament_auto_add_gtest(ros_utils_test
     test/unit/test_ros_utils.cpp

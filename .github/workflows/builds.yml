@@ -116,7 +116,7 @@ jobs:
               source install/setup.bash
               set -u
 
-              eval "$(bash src/ros2_livekit_bridge/test/token_helpers/set_bridge_integration_tokens.bash)"
+              source src/ros2_livekit_bridge/test/token_helpers/set_test_tokens.bash
               test -x build/ros2_livekit_bridge/ros2_livekit_bridge_integration_tests
               GTEST_COLOR=1 build/ros2_livekit_bridge/ros2_livekit_bridge_integration_tests
             '

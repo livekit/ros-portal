@@ -173,23 +173,37 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Main bridge node
+# Bridge library
 # ---------------------------------------------------------------------------
-ament_auto_add_executable(ros2_livekit_bridge_node
-  src/ros2_livekit_bridge_node.cpp
+ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/ros2_livekit_bridge.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
-target_link_libraries(ros2_livekit_bridge_node
+target_link_libraries(ros2_livekit_bridge_lib
   "${LIVEKIT_CORE_TARGET}"
   ${LIVEKIT_EXTRA_LINK_LIBS}
+)
+set_target_properties(ros2_livekit_bridge_lib PROPERTIES
+  BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+  INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+)
+
+# ---------------------------------------------------------------------------
+# Main bridge node
+# ---------------------------------------------------------------------------
+ament_auto_add_executable(ros2_livekit_bridge_node
+  src/ros2_livekit_bridge_node.cpp
+)
+target_link_libraries(ros2_livekit_bridge_node
+  ros2_livekit_bridge_lib
 )
 set_target_properties(ros2_livekit_bridge_node PROPERTIES
   BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
   INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
 )
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
@@ -199,93 +213,11 @@ if(BUILD_TESTING)
     test/launch/test_livekit_bridge_local_launch.py
   )
 
-  ament_auto_add_gtest(livekit_connect_node_test
-    test/integration/livekit_connect_node.cpp
-  )
-  if(TARGET livekit_connect_node_test)
-    target_compile_definitions(livekit_connect_node_test PRIVATE
-      LIVEKIT_CONNECT_NODE_TEST
-    )
-    target_link_libraries(livekit_connect_node_test
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
-    )
-    set_target_properties(livekit_connect_node_test PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
-
-  ament_auto_add_gtest(topic_matcher_test
-    test/unit/topic_matcher_test.cpp
-    src/utils/topic_matcher.cpp
-  )
-
-  ament_auto_add_gtest(image_conversion_test
-    test/unit/image_conversion_test.cpp
-    src/utils/image_conversion.cpp
-  )
-
-  ament_auto_add_gtest(ros_utils_test
-    test/unit/test_ros_utils.cpp
-    src/utils/ros_utils.cpp
-  )
-  if(TARGET ros_utils_test)
-    target_link_libraries(ros_utils_test
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
-    )
-    set_target_properties(ros_utils_test PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
-
-  ament_auto_add_gtest(bridge_config_path_test
-    test/unit/bridge_config_path_test.cpp
-    src/ros2_livekit_bridge.cpp
-    src/utils/image_conversion.cpp
-    src/utils/ros_utils.cpp
-    src/utils/topic_matcher.cpp
-  )
-  if(TARGET bridge_config_path_test)
-    target_link_libraries(bridge_config_path_test
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
-    )
-    set_target_properties(bridge_config_path_test PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
+  add_subdirectory(test)
 
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
-endif()
-
-# ---------------------------------------------------------------------------
-# Integration test node
-#
-# Enable with:
-#   colcon build --packages-select ros2_livekit_bridge \
-#     --cmake-args -DBUILD_INTEGRATION_TESTS=ON
-# ---------------------------------------------------------------------------
-option(BUILD_INTEGRATION_TESTS
-  "Build LiveKit library integration tests" OFF)
-
-if(BUILD_INTEGRATION_TESTS)
-  ament_auto_add_executable(livekit_connect_node
-    test/integration/livekit_connect_node.cpp
-  )
-  target_link_libraries(livekit_connect_node
-    "${LIVEKIT_CORE_TARGET}"
-    ${LIVEKIT_EXTRA_LINK_LIBS}
-  )
-  set_target_properties(livekit_connect_node PROPERTIES
-    BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-  )
 endif()
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)

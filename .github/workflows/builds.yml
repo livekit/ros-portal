@@ -49,7 +49,15 @@ jobs:
       - name: Prepare devcontainer SSH agent mount
         run: touch /tmp/devcontainer-empty-ssh-agent
 
-      - name: Build and test in devcontainer
+      - name: Setup devcontainer environment
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+
+      - name: Build packages
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
           DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
@@ -62,17 +70,59 @@ jobs:
               set -eo pipefail
               source /opt/ros/jazzy/setup.bash
               set -u
-              mkdir -p src/externals
-              if [ -f external.repos ]; then
-                vcs import --skip-existing src/externals < external.repos
-              fi
-              rosdep update
-              rosdep install --from-paths src/ros2_livekit_bridge --ignore-src -r -y
-              colcon build --packages-up-to ros2_livekit_bridge
-
-              # test here to avoid a rebuild
-              colcon test --packages-select ros2_livekit_bridge --ctest-args -E "^livekit_connect_node_test$"
-              colcon test-result --verbose
+              colcon build
             '
+
+      - name: Run unit tests
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: |
+            bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              source install/setup.bash
+              set -u
+
+              test -x build/ros2_livekit_bridge/test/ros2_livekit_bridge_unit_tests
+              GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_unit_tests
+            '
+
+      - name: Start livekit-server
+        id: livekit_server
+        uses: livekit/dev-server-action@61e2b4dcb170dd3591e0c9b0db3c3fe5db93b500
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Install livekit-cli
+        run: |
+          set -euxo pipefail
+          curl -sSL https://get.livekit.io/cli | bash
+          lk --version
+
+      - name: Run integration tests
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LIVEKIT_URL: ws://127.0.0.1:7880
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: |
+            bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              source install/setup.bash
+              set -u
+
+              source .token_helpers/set_test_tokens.bash
+              test -x build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests 
+              GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests 
+            '
+
+      - name: Dump LiveKit server log on failure
+        if: failure()
+        run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
+
         # TODO: add lint stage
-        # TODO: add integration test stage

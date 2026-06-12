@@ -27,7 +27,7 @@
  *   livekit_url   (string) – WebSocket URL, e.g. ws://localhost:7880
  *   livekit_token (string) – JWT participant token
  *
- * Usage (after colcon build with -DBUILD_INTEGRATION_TESTS=ON):
+ * Usage (after building with BUILD_TESTING enabled):
  *   ros2 run ros2_livekit_bridge livekit_connect_node \
  *     --ros-args -p livekit_url:=ws://... -p livekit_token:=<token>
  */

@@ -173,18 +173,31 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Main bridge node
+# Bridge library
 # ---------------------------------------------------------------------------
-ament_auto_add_executable(ros2_livekit_bridge_node
-  src/ros2_livekit_bridge_node.cpp
+ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/ros2_livekit_bridge.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
-target_link_libraries(ros2_livekit_bridge_node
+target_link_libraries(ros2_livekit_bridge_lib
   "${LIVEKIT_CORE_TARGET}"
   ${LIVEKIT_EXTRA_LINK_LIBS}
+)
+set_target_properties(ros2_livekit_bridge_lib PROPERTIES
+  BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+  INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+)
+
+# ---------------------------------------------------------------------------
+# Main bridge node
+# ---------------------------------------------------------------------------
+ament_auto_add_executable(ros2_livekit_bridge_node
+  src/ros2_livekit_bridge_node.cpp
+)
+target_link_libraries(ros2_livekit_bridge_node
+  ros2_livekit_bridge_lib
 )
 set_target_properties(ros2_livekit_bridge_node PROPERTIES
   BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
@@ -204,15 +217,10 @@ if(BUILD_TESTING)
     test/unit/topic_matcher_test.cpp
     test/unit/test_ros_utils.cpp
     test/unit/bridge_config_path_test.cpp
-    src/ros2_livekit_bridge.cpp
-    src/utils/image_conversion.cpp
-    src/utils/ros_utils.cpp
-    src/utils/topic_matcher.cpp
   )
   if(TARGET ros2_livekit_bridge_unit_tests)
     target_link_libraries(ros2_livekit_bridge_unit_tests
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
+      ros2_livekit_bridge_lib
     )
     set_target_properties(ros2_livekit_bridge_unit_tests PROPERTIES
       BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
@@ -223,10 +231,6 @@ if(BUILD_TESTING)
   ament_auto_add_gtest(ros2_livekit_bridge_integration_tests
     test/integration/bridge_test_e2e.cpp
     test/integration/livekit_connect_node.cpp
-    src/ros2_livekit_bridge.cpp
-    src/utils/image_conversion.cpp
-    src/utils/ros_utils.cpp
-    src/utils/topic_matcher.cpp
   )
   if(TARGET ros2_livekit_bridge_integration_tests)
     target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
@@ -236,8 +240,7 @@ if(BUILD_TESTING)
       LIVEKIT_CONNECT_NODE_TEST
     )
     target_link_libraries(ros2_livekit_bridge_integration_tests
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
+      ros2_livekit_bridge_lib
     )
     set_target_properties(ros2_livekit_bridge_integration_tests PROPERTIES
       BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
@@ -250,12 +253,10 @@ if(BUILD_TESTING)
 
   ament_auto_add_gtest(ros_utils_test
     test/unit/test_ros_utils.cpp
-    src/utils/ros_utils.cpp
   )
   if(TARGET ros_utils_test)
     target_link_libraries(ros_utils_test
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
+      ros2_livekit_bridge_lib
     )
     set_target_properties(ros_utils_test PROPERTIES
       BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
@@ -265,15 +266,10 @@ if(BUILD_TESTING)
 
   ament_auto_add_gtest(bridge_config_path_test
     test/unit/bridge_config_path_test.cpp
-    src/ros2_livekit_bridge.cpp
-    src/utils/image_conversion.cpp
-    src/utils/ros_utils.cpp
-    src/utils/topic_matcher.cpp
   )
   if(TARGET bridge_config_path_test)
     target_link_libraries(bridge_config_path_test
-      "${LIVEKIT_CORE_TARGET}"
-      ${LIVEKIT_EXTRA_LINK_LIBS}
+      ros2_livekit_bridge_lib
     )
     set_target_properties(bridge_config_path_test PROPERTIES
       BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"

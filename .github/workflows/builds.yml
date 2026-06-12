@@ -124,3 +124,5 @@ jobs:
       - name: Dump LiveKit server log on failure
         if: failure()
         run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
+
+        # TODO: add lint stage

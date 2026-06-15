@@ -20,7 +20,6 @@
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -39,43 +38,10 @@ namespace ros2_livekit_bridge
 namespace
 {
 
-namespace ros_bridge_utils = ::livekit::ros_bridge::utils;
-
 constexpr size_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 25;
 constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
 
-std::string normalizeTrackTopicName(const std::string & track_name)
-{
-  if (track_name.empty()) {
-    return "/";
-  }
-  if (track_name.front() == '/') {
-    return track_name;
-  }
-  return "/" + track_name;
-}
-
-std::string sanitizeRosNameToken(const std::string & token)
-{
-  std::string sanitized;
-  sanitized.reserve(token.size());
-  for (const unsigned char ch : token) {
-    if (std::isalnum(ch) || ch == '_') {
-      sanitized.push_back(static_cast<char>(ch));
-    } else {
-      sanitized.push_back('_');
-    }
-  }
-
-  if (sanitized.empty()) {
-    return "participant";
-  }
-  if (std::isdigit(static_cast<unsigned char>(sanitized.front()))) {
-    sanitized.insert(sanitized.begin(), '_');
-  }
-  return sanitized;
-}
 } // namespace
 
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions & options)
@@ -103,7 +69,7 @@ bool Ros2LiveKitBridge::initialize()
   const auto config_path =
     std::filesystem::path(this->get_parameter("config_path").as_string());
   const auto config =
-    ros_bridge_utils::parseBridgeConfig(config_path, this->get_logger());
+    utils::parseBridgeConfig(config_path, this->get_logger());
   if (!config) {
     return false;
   }
@@ -118,26 +84,26 @@ bool Ros2LiveKitBridge::initialize()
     static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ =
     static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
-  outgoing_topic_patterns_ = ros_bridge_utils::outgoingTopicPatterns(*config);
-  std::vector<ros_bridge_utils::PatternCompileError> pattern_errors;
+  outgoing_topic_patterns_ = utils::outgoingTopicPatterns(*config);
+  std::vector<utils::PatternCompileError> pattern_errors;
   outgoing_topic_compiled_patterns_ =
-    ros_bridge_utils::compileRegexPatterns(
+    utils::compileRegexPatterns(
       outgoing_topic_patterns_, &pattern_errors);
-  ros_bridge_utils::logPatternCompileErrors(pattern_errors, this->get_logger());
+  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
   auto best_effort_topics =
     this->get_parameter("best_effort_qos_topics").as_string_array();
   pattern_errors.clear();
   best_effort_qos_topic_patterns_ =
-    ros_bridge_utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
-  ros_bridge_utils::logPatternCompileErrors(pattern_errors, this->get_logger());
+    utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
+  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
-  incoming_topic_patterns_ = ros_bridge_utils::incomingTopicPatterns(*config);
+  incoming_topic_patterns_ = utils::incomingTopicPatterns(*config);
   pattern_errors.clear();
   incoming_topic_compiled_patterns_ =
-    ros_bridge_utils::compileRegexPatterns(
+    utils::compileRegexPatterns(
       incoming_topic_patterns_, &pattern_errors);
-  ros_bridge_utils::logPatternCompileErrors(pattern_errors, this->get_logger());
+  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu ROS topic "
@@ -153,9 +119,9 @@ bool Ros2LiveKitBridge::initialize()
   // ----- Resolve LiveKit credentials from environment variables only -----
   std::string url_source, token_source;
   const std::string livekit_url =
-    ros_bridge_utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
+    utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
   const std::string livekit_token =
-    ros_bridge_utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
+    utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s",
               url_source.c_str());
@@ -250,7 +216,9 @@ void Ros2LiveKitBridge::pollTopics()
       continue;
     }
 
-    if (!matchesTopic(topic_name)) {
+    if (!utils::matchesAnyPattern(
+        topic_name, outgoing_topic_compiled_patterns_))
+    {
       continue;
     }
 
@@ -437,7 +405,7 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
         static_cast<std::int64_t>(stamp.nanosec) / 1'000;
 
       if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
-        auto frame = ros_bridge_utils::makeRgbaVideoFrame(
+        auto frame = utils::makeRgbaVideoFrame(
           static_cast<int>(msg->width), static_cast<int>(msg->height),
           msg->data.data(), msg->data.size());
         if (!frame) {
@@ -451,14 +419,14 @@ void Ros2LiveKitBridge::createImageSubscriber(const std::string & topic_name)
 
         state.source->captureFrame(*frame, timestamp_us);
       } else {
-        if (!ros_bridge_utils::convertToRgba(*msg, state.rgba_buf)) {
+        if (!utils::convertToRgba(*msg, state.rgba_buf)) {
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                              "Unsupported image encoding '%s' on topic '%s'",
                              msg->encoding.c_str(), topic_name.c_str());
           return;
         }
 
-        auto frame = ros_bridge_utils::makeRgbaVideoFrame(
+        auto frame = utils::makeRgbaVideoFrame(
           static_cast<int>(msg->width), static_cast<int>(msg->height),
           state.rgba_buf.data(), state.rgba_buf.size());
         if (!frame) {
@@ -492,7 +460,10 @@ void Ros2LiveKitBridge::onDataTrackPublished(
 
   const auto & info = event.track->info();
   const auto & track_name = info.name;
-  if (!matchesLiveKitToRosTopic(track_name)) {
+  if (!utils::matchesAnyPattern(
+      utils::normalizeTrackTopicName(track_name),
+      incoming_topic_compiled_patterns_))
+  {
     return;
   }
 
@@ -628,23 +599,11 @@ void Ros2LiveKitBridge::stopInboundDataTrack(const std::string & sid)
 
 /** Helpers **/
 
-bool Ros2LiveKitBridge::matchesTopic(const std::string & topic_name) const
-{
-  return ros_bridge_utils::matchesAnyPattern(
-    topic_name, outgoing_topic_compiled_patterns_);
-}
-
-bool Ros2LiveKitBridge::matchesLiveKitToRosTopic(
-  const std::string & track_name) const
-{
-  return ros_bridge_utils::matchesAnyPattern(
-    normalizeTrackTopicName(track_name), incoming_topic_compiled_patterns_);
-}
-
 std::optional<std::string> Ros2LiveKitBridge::liveKitToRosTopicType(
   const std::string & track_name) const
 {
-  const std::string normalized_track_name = normalizeTrackTopicName(track_name);
+  const std::string normalized_track_name =
+    utils::normalizeTrackTopicName(track_name);
   // Infer inbound type from local ROS graph only.
   const auto topics = this->get_topic_names_and_types();
   const auto topic_it = topics.find(normalized_track_name);
@@ -667,8 +626,10 @@ std::string Ros2LiveKitBridge::liveKitToRosTopicName(
   const std::string & participant_identity,
   const std::string & track_name) const
 {
-  const auto participant_prefix = sanitizeRosNameToken(participant_identity);
-  const auto normalized_track_name = normalizeTrackTopicName(track_name);
+  const auto participant_prefix =
+    utils::sanitizeRosNameToken(participant_identity);
+  const auto normalized_track_name =
+    utils::normalizeTrackTopicName(track_name);
   return "/" + participant_prefix + normalized_track_name;
 }
 
@@ -715,7 +676,7 @@ Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
   // Reliability: force best-effort if topic matches the override list,
   // otherwise use RELIABLE only when every publisher offers it (mixed policies
   // fall back to best-effort so we can connect to all publishers).
-  if (ros_bridge_utils::matchesAnyPattern(topic_name,
+  if (utils::matchesAnyPattern(topic_name,
                                       best_effort_qos_topic_patterns_))
   {
     qos.best_effort();

@@ -113,8 +113,9 @@ contains:
 
 Direction handling:
 
-- `out` + `bidirectional`: allow ROS -> LiveKit forwarding.
-- `in` + `bidirectional`: allow LiveKit -> ROS forwarding.
+- `out`: allow ROS -> LiveKit forwarding.
+- `in`: allow LiveKit -> ROS forwarding.
+- `bidirectional`: `in` and `out` forwarding/functionality
 
 ### LiveKit-to-ROS topic names
 
@@ -197,16 +198,25 @@ ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
 
 ## Integration Testing
 
-The participant-ID bridge integration test uses a local LiveKit server and two
-participant tokens. If the environment is not configured, the test skips cleanly.
+The bridge E2E integration test uses a local LiveKit server and two
+participant tokens. If credentials are missing, the test fails fast with a
+clear assertion message.
 
 ```bash
 # From the workspace root, with a local LiveKit server available.
-source src/ros2_livekit_bridge/test/token_helpers/set_bridge_integration_tokens.bash
+source .token_helpers/set_test_tokens.bash
 
 colcon build --packages-select ros2_livekit_bridge
+GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests
+```
+
+Or via colcon:
+
+```bash
+source .token_helpers/set_test_tokens.bash
 colcon test --packages-select ros2_livekit_bridge \
-  --ctest-args -R ros2_livekit_bridge_integration_tests
+  --event-handlers console_direct+ \
+  --ctest-args -R ros2_livekit_bridge_integration_tests -V
 colcon test-result --verbose
 ```
 

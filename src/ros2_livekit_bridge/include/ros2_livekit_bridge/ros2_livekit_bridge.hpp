@@ -125,18 +125,6 @@ private:
     const livekit::DataTrackUnpublishedEvent & event) override;
 
   /**
-   * @brief Check if the topic matches the allowed topics
-   * @param topic_name The name of the topic
-   * @return True if the topic matches the allowed topics, false otherwise
-   */
-  bool matchesTopic(const std::string & topic_name) const;
-
-  /**
-   * @brief Check if a remote LiveKit data track is allowed into ROS.
-   */
-  bool matchesLiveKitToRosTopic(const std::string & track_name) const;
-
-  /**
    * @brief Resolve the ROS message type for an inbound LiveKit data track.
    */
   std::optional<std::string> liveKitToRosTopicType(

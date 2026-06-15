@@ -30,7 +30,7 @@
 #include <livekit/video_frame.h>
 #include <rclcpp/logger.hpp>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 
 std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
@@ -41,6 +41,10 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
 std::string resolveEnvironmentCredential(
   const std::string & env_var_name,
   std::string & source);
+
+std::string normalizeTrackTopicName(const std::string & track_name);
+
+std::string sanitizeRosNameToken(const std::string & token);
 
 void logPatternCompileErrors(
   const std::vector<PatternCompileError> & errors,
@@ -56,6 +60,6 @@ outgoingTopicPatterns(
 std::vector<std::string>
 incomingTopicPatterns(
   const ros2_livekit_bridge_config::BridgeConfig & config);
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 namespace
 {
@@ -144,6 +144,34 @@ TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {
     (std::vector<std::string>{"/camera/image_raw", "/odom"}));
 }
 
+TEST(RosUtilsTest, NormalizeTrackTopicNameAddsLeadingSlash) {
+  EXPECT_EQ(normalizeTrackTopicName("camera/image"), "/camera/image");
+}
+
+TEST(RosUtilsTest, NormalizeTrackTopicNamePreservesExistingLeadingSlash) {
+  EXPECT_EQ(normalizeTrackTopicName("/camera/image"), "/camera/image");
+}
+
+TEST(RosUtilsTest, NormalizeTrackTopicNameUsesRootForEmptyInput) {
+  EXPECT_EQ(normalizeTrackTopicName(""), "/");
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenKeepsValidCharacters) {
+  EXPECT_EQ(sanitizeRosNameToken("bridge_test_a"), "bridge_test_a");
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenReplacesInvalidCharacters) {
+  EXPECT_EQ(sanitizeRosNameToken("bridge-test.a"), "bridge_test_a");
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenUsesFallbackForEmptyInput) {
+  EXPECT_EQ(sanitizeRosNameToken(""), "participant");
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenPrefixesLeadingDigit) {
+  EXPECT_EQ(sanitizeRosNameToken("1robot"), "_1robot");
+}
+
 TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
   namespace bridge_config = ::ros2_livekit_bridge_config;
 
@@ -170,4 +198,4 @@ TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
     (std::vector<std::string>{"/teleop_cmd", "/odom"}));
 }
 } // namespace
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils

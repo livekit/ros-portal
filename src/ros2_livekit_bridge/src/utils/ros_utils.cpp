@@ -16,13 +16,14 @@
 
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 
 #include <rclcpp/rclcpp.hpp>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 
 namespace bridge_config = ::ros2_livekit_bridge_config;
@@ -62,6 +63,38 @@ std::string resolveEnvironmentCredential(
   }
   source = "none";
   return {};
+}
+
+std::string normalizeTrackTopicName(const std::string & track_name)
+{
+  if (track_name.empty()) {
+    return "/";
+  }
+  if (track_name.front() == '/') {
+    return track_name;
+  }
+  return "/" + track_name;
+}
+
+std::string sanitizeRosNameToken(const std::string & token)
+{
+  std::string sanitized;
+  sanitized.reserve(token.size());
+  for (const unsigned char ch : token) {
+    if (std::isalnum(ch) || ch == '_') {
+      sanitized.push_back(static_cast<char>(ch));
+    } else {
+      sanitized.push_back('_');
+    }
+  }
+
+  if (sanitized.empty()) {
+    return "participant";
+  }
+  if (std::isdigit(static_cast<unsigned char>(sanitized.front()))) {
+    sanitized.insert(sanitized.begin(), '_');
+  }
+  return sanitized;
 }
 
 void logPatternCompileErrors(
@@ -124,4 +157,4 @@ incomingTopicPatterns(const bridge_config::BridgeConfig & config)
 
   return patterns;
 }
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils

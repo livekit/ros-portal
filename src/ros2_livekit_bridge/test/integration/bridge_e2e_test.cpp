@@ -15,6 +15,7 @@
  */
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
+#include "ros2_livekit_bridge/utils/ros_utils.hpp"
 
 #include "test_common.hpp"
 
@@ -37,12 +38,12 @@ namespace
 {
 
 using namespace std::chrono_literals;
+using ros2_livekit_bridge::utils::resolveEnvironmentCredential;
 using ros2_livekit_bridge::Ros2LiveKitBridge;
 using ros2_livekit_bridge::test::ScopedRosGraph;
 using ros2_livekit_bridge::test::TemporaryConfigFile;
 using ros2_livekit_bridge::test::expectedInboundTopicName;
 using ros2_livekit_bridge::test::findParticipantPrefixedTopic;
-using ros2_livekit_bridge::test::getenvString;
 using ros2_livekit_bridge::test::restoreEnv;
 using ros2_livekit_bridge::test::setEnv;
 using ros2_livekit_bridge::test::testDomainIds;
@@ -91,18 +92,46 @@ std::string bridgeConfigYaml(
   return stream.str();
 }
 
+std::string testLiveKitRoom()
+{
+  std::string source;
+  const auto room = resolveEnvironmentCredential("LIVEKIT_ROOM", source);
+  if (!room.empty()) {
+    return room;
+  }
+  return "ros_bridge_participant_id_test";
+}
+
 class BridgeTestE2E : public ::testing::Test
 {
 protected:
   void SetUp() override
   {
-    livekit_url_ = getenvString("LIVEKIT_URL");
-    token_a_ = getenvString("LIVEKIT_TOKEN_A");
-    token_b_ = getenvString("LIVEKIT_TOKEN_B");
-    original_token_ = getenvString("LIVEKIT_TOKEN");
-    original_livekit_url_ = getenvString("LIVEKIT_URL");
-    identity_a_ = getenvString("LIVEKIT_IDENTITY_A").value_or("bridge-test-a");
-    identity_b_ = getenvString("LIVEKIT_IDENTITY_B").value_or("bridge-test-b");
+    std::string source;
+    livekit_url_ = resolveEnvironmentCredential("LIVEKIT_URL", source);
+    token_a_ = resolveEnvironmentCredential("LIVEKIT_TOKEN_A", source);
+    token_b_ = resolveEnvironmentCredential("LIVEKIT_TOKEN_B", source);
+
+    const auto original_token =
+      resolveEnvironmentCredential("LIVEKIT_TOKEN", source);
+    original_token_ = original_token.empty() ?
+      std::nullopt : std::optional<std::string>(original_token);
+
+    const auto original_livekit_url =
+      resolveEnvironmentCredential("LIVEKIT_URL", source);
+    original_livekit_url_ = original_livekit_url.empty() ?
+      std::nullopt : std::optional<std::string>(original_livekit_url);
+
+    identity_a_ =
+      resolveEnvironmentCredential("LIVEKIT_IDENTITY_A", source);
+    if (identity_a_.empty()) {
+      identity_a_ = "bridge-test-a";
+    }
+    identity_b_ =
+      resolveEnvironmentCredential("LIVEKIT_IDENTITY_B", source);
+    if (identity_b_.empty()) {
+      identity_b_ = "bridge-test-b";
+    }
   }
 
   void TearDown() override
@@ -114,7 +143,7 @@ protected:
 
   bool configured() const
   {
-    return livekit_url_ && token_a_ && token_b_;
+    return !livekit_url_.empty() && !token_a_.empty() && !token_b_.empty();
   }
 
   void initializeRuntime(const std::string & topic_pattern)
@@ -140,16 +169,16 @@ protected:
       ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
     config_file_a_ = std::make_unique<TemporaryConfigFile>(
-      bridgeConfigYaml("integration_test", topic_pattern_a),
+      bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a),
       "ros2_livekit_bridge_bridge_test_e2e_a_");
     config_file_b_ = std::make_unique<TemporaryConfigFile>(
-      bridgeConfigYaml("integration_test", topic_pattern_b),
+      bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b),
       "ros2_livekit_bridge_bridge_test_e2e_b_");
 
     bridge_a_ = createBridge(
-      *graph_a_, "/bridge_a_node", *token_a_, config_file_a_->path().string());
+      *graph_a_, "/bridge_a_node", token_a_, config_file_a_->path().string());
     bridge_b_ = createBridge(
-      *graph_b_, "/bridge_b_node", *token_b_, config_file_b_->path().string());
+      *graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());
     ASSERT_NE(bridge_a_, nullptr);
     ASSERT_NE(bridge_b_, nullptr);
 
@@ -354,7 +383,7 @@ private:
       ADD_FAILURE() << "Failed to set environment variable LIVEKIT_TOKEN";
       return nullptr;
     }
-    if (!setEnv("LIVEKIT_URL", *livekit_url_)) {
+    if (!setEnv("LIVEKIT_URL", livekit_url_)) {
       ADD_FAILURE() << "Failed to set environment variable LIVEKIT_URL";
       return nullptr;
     }
@@ -415,9 +444,9 @@ private:
     config_file_b_.reset();
   }
 
-  std::optional<std::string> livekit_url_;
-  std::optional<std::string> token_a_;
-  std::optional<std::string> token_b_;
+  std::string livekit_url_;
+  std::string token_a_;
+  std::string token_b_;
   std::optional<std::string> original_token_;
   std::optional<std::string> original_livekit_url_;
   std::string identity_a_;

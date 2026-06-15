@@ -17,7 +17,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdlib>
@@ -32,21 +31,14 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "ros2_livekit_bridge/utils/ros_utils.hpp"
+
 #include <unistd.h>
 
 namespace ros2_livekit_bridge::test
 {
 
 using namespace std::chrono_literals;
-
-inline std::optional<std::string> getenvString(const char * name)
-{
-  const char * value = std::getenv(name);
-  if (value == nullptr || value[0] == '\0') {
-    return std::nullopt;
-  }
-  return std::string(value);
-}
 
 inline bool setEnv(const char * name, const std::string & value)
 {
@@ -84,32 +76,11 @@ inline std::string escapedRegex(const std::string & value)
   return std::regex_replace(value, special_chars, R"(\$&)");
 }
 
-inline std::string sanitizeRosNameToken(const std::string & token)
-{
-  std::string sanitized;
-  sanitized.reserve(token.size());
-  for (const unsigned char ch : token) {
-    if (std::isalnum(ch) || ch == '_') {
-      sanitized.push_back(static_cast<char>(ch));
-    } else {
-      sanitized.push_back('_');
-    }
-  }
-
-  if (sanitized.empty()) {
-    return "participant";
-  }
-  if (std::isdigit(static_cast<unsigned char>(sanitized.front()))) {
-    sanitized.insert(sanitized.begin(), '_');
-  }
-  return sanitized;
-}
-
 inline std::string expectedInboundTopicName(
   const std::string & participant_identity,
   const std::string & source_topic)
 {
-  return "/" + sanitizeRosNameToken(participant_identity) + source_topic;
+  return "/" + utils::sanitizeRosNameToken(participant_identity) + source_topic;
 }
 
 inline std::optional<std::string> findParticipantPrefixedTopic(

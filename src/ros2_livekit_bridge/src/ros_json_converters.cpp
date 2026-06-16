@@ -33,6 +33,16 @@ TopicListOptions topicListOptionsFromRequest(
   return options;
 }
 
+ServiceListOptions serviceListOptionsFromRequest(
+  const Ros2ServiceList::Request & request)
+{
+  ServiceListOptions options;
+  options.show_types = request.show_types;
+  options.count_services = request.count_services;
+  options.include_hidden_services = request.include_hidden_services;
+  return options;
+}
+
 std::string topicListRequestToJson(
   const Ros2TopicList::Request & request,
   std::uint8_t timeout_sec)
@@ -44,6 +54,20 @@ std::string topicListRequestToJson(
     {"count_topics", options.count_topics},
     {"include_hidden_topics", options.include_hidden_topics},
     {"verbose", options.verbose},
+    {"timeout_sec", timeout_sec},
+  }.dump();
+}
+
+std::string serviceListRequestToJson(
+  const Ros2ServiceList::Request & request,
+  std::uint8_t timeout_sec)
+{
+  const auto options = serviceListOptionsFromRequest(request);
+  return json{
+    {"participant_id", request.participant_id},
+    {"show_types", options.show_types},
+    {"count_services", options.count_services},
+    {"include_hidden_services", options.include_hidden_services},
     {"timeout_sec", timeout_sec},
   }.dump();
 }
@@ -60,12 +84,36 @@ TopicListOptions topicListOptionsFromJson(const std::string & payload)
   return options;
 }
 
+ServiceListOptions serviceListOptionsFromJson(const std::string & payload)
+{
+  const auto request = json::parse(payload);
+
+  ServiceListOptions options;
+  options.show_types = request.value("show_types", false);
+  options.count_services = request.value("count_services", false);
+  options.include_hidden_services =
+    request.value("include_hidden_services", false);
+  return options;
+}
+
 Ros2TopicList::Response makeTopicListResponse(
   bool success,
   const std::string & err_msg,
   const std::string & output)
 {
   Ros2TopicList::Response response;
+  response.success = success;
+  response.err_msg = err_msg;
+  response.output = output;
+  return response;
+}
+
+Ros2ServiceList::Response makeServiceListResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  Ros2ServiceList::Response response;
   response.success = success;
   response.err_msg = err_msg;
   response.output = output;
@@ -84,10 +132,32 @@ std::string topicListResponseToJson(
   }.dump();
 }
 
+std::string serviceListResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  return json{
+    {"success", success},
+    {"err_msg", err_msg},
+    {"output", output},
+  }.dump();
+}
+
 Ros2TopicList::Response topicListResponseFromJson(const std::string & payload)
 {
   const auto parsed = json::parse(payload);
   return makeTopicListResponse(
+    parsed.at("success").get<bool>(),
+    parsed.at("err_msg").get<std::string>(),
+    parsed.at("output").get<std::string>());
+}
+
+Ros2ServiceList::Response serviceListResponseFromJson(
+  const std::string & payload)
+{
+  const auto parsed = json::parse(payload);
+  return makeServiceListResponse(
     parsed.at("success").get<bool>(),
     parsed.at("err_msg").get<std::string>(),
     parsed.at("output").get<std::string>());

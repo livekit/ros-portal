@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <rclcpp/rclcpp.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -44,6 +45,7 @@ namespace
 
 using namespace std::chrono_literals;
 using ros2_livekit_bridge::utils::resolveEnvironmentCredential;
+using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
 using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
 using ros2_livekit_bridge::Ros2LiveKitBridge;
 using ros2_livekit_bridge::test::ScopedRosGraph;
@@ -70,6 +72,14 @@ struct TopicListServiceOptions
   bool include_hidden_topics{false};
 };
 
+struct ServiceListServiceOptions
+{
+  std::uint8_t timeout_sec{5};
+  bool show_types{false};
+  bool count_services{false};
+  bool include_hidden_services{false};
+};
+
 bool contains(const std::string & value, const std::string & needle)
 {
   return value.find(needle) != std::string::npos;
@@ -79,6 +89,17 @@ std::size_t lineCount(const std::string & value)
 {
   return static_cast<std::size_t>(
     std::count(value.begin(), value.end(), '\n'));
+}
+
+bool serviceExists(rclcpp::Node & node, const std::string & service_name)
+{
+  const auto service_names_and_types = node.get_service_names_and_types();
+  return std::any_of(
+    service_names_and_types.begin(),
+    service_names_and_types.end(),
+    [&](const auto & name_and_types) {
+      return name_and_types.first == service_name;
+    });
 }
 
 /// Create a ROS node options object for a bridge node
@@ -413,6 +434,40 @@ protected:
     return future.get();
   }
 
+  Ros2ServiceList::Response::SharedPtr callServiceListService(
+    const std::shared_ptr<rclcpp::Node> & node,
+    const std::string & participant_id,
+    const ServiceListServiceOptions & options = {})
+  {
+    auto client = node->create_client<Ros2ServiceList>(
+      "/ros2_livekit_bridge/ros2_service_list");
+
+    if (!waitFor(
+        [&]() {
+          return client->wait_for_service(100ms);
+        },
+        kGraphTimeout))
+    {
+      ADD_FAILURE() << "ros2_service_list service was not available";
+      return nullptr;
+    }
+
+    auto request = std::make_shared<Ros2ServiceList::Request>();
+    request->participant_id = participant_id;
+    request->show_types = options.show_types;
+    request->count_services = options.count_services;
+    request->include_hidden_services = options.include_hidden_services;
+    request->timeout_sec = options.timeout_sec;
+
+    auto future = client->async_send_request(request);
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << "ros2_service_list service timed out";
+      return nullptr;
+    }
+
+    return future.get();
+  }
+
   std::shared_ptr<rclcpp::Node> robotANode() const {return robot_a_node_;}
   std::shared_ptr<rclcpp::Node> robotBNode() const {return robot_b_node_;}
   const std::string & identityA() const {return identity_a_;}
@@ -690,6 +745,98 @@ TEST_F(
 
   const auto missing_response =
     callTopicListService(robotANode(), "missing-livekit-participant");
+  ASSERT_NE(missing_response, nullptr);
+  EXPECT_FALSE(missing_response->success);
+  EXPECT_TRUE(contains(missing_response->err_msg, "missing-livekit-participant"));
+}
+
+TEST_F(
+  BridgeTestE2E,
+  ListsRemoteRosServicesOverRpc)
+{
+  initializeRuntime(kBidirectionalTopic);
+
+  constexpr const char * kVisibleService = "/bridge/listable_service";
+  auto visible_service = robotBNode()->create_service<Ros2ServiceList>(
+    kVisibleService,
+    [](
+      const std::shared_ptr<Ros2ServiceList::Request>,
+      std::shared_ptr<Ros2ServiceList::Response> response)
+    {
+      response->success = true;
+    });
+  ASSERT_NE(visible_service, nullptr);
+  ASSERT_TRUE(
+    waitFor(
+      [&]() {return serviceExists(*robotBNode(), kVisibleService);},
+      kGraphTimeout))
+    << "Visible service did not appear in bridge B graph";
+
+  constexpr const char * kHiddenService = "/_hidden_service";
+  auto hidden_service = robotBNode()->create_service<Ros2ServiceList>(
+    kHiddenService,
+    [](
+      const std::shared_ptr<Ros2ServiceList::Request>,
+      std::shared_ptr<Ros2ServiceList::Response> response)
+    {
+      response->success = true;
+    });
+  ASSERT_NE(hidden_service, nullptr);
+  ASSERT_TRUE(
+    waitFor(
+      [&]() {return serviceExists(*robotBNode(), kHiddenService);},
+      kGraphTimeout))
+    << "Hidden service did not appear in bridge B graph";
+
+  const auto response =
+    callServiceListService(robotANode(), identityB());
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->success) << response->err_msg;
+  EXPECT_TRUE(contains(response->output, kVisibleService));
+  EXPECT_FALSE(contains(response->output, "["));
+  EXPECT_FALSE(contains(response->output, kHiddenService));
+
+  ServiceListServiceOptions show_types_options;
+  show_types_options.show_types = true;
+  const auto show_types_response =
+    callServiceListService(robotANode(), identityB(), show_types_options);
+  ASSERT_NE(show_types_response, nullptr);
+  EXPECT_TRUE(show_types_response->success) << show_types_response->err_msg;
+  EXPECT_TRUE(
+    contains(
+      show_types_response->output,
+      std::string(kVisibleService) +
+      " [ros2_livekit_bridge_msgs/srv/Ros2ServiceList]"));
+  EXPECT_FALSE(contains(show_types_response->output, kHiddenService));
+
+  ServiceListServiceOptions include_hidden_options;
+  include_hidden_options.include_hidden_services = true;
+  const auto include_hidden_response =
+    callServiceListService(robotANode(), identityB(), include_hidden_options);
+  ASSERT_NE(include_hidden_response, nullptr);
+  EXPECT_TRUE(include_hidden_response->success) <<
+    include_hidden_response->err_msg;
+  EXPECT_TRUE(contains(include_hidden_response->output, kHiddenService));
+  EXPECT_FALSE(
+    contains(
+      include_hidden_response->output,
+      "[ros2_livekit_bridge_msgs/srv/Ros2ServiceList]"));
+
+  ServiceListServiceOptions count_services_options;
+  count_services_options.count_services = true;
+  const auto count_services_response =
+    callServiceListService(robotANode(), identityB(), count_services_options);
+  ASSERT_NE(count_services_response, nullptr);
+  EXPECT_TRUE(count_services_response->success) <<
+    count_services_response->err_msg;
+  EXPECT_EQ(
+    count_services_response->output,
+    std::to_string(lineCount(response->output)) + "\n");
+  EXPECT_FALSE(contains(count_services_response->output, "/"));
+  EXPECT_FALSE(contains(count_services_response->output, "["));
+
+  const auto missing_response =
+    callServiceListService(robotANode(), "missing-livekit-participant");
   ASSERT_NE(missing_response, nullptr);
   EXPECT_FALSE(missing_response->success);
   EXPECT_TRUE(contains(missing_response->err_msg, "missing-livekit-participant"));

@@ -21,6 +21,7 @@ find_package(rosidl_default_generators REQUIRED)
 ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/Ros2ServiceList.srv"
   "srv/Ros2TopicList.srv"
 )
 

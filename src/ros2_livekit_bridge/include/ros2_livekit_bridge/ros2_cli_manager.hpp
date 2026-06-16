@@ -24,6 +24,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <ros2_livekit_bridge/ros_json_converters.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 
 namespace livekit
@@ -160,6 +161,8 @@ class Ros2CliManager
 public:
   //! @brief Generated ROS service type for remote `ros2 topic list` requests.
   using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
+  //! @brief Generated ROS service type for remote `ros2 service list` requests.
+  using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
 
   /**
    * @brief Snapshot of one ROS topic used to format `ros2 topic list` output.
@@ -174,6 +177,17 @@ public:
     size_t publisher_count{0};
     //! @brief Number of subscribers currently discovered for the topic.
     size_t subscriber_count{0};
+  };
+
+  /**
+   * @brief Snapshot of one ROS service used to format `ros2 service list`.
+   */
+  struct ServiceInfo
+  {
+    //! @brief Fully qualified ROS service name.
+    std::string name;
+    //! @brief ROS interface type names advertised for the service.
+    std::vector<std::string> types;
   };
 
   /**
@@ -203,6 +217,14 @@ public:
     const Ros2TopicList::Request & request) const;
 
   /**
+   * @brief Execute a ROS service request by calling a remote LiveKit RPC.
+   * @param request ROS service request from the local developer.
+   * @return ROS service response with success, err_msg, and service-list output.
+   */
+  Ros2ServiceList::Response callRemoteServiceList(
+    const Ros2ServiceList::Request & request) const;
+
+  /**
    * @brief Fulfill an inbound LiveKit `ros2_topic_list` RPC.
    * @param payload JSON request payload from the remote participant.
    * @return JSON response payload containing success, err_msg, and output.
@@ -210,11 +232,25 @@ public:
   std::string handleTopicListRpc(const std::string & payload) const;
 
   /**
+   * @brief Fulfill an inbound LiveKit `ros2_service_list` RPC.
+   * @param payload JSON request payload from the remote participant.
+   * @return JSON response payload containing success, err_msg, and output.
+   */
+  std::string handleServiceListRpc(const std::string & payload) const;
+
+  /**
    * @brief Check whether a topic should be hidden like default ROS2 CLI output.
    * @param topic_name Fully qualified ROS topic name.
    * @return True when any topic token begins with `_`.
    */
   static bool isHiddenTopic(const std::string & topic_name);
+
+  /**
+   * @brief Check whether a service should be hidden like default ROS2 CLI output.
+   * @param service_name Fully qualified ROS service name.
+   * @return True when any service token begins with `_`.
+   */
+  static bool isHiddenService(const std::string & service_name);
 
   /**
    * @brief Resolve the user-provided timeout field to an actual timeout.
@@ -233,10 +269,23 @@ public:
     const std::vector<TopicInfo> & topics,
     const TopicListOptions & options);
 
+  /**
+   * @brief Format services using `ros2 service list` output conventions.
+   * @param services Sorted service snapshots to render.
+   * @param options Service list formatting options.
+   * @return Human-readable service list output.
+   */
+  static std::string formatServiceList(
+    const std::vector<ServiceInfo> & services,
+    const ServiceListOptions & options);
+
 private:
-  static constexpr const char * kRpcMethod = "ros2_topic_list";
-  static constexpr const char * kServiceName =
+  static constexpr const char * kTopicListRpcMethod = "ros2_topic_list";
+  static constexpr const char * kTopicListServiceName =
     "/ros2_livekit_bridge/ros2_topic_list";
+  static constexpr const char * kServiceListRpcMethod = "ros2_service_list";
+  static constexpr const char * kServiceListServiceName =
+    "/ros2_livekit_bridge/ros2_service_list";
   static constexpr std::uint8_t kDefaultTimeoutSec = 10;
 
   /**
@@ -244,9 +293,18 @@ private:
    * @param request Shared ROS service request.
    * @param response Shared ROS service response to populate.
    */
-  void handleRosService(
+  void handleTopicListRosService(
     const std::shared_ptr<Ros2TopicList::Request> request,
     std::shared_ptr<Ros2TopicList::Response> response) const;
+
+  /**
+   * @brief Service callback that maps a ROS request into a service response.
+   * @param request Shared ROS service request.
+   * @param response Shared ROS service response to populate.
+   */
+  void handleServiceListRosService(
+    const std::shared_ptr<Ros2ServiceList::Request> request,
+    std::shared_ptr<Ros2ServiceList::Response> response) const;
 
   /**
    * @brief Capture topics from the local ROS graph.
@@ -255,9 +313,18 @@ private:
    */
   std::vector<TopicInfo> collectTopicInfo(const TopicListOptions & options) const;
 
+  /**
+   * @brief Capture services from the local ROS graph.
+   * @param options Service list graph filtering options.
+   * @return Sorted service snapshots.
+   */
+  std::vector<ServiceInfo> collectServiceInfo(
+    const ServiceListOptions & options) const;
+
   rclcpp::Node & node_;
   std::shared_ptr<Ros2CliRpcClient> rpc_client_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
+  rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
 };
 
 }  // namespace ros2_livekit_bridge

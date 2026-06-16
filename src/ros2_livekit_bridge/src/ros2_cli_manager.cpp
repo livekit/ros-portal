@@ -44,6 +44,29 @@ std::string joinTypes(const std::vector<std::string> & types)
   return stream.str();
 }
 
+bool hasHiddenNameToken(const std::string & name)
+{
+  size_t token_start = 0;
+  while (token_start < name.size()) {
+    while (token_start < name.size() && name[token_start] == '/') {
+      ++token_start;
+    }
+    if (token_start >= name.size()) {
+      break;
+    }
+
+    const auto token_end = name.find('/', token_start);
+    if (name[token_start] == '_') {
+      return true;
+    }
+    if (token_end == std::string::npos) {
+      break;
+    }
+    token_start = token_end + 1;
+  }
+  return false;
+}
+
 }  // namespace
 
 LiveKitRos2CliRpcClient::LiveKitRos2CliRpcClient(livekit::Room & room)
@@ -109,40 +132,68 @@ Ros2CliManager::Ros2CliManager(
   }
 
   topic_list_service_ = node_.create_service<Ros2TopicList>(
-    kServiceName,
+    kTopicListServiceName,
     [this](
       const std::shared_ptr<Ros2TopicList::Request> request,
       std::shared_ptr<Ros2TopicList::Response> response)
     {
-      handleRosService(request, response);
+      handleTopicListRosService(request, response);
+    },
+    rclcpp::ServicesQoS(),
+    callback_group);
+
+  service_list_service_ = node_.create_service<Ros2ServiceList>(
+    kServiceListServiceName,
+    [this](
+      const std::shared_ptr<Ros2ServiceList::Request> request,
+      std::shared_ptr<Ros2ServiceList::Response> response)
+    {
+      handleServiceListRosService(request, response);
     },
     rclcpp::ServicesQoS(),
     callback_group);
 
   rpc_client_->registerRpcMethod(
-    kRpcMethod,
+    kTopicListRpcMethod,
     [this](const std::string & payload) {
       return handleTopicListRpc(payload);
     });
 
+  rpc_client_->registerRpcMethod(
+    kServiceListRpcMethod,
+    [this](const std::string & payload) {
+      return handleServiceListRpc(payload);
+    });
+
   RCLCPP_INFO(
     node_.get_logger(),
-    "Registered ROS service '%s' and LiveKit RPC method '%s'",
-    kServiceName, kRpcMethod);
+    "Registered ROS services '%s', '%s' and LiveKit RPC methods '%s', '%s'",
+    kTopicListServiceName,
+    kServiceListServiceName,
+    kTopicListRpcMethod,
+    kServiceListRpcMethod);
 }
 
 Ros2CliManager::~Ros2CliManager()
 {
   if (rpc_client_) {
-    rpc_client_->unregisterRpcMethod(kRpcMethod);
+    rpc_client_->unregisterRpcMethod(kTopicListRpcMethod);
+    rpc_client_->unregisterRpcMethod(kServiceListRpcMethod);
   }
 }
 
-void Ros2CliManager::handleRosService(
+void Ros2CliManager::handleTopicListRosService(
   const std::shared_ptr<Ros2TopicList::Request> request,
   std::shared_ptr<Ros2TopicList::Response> response) const
 {
   *response = callRemoteTopicList(*request);
+}
+
+void Ros2CliManager::handleServiceListRosService(
+  const std::shared_ptr<Ros2ServiceList::Request> request,
+  std::shared_ptr<Ros2ServiceList::Response> response) const
+{
+  *response = callRemoteServiceList(*request);
 }
 
 Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
@@ -164,19 +215,19 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
   std::string rpc_response;
   try {
     rpc_response = rpc_client_->performRpc(
-      request.participant_id, kRpcMethod, payload, timeout_sec);
+      request.participant_id, kTopicListRpcMethod, payload, timeout_sec);
   } catch (const livekit::RpcError & error) {
     RCLCPP_ERROR(
       node_.get_logger(),
       "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
-      kRpcMethod, request.participant_id.c_str(), error.code(),
+      kTopicListRpcMethod, request.participant_id.c_str(), error.code(),
       error.message().c_str());
     return makeTopicListResponse(false, error.message());
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
       node_.get_logger(),
       "LiveKit RPC '%s' to participant '%s' failed: %s",
-      kRpcMethod, request.participant_id.c_str(), error.what());
+      kTopicListRpcMethod, request.participant_id.c_str(), error.what());
     return makeTopicListResponse(false, error.what());
   }
 
@@ -186,9 +237,56 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
     RCLCPP_ERROR(
       node_.get_logger(),
       "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-      kRpcMethod, request.participant_id.c_str(), error.what());
+      kTopicListRpcMethod, request.participant_id.c_str(), error.what());
     return makeTopicListResponse(
       false, "remote ros2_topic_list returned malformed JSON");
+  }
+}
+
+Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
+  const Ros2ServiceList::Request & request) const
+{
+  if (request.participant_id.empty()) {
+    return makeServiceListResponse(false, "participant_id must be non-empty");
+  }
+
+  if (!rpc_client_->hasParticipant(request.participant_id)) {
+    return makeServiceListResponse(
+      false,
+      "LiveKit participant '" + request.participant_id + "' was not found");
+  }
+
+  const auto timeout_sec = effectiveTimeout(request.timeout_sec);
+  const auto payload = serviceListRequestToJson(request, timeout_sec);
+
+  std::string rpc_response;
+  try {
+    rpc_response = rpc_client_->performRpc(
+      request.participant_id, kServiceListRpcMethod, payload, timeout_sec);
+  } catch (const livekit::RpcError & error) {
+    RCLCPP_ERROR(
+      node_.get_logger(),
+      "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
+      kServiceListRpcMethod, request.participant_id.c_str(), error.code(),
+      error.message().c_str());
+    return makeServiceListResponse(false, error.message());
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR(
+      node_.get_logger(),
+      "LiveKit RPC '%s' to participant '%s' failed: %s",
+      kServiceListRpcMethod, request.participant_id.c_str(), error.what());
+    return makeServiceListResponse(false, error.what());
+  }
+
+  try {
+    return serviceListResponseFromJson(rpc_response);
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR(
+      node_.get_logger(),
+      "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
+      kServiceListRpcMethod, request.participant_id.c_str(), error.what());
+    return makeServiceListResponse(
+      false, "remote ros2_service_list returned malformed JSON");
   }
 }
 
@@ -202,32 +300,35 @@ std::string Ros2CliManager::handleTopicListRpc(const std::string & payload) cons
     RCLCPP_ERROR(
       node_.get_logger(),
       "Failed to handle LiveKit RPC '%s': %s",
-      kRpcMethod, error.what());
+      kTopicListRpcMethod, error.what());
     return topicListResponseToJson(false, error.what(), "");
+  }
+}
+
+std::string Ros2CliManager::handleServiceListRpc(
+  const std::string & payload) const
+{
+  try {
+    const auto options = serviceListOptionsFromJson(payload);
+    const auto output = formatServiceList(collectServiceInfo(options), options);
+    return serviceListResponseToJson(true, "", output);
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR(
+      node_.get_logger(),
+      "Failed to handle LiveKit RPC '%s': %s",
+      kServiceListRpcMethod, error.what());
+    return serviceListResponseToJson(false, error.what(), "");
   }
 }
 
 bool Ros2CliManager::isHiddenTopic(const std::string & topic_name)
 {
-  size_t token_start = 0;
-  while (token_start < topic_name.size()) {
-    while (token_start < topic_name.size() && topic_name[token_start] == '/') {
-      ++token_start;
-    }
-    if (token_start >= topic_name.size()) {
-      break;
-    }
+  return hasHiddenNameToken(topic_name);
+}
 
-    const auto token_end = topic_name.find('/', token_start);
-    if (topic_name[token_start] == '_') {
-      return true;
-    }
-    if (token_end == std::string::npos) {
-      break;
-    }
-    token_start = token_end + 1;
-  }
-  return false;
+bool Ros2CliManager::isHiddenService(const std::string & service_name)
+{
+  return hasHiddenNameToken(service_name);
 }
 
 std::uint8_t Ros2CliManager::effectiveTimeout(std::uint8_t timeout_sec)
@@ -286,6 +387,28 @@ std::string Ros2CliManager::formatTopicList(
   return stream.str();
 }
 
+std::string Ros2CliManager::formatServiceList(
+  const std::vector<ServiceInfo> & services,
+  const ServiceListOptions & options)
+{
+  std::ostringstream stream;
+
+  if (options.count_services) {
+    stream << services.size() << '\n';
+    return stream.str();
+  }
+
+  for (const auto & service : services) {
+    stream << service.name;
+    if (options.show_types) {
+      stream << " [" << joinTypes(service.types) << "]";
+    }
+    stream << '\n';
+  }
+
+  return stream.str();
+}
+
 std::vector<Ros2CliManager::TopicInfo> Ros2CliManager::collectTopicInfo(
   const TopicListOptions & options) const
 {
@@ -314,6 +437,32 @@ std::vector<Ros2CliManager::TopicInfo> Ros2CliManager::collectTopicInfo(
       return lhs.name < rhs.name;
     });
   return topics;
+}
+
+std::vector<Ros2CliManager::ServiceInfo> Ros2CliManager::collectServiceInfo(
+  const ServiceListOptions & options) const
+{
+  std::vector<ServiceInfo> services;
+  const auto service_names_and_types = node_.get_service_names_and_types();
+  services.reserve(service_names_and_types.size());
+
+  for (const auto & [service_name, service_types] : service_names_and_types) {
+    if (!options.include_hidden_services && isHiddenService(service_name)) {
+      continue;
+    }
+
+    ServiceInfo service_info;
+    service_info.name = service_name;
+    service_info.types = service_types;
+    services.push_back(std::move(service_info));
+  }
+
+  std::sort(
+    services.begin(), services.end(),
+    [](const ServiceInfo & lhs, const ServiceInfo & rhs) {
+      return lhs.name < rhs.name;
+    });
+  return services;
 }
 
 }  // namespace ros2_livekit_bridge

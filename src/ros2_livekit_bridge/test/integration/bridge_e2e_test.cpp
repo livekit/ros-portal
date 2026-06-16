@@ -202,12 +202,12 @@ protected:
     graph_a_spinning_.store(true);
     graph_b_spinning_.store(true);
     graph_a_spin_thread_ = std::thread([this]() {
-      graph_a_executor_->spin();
-      graph_a_spinning_.store(false);
+          graph_a_executor_->spin();
+          graph_a_spinning_.store(false);
     });
     graph_b_spin_thread_ = std::thread([this]() {
-      graph_b_executor_->spin();
-      graph_b_spinning_.store(false);
+          graph_b_executor_->spin();
+          graph_b_spinning_.store(false);
     });
 
     publisher_a_ =
@@ -216,9 +216,9 @@ protected:
       robot_b_node_->create_publisher<std_msgs::msg::String>(publish_topic_b, 10);
 
     ASSERT_TRUE(waitFor(
-      [&]() {
-        return topicExists(*robot_a_node_, publish_topic_a) &&
-        topicExists(*robot_b_node_, publish_topic_b);
+        [&]() {
+          return topicExists(*robot_a_node_, publish_topic_a) &&
+                 topicExists(*robot_b_node_, publish_topic_b);
       },
       kGraphTimeout));
   }

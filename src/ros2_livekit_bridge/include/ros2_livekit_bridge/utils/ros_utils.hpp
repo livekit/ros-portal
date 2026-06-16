@@ -23,9 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
-#include <string>
-#include <vector>
 
 #include <livekit/video_frame.h>
 #include <rclcpp/logger.hpp>
@@ -45,6 +42,10 @@ std::string resolveEnvironmentCredential(
 std::string normalizeTrackTopicName(const std::string & track_name);
 
 std::string sanitizeRosNameToken(const std::string & token);
+
+std::optional<std::string> liveKitToRosTopicName(
+  const std::string & participant_identity,
+  const std::string & track_name);
 
 void logPatternCompileErrors(
   const std::vector<PatternCompileError> & errors,

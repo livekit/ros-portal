@@ -97,6 +97,23 @@ std::string sanitizeRosNameToken(const std::string & token)
   return sanitized;
 }
 
+std::optional<std::string> liveKitToRosTopicName(
+  const std::string & participant_identity,
+  const std::string & track_name)
+{
+  if (participant_identity.empty()) {
+    return std::nullopt;
+  }
+
+  const auto normalized_track_name = normalizeTrackTopicName(track_name);
+  if (normalized_track_name == "/") {
+    return std::nullopt;
+  }
+
+  const auto participant_prefix = sanitizeRosNameToken(participant_identity);
+  return "/" + participant_prefix + normalized_track_name;
+}
+
 void logPatternCompileErrors(
   const std::vector<PatternCompileError> & errors,
   rclcpp::Logger logger)

@@ -19,14 +19,8 @@
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
-#include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
-#include <filesystem>
-#include <optional>
-#include <stdexcept>
 
 #include <livekit/data_track_frame.h>
 #include <livekit/data_track_stream.h>
@@ -151,7 +145,9 @@ bool Ros2LiveKitBridge::initialize()
                 livekit_url.c_str());
     livekit::initialize(livekit::LogLevel::Info);
     sdk_initialized_ = true;
+
     room_ = std::make_unique<livekit::Room>();
+    // Warning: avoid doing ROS operations in delegate callbacks
     room_->setDelegate(this);
 
     if (room_->connect(livekit_url, livekit_token, room_options)) {
@@ -165,7 +161,7 @@ bool Ros2LiveKitBridge::initialize()
     }
   }
 
-  RCLCPP_DEBUG(this->get_logger(), "Creating timer for polling topics");
+  RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
 
   poll_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(topic_polling_period_ms_),
@@ -181,7 +177,7 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge()
   {
     std::vector<std::string> inbound_sids;
     {
-      std::lock_guard<std::mutex> lock(inbound_data_track_mutex_);
+      std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
       inbound_sids.reserve(inbound_data_track_states_.size());
       for (const auto & [sid, _] : inbound_data_track_states_) {
         inbound_sids.push_back(sid);
@@ -208,20 +204,24 @@ void Ros2LiveKitBridge::pollTopics()
   auto topic_names_and_types = this->get_topic_names_and_types();
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
+    // Skip topics we have already subscribed to in this bridge instance
     if (subscriptions_.count(topic_name) > 0) {
       continue;
     }
 
+    // Skip topics that this bridge created from inbound LiveKit tracks
     if (inbound_ros_topic_names_.count(topic_name) > 0) {
       continue;
     }
 
+    // Only keep ROS topics that match configured ROS->LiveKit patterns
     if (!utils::matchesAnyPattern(
         topic_name, outgoing_topic_compiled_patterns_))
     {
       continue;
     }
 
+    // Skip malformed graph entries that have no associated ROS type
     if (topic_types.empty()) {
       continue;
     }
@@ -454,16 +454,23 @@ void Ros2LiveKitBridge::onDataTrackPublished(
   livekit::Room &,
   const livekit::DataTrackPublishedEvent & event)
 {
+  // TODO: Handle these various error cases below when ROS diagnostics are implemented
   if (!event.track) {
+    RCLCPP_ERROR(this->get_logger(), "Received empty data track event from participant '%s'", event.track->publisherIdentity().c_str());
     return;
   }
 
   const auto & info = event.track->info();
   const auto & track_name = info.name;
+
+  // Check if the track name matches any of the incoming topic patterns
   if (!utils::matchesAnyPattern(
       utils::normalizeTrackTopicName(track_name),
       incoming_topic_compiled_patterns_))
   {
+    RCLCPP_DEBUG(this->get_logger(),
+        "Ignoring LiveKit data track '%s' from '%s' because it does not match any incoming topic patterns",
+        track_name.c_str(), event.track->publisherIdentity().c_str());
     return;
   }
 
@@ -477,12 +484,20 @@ void Ros2LiveKitBridge::onDataTrackPublished(
     return;
   }
 
-  const std::string ros_topic_name =
-    liveKitToRosTopicName(event.track->publisherIdentity(), track_name);
+  const auto ros_topic_name =
+    utils::liveKitToRosTopicName(event.track->publisherIdentity(), track_name);
+  if (!ros_topic_name) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Ignoring LiveKit data track '%s' from '%s' because ROS topic name "
+      "resolution failed",
+      track_name.c_str(), event.track->publisherIdentity().c_str());
+    return;
+  }
 
   std::shared_ptr<InboundDataTrackState> state;
   {
-    std::lock_guard<std::mutex> lock(inbound_data_track_mutex_);
+    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
     if (inbound_data_track_states_.count(info.sid) > 0) {
       return;
     }
@@ -491,10 +506,10 @@ void Ros2LiveKitBridge::onDataTrackPublished(
     state->sid = info.sid;
     state->track_name = track_name;
     state->publisher_identity = event.track->publisherIdentity();
-    state->ros_topic_name = ros_topic_name;
+    state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
     state->publisher = this->create_generic_publisher(
-      ros_topic_name, *topic_type, rclcpp::QoS(10));
+      *ros_topic_name, *topic_type, rclcpp::QoS(10));
 
     const auto subscribe_result = event.track->subscribe();
     if (!subscribe_result) {
@@ -510,7 +525,7 @@ void Ros2LiveKitBridge::onDataTrackPublished(
 
     state->stream = subscribe_result.value();
     inbound_data_track_states_[info.sid] = state;
-    inbound_ros_topic_names_.insert(ros_topic_name);
+    inbound_ros_topic_names_.insert(*ros_topic_name);
   }
 
   RCLCPP_INFO(
@@ -518,7 +533,7 @@ void Ros2LiveKitBridge::onDataTrackPublished(
     "Subscribed to LiveKit data track '%s' from '%s'; publishing ROS topic "
     "'%s' [%s]",
     track_name.c_str(), state->publisher_identity.c_str(),
-    ros_topic_name.c_str(), state->ros_topic_type.c_str());
+    ros_topic_name->c_str(), state->ros_topic_type.c_str());
 
   state->thread = std::thread(&Ros2LiveKitBridge::readInboundDataTrack, this, state);
 }
@@ -572,7 +587,7 @@ void Ros2LiveKitBridge::stopInboundDataTrack(const std::string & sid)
 {
   std::shared_ptr<InboundDataTrackState> state;
   {
-    std::lock_guard<std::mutex> lock(inbound_data_track_mutex_);
+    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
     const auto it = inbound_data_track_states_.find(sid);
     if (it == inbound_data_track_states_.end()) {
       return;
@@ -620,17 +635,6 @@ std::optional<std::string> Ros2LiveKitBridge::liveKitToRosTopicType(
       topic_it->second.front().c_str());
   }
   return topic_it->second.front();
-}
-
-std::string Ros2LiveKitBridge::liveKitToRosTopicName(
-  const std::string & participant_identity,
-  const std::string & track_name) const
-{
-  const auto participant_prefix =
-    utils::sanitizeRosNameToken(participant_identity);
-  const auto normalized_track_name =
-    utils::normalizeTrackTopicName(track_name);
-  return "/" + participant_prefix + normalized_track_name;
 }
 
 rclcpp::QoS

@@ -131,13 +131,6 @@ private:
     const std::string & track_name) const;
 
   /**
-   * @brief Build the ROS topic for a remote participant's data track.
-   */
-  std::string liveKitToRosTopicName(
-    const std::string & participant_identity,
-    const std::string & track_name) const;
-
-  /**
    * @brief Determine QoS for subscribing to a topic by aggregating all
    * publisher endpoints.
    *
@@ -223,7 +216,7 @@ private:
     std::shared_ptr<InboundDataTrackState> state);
   void stopInboundDataTrack(const std::string & sid);
 
-  std::mutex inbound_data_track_mutex_;
+  std::mutex inbound_data_track_states_mutex_;
   std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>>
   inbound_data_track_states_;
   std::unordered_set<std::string> inbound_ros_topic_names_;

@@ -1,0 +1,8 @@
+{
+  "clangd.path": "/usr/bin/clangd",
+  "clangd.arguments": [
+    "--background-index",
+    "--compile-commands-dir=build/ros2_livekit_bridge"
+  ],
+  "C_Cpp.intelliSenseEngine": "disabled"
+}

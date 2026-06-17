@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <string>
 
+#include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 
@@ -53,6 +54,20 @@ struct ServiceListOptions
   bool include_hidden_services{false};
 };
 
+/**
+ * @brief Arguments and formatting options for `ros2 interface show`.
+ */
+struct InterfaceShowOptions
+{
+  //! @brief Interface type identifier to show, such as `std_msgs/msg/String`.
+  std::string type;
+  //! @brief Show all comments, including nested interface comments.
+  bool all_comments{false};
+  //! @brief Hide comments and whitespace.
+  bool no_comments{false};
+};
+
+using Ros2InterfaceShow = ros2_livekit_bridge_msgs::srv::Ros2InterfaceShow;
 using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
 using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
 
@@ -71,6 +86,14 @@ TopicListOptions topicListOptionsFromRequest(
  */
 ServiceListOptions serviceListOptionsFromRequest(
   const Ros2ServiceList::Request & request);
+
+/**
+ * @brief Convert a ROS service request to local interface-show options.
+ * @param request ROS service request.
+ * @return Interface-show options from the request fields.
+ */
+InterfaceShowOptions interfaceShowOptionsFromRequest(
+  const Ros2InterfaceShow::Request & request);
 
 /**
  * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
@@ -93,6 +116,16 @@ std::string serviceListRequestToJson(
   std::uint8_t timeout_sec);
 
 /**
+ * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+ * @param request ROS service request.
+ * @param timeout_sec Effective timeout to include in the payload.
+ * @return JSON request payload.
+ */
+std::string interfaceShowRequestToJson(
+  const Ros2InterfaceShow::Request & request,
+  std::uint8_t timeout_sec);
+
+/**
  * @brief Parse topic-list options from a LiveKit RPC JSON request payload.
  * @param payload JSON request payload.
  * @return Topic-list options from the payload flags.
@@ -107,6 +140,14 @@ TopicListOptions topicListOptionsFromJson(const std::string & payload);
  * @throws nlohmann::json::exception when @p payload is malformed.
  */
 ServiceListOptions serviceListOptionsFromJson(const std::string & payload);
+
+/**
+ * @brief Parse interface-show options from a LiveKit RPC JSON request payload.
+ * @param payload JSON request payload.
+ * @return Interface-show options from the payload fields.
+ * @throws nlohmann::json::exception when @p payload is malformed.
+ */
+InterfaceShowOptions interfaceShowOptionsFromJson(const std::string & payload);
 
 /**
  * @brief Construct a ROS service response.
@@ -128,6 +169,18 @@ Ros2TopicList::Response makeTopicListResponse(
  * @return ROS service response.
  */
 Ros2ServiceList::Response makeServiceListResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output = {});
+
+/**
+ * @brief Construct a ROS service response.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return ROS service response.
+ */
+Ros2InterfaceShow::Response makeInterfaceShowResponse(
   bool success,
   const std::string & err_msg,
   const std::string & output = {});
@@ -157,6 +210,18 @@ std::string serviceListResponseToJson(
   const std::string & output);
 
 /**
+ * @brief Serialize an interface-show result as a LiveKit RPC JSON response.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return JSON response payload.
+ */
+std::string interfaceShowResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output);
+
+/**
  * @brief Parse a LiveKit RPC JSON response into a ROS service response.
  * @param payload JSON response payload.
  * @return ROS service response.
@@ -171,6 +236,15 @@ Ros2TopicList::Response topicListResponseFromJson(const std::string & payload);
  * @throws nlohmann::json::exception when @p payload is malformed or incomplete.
  */
 Ros2ServiceList::Response serviceListResponseFromJson(
+  const std::string & payload);
+
+/**
+ * @brief Parse a LiveKit RPC JSON response into a ROS service response.
+ * @param payload JSON response payload.
+ * @return ROS service response.
+ * @throws nlohmann::json::exception when @p payload is malformed or incomplete.
+ */
+Ros2InterfaceShow::Response interfaceShowResponseFromJson(
   const std::string & payload);
 
 }  // namespace ros2_livekit_bridge

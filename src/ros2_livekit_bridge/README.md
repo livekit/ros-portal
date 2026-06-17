@@ -174,6 +174,37 @@ The response contains `success`, `err_msg`, and `output`. Expected failures such
 as a missing participant, unsupported remote RPC method, or LiveKit RPC timeout
 are reported as `success: false` with details in `err_msg`.
 
+### Remote ROS2 interface display
+
+Each connected bridge also exposes a ROS service that can ask another bridge
+participant to show an interface definition available in its local ROS
+environment:
+
+```bash
+ros2 service call /ros2_livekit_bridge/ros2_interface_show \
+  ros2_livekit_bridge_msgs/srv/Ros2InterfaceShow \
+  "{participant_id: robot_b, type: std_msgs/msg/Header, all_comments: false, no_comments: false, timeout_sec: 10}"
+```
+
+The service request fields are:
+
+| Field | Description |
+|---|---|
+| `participant_id` | LiveKit identity of the remote bridge participant. |
+| `type` | Match the `ros2 interface show type` argument; interface identifier such as `std_msgs/msg/Header`, `std_srvs/srv/SetBool`, or `control_msgs/action/FollowJointTrajectory`. |
+| `all_comments` | Match `ros2 interface show --all-comments`; show comments for nested interface definitions as well as the top-level interface. |
+| `no_comments` | Match `ros2 interface show --no-comments`; remove comments and blank lines from top-level and nested interface definitions. Mutually exclusive with `all_comments`. |
+| `timeout_sec` | LiveKit RPC timeout in seconds. Use `0` for the default `10` seconds. |
+
+The service intentionally does not expose `--help`. The `type: "-"` stdin form
+from the interactive CLI cannot carry stdin over a ROS service request; callers
+should resolve the interface type before making the remote call.
+
+The response contains `success`, `err_msg`, and `output`. Expected failures such
+as a missing participant, unsupported remote RPC method, LiveKit RPC timeout, or
+unknown interface type are reported as `success: false` with details in
+`err_msg`.
+
 The service callback waits until the LiveKit RPC returns or times out. Keep
 `ros_threads` greater than `1` for normal bridge deployments so topic forwarding
 and timers can continue while a remote introspection request is pending; the

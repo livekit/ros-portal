@@ -27,6 +27,7 @@ endif()
 
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies(REQUIRED
+  ament_index_cpp
   geometry_msgs
   nav_msgs
   ros2_livekit_bridge_msgs

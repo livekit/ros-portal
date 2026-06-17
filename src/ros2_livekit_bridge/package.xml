@@ -25,6 +25,7 @@
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
   <depend>rclcpp</depend>
+  <depend>ament_index_cpp</depend>
   <depend>ros2_livekit_bridge_config</depend>
   <depend>ros2_livekit_bridge_msgs</depend>
   <depend>sensor_msgs</depend>

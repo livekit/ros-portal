@@ -37,6 +37,7 @@ namespace
 {
 
 using json = nlohmann::json;
+using Ros2InterfaceShow = Ros2CliManager::Ros2InterfaceShow;
 using Ros2ServiceList = Ros2CliManager::Ros2ServiceList;
 using Ros2TopicList = Ros2CliManager::Ros2TopicList;
 
@@ -63,6 +64,18 @@ ServiceListOptions makeServiceOptions(
   options.show_types = show_types;
   options.count_services = count_services;
   options.include_hidden_services = include_hidden_services;
+  return options;
+}
+
+InterfaceShowOptions makeInterfaceOptions(
+  std::string type = "std_msgs/msg/Header",
+  bool all_comments = false,
+  bool no_comments = false)
+{
+  InterfaceShowOptions options;
+  options.type = std::move(type);
+  options.all_comments = all_comments;
+  options.no_comments = no_comments;
   return options;
 }
 
@@ -188,6 +201,22 @@ protected:
     return request;
   }
 
+  Ros2InterfaceShow::Request makeInterfaceRequest(
+    std::string participant_id = "robot-b",
+    std::string type = "std_msgs/msg/Header",
+    std::uint8_t timeout_sec = 0,
+    bool all_comments = false,
+    bool no_comments = false)
+  {
+    Ros2InterfaceShow::Request request;
+    request.participant_id = std::move(participant_id);
+    request.type = std::move(type);
+    request.all_comments = all_comments;
+    request.no_comments = no_comments;
+    request.timeout_sec = timeout_sec;
+    return request;
+  }
+
   std::shared_ptr<rclcpp::Node> node;
   rclcpp::CallbackGroup::SharedPtr callback_group;
   std::shared_ptr<FakeRpcClient> rpc_client;
@@ -297,6 +326,59 @@ TEST(Ros2CliManagerFormattingTest, EmptyServiceListProducesEmptyOutput)
     "");
 }
 
+TEST(Ros2CliManagerFormattingTest, RendersInterfaceWithTopLevelComments)
+{
+  const auto output = Ros2CliManager::renderInterfaceDefinition(
+    makeInterfaceOptions());
+
+  EXPECT_NE(
+    output.find(
+      "# Standard metadata for higher-level stamped data types."),
+    std::string::npos);
+  EXPECT_NE(output.find("builtin_interfaces/Time stamp"), std::string::npos);
+  EXPECT_NE(output.find("\tint32 sec"), std::string::npos);
+  EXPECT_EQ(
+    output.find("# This message communicates ROS Time defined here:"),
+    std::string::npos);
+}
+
+TEST(Ros2CliManagerFormattingTest, RendersInterfaceWithAllComments)
+{
+  const auto output = Ros2CliManager::renderInterfaceDefinition(
+    makeInterfaceOptions("std_msgs/msg/Header", true));
+
+  EXPECT_NE(
+    output.find("# This message communicates ROS Time defined here:"),
+    std::string::npos);
+}
+
+TEST(Ros2CliManagerFormattingTest, RendersInterfaceWithoutCommentsOrWhitespace)
+{
+  const auto output = Ros2CliManager::renderInterfaceDefinition(
+    makeInterfaceOptions("std_msgs/msg/Header", false, true));
+
+  EXPECT_EQ(
+    output,
+    "builtin_interfaces/Time stamp\n"
+    "\tint32 sec\n"
+    "\tuint32 nanosec\n"
+    "string frame_id\n");
+}
+
+TEST(Ros2CliManagerFormattingTest, InterfaceShowRejectsInvalidArguments)
+{
+  EXPECT_THROW(
+    Ros2CliManager::renderInterfaceDefinition(makeInterfaceOptions("")),
+    std::runtime_error);
+  EXPECT_THROW(
+    Ros2CliManager::renderInterfaceDefinition(makeInterfaceOptions("-")),
+    std::runtime_error);
+  EXPECT_THROW(
+    Ros2CliManager::renderInterfaceDefinition(
+      makeInterfaceOptions("std_msgs/msg/Header", true, true)),
+    std::runtime_error);
+}
+
 TEST(Ros2CliManagerFormattingTest, DetectsHiddenTopicTokens)
 {
   EXPECT_FALSE(Ros2CliManager::isHiddenTopic("/visible/topic"));
@@ -335,6 +417,16 @@ TEST_F(Ros2CliManagerTest, EmptyParticipantFailsForServiceList)
   EXPECT_TRUE(response.output.empty());
 }
 
+TEST_F(Ros2CliManagerTest, EmptyParticipantFailsForInterfaceShow)
+{
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest(""));
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "participant_id must be non-empty");
+  EXPECT_TRUE(response.output.empty());
+}
+
 TEST_F(Ros2CliManagerTest, MissingParticipantFails)
 {
   rpc_client->has_participant = false;
@@ -352,6 +444,18 @@ TEST_F(Ros2CliManagerTest, MissingParticipantFailsForServiceList)
 
   const auto response =
     manager->callRemoteServiceList(makeServiceRequest("missing"));
+
+  EXPECT_FALSE(response.success);
+  EXPECT_NE(response.err_msg.find("missing"), std::string::npos);
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, MissingParticipantFailsForInterfaceShow)
+{
+  rpc_client->has_participant = false;
+
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest("missing"));
 
   EXPECT_FALSE(response.success);
   EXPECT_NE(response.err_msg.find("missing"), std::string::npos);
@@ -400,6 +504,29 @@ TEST_F(Ros2CliManagerTest, SuccessfulServiceListRpcMapsResponseAndDefaultTimeout
   EXPECT_EQ(payload.at("timeout_sec"), 10);
 }
 
+TEST_F(Ros2CliManagerTest, SuccessfulInterfaceShowRpcMapsResponseAndDefaultTimeout)
+{
+  rpc_client->response_json =
+    R"({"success":true,"err_msg":"","output":"string data\n"})";
+
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest());
+
+  EXPECT_TRUE(response.success);
+  EXPECT_EQ(response.err_msg, "");
+  EXPECT_EQ(response.output, "string data\n");
+  EXPECT_EQ(rpc_client->last_participant_id, "robot-b");
+  EXPECT_EQ(rpc_client->last_method, "ros2_interface_show");
+  EXPECT_EQ(rpc_client->last_timeout_sec, 10);
+
+  const auto payload = json::parse(rpc_client->last_payload);
+  EXPECT_EQ(payload.at("participant_id"), "robot-b");
+  EXPECT_EQ(payload.at("type"), "std_msgs/msg/Header");
+  EXPECT_EQ(payload.at("all_comments"), false);
+  EXPECT_EQ(payload.at("no_comments"), false);
+  EXPECT_EQ(payload.at("timeout_sec"), 10);
+}
+
 TEST_F(Ros2CliManagerTest, PositiveTimeoutPassesThrough)
 {
   const auto response = manager->callRemoteTopicList(
@@ -431,6 +558,34 @@ TEST_F(Ros2CliManagerTest, PositiveServiceListTimeoutPassesThrough)
   EXPECT_EQ(payload.at("timeout_sec"), 3);
 }
 
+TEST_F(Ros2CliManagerTest, PositiveInterfaceShowTimeoutPassesThrough)
+{
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest(
+      "robot-b", "std_msgs/msg/Header", 3, true, false));
+
+  EXPECT_TRUE(response.success);
+  EXPECT_EQ(rpc_client->last_timeout_sec, 3);
+
+  const auto payload = json::parse(rpc_client->last_payload);
+  EXPECT_EQ(payload.at("type"), "std_msgs/msg/Header");
+  EXPECT_EQ(payload.at("all_comments"), true);
+  EXPECT_EQ(payload.at("no_comments"), false);
+  EXPECT_EQ(payload.at("timeout_sec"), 3);
+}
+
+TEST_F(Ros2CliManagerTest, InterfaceShowMutuallyExclusiveCommentsFail)
+{
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest(
+      "robot-b", "std_msgs/msg/Header", 0, true, true));
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(
+    response.err_msg, "all_comments and no_comments are mutually exclusive");
+  EXPECT_TRUE(response.output.empty());
+}
+
 TEST_F(Ros2CliManagerTest, RemoteFailureResponsePassesThrough)
 {
   rpc_client->response_json =
@@ -449,6 +604,19 @@ TEST_F(Ros2CliManagerTest, ServiceListRemoteFailureResponsePassesThrough)
     R"({"success":false,"err_msg":"remote parse failed","output":""})";
 
   const auto response = manager->callRemoteServiceList(makeServiceRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "remote parse failed");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, InterfaceShowRemoteFailureResponsePassesThrough)
+{
+  rpc_client->response_json =
+    R"({"success":false,"err_msg":"remote parse failed","output":""})";
+
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest());
 
   EXPECT_FALSE(response.success);
   EXPECT_EQ(response.err_msg, "remote parse failed");
@@ -481,6 +649,20 @@ TEST_F(Ros2CliManagerTest, RpcErrorFailsServiceList)
   EXPECT_TRUE(response.output.empty());
 }
 
+TEST_F(Ros2CliManagerTest, RpcErrorFailsInterfaceShow)
+{
+  rpc_client->rpc_error = livekit::RpcError(
+    livekit::RpcError::ErrorCode::UNSUPPORTED_METHOD,
+    "unsupported method");
+
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "unsupported method");
+  EXPECT_TRUE(response.output.empty());
+}
+
 TEST_F(Ros2CliManagerTest, RuntimeErrorFailsService)
 {
   rpc_client->runtime_error = std::runtime_error("send failed");
@@ -497,6 +679,18 @@ TEST_F(Ros2CliManagerTest, RuntimeErrorFailsServiceList)
   rpc_client->runtime_error = std::runtime_error("send failed");
 
   const auto response = manager->callRemoteServiceList(makeServiceRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "send failed");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, RuntimeErrorFailsInterfaceShow)
+{
+  rpc_client->runtime_error = std::runtime_error("send failed");
+
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest());
 
   EXPECT_FALSE(response.success);
   EXPECT_EQ(response.err_msg, "send failed");
@@ -525,6 +719,19 @@ TEST_F(Ros2CliManagerTest, MalformedServiceListRpcResponseFailsService)
   EXPECT_TRUE(response.output.empty());
 }
 
+TEST_F(Ros2CliManagerTest, MalformedInterfaceShowRpcResponseFailsService)
+{
+  rpc_client->response_json = "not-json";
+
+  const auto response = manager->callRemoteInterfaceShow(
+    makeInterfaceRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(
+    response.err_msg, "remote ros2_interface_show returned malformed JSON");
+  EXPECT_TRUE(response.output.empty());
+}
+
 TEST_F(Ros2CliManagerTest, MalformedInboundRpcReturnsFailureJson)
 {
   const auto response_json = manager->handleTopicListRpc("not-json");
@@ -549,6 +756,31 @@ TEST_F(Ros2CliManagerTest, MalformedInboundServiceListRpcReturnsFailureJson)
   EXPECT_EQ(response.at("output"), "");
 }
 
+TEST_F(Ros2CliManagerTest, MalformedInboundInterfaceShowRpcReturnsFailureJson)
+{
+  const auto response_json = manager->handleInterfaceShowRpc("not-json");
+  const auto response = json::parse(response_json);
+
+  EXPECT_EQ(response.at("success"), false);
+  EXPECT_NE(
+    response.at("err_msg").get<std::string>().find("parse error"),
+    std::string::npos);
+  EXPECT_EQ(response.at("output"), "");
+}
+
+TEST_F(Ros2CliManagerTest, InvalidInboundInterfaceShowRpcReturnsFailureJson)
+{
+  const auto response_json = manager->handleInterfaceShowRpc(
+    R"({"type":"missing_pkg/msg/Thing"})");
+  const auto response = json::parse(response_json);
+
+  EXPECT_EQ(response.at("success"), false);
+  EXPECT_NE(
+    response.at("err_msg").get<std::string>().find("missing_pkg"),
+    std::string::npos);
+  EXPECT_EQ(response.at("output"), "");
+}
+
 TEST_F(Ros2CliManagerTest, DestructorUnregistersRpcMethods)
 {
   manager.reset();
@@ -564,6 +796,12 @@ TEST_F(Ros2CliManagerTest, DestructorUnregistersRpcMethods)
       rpc_client->unregistered_methods.begin(),
       rpc_client->unregistered_methods.end(),
       "ros2_service_list"),
+    rpc_client->unregistered_methods.end());
+  EXPECT_NE(
+    std::find(
+      rpc_client->unregistered_methods.begin(),
+      rpc_client->unregistered_methods.end(),
+      "ros2_interface_show"),
     rpc_client->unregistered_methods.end());
 }
 

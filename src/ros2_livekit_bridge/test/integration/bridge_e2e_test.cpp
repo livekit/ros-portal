@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <rclcpp/rclcpp.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -45,6 +46,7 @@ namespace
 
 using namespace std::chrono_literals;
 using ros2_livekit_bridge::utils::resolveEnvironmentCredential;
+using Ros2InterfaceShow = ros2_livekit_bridge_msgs::srv::Ros2InterfaceShow;
 using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
 using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
 using ros2_livekit_bridge::Ros2LiveKitBridge;
@@ -78,6 +80,13 @@ struct ServiceListServiceOptions
   bool show_types{false};
   bool count_services{false};
   bool include_hidden_services{false};
+};
+
+struct InterfaceShowServiceOptions
+{
+  std::uint8_t timeout_sec{5};
+  bool all_comments{false};
+  bool no_comments{false};
 };
 
 bool contains(const std::string & value, const std::string & needle)
@@ -468,6 +477,41 @@ protected:
     return future.get();
   }
 
+  Ros2InterfaceShow::Response::SharedPtr callInterfaceShowService(
+    const std::shared_ptr<rclcpp::Node> & node,
+    const std::string & participant_id,
+    const std::string & interface_type,
+    const InterfaceShowServiceOptions & options = {})
+  {
+    auto client = node->create_client<Ros2InterfaceShow>(
+      "/ros2_livekit_bridge/ros2_interface_show");
+
+    if (!waitFor(
+        [&]() {
+          return client->wait_for_service(100ms);
+        },
+        kGraphTimeout))
+    {
+      ADD_FAILURE() << "ros2_interface_show service was not available";
+      return nullptr;
+    }
+
+    auto request = std::make_shared<Ros2InterfaceShow::Request>();
+    request->participant_id = participant_id;
+    request->type = interface_type;
+    request->all_comments = options.all_comments;
+    request->no_comments = options.no_comments;
+    request->timeout_sec = options.timeout_sec;
+
+    auto future = client->async_send_request(request);
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << "ros2_interface_show service timed out";
+      return nullptr;
+    }
+
+    return future.get();
+  }
+
   std::shared_ptr<rclcpp::Node> robotANode() const {return robot_a_node_;}
   std::shared_ptr<rclcpp::Node> robotBNode() const {return robot_b_node_;}
   const std::string & identityA() const {return identity_a_;}
@@ -837,6 +881,64 @@ TEST_F(
 
   const auto missing_response =
     callServiceListService(robotANode(), "missing-livekit-participant");
+  ASSERT_NE(missing_response, nullptr);
+  EXPECT_FALSE(missing_response->success);
+  EXPECT_TRUE(contains(missing_response->err_msg, "missing-livekit-participant"));
+}
+
+TEST_F(
+  BridgeTestE2E,
+  ShowsRemoteRosInterfacesOverRpc)
+{
+  initializeRuntime(kBidirectionalTopic);
+
+  constexpr const char * kInterfaceType = "std_msgs/msg/Header";
+  const auto response =
+    callInterfaceShowService(robotANode(), identityB(), kInterfaceType);
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->success) << response->err_msg;
+  EXPECT_TRUE(
+    contains(
+      response->output,
+      "# Standard metadata for higher-level stamped data types."));
+  EXPECT_TRUE(contains(response->output, "builtin_interfaces/Time stamp"));
+  EXPECT_TRUE(contains(response->output, "\tint32 sec"));
+  EXPECT_FALSE(
+    contains(
+      response->output,
+      "# This message communicates ROS Time defined here:"));
+
+  InterfaceShowServiceOptions all_comments_options;
+  all_comments_options.all_comments = true;
+  const auto all_comments_response = callInterfaceShowService(
+    robotANode(), identityB(), kInterfaceType, all_comments_options);
+  ASSERT_NE(all_comments_response, nullptr);
+  EXPECT_TRUE(all_comments_response->success) <<
+    all_comments_response->err_msg;
+  EXPECT_TRUE(
+    contains(
+      all_comments_response->output,
+      "# This message communicates ROS Time defined here:"));
+
+  InterfaceShowServiceOptions no_comments_options;
+  no_comments_options.no_comments = true;
+  const auto no_comments_response = callInterfaceShowService(
+    robotANode(), identityB(), kInterfaceType, no_comments_options);
+  ASSERT_NE(no_comments_response, nullptr);
+  EXPECT_TRUE(no_comments_response->success) << no_comments_response->err_msg;
+  EXPECT_TRUE(contains(no_comments_response->output, "builtin_interfaces/Time stamp"));
+  EXPECT_TRUE(contains(no_comments_response->output, "\tuint32 nanosec"));
+  EXPECT_FALSE(contains(no_comments_response->output, "#"));
+  EXPECT_FALSE(contains(no_comments_response->output, "\n\n"));
+
+  const auto invalid_type_response = callInterfaceShowService(
+    robotANode(), identityB(), "missing_pkg/msg/Thing");
+  ASSERT_NE(invalid_type_response, nullptr);
+  EXPECT_FALSE(invalid_type_response->success);
+  EXPECT_TRUE(contains(invalid_type_response->err_msg, "missing_pkg"));
+
+  const auto missing_response = callInterfaceShowService(
+    robotANode(), "missing-livekit-participant", kInterfaceType);
   ASSERT_NE(missing_response, nullptr);
   EXPECT_FALSE(missing_response->success);
   EXPECT_TRUE(contains(missing_response->err_msg, "missing-livekit-participant"));

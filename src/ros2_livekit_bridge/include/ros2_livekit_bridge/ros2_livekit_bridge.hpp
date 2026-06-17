@@ -219,8 +219,6 @@ private:
   std::unique_ptr<livekit::Room> room_;
   //! @brief ROS CLI service/RPC manager for remote graph introspection.
   std::unique_ptr<Ros2CliManager> ros2_cli_manager_;
-  //! @brief Tracks whether livekit::initialize() has been called.
-  bool sdk_initialized_{false};
 
   //! @brief Per-image-topic state: lazily created video source/track pair plus
   //! conversion buffer. Declared after room_ so it is destroyed first (tracks

@@ -22,6 +22,11 @@
 #include <string>
 #include <vector>
 
+#include <rclcpp/create_service.hpp>
+#include <rclcpp/node_interfaces/node_base_interface.hpp>
+#include <rclcpp/node_interfaces/node_graph_interface.hpp>
+#include <rclcpp/node_interfaces/node_logging_interface.hpp>
+#include <rclcpp/node_interfaces/node_services_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
@@ -109,11 +114,48 @@ public:
   };
 
   /**
+   * @brief ROS node interfaces required for service hosting and graph queries.
+   *
+   * Holding these interfaces instead of a full @c rclcpp::Node keeps the manager
+   * decoupled from node lifetime and makes the dependency surface explicit.
+   */
+  struct NodeInterfaces
+  {
+    //! @brief Node identity and shared RCL handle used when creating services.
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base;
+    //! @brief Service registry used when creating ROS services.
+    rclcpp::node_interfaces::NodeServicesInterface::SharedPtr node_services;
+    //! @brief Graph APIs used for topic and service discovery.
+    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph;
+    //! @brief Logger used for manager diagnostics.
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
+  };
+
+  /**
    * @brief Construct the manager, create the ROS service, and register RPC.
+   * @param node_interfaces Node interfaces for service hosting, graph queries,
+   * and logs.
+   * @param callback_group Callback group used by the ROS service.
+   * @param transport RPC callbacks supplied by the bridge.
+   * @throws std::invalid_argument when any interface or @p transport callback is
+   * unset.
+   * @throws std::exception when RPC registration fails.
+   */
+  Ros2CliManager(
+    NodeInterfaces node_interfaces,
+    rclcpp::CallbackGroup::SharedPtr callback_group,
+    RpcTransport transport);
+
+  /**
+   * @brief Construct the manager from a bridge node.
+   *
+   * Delegates to the @ref NodeInterfaces constructor after extracting the
+   * required node interfaces from @p node.
    * @param node Bridge node used for service hosting, graph queries, and logs.
    * @param callback_group Callback group used by the ROS service.
    * @param transport RPC callbacks supplied by the bridge.
-   * @throws std::invalid_argument when any @p transport callback is unset.
+   * @throws std::invalid_argument when any extracted interface or @p transport
+   * callback is unset.
    * @throws std::exception when RPC registration fails.
    */
   Ros2CliManager(
@@ -233,7 +275,7 @@ private:
     const std::shared_ptr<Ros2InterfaceShow::Request> request,
     std::shared_ptr<Ros2InterfaceShow::Response> response) const;
 
-  rclcpp::Node & node_;
+  NodeInterfaces node_interfaces_;
   RpcTransport transport_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;

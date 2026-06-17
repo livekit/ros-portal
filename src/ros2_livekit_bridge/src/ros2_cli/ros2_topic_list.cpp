@@ -85,10 +85,12 @@ formatTopicList(
 
 /// @copydoc collectTopicInfo()
 std::vector<Ros2CliManager::TopicInfo>
-collectTopicInfo(rclcpp::Node & node, const TopicListOptions & options)
+collectTopicInfo(
+  const rclcpp::node_interfaces::NodeGraphInterface & graph,
+  const TopicListOptions & options)
 {
   std::vector<Ros2CliManager::TopicInfo> topics;
-  const auto topic_names_and_types = node.get_topic_names_and_types();
+  const auto topic_names_and_types = graph.get_topic_names_and_types();
   topics.reserve(topic_names_and_types.size());
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
@@ -100,8 +102,8 @@ collectTopicInfo(rclcpp::Node & node, const TopicListOptions & options)
     topic_info.name = topic_name;
     topic_info.types = topic_types;
     if (options.verbose) {
-      topic_info.publisher_count = node.count_publishers(topic_name);
-      topic_info.subscriber_count = node.count_subscribers(topic_name);
+      topic_info.publisher_count = graph.count_publishers(topic_name);
+      topic_info.subscriber_count = graph.count_subscribers(topic_name);
     }
     topics.push_back(std::move(topic_info));
   }

@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include <rclcpp/node_interfaces/node_graph_interface.hpp>
+
 #include "ros2_livekit_bridge/ros2_cli/ros_json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 
@@ -46,11 +48,13 @@ formatServiceList(
 
 /**
  * @brief Query the ROS graph for visible service metadata.
- * @param node Node whose graph APIs are used for discovery.
+ * @param graph Node graph interface used for discovery.
  * @param options Discovery options, including hidden-service filtering.
  * @return Service metadata sorted by service name.
  */
 std::vector<Ros2CliManager::ServiceInfo>
-collectServiceInfo(rclcpp::Node & node, const ServiceListOptions & options);
+collectServiceInfo(
+  const rclcpp::node_interfaces::NodeGraphInterface & graph,
+  const ServiceListOptions & options);
 
 } // namespace ros2_livekit_bridge::ros2_cli

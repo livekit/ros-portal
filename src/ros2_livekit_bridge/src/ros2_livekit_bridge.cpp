@@ -150,9 +150,11 @@ bool Ros2LiveKitBridge::initialize()
                 token_source.c_str());
     RCLCPP_INFO(this->get_logger(), "Connecting to %s ...",
                 livekit_url.c_str());
-    livekit::initialize(livekit::LogLevel::Info);
-    sdk_initialized_ = true;
-
+    // The LiveKit SDK lifecycle (livekit::initialize()/shutdown()) is owned by
+    // the process entry point (the node main() or the test harness), not by
+    // this node: livekit::initialize() must be the first LiveKit API called in
+    // the process and is process-global, so a node that owns it would clash
+    // with any sibling node in the same process. We assume it has already run.
     room_ = std::make_unique<livekit::Room>();
     // Warning: avoid doing ROS operations in delegate callbacks
     room_->setDelegate(this);
@@ -179,8 +181,6 @@ bool Ros2LiveKitBridge::initialize()
         std::move(transport));
     } else {
       room_.reset();
-      livekit::shutdown();
-      sdk_initialized_ = false;
       RCLCPP_FATAL(this->get_logger(), "Failed to connect to LiveKit room.");
       return false;
     }
@@ -194,7 +194,9 @@ bool Ros2LiveKitBridge::initialize()
       std::bind(&Ros2LiveKitBridge::pollTopics, this),
       reentrant_callback_group_);
 
-  initialized_ = true && sdk_initialized_;
+  // The bridge is considered initialized only once it is connected to a room
+  // (room_ is left null when credentials are absent or connection failed).
+  initialized_ = (room_ != nullptr);
   return initialized_;
 }
 
@@ -220,10 +222,8 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge()
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
     room_.reset();
   }
-  if (sdk_initialized_) {
-    livekit::shutdown();
-    sdk_initialized_ = false;
-  }
+  // Note: livekit::shutdown() is intentionally NOT called here — the SDK
+  // lifecycle is owned by the process entry point (see initialize()).
 }
 
 void Ros2LiveKitBridge::pollTopics()

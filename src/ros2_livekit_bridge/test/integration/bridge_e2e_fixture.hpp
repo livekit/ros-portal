@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <livekit/livekit.h>
+
 #include <rclcpp/rclcpp.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
@@ -145,6 +147,19 @@ inline std::string testLiveKitRoom()
 class BridgeTestE2E : public ::testing::Test
 {
 protected:
+  // The LiveKit SDK lifecycle is process-global, so it is owned by the test
+  // harness rather than by individual bridges: initialize once before any
+  // bridge in the suite is constructed, and shut down once after the last test.
+  static void SetUpTestSuite()
+  {
+    livekit::initialize(livekit::LogLevel::Info);
+  }
+
+  static void TearDownTestSuite()
+  {
+    livekit::shutdown();
+  }
+
   void SetUp() override
   {
     std::string source;

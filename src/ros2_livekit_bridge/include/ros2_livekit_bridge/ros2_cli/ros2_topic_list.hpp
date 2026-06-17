@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include <rclcpp/node_interfaces/node_graph_interface.hpp>
+
 #include "ros2_livekit_bridge/ros2_cli/ros_json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 
@@ -47,12 +49,14 @@ formatTopicList(
 
 /**
  * @brief Query the ROS graph for visible topic metadata.
- * @param node Node whose graph APIs are used for discovery.
+ * @param graph Node graph interface used for discovery.
  * @param options Discovery options, including hidden-topic filtering and
  * verbose publisher/subscriber counts.
  * @return Topic metadata sorted by topic name.
  */
 std::vector<Ros2CliManager::TopicInfo>
-collectTopicInfo(rclcpp::Node & node, const TopicListOptions & options);
+collectTopicInfo(
+  const rclcpp::node_interfaces::NodeGraphInterface & graph,
+  const TopicListOptions & options);
 
 } // namespace ros2_livekit_bridge::ros2_cli

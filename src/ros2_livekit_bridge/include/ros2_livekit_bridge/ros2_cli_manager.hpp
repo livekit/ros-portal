@@ -27,124 +27,8 @@
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 
-namespace livekit
-{
-class Room;
-} // namespace livekit
-
 namespace ros2_livekit_bridge
 {
-/**
- * @brief Minimal RPC transport used by Ros2CliManager.
- *
- * This interface isolates LiveKit-specific calls from ROS CLI request handling
- * so the manager can be unit-tested without connecting to a LiveKit room.
- */
-class Ros2CliRpcClient {
-public:
-  /**
-   * @brief Handler for inbound LiveKit RPC payloads.
-   *
-   * The input and return value are JSON strings. The concrete transport wraps
-   * this callback in the SDK-specific RPC handler signature.
-   */
-  using RpcHandler = std::function<std::string(const std::string &)>;
-
-  virtual ~Ros2CliRpcClient() = default;
-
-  /**
-   * @brief Check whether a remote participant identity is currently present.
-   * @param participant_id LiveKit participant identity to look up.
-   * @return True when the participant exists in the connected room.
-   */
-  virtual bool hasParticipant(const std::string & participant_id) const = 0;
-
-  /**
-   * @brief Invoke a LiveKit RPC method on a remote participant.
-   * @param participant_id LiveKit participant identity to call.
-   * @param method LiveKit RPC method name.
-   * @param payload JSON request payload.
-   * @param timeout_sec Response timeout in seconds.
-   * @return JSON response payload returned by the remote handler.
-   * @throws livekit::RpcError for LiveKit RPC failures.
-   * @throws std::exception for unexpected transport failures.
-   */
-  virtual std::string performRpc(
-    const std::string & participant_id,
-    const std::string & method,
-    const std::string & payload,
-    std::uint8_t timeout_sec) = 0;
-
-  /**
-   * @brief Register a local handler for a LiveKit RPC method.
-   * @param method LiveKit RPC method name.
-   * @param handler Callback that receives a JSON request and returns JSON.
-   */
-  virtual void registerRpcMethod(
-    const std::string & method,
-    RpcHandler handler) = 0;
-
-  /**
-   * @brief Remove a previously registered local LiveKit RPC method.
-   * @param method LiveKit RPC method name to unregister.
-   */
-  virtual void unregisterRpcMethod(const std::string & method) = 0;
-};
-
-/**
- * @brief LiveKit SDK-backed implementation of Ros2CliRpcClient.
- *
- * The adapter uses the room's local participant to register and perform RPC
- * calls, and uses the room's remote participant map for preflight existence
- * checks.
- */
-class LiveKitRos2CliRpcClient final : public Ros2CliRpcClient {
-public:
-  /**
-   * @brief Construct an adapter around an already connected LiveKit room.
-   * @param room LiveKit room owned by Ros2LiveKitBridge.
-   */
-  explicit LiveKitRos2CliRpcClient(livekit::Room & room);
-
-  /**
-   * @brief Check whether a remote participant identity is currently present.
-   * @param participant_id LiveKit participant identity to look up.
-   * @return True when the participant exists in the room.
-   */
-  bool hasParticipant(const std::string & participant_id) const override;
-
-  /**
-   * @brief Invoke a LiveKit RPC method through the local participant.
-   * @param participant_id LiveKit participant identity to call.
-   * @param method LiveKit RPC method name.
-   * @param payload JSON request payload.
-   * @param timeout_sec Response timeout in seconds.
-   * @return JSON response payload returned by the remote participant.
-   */
-  std::string performRpc(
-    const std::string & participant_id,
-    const std::string & method, const std::string & payload,
-    std::uint8_t timeout_sec) override;
-
-  /**
-   * @brief Register a local LiveKit RPC handler on the local participant.
-   * @param method LiveKit RPC method name.
-   * @param handler Callback that receives and returns JSON strings.
-   */
-  void registerRpcMethod(
-    const std::string & method,
-    RpcHandler handler) override;
-
-  /**
-   * @brief Unregister a local LiveKit RPC handler from the local participant.
-   * @param method LiveKit RPC method name.
-   */
-  void unregisterRpcMethod(const std::string & method) override;
-
-private:
-  livekit::Room & room_;
-};
-
 /**
  * @brief Hosts ROS CLI-like introspection services over ROS and LiveKit RPC.
  *
@@ -161,6 +45,42 @@ public:
   using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
   //! @brief Generated ROS service type for remote `ros2 service list` requests.
   using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
+
+  /**
+   * @brief Handler for inbound RPC payloads.
+   *
+   * The input and return value are JSON strings. The owning transport wraps
+   * this callback in the LiveKit SDK-specific RPC handler signature.
+   */
+  using RpcHandler = std::function<std::string(const std::string &)>;
+
+  /**
+   * @brief Set of RPC callbacks the bridge supplies to the manager.
+   *
+   * This struct isolates LiveKit-specific calls from ROS CLI request handling
+   * so the manager owns no reference to a `livekit::Room` and can be
+   * unit-tested without connecting to a LiveKit room. The bridge populates each
+   * callback from its own room and passes the struct in at construction.
+   */
+  struct RpcTransport
+  {
+    //! @brief Return true when a remote participant identity is present.
+    std::function<bool(const std::string & participant_id)> has_participant;
+
+    //! @brief Invoke an RPC method on a remote participant and return its JSON
+    //! response. Throws std::exception (including translated LiveKit RPC
+    //! errors) on failure.
+    std::function<std::string(
+        const std::string & participant_id, const std::string & method,
+        const std::string & payload, std::uint8_t timeout_sec)> perform_rpc;
+
+    //! @brief Register a local handler for an RPC method.
+    std::function<void(
+        const std::string & method, RpcHandler handler)> register_rpc_method;
+
+    //! @brief Remove a previously registered local RPC method.
+    std::function<void(const std::string & method)> unregister_rpc_method;
+  };
 
   /**
    * @brief Snapshot of one ROS topic used to format `ros2 topic list` output.
@@ -192,14 +112,14 @@ public:
    * @brief Construct the manager, create the ROS service, and register RPC.
    * @param node Bridge node used for service hosting, graph queries, and logs.
    * @param callback_group Callback group used by the ROS service.
-   * @param rpc_client LiveKit RPC transport abstraction.
-   * @throws std::invalid_argument when @p rpc_client is null.
+   * @param transport RPC callbacks supplied by the bridge.
+   * @throws std::invalid_argument when any @p transport callback is unset.
    * @throws std::exception when RPC registration fails.
    */
   Ros2CliManager(
     rclcpp::Node & node,
     rclcpp::CallbackGroup::SharedPtr callback_group,
-    std::shared_ptr<Ros2CliRpcClient> rpc_client);
+    RpcTransport transport);
 
   /**
    * @brief Unregister the LiveKit RPC method before destruction.
@@ -314,7 +234,7 @@ private:
     std::shared_ptr<Ros2InterfaceShow::Response> response) const;
 
   rclcpp::Node & node_;
-  std::shared_ptr<Ros2CliRpcClient> rpc_client_;
+  RpcTransport transport_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;

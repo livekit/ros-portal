@@ -22,10 +22,16 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <optional>
+#include <stdexcept>
+#include <utility>
 
 #include <livekit/data_track_frame.h>
 #include <livekit/data_track_stream.h>
 #include <livekit/livekit.h>
+#include <livekit/local_participant.h>
+#include <livekit/room.h>
+#include <livekit/rpc_error.h>
 
 namespace ros2_livekit_bridge
 {
@@ -157,10 +163,20 @@ bool Ros2LiveKitBridge::initialize()
                   "Connected to LiveKit room '%s' as identity '%s'",
                   room_name_.c_str(),
                   local ? local->identity().c_str() : "(unknown)");
+      Ros2CliManager::RpcTransport transport{
+        [this](const std::string & id) { return hasParticipant(id); },
+        [this](const std::string & id, const std::string & method,
+               const std::string & payload, std::uint8_t timeout_sec) {
+          return rpcPerform(id, method, payload, timeout_sec);
+        },
+        [this](const std::string & method, Ros2CliManager::RpcHandler handler) {
+          rpcRegisterMethod(method, std::move(handler));
+        },
+        [this](const std::string & method) { rpcUnregisterMethod(method); }};
       ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
         *this,
         reentrant_callback_group_,
-        std::make_shared<LiveKitRos2CliRpcClient>(*room_));
+        std::move(transport));
     } else {
       room_.reset();
       livekit::shutdown();
@@ -755,6 +771,65 @@ Ros2LiveKitBridge::determineQoS(const std::string & topic_name) const
       publisher_info.size());
 
   return qos;
+}
+
+bool Ros2LiveKitBridge::hasParticipant(
+  const std::string & participant_id) const
+{
+  if (!room_) {
+    return false;
+  }
+  return static_cast<bool>(room_->remoteParticipant(participant_id).lock());
+}
+
+std::string Ros2LiveKitBridge::rpcPerform(
+  const std::string & participant_id, const std::string & method,
+  const std::string & payload, std::uint8_t timeout_sec)
+{
+  const auto local_participant =
+    room_ ? room_->localParticipant().lock() : nullptr;
+  if (!local_participant) {
+    throw std::runtime_error("LiveKit local participant is unavailable");
+  }
+
+  try {
+    return local_participant->performRpc(participant_id, method, payload,
+                                         static_cast<double>(timeout_sec));
+  } catch (const livekit::RpcError & error) {
+    // Translate LiveKit-specific errors into a plain std::exception so the
+    // CLI manager stays free of any LiveKit dependency. The numeric code is
+    // logged here, the LiveKit-aware layer, before it is discarded.
+    RCLCPP_ERROR(
+      this->get_logger(),
+      "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
+      method.c_str(), participant_id.c_str(), error.code(),
+      error.message().c_str());
+    throw std::runtime_error(error.message());
+  }
+}
+
+void Ros2LiveKitBridge::rpcRegisterMethod(
+  const std::string & method, Ros2CliManager::RpcHandler handler)
+{
+  const auto local_participant =
+    room_ ? room_->localParticipant().lock() : nullptr;
+  if (!local_participant) {
+    throw std::runtime_error("LiveKit local participant is unavailable");
+  }
+
+  local_participant->registerRpcMethod(
+    method,
+    [handler = std::move(handler)](const livekit::RpcInvocationData & data)
+      -> std::optional<std::string> {return handler(data.payload);});
+}
+
+void Ros2LiveKitBridge::rpcUnregisterMethod(const std::string & method)
+{
+  const auto local_participant =
+    room_ ? room_->localParticipant().lock() : nullptr;
+  if (local_participant) {
+    local_participant->unregisterRpcMethod(method);
+  }
 }
 
 } // namespace ros2_livekit_bridge

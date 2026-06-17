@@ -41,11 +41,10 @@
 #include <rclcpp/serialized_message.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
+#include "ros2_livekit_bridge/ros2_cli_manager.hpp"
+
 namespace ros2_livekit_bridge
 {
-
-//! @brief Owns ROS CLI-style services and matching LiveKit RPC handlers.
-class Ros2CliManager;
 
 /**
  * @brief The main bridge node for the ROS2 LiveKit bridge.
@@ -146,6 +145,43 @@ private:
    * TRANSIENT_LOCAL.
    */
   rclcpp::QoS determineQoS(const std::string & topic_name) const;
+
+  /**
+   * @brief Check whether a remote participant identity is present in the room.
+   * @param participant_id LiveKit participant identity to look up.
+   * @return True when the participant exists in the connected room.
+   */
+  bool hasParticipant(const std::string & participant_id) const;
+
+  /**
+   * @brief Invoke a LiveKit RPC method through the room's local participant.
+   * @param participant_id LiveKit participant identity to call.
+   * @param method LiveKit RPC method name.
+   * @param payload JSON request payload.
+   * @param timeout_sec Response timeout in seconds.
+   * @return JSON response payload returned by the remote participant.
+   * @throws std::runtime_error on transport failure or translated LiveKit RPC
+   * errors so callers need not depend on the LiveKit SDK.
+   */
+  std::string rpcPerform(
+    const std::string & participant_id, const std::string & method,
+    const std::string & payload, std::uint8_t timeout_sec);
+
+  /**
+   * @brief Register a local LiveKit RPC handler on the room's local
+   * participant, adapting the JSON-string handler to the SDK signature.
+   * @param method LiveKit RPC method name.
+   * @param handler Callback that receives and returns JSON strings.
+   */
+  void rpcRegisterMethod(
+    const std::string & method, Ros2CliManager::RpcHandler handler);
+
+  /**
+   * @brief Unregister a local LiveKit RPC handler from the room's local
+   * participant. No-op when the local participant is unavailable.
+   * @param method LiveKit RPC method name.
+   */
+  void rpcUnregisterMethod(const std::string & method);
 
   //! @brief The name of the room
   std::string room_name_;

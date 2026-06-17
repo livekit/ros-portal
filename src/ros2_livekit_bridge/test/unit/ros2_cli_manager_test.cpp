@@ -41,7 +41,11 @@ using Ros2InterfaceShow = Ros2CliManager::Ros2InterfaceShow;
 using Ros2ServiceList = Ros2CliManager::Ros2ServiceList;
 using Ros2TopicList = Ros2CliManager::Ros2TopicList;
 
-class FakeRpcClient : public Ros2CliRpcClient
+// Records the calls the manager makes and produces an Ros2CliManager::
+// RpcTransport whose callbacks drive this recorder. This replaces the former
+// Ros2CliRpcClient subclass now that the manager takes a struct of callbacks
+// instead of a polymorphic interface.
+class FakeRpcClient
 {
 public:
   bool has_participant{true};
@@ -53,46 +57,50 @@ public:
   std::string last_method;
   std::string last_payload;
   std::uint8_t last_timeout_sec{0};
-  RpcHandler registered_handler;
+  Ros2CliManager::RpcHandler registered_handler;
   std::vector<std::string> registered_methods;
   std::vector<std::string> unregistered_methods;
 
-  bool hasParticipant(const std::string &) const override
+  // Safe to capture `this`: the fixture owns this recorder past the manager's
+  // lifetime (the manager is reset before rpc_client in TearDown).
+  Ros2CliManager::RpcTransport makeTransport()
   {
-    return has_participant;
-  }
+    Ros2CliManager::RpcTransport transport;
 
-  std::string performRpc(
-    const std::string & participant_id,
-    const std::string & method,
-    const std::string & payload,
-    std::uint8_t timeout_sec) override
-  {
-    last_participant_id = participant_id;
-    last_method = method;
-    last_payload = payload;
-    last_timeout_sec = timeout_sec;
+    transport.has_participant =
+      [this](const std::string &) { return has_participant; };
 
-    if (rpc_error) {
-      throw *rpc_error;
-    }
-    if (runtime_error) {
-      throw *runtime_error;
-    }
-    return response_json;
-  }
+    transport.perform_rpc =
+      [this](const std::string & participant_id, const std::string & method,
+        const std::string & payload, std::uint8_t timeout_sec) {
+        last_participant_id = participant_id;
+        last_method = method;
+        last_payload = payload;
+        last_timeout_sec = timeout_sec;
 
-  void registerRpcMethod(
-    const std::string & method,
-    RpcHandler handler) override
-  {
-    registered_methods.push_back(method);
-    registered_handler = std::move(handler);
-  }
+        // The bridge translates a LiveKit RpcError into a std::runtime_error
+        // before it reaches the manager; mirror that boundary here.
+        if (rpc_error) {
+          throw std::runtime_error(rpc_error->message());
+        }
+        if (runtime_error) {
+          throw *runtime_error;
+        }
+        return response_json;
+      };
 
-  void unregisterRpcMethod(const std::string & method) override
-  {
-    unregistered_methods.push_back(method);
+    transport.register_rpc_method =
+      [this](const std::string & method, Ros2CliManager::RpcHandler handler) {
+        registered_methods.push_back(method);
+        registered_handler = std::move(handler);
+      };
+
+    transport.unregister_rpc_method =
+      [this](const std::string & method) {
+        unregistered_methods.push_back(method);
+      };
+
+    return transport;
   }
 };
 
@@ -118,7 +126,7 @@ protected:
       node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     rpc_client = std::make_shared<FakeRpcClient>();
     manager = std::make_unique<Ros2CliManager>(
-      *node, callback_group, rpc_client);
+      *node, callback_group, rpc_client->makeTransport());
   }
 
   void TearDown() override

@@ -21,69 +21,22 @@
 #include "ros2_livekit_bridge/ros2_cli/ros_json_converters.hpp"
 
 #include <exception>
-#include <optional>
 #include <stdexcept>
 #include <utility>
 
-#include <livekit/local_participant.h>
-#include <livekit/room.h>
-#include <livekit/rpc_error.h>
-
 namespace ros2_livekit_bridge
 {
-LiveKitRos2CliRpcClient::LiveKitRos2CliRpcClient(livekit::Room & room)
-: room_(room) {}
-
-bool LiveKitRos2CliRpcClient::hasParticipant(
-  const std::string & participant_id) const
-{
-  return static_cast<bool>(room_.remoteParticipant(participant_id).lock());
-}
-
-std::string LiveKitRos2CliRpcClient::performRpc(
-  const std::string & participant_id, const std::string & method,
-  const std::string & payload, std::uint8_t timeout_sec)
-{
-  const auto local_participant = room_.localParticipant().lock();
-  if (!local_participant) {
-    throw std::runtime_error("LiveKit local participant is unavailable");
-  }
-
-  return local_participant->performRpc(participant_id, method, payload,
-                                       static_cast<double>(timeout_sec));
-}
-
-void LiveKitRos2CliRpcClient::registerRpcMethod(
-  const std::string & method,
-  RpcHandler handler)
-{
-  const auto local_participant = room_.localParticipant().lock();
-  if (!local_participant) {
-    throw std::runtime_error("LiveKit local participant is unavailable");
-  }
-
-  local_participant->registerRpcMethod(
-      method,
-    [handler = std::move(handler)](const livekit::RpcInvocationData & data)
-          -> std::optional<std::string> {return handler(data.payload);});
-}
-
-void LiveKitRos2CliRpcClient::unregisterRpcMethod(const std::string & method)
-{
-  const auto local_participant = room_.localParticipant().lock();
-  if (local_participant) {
-    local_participant->unregisterRpcMethod(method);
-  }
-}
-
 Ros2CliManager::Ros2CliManager(
   rclcpp::Node & node,
   rclcpp::CallbackGroup::SharedPtr callback_group,
-  std::shared_ptr<Ros2CliRpcClient> rpc_client)
-: node_(node), rpc_client_(std::move(rpc_client))
+  RpcTransport transport)
+: node_(node), transport_(std::move(transport))
 {
-  if (!rpc_client_) {
-    throw std::invalid_argument("Ros2CliManager requires an RPC client");
+  if (!transport_.has_participant || !transport_.perform_rpc ||
+      !transport_.register_rpc_method || !transport_.unregister_rpc_method)
+  {
+    throw std::invalid_argument(
+            "Ros2CliManager requires a fully populated RpcTransport");
   }
 
   topic_list_service_ = node_.create_service<Ros2TopicList>(
@@ -110,17 +63,17 @@ Ros2CliManager::Ros2CliManager(
       },
       rclcpp::ServicesQoS(), callback_group);
 
-  rpc_client_->registerRpcMethod(kTopicListRpcMethod,
+  transport_.register_rpc_method(kTopicListRpcMethod,
     [this](const std::string & payload) {
       return handleTopicListRpc(payload);
                                  });
 
-  rpc_client_->registerRpcMethod(kServiceListRpcMethod,
+  transport_.register_rpc_method(kServiceListRpcMethod,
     [this](const std::string & payload) {
       return handleServiceListRpc(payload);
                                  });
 
-  rpc_client_->registerRpcMethod(kInterfaceShowRpcMethod,
+  transport_.register_rpc_method(kInterfaceShowRpcMethod,
     [this](const std::string & payload) {
       return handleInterfaceShowRpc(payload);
                                  });
@@ -135,10 +88,10 @@ Ros2CliManager::Ros2CliManager(
 
 Ros2CliManager::~Ros2CliManager()
 {
-  if (rpc_client_) {
-    rpc_client_->unregisterRpcMethod(kTopicListRpcMethod);
-    rpc_client_->unregisterRpcMethod(kServiceListRpcMethod);
-    rpc_client_->unregisterRpcMethod(kInterfaceShowRpcMethod);
+  if (transport_.unregister_rpc_method) {
+    transport_.unregister_rpc_method(kTopicListRpcMethod);
+    transport_.unregister_rpc_method(kServiceListRpcMethod);
+    transport_.unregister_rpc_method(kInterfaceShowRpcMethod);
   }
 }
 
@@ -170,7 +123,7 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
     return makeTopicListResponse(false, "participant_id must be non-empty");
   }
 
-  if (!rpc_client_->hasParticipant(request.participant_id)) {
+  if (!transport_.has_participant(request.participant_id)) {
     return makeTopicListResponse(false, "LiveKit participant '" +
                                             request.participant_id +
                                             "' was not found");
@@ -181,15 +134,8 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
 
   std::string rpc_response;
   try {
-    rpc_response = rpc_client_->performRpc(
+    rpc_response = transport_.perform_rpc(
         request.participant_id, kTopicListRpcMethod, payload, timeout_sec);
-  } catch (const livekit::RpcError & error) {
-    RCLCPP_ERROR(
-        node_.get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
-        kTopicListRpcMethod, request.participant_id.c_str(), error.code(),
-        error.message().c_str());
-    return makeTopicListResponse(false, error.message());
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_.get_logger(), "LiveKit RPC '%s' to participant '%s' failed: %s",
@@ -216,7 +162,7 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
     return makeServiceListResponse(false, "participant_id must be non-empty");
   }
 
-  if (!rpc_client_->hasParticipant(request.participant_id)) {
+  if (!transport_.has_participant(request.participant_id)) {
     return makeServiceListResponse(false, "LiveKit participant '" +
                                               request.participant_id +
                                               "' was not found");
@@ -227,15 +173,8 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
 
   std::string rpc_response;
   try {
-    rpc_response = rpc_client_->performRpc(
+    rpc_response = transport_.perform_rpc(
         request.participant_id, kServiceListRpcMethod, payload, timeout_sec);
-  } catch (const livekit::RpcError & error) {
-    RCLCPP_ERROR(
-        node_.get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
-        kServiceListRpcMethod, request.participant_id.c_str(), error.code(),
-        error.message().c_str());
-    return makeServiceListResponse(false, error.message());
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_.get_logger(), "LiveKit RPC '%s' to participant '%s' failed: %s",
@@ -268,7 +207,7 @@ Ros2CliManager::callRemoteInterfaceShow(
         false, "all_comments and no_comments are mutually exclusive");
   }
 
-  if (!rpc_client_->hasParticipant(request.participant_id)) {
+  if (!transport_.has_participant(request.participant_id)) {
     return makeInterfaceShowResponse(false, "LiveKit participant '" +
                                                 request.participant_id +
                                                 "' was not found");
@@ -279,15 +218,8 @@ Ros2CliManager::callRemoteInterfaceShow(
 
   std::string rpc_response;
   try {
-    rpc_response = rpc_client_->performRpc(
+    rpc_response = transport_.perform_rpc(
         request.participant_id, kInterfaceShowRpcMethod, payload, timeout_sec);
-  } catch (const livekit::RpcError & error) {
-    RCLCPP_ERROR(
-        node_.get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
-        kInterfaceShowRpcMethod, request.participant_id.c_str(), error.code(),
-        error.message().c_str());
-    return makeInterfaceShowResponse(false, error.message());
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_.get_logger(), "LiveKit RPC '%s' to participant '%s' failed: %s",

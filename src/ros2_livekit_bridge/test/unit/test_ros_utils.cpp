@@ -118,7 +118,7 @@ TEST(RosUtilsTest, ResolveEnvironmentCredentialTreatsEmptyValueAsNone) {
   EXPECT_EQ(source, "none");
 }
 
-TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {
+TEST(RosUtilsTest, CompileTopicRoutesIncludesOutAndBidirectionalOutgoing) {
   namespace bridge_config = ::ros2_livekit_bridge_config;
 
   bridge_config::BridgeConfig config;
@@ -137,11 +137,16 @@ TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {
   bidirectional_topic.direction = bridge_config::Direction::Bidirectional;
   config.topics.push_back(bidirectional_topic);
 
-  const auto patterns = outgoingTopicPatterns(config);
+  const auto route_table = compileTopicRoutes(config);
 
-  EXPECT_EQ(
-    patterns,
-    (std::vector<std::string>{"/camera/image_raw", "/odom"}));
+  ASSERT_EQ(route_table.outgoing.size(), 2u);
+  EXPECT_EQ(route_table.outgoing[0].pattern, "/camera/image_raw");
+  EXPECT_EQ(route_table.outgoing[1].pattern, "/odom");
+  EXPECT_TRUE(matchesTopicRoutes("/camera/image_raw", route_table.outgoing));
+  EXPECT_TRUE(matchesTopicRoutes("/odom", route_table.outgoing));
+  EXPECT_FALSE(matchesTopicRoutes("/teleop_cmd", route_table.outgoing));
+  EXPECT_EQ(route_table.outgoing_by_participant.size(), 1u);
+  EXPECT_EQ(route_table.outgoing_by_participant.at("").size(), 2u);
 }
 
 TEST(RosUtilsTest, NormalizeTrackTopicNameAddsLeadingSlash) {
@@ -209,7 +214,7 @@ TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForRootTrackName) {
   EXPECT_FALSE(ros_topic_name.has_value());
 }
 
-TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
+TEST(RosUtilsTest, CompileTopicRoutesIncludesInAndBidirectionalIncoming) {
   namespace bridge_config = ::ros2_livekit_bridge_config;
 
   bridge_config::BridgeConfig config;
@@ -228,11 +233,32 @@ TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
   bidirectional_topic.direction = bridge_config::Direction::Bidirectional;
   config.topics.push_back(bidirectional_topic);
 
-  const auto patterns = incomingTopicPatterns(config);
+  const auto route_table = compileTopicRoutes(config);
 
-  EXPECT_EQ(
-    patterns,
-    (std::vector<std::string>{"/teleop_cmd", "/odom"}));
+  ASSERT_EQ(route_table.incoming.size(), 2u);
+  EXPECT_EQ(route_table.incoming[0].pattern, "/teleop_cmd");
+  EXPECT_EQ(route_table.incoming[1].pattern, "/odom");
+  EXPECT_TRUE(matchesTopicRoutes("/teleop_cmd", route_table.incoming));
+  EXPECT_TRUE(matchesTopicRoutes("/odom", route_table.incoming));
+  EXPECT_FALSE(matchesTopicRoutes("/camera/image_raw", route_table.incoming));
+  EXPECT_EQ(route_table.incoming_by_participant.size(), 1u);
+  EXPECT_EQ(route_table.incoming_by_participant.at("").size(), 2u);
+}
+
+TEST(RosUtilsTest, CompileTopicRoutesReportsInvalidPatterns) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+  bridge_config::TopicConfig invalid_topic;
+  invalid_topic.topic = "[";
+  invalid_topic.direction = bridge_config::Direction::Out;
+  config.topics.push_back(invalid_topic);
+
+  const auto route_table = compileTopicRoutes(config);
+
+  ASSERT_EQ(route_table.errors.size(), 1u);
+  EXPECT_EQ(route_table.errors.front().pattern, "[");
+  EXPECT_TRUE(route_table.outgoing.empty());
 }
 } // namespace
 } // namespace ros2_livekit_bridge::utils

@@ -176,10 +176,12 @@ endif()
 # Bridge library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
+  src/managers/data_track_topic_manager.cpp
   src/ros2_livekit_bridge.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
+  src/utils/track_transport_selector.cpp
 )
 target_link_libraries(ros2_livekit_bridge_lib
   "${LIVEKIT_CORE_TARGET}"

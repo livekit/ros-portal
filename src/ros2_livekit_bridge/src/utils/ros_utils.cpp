@@ -141,37 +141,30 @@ parseBridgeConfig(const std::filesystem::path & path, rclcpp::Logger logger)
   }
 }
 
-std::vector<std::string>
-outgoingTopicPatterns(const bridge_config::BridgeConfig & config)
+TopicRouteTable compileTopicRoutes(const bridge_config::BridgeConfig & config)
 {
-  std::vector<std::string> patterns;
-  patterns.reserve(config.topics.size());
+  TopicRouteTable route_table;
 
   for (const auto & topic_config : config.topics) {
-    if (topic_config.direction == bridge_config::Direction::Out ||
-      topic_config.direction == bridge_config::Direction::Bidirectional)
-    {
-      patterns.push_back(topic_config.topic);
-    }
+    const bool include_outgoing =
+      topic_config.direction == bridge_config::Direction::Out ||
+      topic_config.direction == bridge_config::Direction::Bidirectional;
+    const bool include_incoming =
+      topic_config.direction == bridge_config::Direction::In ||
+      topic_config.direction == bridge_config::Direction::Bidirectional;
+
+    // TODO: populate participants from config once topic routes support it.
+    const std::vector<std::string> participants;
+
+    appendTopicRoute(
+      route_table,
+      topic_config.topic,
+      participants,
+      include_outgoing,
+      include_incoming);
   }
 
-  return patterns;
+  return route_table;
 }
 
-std::vector<std::string>
-incomingTopicPatterns(const bridge_config::BridgeConfig & config)
-{
-  std::vector<std::string> patterns;
-  patterns.reserve(config.topics.size());
-
-  for (const auto & topic_config : config.topics) {
-    if (topic_config.direction == bridge_config::Direction::In ||
-      topic_config.direction == bridge_config::Direction::Bidirectional)
-    {
-      patterns.push_back(topic_config.topic);
-    }
-  }
-
-  return patterns;
-}
 } // namespace ros2_livekit_bridge::utils

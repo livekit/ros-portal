@@ -16,29 +16,22 @@
 
 #pragma once
 
-#include <cstdint>
-#include <atomic>
+#include "ros2_livekit_bridge/managers/data_track_topic_manager.hpp"
+#include "ros2_livekit_bridge/utils/topic_matcher.hpp"
+
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <regex>
 #include <string>
-#include <thread>
-#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
-#include <livekit/local_data_track.h>
 #include <livekit/local_participant.h>
 #include <livekit/local_video_track.h>
-#include <livekit/remote_data_track.h>
 #include <livekit/room.h>
 #include <livekit/room_delegate.h>
 #include <livekit/video_source.h>
-#include <rclcpp/generic_publisher.hpp>
-#include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/serialized_message.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
 namespace ros2_livekit_bridge
@@ -97,20 +90,6 @@ private:
   void createImageSubscriber(const std::string & topic_name);
 
   /**
-   * @brief Create a generic subscriber that forwards raw CDR-serialized bytes
-   * over a LiveKit data track.
-   *
-   * Uses rclcpp::GenericSubscription so no compile-time message type
-   * knowledge is required; the @p topic_type string (resolved from the ROS
-   * graph by pollTopics()) is passed through to rosidl's runtime typesupport
-   * loader. A local LiveKit data track is created lazily on the first
-   * received message.
-   */
-  void createDataSubscriber(
-    const std::string & topic_name,
-    const std::string & topic_type);
-
-  /**
    * @brief Handle remote LiveKit data tracks and republish them into ROS.
    */
   void onDataTrackPublished(
@@ -142,18 +121,14 @@ private:
    */
   rclcpp::QoS determineQoS(const std::string & topic_name) const;
 
+  void initializeDataTrackManager();
+
   //! @brief The name of the room
   std::string room_name_;
   //! @brief The period for polling the topics
   int topic_polling_period_ms_;
-  //! @brief Topic patterns allowed from ROS to LiveKit.
-  std::vector<std::string> outgoing_topic_patterns_;
-  //! @brief Compiled ROS->LiveKit allow patterns.
-  std::vector<std::regex> outgoing_topic_compiled_patterns_;
-  //! @brief Topic patterns allowed from LiveKit to ROS.
-  std::vector<std::string> incoming_topic_patterns_;
-  //! @brief Compiled LiveKit->ROS allow patterns.
-  std::vector<std::regex> incoming_topic_compiled_patterns_;
+  //! @brief Compiled topic routes from bridge config (ROS↔LiveKit).
+  utils::TopicRouteTable topic_routes_;
 
   //! @brief The minimum QoS depth
   size_t min_qos_depth_;
@@ -170,7 +145,7 @@ private:
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics
   rclcpp::TimerBase::SharedPtr poll_timer_;
-  //! @brief The subscriptions for the topics (generic and typed)
+  //! @brief The subscriptions for video topics (typed)
   std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr>
   subscriptions_;
 
@@ -190,36 +165,7 @@ private:
   };
   std::unordered_map<std::string, ImageTopicState> image_topic_states_;
 
-  //! @brief Per-data-topic state: lazily created data track. Declared after
-  //! room_ so it is destroyed first (tracks released before the room
-  //! disconnects).
-  struct DataTopicState
-  {
-    std::shared_ptr<livekit::LocalDataTrack> track;
-  };
-  std::unordered_map<std::string, DataTopicState> data_topic_states_;
-
-  //! @brief Per-inbound-data-track state for LiveKit-to-ROS forwarding.
-  struct InboundDataTrackState
-  {
-    std::string sid;
-    std::string track_name;
-    std::string publisher_identity;
-    std::string ros_topic_name;
-    std::string ros_topic_type;
-    rclcpp::GenericPublisher::SharedPtr publisher;
-    std::shared_ptr<livekit::DataTrackStream> stream;
-    std::thread thread;
-    std::atomic_bool stop{false};
-  };
-  void readInboundDataTrack(
-    std::shared_ptr<InboundDataTrackState> state);
-  void stopInboundDataTrack(const std::string & sid);
-
-  std::mutex inbound_data_track_states_mutex_;
-  std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>>
-  inbound_data_track_states_;
-  std::unordered_set<std::string> inbound_ros_topic_names_;
+  std::unique_ptr<managers::DataTrackTopicManager> data_track_manager_;
 };
 
 } // namespace ros2_livekit_bridge

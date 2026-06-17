@@ -54,12 +54,7 @@ void logPatternCompileErrors(
 std::optional<ros2_livekit_bridge_config::BridgeConfig>
 parseBridgeConfig(const std::filesystem::path & path, rclcpp::Logger logger);
 
-std::vector<std::string>
-outgoingTopicPatterns(
-  const ros2_livekit_bridge_config::BridgeConfig & config);
-
-std::vector<std::string>
-incomingTopicPatterns(
+TopicRouteTable compileTopicRoutes(
   const ros2_livekit_bridge_config::BridgeConfig & config);
 } // namespace ros2_livekit_bridge::utils
 

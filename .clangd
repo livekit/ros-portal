@@ -1,2 +1,4 @@
 CompileFlags:
   CompilationDatabase: build/ros2_livekit_bridge
+Index:
+  Background: Build

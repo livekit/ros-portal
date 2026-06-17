@@ -41,6 +41,10 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
    can be pushed into a LiveKit video track; all other topics use a **generic
    subscription** (`rclcpp::GenericSubscription`) and are forwarded as raw
    CDR-serialized bytes over a LiveKit data track.
+5. **Subscribes to allowed remote LiveKit data tracks** and republishes their
+   raw CDR payloads into ROS with the remote participant identity prepended to
+   the topic name. For example, participant `robot_b` publishing data track
+   `/odom/global` is exposed locally as ROS topic `/robot_b/odom/global`.
 
 ### Message-type handling
 
@@ -53,7 +57,12 @@ The data-track payload is the unmodified CDR byte stream produced by the
 publisher. Consumers need the matching `.msg` definition (or any IDL/CDR-aware
 deserializer) to decode it.
 
-```
+For LiveKit-to-ROS data tracks, the track name does not currently include ROS
+message type metadata. The bridge resolves inbound message type using local ROS
+graph lookup for the same topic name before creating the
+`rclcpp::GenericPublisher`. TODO: Add section on how mismatched types are handled once schema metadata is ready.
+
+```text
 ┌───────────────────────────────────────────────────────────────────────┐
 │                        Ros2LiveKitBridge Node                         │
 │                                                                       │
@@ -95,6 +104,32 @@ Bridge settings are loaded from `config/ros2_livekit_bridge.yaml` using the
 schema-driven `ros2_livekit_bridge_config` parser. Launch files pass this path
 to the node with the `config_path` ROS parameter. See the
 [configuration guide](../../docs/configuration.md) for the supported schema.
+
+For topic routing, the config uses a single `topics` list where each entry
+contains:
+
+- `topic`: an ECMAScript regex matched with `std::regex_match` against full topic names.
+- `direction`: one of `in`, `out`, or `bidirectional`.
+
+Direction handling:
+
+- `out`: allow ROS -> LiveKit forwarding.
+- `in`: allow LiveKit -> ROS forwarding.
+- `bidirectional`: `in` and `out` forwarding/functionality
+
+### LiveKit-to-ROS topic names
+
+Inbound data tracks are published under a participant namespace:
+
+```text
+participant identity: robot_b
+LiveKit data track:   /odom/global
+ROS topic:            /robot_b/odom/global
+```
+
+Participant identities are converted to ROS-safe topic tokens by replacing
+characters outside `[A-Za-z0-9_]` with `_`. Use ROS-compatible LiveKit identities
+if the exact namespace matters.
 
 ## QoS Determination
 
@@ -160,6 +195,37 @@ When doing local development or testing, the Python launch file automatically se
 source ros/install/setup.bash
 ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
 ```
+
+## Integration Testing
+
+The bridge E2E integration test uses a local LiveKit server and two
+participant tokens. If credentials are missing, the test fails fast with a
+clear assertion message.
+
+```bash
+# From the workspace root, with a local LiveKit server available.
+source .token_helpers/set_test_tokens.bash
+
+colcon build --packages-select ros2_livekit_bridge
+GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests
+```
+
+Or via colcon:
+
+```bash
+source .token_helpers/set_test_tokens.bash
+colcon test --packages-select ros2_livekit_bridge \
+  --event-handlers console_direct+ \
+  --ctest-args -R ros2_livekit_bridge_integration_tests -V
+colcon test-result --verbose
+```
+
+The helper defaults to local development credentials (`devkey` / `secret`) and
+the room `ros_bridge_participant_id_test`. It uses
+`ws://host.docker.internal:7880` by default to match the devcontainer launch
+setup. Override `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
+`LIVEKIT_ROOM`, or the `LIVEKIT_IDENTITY_A/B` values before sourcing the script
+if your server uses a different setup.
 
 ```bash
 # launch with gdb

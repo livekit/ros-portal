@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 
 struct PatternCompileError
@@ -38,6 +38,6 @@ bool matchesAnyPattern(
   const std::string & value,
   const std::vector<std::regex> & patterns);
 
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__TOPIC_MATCHER_HPP_

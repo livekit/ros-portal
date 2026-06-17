@@ -57,6 +57,9 @@ if(BUILD_TESTING)
   endif()
 
   if(TARGET ros2_livekit_bridge_integration_tests)
+    target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/common"
+    )
     target_link_libraries(ros2_livekit_bridge_integration_tests
       ros2_livekit_bridge_lib
     )

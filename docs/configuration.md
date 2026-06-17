@@ -59,8 +59,9 @@ Service direction does not accept `bidirectional`.
 | `video_options` | map | no | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
-`direction: "bidirectional"`. Topic patterns are ECMAScript regular expressions
-matched against the full topic name.
+`direction: "bidirectional"`. Incoming topics are those with `direction: "in"`
+or `direction: "bidirectional"`. Topic patterns are ECMAScript regular
+expressions matched against the full topic name.
 
 ## Video Options
 

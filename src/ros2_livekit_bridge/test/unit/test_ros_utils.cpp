@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 namespace
 {
@@ -144,5 +144,105 @@ TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {
     (std::vector<std::string>{"/camera/image_raw", "/odom"}));
 }
 
+TEST(RosUtilsTest, NormalizeTrackTopicNameAddsLeadingSlash) {
+  const auto normalized = normalizeTrackTopicName("camera/image");
+  ASSERT_TRUE(normalized.has_value());
+  EXPECT_EQ(*normalized, "/camera/image");
+}
+
+TEST(RosUtilsTest, NormalizeTrackTopicNamePreservesExistingLeadingSlash) {
+  const auto normalized = normalizeTrackTopicName("/camera/image");
+  ASSERT_TRUE(normalized.has_value());
+  EXPECT_EQ(*normalized, "/camera/image");
+}
+
+TEST(RosUtilsTest, NormalizeTrackTopicNameReturnsEmptyForEmptyInput) {
+  EXPECT_FALSE(normalizeTrackTopicName("").has_value());
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenKeepsValidCharacters) {
+  const auto sanitized = sanitizeRosNameToken("bridge_test_a");
+  ASSERT_TRUE(sanitized.has_value());
+  EXPECT_EQ(*sanitized, "bridge_test_a");
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenReplacesInvalidCharacters) {
+  const auto sanitized = sanitizeRosNameToken("bridge-test.a");
+  ASSERT_TRUE(sanitized.has_value());
+  EXPECT_EQ(*sanitized, "bridge_test_a");
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenReturnsEmptyForEmptyInput) {
+  EXPECT_FALSE(sanitizeRosNameToken("").has_value());
+}
+
+TEST(RosUtilsTest, SanitizeRosNameTokenPrefixesLeadingDigit) {
+  const auto sanitized = sanitizeRosNameToken("1robot");
+  ASSERT_TRUE(sanitized.has_value());
+  EXPECT_EQ(*sanitized, "_1robot");
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameBuildsParticipantPrefixedTopic) {
+  const auto ros_topic_name =
+    liveKitToRosTopicName("bridge-test-a", "bridge/out");
+
+  ASSERT_TRUE(ros_topic_name.has_value());
+  EXPECT_EQ(*ros_topic_name, "/bridge_test_a/bridge/out");
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNamePreservesLeadingSlashInTrackName) {
+  const auto ros_topic_name =
+    liveKitToRosTopicName("bridge-test-a", "/bridge/out");
+
+  ASSERT_TRUE(ros_topic_name.has_value());
+  EXPECT_EQ(*ros_topic_name, "/bridge_test_a/bridge/out");
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyIdentity) {
+  const auto ros_topic_name =
+    liveKitToRosTopicName("", "/bridge/out");
+
+  EXPECT_FALSE(ros_topic_name.has_value());
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyTrackName) {
+  const auto ros_topic_name =
+    liveKitToRosTopicName("bridge-test-a", "");
+
+  EXPECT_FALSE(ros_topic_name.has_value());
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForRootTrackName) {
+  const auto ros_topic_name =
+    liveKitToRosTopicName("bridge-test-a", "/");
+
+  EXPECT_FALSE(ros_topic_name.has_value());
+}
+
+TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+  bridge_config::TopicConfig out_topic;
+  out_topic.topic = "/camera/image_raw";
+  out_topic.direction = bridge_config::Direction::Out;
+  config.topics.push_back(out_topic);
+
+  bridge_config::TopicConfig in_topic;
+  in_topic.topic = "/teleop_cmd";
+  in_topic.direction = bridge_config::Direction::In;
+  config.topics.push_back(in_topic);
+
+  bridge_config::TopicConfig bidirectional_topic;
+  bidirectional_topic.topic = "/odom";
+  bidirectional_topic.direction = bridge_config::Direction::Bidirectional;
+  config.topics.push_back(bidirectional_topic);
+
+  const auto patterns = incomingTopicPatterns(config);
+
+  EXPECT_EQ(
+    patterns,
+    (std::vector<std::string>{"/teleop_cmd", "/odom"}));
+}
 } // namespace
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils

@@ -22,7 +22,7 @@ ENV USER=root
 ENV WS=/${WS_ROS}
 WORKDIR ${WS}
 
-RUN apt update && apt install -y \
+RUN apt-get update && apt-get install -y \
     python3-jinja2 \
     python3-pip \
     python3-opencv \

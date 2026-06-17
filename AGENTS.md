@@ -10,6 +10,23 @@ with existing package structure.
 - Keep ROS dependencies simple and explicit. Avoid adding broad dependency
   surfaces when a narrower message or utility package is enough.
 
+## Testing And Verification
+
+- Treat behavior changes as test-impacting changes. If functionality changes,
+ add or update tests in the nearest existing test target (unit first, then
+ integration/end-to-end as needed).
+- When tests already exist for the affected area, run them after making
+ functional changes. Do not skip existing relevant tests.
+- Prefer targeted test commands during iteration, then run the package-level
+ test suite before finalizing:
+  - `colcon test --packages-select ros2_livekit_bridge --ctest-args -R ros2_livekit_bridge_unit_tests`
+  - `colcon test --packages-select ros2_livekit_bridge --ctest-args -R ros2_livekit_bridge_integration_tests`
+  - `colcon test-result --verbose`
+- If an integration test requires external services or credentials, keep the
+ test deterministic and document/emit the exact environment assumptions.
+- If tests cannot be run in the current environment, explicitly state what was
+ not run and why, and provide the exact command(s) to run.
+
 ## Architecture
 
 - Design library code around ROS2-facing interfaces, but keep the library

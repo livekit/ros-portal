@@ -16,7 +16,7 @@
 
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 
 std::vector<std::regex> compileRegexPatterns(
@@ -51,4 +51,4 @@ bool matchesAnyPattern(
   return false;
 }
 
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils

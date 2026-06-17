@@ -18,7 +18,7 @@
 
 #include <cstring>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 
 bool convertToRgba(
@@ -105,4 +105,4 @@ bool convertToRgba(
   return false;
 }
 
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils

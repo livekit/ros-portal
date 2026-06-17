@@ -23,7 +23,7 @@
 #include <utility>
 #include <vector>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 namespace
 {
@@ -117,4 +117,4 @@ TEST(ImageConversionTest, ReturnsFalseForUnsupportedEncoding) {
 }
 
 } // namespace
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils

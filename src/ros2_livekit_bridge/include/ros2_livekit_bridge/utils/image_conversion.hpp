@@ -22,13 +22,13 @@
 
 #include <sensor_msgs/msg/image.hpp>
 
-namespace livekit::ros_bridge::utils
+namespace ros2_livekit_bridge::utils
 {
 
 bool convertToRgba(
   const sensor_msgs::msg::Image & image,
   std::vector<std::uint8_t> & out);
 
-} // namespace livekit::ros_bridge::utils
+} // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__IMAGE_CONVERSION_HPP_

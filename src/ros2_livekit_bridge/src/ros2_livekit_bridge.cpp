@@ -161,7 +161,8 @@ bool Ros2LiveKitBridge::initialize()
     }
   }
 
-  RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
+  RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms",
+      topic_polling_period_ms_);
 
   poll_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(topic_polling_period_ms_),
@@ -456,16 +457,25 @@ void Ros2LiveKitBridge::onDataTrackPublished(
 {
   // TODO: Handle these various error cases below when ROS diagnostics are implemented
   if (!event.track) {
-    RCLCPP_ERROR(this->get_logger(), "Received empty data track event from participant '%s'", event.track->publisherIdentity().c_str());
+    RCLCPP_ERROR(this->get_logger(), "Received empty data track event from participant '%s'",
+        event.track->publisherIdentity().c_str());
     return;
   }
 
   const auto & info = event.track->info();
   const auto & track_name = info.name;
+  const auto normalized_track_name = utils::normalizeTrackTopicName(track_name);
+  if (!normalized_track_name.has_value()) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Ignoring LiveKit data track from '%s' because the track name is empty",
+      event.track->publisherIdentity().c_str());
+    return;
+  }
 
   // Check if the track name matches any of the incoming topic patterns
   if (!utils::matchesAnyPattern(
-      utils::normalizeTrackTopicName(track_name),
+      *normalized_track_name,
       incoming_topic_compiled_patterns_))
   {
     RCLCPP_DEBUG(this->get_logger(),
@@ -555,7 +565,14 @@ void Ros2LiveKitBridge::readInboundDataTrack(
 
     if (!frame.payload.empty()) {
       std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
+    } else {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Received empty payload from LiveKit data track '%s' from '%s'",
+        state->track_name.c_str(), state->publisher_identity.c_str());
+      return;
     }
+
     rcl_msg.buffer_length = frame.payload.size();
 
     try {
@@ -617,11 +634,14 @@ void Ros2LiveKitBridge::stopInboundDataTrack(const std::string & sid)
 std::optional<std::string> Ros2LiveKitBridge::liveKitToRosTopicType(
   const std::string & track_name) const
 {
-  const std::string normalized_track_name =
+  const auto normalized_track_name =
     utils::normalizeTrackTopicName(track_name);
+  if (!normalized_track_name.has_value()) {
+    return std::nullopt;
+  }
   // Infer inbound type from local ROS graph only.
   const auto topics = this->get_topic_names_and_types();
-  const auto topic_it = topics.find(normalized_track_name);
+  const auto topic_it = topics.find(*normalized_track_name);
   if (topic_it == topics.end() || topic_it->second.empty()) {
     return std::nullopt;
   }
@@ -631,7 +651,7 @@ std::optional<std::string> Ros2LiveKitBridge::liveKitToRosTopicType(
       this->get_logger(),
       "Inbound track '%s' matched topic '%s' with multiple ROS types; using "
       "first discovered type '%s'.",
-      track_name.c_str(), normalized_track_name.c_str(),
+      track_name.c_str(), normalized_track_name->c_str(),
       topic_it->second.front().c_str());
   }
   return topic_it->second.front();

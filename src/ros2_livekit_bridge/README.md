@@ -60,7 +60,7 @@ deserializer) to decode it.
 For LiveKit-to-ROS data tracks, the track name does not currently include ROS
 message type metadata. The bridge resolves inbound message type using local ROS
 graph lookup for the same topic name before creating the
-`rclcpp::GenericPublisher`.
+`rclcpp::GenericPublisher`. TODO: Add section on how mismatched types are handled once schema metadata is ready.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────┐

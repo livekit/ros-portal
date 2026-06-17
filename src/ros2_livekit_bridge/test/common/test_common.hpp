@@ -76,11 +76,15 @@ inline std::string escapedRegex(const std::string & value)
   return std::regex_replace(value, special_chars, R"(\$&)");
 }
 
-inline std::string expectedInboundTopicName(
+inline std::optional<std::string> expectedInboundTopicName(
   const std::string & participant_identity,
   const std::string & source_topic)
 {
-  return "/" + utils::sanitizeRosNameToken(participant_identity) + source_topic;
+  const auto sanitized_identity = utils::sanitizeRosNameToken(participant_identity);
+  if (!sanitized_identity.has_value()) {
+    return std::nullopt;
+  }
+  return "/" + *sanitized_identity + source_topic;
 }
 
 inline std::optional<std::string> findParticipantPrefixedTopic(

@@ -65,10 +65,10 @@ std::string resolveEnvironmentCredential(
   return {};
 }
 
-std::string normalizeTrackTopicName(const std::string & track_name)
+std::optional<std::string> normalizeTrackTopicName(const std::string & track_name)
 {
   if (track_name.empty()) {
-    return "/";
+    return std::nullopt;
   }
   if (track_name.front() == '/') {
     return track_name;
@@ -76,7 +76,7 @@ std::string normalizeTrackTopicName(const std::string & track_name)
   return "/" + track_name;
 }
 
-std::string sanitizeRosNameToken(const std::string & token)
+std::optional<std::string> sanitizeRosNameToken(const std::string & token)
 {
   std::string sanitized;
   sanitized.reserve(token.size());
@@ -89,7 +89,7 @@ std::string sanitizeRosNameToken(const std::string & token)
   }
 
   if (sanitized.empty()) {
-    return "participant";
+    return std::nullopt;
   }
   if (std::isdigit(static_cast<unsigned char>(sanitized.front()))) {
     sanitized.insert(sanitized.begin(), '_');
@@ -106,12 +106,15 @@ std::optional<std::string> liveKitToRosTopicName(
   }
 
   const auto normalized_track_name = normalizeTrackTopicName(track_name);
-  if (normalized_track_name == "/") {
+  if (!normalized_track_name.has_value() || *normalized_track_name == "/") {
     return std::nullopt;
   }
 
   const auto participant_prefix = sanitizeRosNameToken(participant_identity);
-  return "/" + participant_prefix + normalized_track_name;
+  if (!participant_prefix.has_value()) {
+    return std::nullopt;
+  }
+  return "/" + *participant_prefix + *normalized_track_name;
 }
 
 void logPatternCompileErrors(

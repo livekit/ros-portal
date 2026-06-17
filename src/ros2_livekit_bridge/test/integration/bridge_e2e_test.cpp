@@ -485,18 +485,24 @@ TEST_F(
   RepublishesRosMessagesBothWays)
 {
   initializeRuntime(kBidirectionalTopic);
+  const auto expected_topic_from_a =
+    expectedInboundTopicName(identityA(), kBidirectionalTopic);
+  const auto expected_topic_from_b =
+    expectedInboundTopicName(identityB(), kBidirectionalTopic);
+  ASSERT_TRUE(expected_topic_from_a.has_value());
+  ASSERT_TRUE(expected_topic_from_b.has_value());
 
   EXPECT_TRUE(verifyDirection(
       publisherA(),
       robotBNode(),
       kBidirectionalTopic,
-      expectedInboundTopicName(identityA(), kBidirectionalTopic),
+      *expected_topic_from_a,
       "message from bridge a"));
   EXPECT_TRUE(verifyDirection(
       publisherB(),
       robotANode(),
       kBidirectionalTopic,
-      expectedInboundTopicName(identityB(), kBidirectionalTopic),
+      *expected_topic_from_b,
       "message from bridge b"));
 }
 
@@ -512,11 +518,14 @@ TEST_F(
     kReceiverAllowedTopic,
     kSenderOnlyTopic,
     kReceiverAllowedTopic);
+  const auto forbidden_topic =
+    expectedInboundTopicName(identityA(), kSenderOnlyTopic);
+  ASSERT_TRUE(forbidden_topic.has_value());
 
   EXPECT_TRUE(verifyDirectionNotForwarded(
       publisherA(),
       robotBNode(),
       kSenderOnlyTopic,
-      expectedInboundTopicName(identityA(), kSenderOnlyTopic),
+      *forbidden_topic,
       "message that should stay blocked"));
 }

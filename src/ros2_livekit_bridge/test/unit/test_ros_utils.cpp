@@ -145,31 +145,41 @@ TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {
 }
 
 TEST(RosUtilsTest, NormalizeTrackTopicNameAddsLeadingSlash) {
-  EXPECT_EQ(normalizeTrackTopicName("camera/image"), "/camera/image");
+  const auto normalized = normalizeTrackTopicName("camera/image");
+  ASSERT_TRUE(normalized.has_value());
+  EXPECT_EQ(*normalized, "/camera/image");
 }
 
 TEST(RosUtilsTest, NormalizeTrackTopicNamePreservesExistingLeadingSlash) {
-  EXPECT_EQ(normalizeTrackTopicName("/camera/image"), "/camera/image");
+  const auto normalized = normalizeTrackTopicName("/camera/image");
+  ASSERT_TRUE(normalized.has_value());
+  EXPECT_EQ(*normalized, "/camera/image");
 }
 
-TEST(RosUtilsTest, NormalizeTrackTopicNameUsesRootForEmptyInput) {
-  EXPECT_EQ(normalizeTrackTopicName(""), "/");
+TEST(RosUtilsTest, NormalizeTrackTopicNameReturnsEmptyForEmptyInput) {
+  EXPECT_FALSE(normalizeTrackTopicName("").has_value());
 }
 
 TEST(RosUtilsTest, SanitizeRosNameTokenKeepsValidCharacters) {
-  EXPECT_EQ(sanitizeRosNameToken("bridge_test_a"), "bridge_test_a");
+  const auto sanitized = sanitizeRosNameToken("bridge_test_a");
+  ASSERT_TRUE(sanitized.has_value());
+  EXPECT_EQ(*sanitized, "bridge_test_a");
 }
 
 TEST(RosUtilsTest, SanitizeRosNameTokenReplacesInvalidCharacters) {
-  EXPECT_EQ(sanitizeRosNameToken("bridge-test.a"), "bridge_test_a");
+  const auto sanitized = sanitizeRosNameToken("bridge-test.a");
+  ASSERT_TRUE(sanitized.has_value());
+  EXPECT_EQ(*sanitized, "bridge_test_a");
 }
 
-TEST(RosUtilsTest, SanitizeRosNameTokenUsesFallbackForEmptyInput) {
-  EXPECT_EQ(sanitizeRosNameToken(""), "participant");
+TEST(RosUtilsTest, SanitizeRosNameTokenReturnsEmptyForEmptyInput) {
+  EXPECT_FALSE(sanitizeRosNameToken("").has_value());
 }
 
 TEST(RosUtilsTest, SanitizeRosNameTokenPrefixesLeadingDigit) {
-  EXPECT_EQ(sanitizeRosNameToken("1robot"), "_1robot");
+  const auto sanitized = sanitizeRosNameToken("1robot");
+  ASSERT_TRUE(sanitized.has_value());
+  EXPECT_EQ(*sanitized, "_1robot");
 }
 
 TEST(RosUtilsTest, LiveKitToRosTopicNameBuildsParticipantPrefixedTopic) {

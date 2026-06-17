@@ -23,7 +23,6 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
-#include <ros2_livekit_bridge/ros_json_converters.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
@@ -31,7 +30,7 @@
 namespace livekit
 {
 class Room;
-}  // namespace livekit
+} // namespace livekit
 
 namespace ros2_livekit_bridge
 {
@@ -41,8 +40,7 @@ namespace ros2_livekit_bridge
  * This interface isolates LiveKit-specific calls from ROS CLI request handling
  * so the manager can be unit-tested without connecting to a LiveKit room.
  */
-class Ros2CliRpcClient
-{
+class Ros2CliRpcClient {
 public:
   /**
    * @brief Handler for inbound LiveKit RPC payloads.
@@ -100,8 +98,7 @@ public:
  * calls, and uses the room's remote participant map for preflight existence
  * checks.
  */
-class LiveKitRos2CliRpcClient final : public Ros2CliRpcClient
-{
+class LiveKitRos2CliRpcClient final : public Ros2CliRpcClient {
 public:
   /**
    * @brief Construct an adapter around an already connected LiveKit room.
@@ -126,8 +123,7 @@ public:
    */
   std::string performRpc(
     const std::string & participant_id,
-    const std::string & method,
-    const std::string & payload,
+    const std::string & method, const std::string & payload,
     std::uint8_t timeout_sec) override;
 
   /**
@@ -157,8 +153,7 @@ private:
  * CLI-style graph introspection so future commands such as interface show or
  * service list can share the same transport and JSON response conventions.
  */
-class Ros2CliManager
-{
+class Ros2CliManager {
 public:
   //! @brief Generated ROS service type for remote `ros2 interface show`.
   using Ros2InterfaceShow = ros2_livekit_bridge_msgs::srv::Ros2InterfaceShow;
@@ -216,24 +211,25 @@ public:
    * @param request ROS service request from the local developer.
    * @return ROS service response with success, err_msg, and topic-list output.
    */
-  Ros2TopicList::Response callRemoteTopicList(
-    const Ros2TopicList::Request & request) const;
+  Ros2TopicList::Response
+  callRemoteTopicList(const Ros2TopicList::Request & request) const;
 
   /**
    * @brief Execute a ROS service request by calling a remote LiveKit RPC.
    * @param request ROS service request from the local developer.
-   * @return ROS service response with success, err_msg, and service-list output.
+   * @return ROS service response with success, err_msg, and service-list
+   * output.
    */
-  Ros2ServiceList::Response callRemoteServiceList(
-    const Ros2ServiceList::Request & request) const;
+  Ros2ServiceList::Response
+  callRemoteServiceList(const Ros2ServiceList::Request & request) const;
 
   /**
    * @brief Execute a ROS service request by calling a remote LiveKit RPC.
    * @param request ROS service request from the local developer.
    * @return ROS service response with success, err_msg, and interface output.
    */
-  Ros2InterfaceShow::Response callRemoteInterfaceShow(
-    const Ros2InterfaceShow::Request & request) const;
+  Ros2InterfaceShow::Response
+  callRemoteInterfaceShow(const Ros2InterfaceShow::Request & request) const;
 
   /**
    * @brief Fulfill an inbound LiveKit `ros2_topic_list` RPC.
@@ -264,7 +260,8 @@ public:
   static bool isHiddenTopic(const std::string & topic_name);
 
   /**
-   * @brief Check whether a service should be hidden like default ROS2 CLI output.
+   * @brief Check whether a service should be hidden like default ROS2 CLI
+   * output.
    * @param service_name Fully qualified ROS service name.
    * @return True when any service token begins with `_`.
    */
@@ -277,44 +274,15 @@ public:
    */
   static std::uint8_t effectiveTimeout(std::uint8_t timeout_sec);
 
-  /**
-   * @brief Format topics using `ros2 topic list` output conventions.
-   * @param topics Sorted topic snapshots to render.
-   * @param options Topic list formatting options.
-   * @return Human-readable topic list output.
-   */
-  static std::string formatTopicList(
-    const std::vector<TopicInfo> & topics,
-    const TopicListOptions & options);
-
-  /**
-   * @brief Format services using `ros2 service list` output conventions.
-   * @param services Sorted service snapshots to render.
-   * @param options Service list formatting options.
-   * @return Human-readable service list output.
-   */
-  static std::string formatServiceList(
-    const std::vector<ServiceInfo> & services,
-    const ServiceListOptions & options);
-
-  /**
-   * @brief Render an interface definition using `ros2 interface show` conventions.
-   * @param options Interface type and comment handling options.
-   * @return Human-readable interface definition.
-   * @throws std::exception when the type is invalid or unavailable.
-   */
-  static std::string renderInterfaceDefinition(
-    const InterfaceShowOptions & options);
-
 private:
-  static constexpr const char * kTopicListRpcMethod = "ros2_topic_list";
-  static constexpr const char * kTopicListServiceName =
+  static constexpr const char *kTopicListRpcMethod = "ros2_topic_list";
+  static constexpr const char *kTopicListServiceName =
     "/ros2_livekit_bridge/ros2_topic_list";
-  static constexpr const char * kServiceListRpcMethod = "ros2_service_list";
-  static constexpr const char * kServiceListServiceName =
+  static constexpr const char *kServiceListRpcMethod = "ros2_service_list";
+  static constexpr const char *kServiceListServiceName =
     "/ros2_livekit_bridge/ros2_service_list";
-  static constexpr const char * kInterfaceShowRpcMethod = "ros2_interface_show";
-  static constexpr const char * kInterfaceShowServiceName =
+  static constexpr const char *kInterfaceShowRpcMethod = "ros2_interface_show";
+  static constexpr const char *kInterfaceShowServiceName =
     "/ros2_livekit_bridge/ros2_interface_show";
   static constexpr std::uint8_t kDefaultTimeoutSec = 10;
 
@@ -345,21 +313,6 @@ private:
     const std::shared_ptr<Ros2InterfaceShow::Request> request,
     std::shared_ptr<Ros2InterfaceShow::Response> response) const;
 
-  /**
-   * @brief Capture topics from the local ROS graph.
-   * @param options Topic list graph filtering options.
-   * @return Sorted topic snapshots.
-   */
-  std::vector<TopicInfo> collectTopicInfo(const TopicListOptions & options) const;
-
-  /**
-   * @brief Capture services from the local ROS graph.
-   * @param options Service list graph filtering options.
-   * @return Sorted service snapshots.
-   */
-  std::vector<ServiceInfo> collectServiceInfo(
-    const ServiceListOptions & options) const;
-
   rclcpp::Node & node_;
   std::shared_ptr<Ros2CliRpcClient> rpc_client_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
@@ -367,4 +320,4 @@ private:
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;
 };
 
-}  // namespace ros2_livekit_bridge
+} // namespace ros2_livekit_bridge

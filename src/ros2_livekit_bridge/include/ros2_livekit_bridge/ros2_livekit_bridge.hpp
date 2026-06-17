@@ -114,20 +114,6 @@ private:
     const std::string & topic_type);
 
   /**
-   * @brief Handle remote LiveKit data tracks and republish them into ROS.
-   */
-  void onDataTrackPublished(
-    livekit::Room & room,
-    const livekit::DataTrackPublishedEvent & event) override;
-
-  /**
-   * @brief Stop republishing a remote LiveKit data track when it is removed.
-   */
-  void onDataTrackUnpublished(
-    livekit::Room & room,
-    const livekit::DataTrackUnpublishedEvent & event) override;
-
-  /**
    * @brief Check if the topic matches the allowed topics
    * @param topic_name The name of the topic
    * @return True if the topic matches the allowed topics, false otherwise
@@ -142,17 +128,6 @@ private:
   void onDataTrackUnpublished(
     livekit::Room & room,
     const livekit::DataTrackUnpublishedEvent & event) override;
-
-  /**
-   * @brief Resolve the ROS message type for an inbound LiveKit data track.
-   */
-  std::optional<std::string> liveKitToRosTopicType(
-    const std::string & track_name) const;
-
-  /**
-   * @brief Check if a remote LiveKit data track is allowed into ROS.
-   */
-  bool matchesLiveKitToRosTopic(const std::string & track_name) const;
 
   /**
    * @brief Resolve the ROS message type for an inbound LiveKit data track.

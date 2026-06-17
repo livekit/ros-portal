@@ -22,15 +22,10 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <optional>
-#include <stdexcept>
 
 #include <livekit/data_track_frame.h>
 #include <livekit/data_track_stream.h>
 #include <livekit/livekit.h>
-#include <livekit/remote_data_track.h>
-#include <livekit/room_delegate.h>
-#include <livekit/video_frame.h>
 
 namespace ros2_livekit_bridge
 {
@@ -91,20 +86,19 @@ bool Ros2LiveKitBridge::initialize()
       outgoing_topic_patterns_, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
+  auto best_effort_topics =
+    this->get_parameter("best_effort_qos_topics").as_string_array();
+  pattern_errors.clear();
+  best_effort_qos_topic_patterns_ =
+    utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
+  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
+
   incoming_topic_patterns_ = utils::incomingTopicPatterns(*config);
   pattern_errors.clear();
   incoming_topic_compiled_patterns_ =
     utils::compileRegexPatterns(
       incoming_topic_patterns_, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
-
-  lk_topic_patterns_ =
-    this->get_parameter("lk_topics").as_string_array();
-  pattern_errors.clear();
-  lk_topic_compiled_patterns_ =
-    bridge_utils::compileRegexPatterns(
-      lk_topic_patterns_, &pattern_errors);
-  logPatternCompileErrors(pattern_errors, this->get_logger());
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu ROS topic "

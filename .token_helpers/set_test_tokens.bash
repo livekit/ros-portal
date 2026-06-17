@@ -109,12 +109,11 @@ _emit_eval() {
   printf 'export LIVEKIT_URL=%q\n' "$LIVEKIT_URL"
   printf 'export LIVEKIT_TOKEN_A=%q\n' "$LIVEKIT_TOKEN_A"
   printf 'export LIVEKIT_TOKEN_B=%q\n' "$LIVEKIT_TOKEN_B"
-  printf 'export LIVEKIT_ROOM=%q\n' "$LIVEKIT_ROOM"
 }
 
 if [[ "$_sourced" -eq 1 ]]; then
   _apply
-  echo "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B set for this shell." >&2
+  echo "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B set for this shell. using LIVEKIT_ROOM: $LIVEKIT_ROOM" >&2
 else
   _emit_eval
   echo "set_test_tokens.bash: for this shell run: source $0   or: eval \"\$(bash $0)\"" >&2

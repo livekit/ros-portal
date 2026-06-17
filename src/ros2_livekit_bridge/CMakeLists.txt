@@ -1,4 +1,4 @@
-`#
+#
 # Copyright 2026 LiveKit
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,6 +104,15 @@ endif()
 
 set(LIVEKIT_RUNTIME_LIBRARY_DIR "$<TARGET_FILE_DIR:${LIVEKIT_CORE_TARGET}>")
 
+# Point a target's RPATH at the LiveKit SDK so its shared library is resolved at
+# both build and install time. Shared by the targets here and under test/.
+function(livekit_set_runtime_rpath target)
+  set_target_properties(${target} PROPERTIES
+    BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+    INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+  )
+endfunction()
+
 if(LIVEKIT_LOCAL_SDK_DIR)
   if(CMAKE_BUILD_TYPE)
     string(TOUPPER "${CMAKE_BUILD_TYPE}" _livekit_imported_config)
@@ -176,42 +185,38 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# ROS2 CLI library
+# ---------------------------------------------------------------------------
+ament_auto_add_library(ros2_cli_lib SHARED
+  src/ros2_cli/ros2_interface_show.cpp
+  src/ros2_cli/ros_json_converters.cpp
+  src/ros2_cli/ros2_service_list.cpp
+  src/ros2_cli/ros2_topic_list.cpp
+  src/ros2_cli/utils.cpp
+  src/ros2_cli_manager.cpp
+)
+target_link_libraries(ros2_cli_lib
+  "${LIVEKIT_CORE_TARGET}"
+  nlohmann_json::nlohmann_json
+  ${LIVEKIT_EXTRA_LINK_LIBS}
+)
+livekit_set_runtime_rpath(ros2_cli_lib)
+
+# ---------------------------------------------------------------------------
 # Bridge library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
-  src/ros2_cli_manager.cpp
-  src/ros_json_converters.cpp
   src/ros2_livekit_bridge.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
 target_link_libraries(ros2_livekit_bridge_lib
+  ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
-  nlohmann_json::nlohmann_json
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
-set_target_properties(ros2_livekit_bridge_lib PROPERTIES
-  BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-  INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-)
-
-# ---------------------------------------------------------------------------
-# Main bridge node
-# ---------------------------------------------------------------------------
-ament_auto_add_library(ros2_livekit_bridge_lib SHARED
-  src/ros2_livekit_bridge.cpp
-  src/utils/image_conversion.cpp
-  src/utils/ros_utils.cpp
-  src/utils/topic_matcher.cpp
-)
-target_link_libraries(ros2_livekit_bridge_node
-  ros2_livekit_bridge_lib
-)
-set_target_properties(ros2_livekit_bridge_lib PROPERTIES
-  BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-  INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-)
+livekit_set_runtime_rpath(ros2_livekit_bridge_lib)
 
 # ---------------------------------------------------------------------------
 # Main bridge node
@@ -222,51 +227,10 @@ ament_auto_add_executable(ros2_livekit_bridge_node
 target_link_libraries(ros2_livekit_bridge_node
   ros2_livekit_bridge_lib
 )
-set_target_properties(ros2_livekit_bridge_node PROPERTIES
-  BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-  INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-)
+livekit_set_runtime_rpath(ros2_livekit_bridge_node)
 
 if(BUILD_TESTING)
-  find_package(ament_cmake_gtest REQUIRED)
-  find_package(ament_cmake_pytest REQUIRED)
-  find_package(ament_lint_auto REQUIRED)
-
-  ament_add_pytest_test(livekit_bridge_local_launch_test
-    test/launch/test_livekit_bridge_local_launch.py
-  )
-
   add_subdirectory(test)
-
-  ament_auto_add_gtest(ros_utils_test
-    test/unit/test_ros_utils.cpp
-  )
-  if(TARGET ros_utils_test)
-    target_link_libraries(ros_utils_test
-      ros2_livekit_bridge_lib
-    )
-    set_target_properties(ros_utils_test PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
-
-  ament_auto_add_gtest(bridge_config_path_test
-    test/unit/bridge_config_path_test.cpp
-  )
-  if(TARGET bridge_config_path_test)
-    target_link_libraries(bridge_config_path_test
-      ros2_livekit_bridge_lib
-    )
-    set_target_properties(bridge_config_path_test PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
-
-  set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
 endif()
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)

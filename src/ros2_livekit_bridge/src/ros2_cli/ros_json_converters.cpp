@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros_json_converters.hpp"
+#include "ros2_livekit_bridge/ros2_cli/ros_json_converters.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -22,8 +22,9 @@ namespace ros2_livekit_bridge
 {
 using json = nlohmann::json;
 
-TopicListOptions topicListOptionsFromRequest(
-  const Ros2TopicList::Request & request)
+/// @copydoc topicListOptionsFromRequest()
+TopicListOptions
+topicListOptionsFromRequest(const Ros2TopicList::Request & request)
 {
   TopicListOptions options;
   options.show_types = request.show_types;
@@ -33,8 +34,9 @@ TopicListOptions topicListOptionsFromRequest(
   return options;
 }
 
-ServiceListOptions serviceListOptionsFromRequest(
-  const Ros2ServiceList::Request & request)
+/// @copydoc serviceListOptionsFromRequest()
+ServiceListOptions
+serviceListOptionsFromRequest(const Ros2ServiceList::Request & request)
 {
   ServiceListOptions options;
   options.show_types = request.show_types;
@@ -43,8 +45,9 @@ ServiceListOptions serviceListOptionsFromRequest(
   return options;
 }
 
-InterfaceShowOptions interfaceShowOptionsFromRequest(
-  const Ros2InterfaceShow::Request & request)
+/// @copydoc interfaceShowOptionsFromRequest()
+InterfaceShowOptions
+interfaceShowOptionsFromRequest(const Ros2InterfaceShow::Request & request)
 {
   InterfaceShowOptions options;
   options.type = request.type;
@@ -53,6 +56,7 @@ InterfaceShowOptions interfaceShowOptionsFromRequest(
   return options;
 }
 
+/// @copydoc topicListRequestToJson()
 std::string topicListRequestToJson(
   const Ros2TopicList::Request & request,
   std::uint8_t timeout_sec)
@@ -65,9 +69,11 @@ std::string topicListRequestToJson(
     {"include_hidden_topics", options.include_hidden_topics},
     {"verbose", options.verbose},
     {"timeout_sec", timeout_sec},
-  }.dump();
+  }
+         .dump();
 }
 
+/// @copydoc serviceListRequestToJson()
 std::string serviceListRequestToJson(
   const Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec)
@@ -79,10 +85,13 @@ std::string serviceListRequestToJson(
     {"count_services", options.count_services},
     {"include_hidden_services", options.include_hidden_services},
     {"timeout_sec", timeout_sec},
-  }.dump();
+  }
+         .dump();
 }
 
-std::string interfaceShowRequestToJson(
+/// @copydoc interfaceShowRequestToJson()
+std::string
+interfaceShowRequestToJson(
   const Ros2InterfaceShow::Request & request,
   std::uint8_t timeout_sec)
 {
@@ -93,9 +102,11 @@ std::string interfaceShowRequestToJson(
     {"all_comments", options.all_comments},
     {"no_comments", options.no_comments},
     {"timeout_sec", timeout_sec},
-  }.dump();
+  }
+         .dump();
 }
 
+/// @copydoc topicListOptionsFromJson()
 TopicListOptions topicListOptionsFromJson(const std::string & payload)
 {
   const auto request = json::parse(payload);
@@ -108,6 +119,7 @@ TopicListOptions topicListOptionsFromJson(const std::string & payload)
   return options;
 }
 
+/// @copydoc serviceListOptionsFromJson()
 ServiceListOptions serviceListOptionsFromJson(const std::string & payload)
 {
   const auto request = json::parse(payload);
@@ -120,6 +132,7 @@ ServiceListOptions serviceListOptionsFromJson(const std::string & payload)
   return options;
 }
 
+/// @copydoc interfaceShowOptionsFromJson()
 InterfaceShowOptions interfaceShowOptionsFromJson(const std::string & payload)
 {
   const auto request = json::parse(payload);
@@ -131,6 +144,7 @@ InterfaceShowOptions interfaceShowOptionsFromJson(const std::string & payload)
   return options;
 }
 
+/// @copydoc makeTopicListResponse()
 Ros2TopicList::Response makeTopicListResponse(
   bool success,
   const std::string & err_msg,
@@ -143,6 +157,7 @@ Ros2TopicList::Response makeTopicListResponse(
   return response;
 }
 
+/// @copydoc makeServiceListResponse()
 Ros2ServiceList::Response makeServiceListResponse(
   bool success,
   const std::string & err_msg,
@@ -155,9 +170,10 @@ Ros2ServiceList::Response makeServiceListResponse(
   return response;
 }
 
-Ros2InterfaceShow::Response makeInterfaceShowResponse(
-  bool success,
-  const std::string & err_msg,
+/// @copydoc makeInterfaceShowResponse()
+Ros2InterfaceShow::Response
+makeInterfaceShowResponse(
+  bool success, const std::string & err_msg,
   const std::string & output)
 {
   Ros2InterfaceShow::Response response;
@@ -167,30 +183,33 @@ Ros2InterfaceShow::Response makeInterfaceShowResponse(
   return response;
 }
 
+/// @copydoc topicListResponseToJson()
 std::string topicListResponseToJson(
-  bool success,
-  const std::string & err_msg,
+  bool success, const std::string & err_msg,
   const std::string & output)
 {
   return json{
     {"success", success},
     {"err_msg", err_msg},
     {"output", output},
-  }.dump();
+  }
+         .dump();
 }
 
+/// @copydoc serviceListResponseToJson()
 std::string serviceListResponseToJson(
-  bool success,
-  const std::string & err_msg,
+  bool success, const std::string & err_msg,
   const std::string & output)
 {
   return json{
     {"success", success},
     {"err_msg", err_msg},
     {"output", output},
-  }.dump();
+  }
+         .dump();
 }
 
+/// @copydoc interfaceShowResponseToJson()
 std::string interfaceShowResponseToJson(
   bool success,
   const std::string & err_msg,
@@ -200,36 +219,37 @@ std::string interfaceShowResponseToJson(
     {"success", success},
     {"err_msg", err_msg},
     {"output", output},
-  }.dump();
+  }
+         .dump();
 }
 
+/// @copydoc topicListResponseFromJson()
 Ros2TopicList::Response topicListResponseFromJson(const std::string & payload)
 {
   const auto parsed = json::parse(payload);
-  return makeTopicListResponse(
-    parsed.at("success").get<bool>(),
-    parsed.at("err_msg").get<std::string>(),
-    parsed.at("output").get<std::string>());
+  return makeTopicListResponse(parsed.at("success").get<bool>(),
+                               parsed.at("err_msg").get<std::string>(),
+                               parsed.at("output").get<std::string>());
 }
 
-Ros2ServiceList::Response serviceListResponseFromJson(
-  const std::string & payload)
+/// @copydoc serviceListResponseFromJson()
+Ros2ServiceList::Response
+serviceListResponseFromJson(const std::string & payload)
 {
   const auto parsed = json::parse(payload);
-  return makeServiceListResponse(
-    parsed.at("success").get<bool>(),
-    parsed.at("err_msg").get<std::string>(),
-    parsed.at("output").get<std::string>());
+  return makeServiceListResponse(parsed.at("success").get<bool>(),
+                                 parsed.at("err_msg").get<std::string>(),
+                                 parsed.at("output").get<std::string>());
 }
 
-Ros2InterfaceShow::Response interfaceShowResponseFromJson(
-  const std::string & payload)
+/// @copydoc interfaceShowResponseFromJson()
+Ros2InterfaceShow::Response
+interfaceShowResponseFromJson(const std::string & payload)
 {
   const auto parsed = json::parse(payload);
-  return makeInterfaceShowResponse(
-    parsed.at("success").get<bool>(),
-    parsed.at("err_msg").get<std::string>(),
-    parsed.at("output").get<std::string>());
+  return makeInterfaceShowResponse(parsed.at("success").get<bool>(),
+                                   parsed.at("err_msg").get<std::string>(),
+                                   parsed.at("output").get<std::string>());
 }
 
-}  // namespace ros2_livekit_bridge
+} // namespace ros2_livekit_bridge

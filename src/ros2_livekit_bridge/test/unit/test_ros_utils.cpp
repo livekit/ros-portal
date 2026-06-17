@@ -219,43 +219,6 @@ TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForRootTrackName) {
   EXPECT_FALSE(ros_topic_name.has_value());
 }
 
-TEST(RosUtilsTest, LiveKitToRosTopicNameBuildsParticipantPrefixedTopic) {
-  const auto ros_topic_name =
-    liveKitToRosTopicName("bridge-test-a", "bridge/out");
-
-  ASSERT_TRUE(ros_topic_name.has_value());
-  EXPECT_EQ(*ros_topic_name, "/bridge_test_a/bridge/out");
-}
-
-TEST(RosUtilsTest, LiveKitToRosTopicNamePreservesLeadingSlashInTrackName) {
-  const auto ros_topic_name =
-    liveKitToRosTopicName("bridge-test-a", "/bridge/out");
-
-  ASSERT_TRUE(ros_topic_name.has_value());
-  EXPECT_EQ(*ros_topic_name, "/bridge_test_a/bridge/out");
-}
-
-TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyIdentity) {
-  const auto ros_topic_name =
-    liveKitToRosTopicName("", "/bridge/out");
-
-  EXPECT_FALSE(ros_topic_name.has_value());
-}
-
-TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyTrackName) {
-  const auto ros_topic_name =
-    liveKitToRosTopicName("bridge-test-a", "");
-
-  EXPECT_FALSE(ros_topic_name.has_value());
-}
-
-TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForRootTrackName) {
-  const auto ros_topic_name =
-    liveKitToRosTopicName("bridge-test-a", "/");
-
-  EXPECT_FALSE(ros_topic_name.has_value());
-}
-
 TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
   namespace bridge_config = ::ros2_livekit_bridge_config;
 

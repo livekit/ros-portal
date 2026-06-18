@@ -18,7 +18,7 @@
 #include "ros2_livekit_bridge/ros2_cli/ros2_interface_show.hpp"
 #include "ros2_livekit_bridge/ros2_cli/ros2_service_list.hpp"
 #include "ros2_livekit_bridge/ros2_cli/ros2_topic_list.hpp"
-#include "ros2_livekit_bridge/ros2_cli/ros_json_converters.hpp"
+#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 #include <exception>
 #include <stdexcept>

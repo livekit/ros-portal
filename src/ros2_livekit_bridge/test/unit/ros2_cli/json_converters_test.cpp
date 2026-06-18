@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/ros_json_converters.hpp"
+#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 #include <gtest/gtest.h>
 
@@ -64,7 +64,7 @@ Ros2InterfaceShow::Request makeInterfaceShowRequest()
   return request;
 }
 
-TEST(RosJsonConvertersTest, ConvertsTopicListRequestToOptions) {
+TEST(JsonConvertersTest, ConvertsTopicListRequestToOptions) {
   const auto options = topicListOptionsFromRequest(makeRequest());
 
   EXPECT_TRUE(options.show_types);
@@ -73,7 +73,7 @@ TEST(RosJsonConvertersTest, ConvertsTopicListRequestToOptions) {
   EXPECT_TRUE(options.verbose);
 }
 
-TEST(RosJsonConvertersTest, ConvertsServiceListRequestToOptions) {
+TEST(JsonConvertersTest, ConvertsServiceListRequestToOptions) {
   const auto options = serviceListOptionsFromRequest(makeServiceListRequest());
 
   EXPECT_TRUE(options.show_types);
@@ -81,7 +81,7 @@ TEST(RosJsonConvertersTest, ConvertsServiceListRequestToOptions) {
   EXPECT_TRUE(options.include_hidden_services);
 }
 
-TEST(RosJsonConvertersTest, ConvertsInterfaceShowRequestToOptions) {
+TEST(JsonConvertersTest, ConvertsInterfaceShowRequestToOptions) {
   const auto options =
     interfaceShowOptionsFromRequest(makeInterfaceShowRequest());
 
@@ -90,7 +90,7 @@ TEST(RosJsonConvertersTest, ConvertsInterfaceShowRequestToOptions) {
   EXPECT_FALSE(options.no_comments);
 }
 
-TEST(RosJsonConvertersTest, SerializesTopicListRequestPayload) {
+TEST(JsonConvertersTest, SerializesTopicListRequestPayload) {
   const auto payload = json::parse(topicListRequestToJson(makeRequest(), 7));
 
   EXPECT_EQ(payload.at("participant_id"), "robot-b");
@@ -101,7 +101,7 @@ TEST(RosJsonConvertersTest, SerializesTopicListRequestPayload) {
   EXPECT_EQ(payload.at("timeout_sec"), 7);
 }
 
-TEST(RosJsonConvertersTest, SerializesServiceListRequestPayload) {
+TEST(JsonConvertersTest, SerializesServiceListRequestPayload) {
   const auto payload =
     json::parse(serviceListRequestToJson(makeServiceListRequest(), 7));
 
@@ -112,7 +112,7 @@ TEST(RosJsonConvertersTest, SerializesServiceListRequestPayload) {
   EXPECT_EQ(payload.at("timeout_sec"), 7);
 }
 
-TEST(RosJsonConvertersTest, SerializesInterfaceShowRequestPayload) {
+TEST(JsonConvertersTest, SerializesInterfaceShowRequestPayload) {
   const auto payload =
     json::parse(interfaceShowRequestToJson(makeInterfaceShowRequest(), 7));
 
@@ -123,7 +123,7 @@ TEST(RosJsonConvertersTest, SerializesInterfaceShowRequestPayload) {
   EXPECT_EQ(payload.at("timeout_sec"), 7);
 }
 
-TEST(RosJsonConvertersTest, ParsesTopicListOptionsPayload) {
+TEST(JsonConvertersTest, ParsesTopicListOptionsPayload) {
   const auto options = topicListOptionsFromJson(
       R"({"show_types":true,"count_topics":true,"include_hidden_topics":true,"verbose":false})");
 
@@ -133,7 +133,7 @@ TEST(RosJsonConvertersTest, ParsesTopicListOptionsPayload) {
   EXPECT_FALSE(options.verbose);
 }
 
-TEST(RosJsonConvertersTest, ParsesServiceListOptionsPayload) {
+TEST(JsonConvertersTest, ParsesServiceListOptionsPayload) {
   const auto options = serviceListOptionsFromJson(
       R"({"show_types":true,"count_services":true,"include_hidden_services":true})");
 
@@ -142,7 +142,7 @@ TEST(RosJsonConvertersTest, ParsesServiceListOptionsPayload) {
   EXPECT_TRUE(options.include_hidden_services);
 }
 
-TEST(RosJsonConvertersTest, ParsesInterfaceShowOptionsPayload) {
+TEST(JsonConvertersTest, ParsesInterfaceShowOptionsPayload) {
   const auto options = interfaceShowOptionsFromJson(
       R"({"type":"std_msgs/msg/Header","all_comments":true,"no_comments":false})");
 
@@ -151,7 +151,7 @@ TEST(RosJsonConvertersTest, ParsesInterfaceShowOptionsPayload) {
   EXPECT_FALSE(options.no_comments);
 }
 
-TEST(RosJsonConvertersTest, MissingTopicListOptionFieldsDefaultToFalse) {
+TEST(JsonConvertersTest, MissingTopicListOptionFieldsDefaultToFalse) {
   const auto options = topicListOptionsFromJson(R"({})");
 
   EXPECT_FALSE(options.show_types);
@@ -160,7 +160,7 @@ TEST(RosJsonConvertersTest, MissingTopicListOptionFieldsDefaultToFalse) {
   EXPECT_FALSE(options.verbose);
 }
 
-TEST(RosJsonConvertersTest, MissingServiceListOptionFieldsDefaultToFalse) {
+TEST(JsonConvertersTest, MissingServiceListOptionFieldsDefaultToFalse) {
   const auto options = serviceListOptionsFromJson(R"({})");
 
   EXPECT_FALSE(options.show_types);
@@ -168,7 +168,7 @@ TEST(RosJsonConvertersTest, MissingServiceListOptionFieldsDefaultToFalse) {
   EXPECT_FALSE(options.include_hidden_services);
 }
 
-TEST(RosJsonConvertersTest, MissingInterfaceShowOptionFieldsDefaultToFalse) {
+TEST(JsonConvertersTest, MissingInterfaceShowOptionFieldsDefaultToFalse) {
   const auto options = interfaceShowOptionsFromJson(R"({})");
 
   EXPECT_TRUE(options.type.empty());
@@ -176,7 +176,7 @@ TEST(RosJsonConvertersTest, MissingInterfaceShowOptionFieldsDefaultToFalse) {
   EXPECT_FALSE(options.no_comments);
 }
 
-TEST(RosJsonConvertersTest, BuildsTopicListResponse) {
+TEST(JsonConvertersTest, BuildsTopicListResponse) {
   const auto response = makeTopicListResponse(true, "ok", "/topic\n");
 
   EXPECT_TRUE(response.success);
@@ -184,7 +184,7 @@ TEST(RosJsonConvertersTest, BuildsTopicListResponse) {
   EXPECT_EQ(response.output, "/topic\n");
 }
 
-TEST(RosJsonConvertersTest, BuildsServiceListResponse) {
+TEST(JsonConvertersTest, BuildsServiceListResponse) {
   const auto response = makeServiceListResponse(true, "ok", "/service\n");
 
   EXPECT_TRUE(response.success);
@@ -192,7 +192,7 @@ TEST(RosJsonConvertersTest, BuildsServiceListResponse) {
   EXPECT_EQ(response.output, "/service\n");
 }
 
-TEST(RosJsonConvertersTest, BuildsInterfaceShowResponse) {
+TEST(JsonConvertersTest, BuildsInterfaceShowResponse) {
   const auto response = makeInterfaceShowResponse(true, "ok", "string data\n");
 
   EXPECT_TRUE(response.success);
@@ -200,7 +200,7 @@ TEST(RosJsonConvertersTest, BuildsInterfaceShowResponse) {
   EXPECT_EQ(response.output, "string data\n");
 }
 
-TEST(RosJsonConvertersTest, SerializesTopicListResponsePayload) {
+TEST(JsonConvertersTest, SerializesTopicListResponsePayload) {
   const auto payload =
     json::parse(topicListResponseToJson(false, "timeout", ""));
 
@@ -209,7 +209,7 @@ TEST(RosJsonConvertersTest, SerializesTopicListResponsePayload) {
   EXPECT_EQ(payload.at("output"), "");
 }
 
-TEST(RosJsonConvertersTest, SerializesServiceListResponsePayload) {
+TEST(JsonConvertersTest, SerializesServiceListResponsePayload) {
   const auto payload =
     json::parse(serviceListResponseToJson(false, "timeout", ""));
 
@@ -218,7 +218,7 @@ TEST(RosJsonConvertersTest, SerializesServiceListResponsePayload) {
   EXPECT_EQ(payload.at("output"), "");
 }
 
-TEST(RosJsonConvertersTest, SerializesInterfaceShowResponsePayload) {
+TEST(JsonConvertersTest, SerializesInterfaceShowResponsePayload) {
   const auto payload =
     json::parse(interfaceShowResponseToJson(false, "timeout", ""));
 
@@ -227,7 +227,7 @@ TEST(RosJsonConvertersTest, SerializesInterfaceShowResponsePayload) {
   EXPECT_EQ(payload.at("output"), "");
 }
 
-TEST(RosJsonConvertersTest, ParsesTopicListResponsePayload) {
+TEST(JsonConvertersTest, ParsesTopicListResponsePayload) {
   const auto response = topicListResponseFromJson(
       R"({"success":true,"err_msg":"","output":"/topic\n"})");
 
@@ -236,7 +236,7 @@ TEST(RosJsonConvertersTest, ParsesTopicListResponsePayload) {
   EXPECT_EQ(response.output, "/topic\n");
 }
 
-TEST(RosJsonConvertersTest, ParsesServiceListResponsePayload) {
+TEST(JsonConvertersTest, ParsesServiceListResponsePayload) {
   const auto response = serviceListResponseFromJson(
       R"({"success":true,"err_msg":"","output":"/service\n"})");
 
@@ -245,7 +245,7 @@ TEST(RosJsonConvertersTest, ParsesServiceListResponsePayload) {
   EXPECT_EQ(response.output, "/service\n");
 }
 
-TEST(RosJsonConvertersTest, ParsesInterfaceShowResponsePayload) {
+TEST(JsonConvertersTest, ParsesInterfaceShowResponsePayload) {
   const auto response = interfaceShowResponseFromJson(
       R"({"success":true,"err_msg":"","output":"string data\n"})");
 
@@ -254,7 +254,7 @@ TEST(RosJsonConvertersTest, ParsesInterfaceShowResponsePayload) {
   EXPECT_EQ(response.output, "string data\n");
 }
 
-TEST(RosJsonConvertersTest, MalformedPayloadsThrow) {
+TEST(JsonConvertersTest, MalformedPayloadsThrow) {
   EXPECT_THROW(topicListOptionsFromJson("not-json"), json::exception);
   EXPECT_THROW(topicListResponseFromJson("not-json"), json::exception);
   EXPECT_THROW(topicListResponseFromJson(R"({"success":true})"),

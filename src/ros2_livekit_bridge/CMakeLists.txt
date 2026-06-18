@@ -189,7 +189,7 @@ endif()
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_cli_lib SHARED
   src/ros2_cli/ros2_interface_show.cpp
-  src/ros2_cli/ros_json_converters.cpp
+  src/ros2_cli/json_converters.cpp
   src/ros2_cli/ros2_service_list.cpp
   src/ros2_cli/ros2_topic_list.cpp
   src/ros2_cli/utils.cpp

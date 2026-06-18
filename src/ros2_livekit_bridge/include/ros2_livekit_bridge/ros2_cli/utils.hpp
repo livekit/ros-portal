@@ -33,6 +33,11 @@ bool hasHiddenNameToken(const std::string & name);
  * @brief Join ROS interface type names for CLI display.
  * @param types Interface type names associated with one graph entity.
  * @return Comma-and-space separated type list.
+ *
+ * Example:
+ *   Type 1: std_msgs/msg/String
+ *   Type 2: std_msgs/msg/Header
+ *   Joined: std_msgs/msg/String, std_msgs/msg/Header
  */
 std::string joinTypes(const std::vector<std::string> & types);
 

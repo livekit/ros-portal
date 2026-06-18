@@ -16,11 +16,40 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
 namespace ros2_livekit_bridge::ros2_cli
 {
+
+/**
+ * @brief Remove leading whitespace from a string.
+ * @param value Input string.
+ * @return Copy of @p value without leading whitespace.
+ */
+inline std::string leftTrim(const std::string & value)
+{
+  const auto first = std::find_if(
+    value.begin(), value.end(),
+    [](unsigned char character) { return !std::isspace(character); });
+  return std::string(first, value.end());
+}
+
+/**
+ * @brief Remove trailing whitespace from a string.
+ * @param value Input string.
+ * @return Copy of @p value without trailing whitespace.
+ */
+inline std::string rightTrim(std::string value)
+{
+  while (!value.empty() &&
+    std::isspace(static_cast<unsigned char>(value.back()))) {
+    value.pop_back();
+  }
+  return value;
+}
 
 /**
  * @brief Detect ROS hidden-name tokens in a slash-delimited graph name.

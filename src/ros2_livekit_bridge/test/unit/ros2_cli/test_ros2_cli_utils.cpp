@@ -42,5 +42,19 @@ TEST(Ros2CliUtilsTest, JoinsTypesWithCommaSeparators) {
             "std_msgs/msg/String, std_msgs/msg/Header");
 }
 
+TEST(Ros2CliUtilsTest, TrimsLeadingAndTrailingWhitespace) {
+  EXPECT_EQ(leftTrim("  hello"), "hello");
+  EXPECT_EQ(leftTrim("\t\nvalue"), "value");
+  EXPECT_EQ(leftTrim("no_trim"), "no_trim");
+  EXPECT_EQ(leftTrim(""), "");
+  EXPECT_EQ(leftTrim("   "), "");
+
+  EXPECT_EQ(rightTrim("hello  "), "hello");
+  EXPECT_EQ(rightTrim("value\t\n"), "value");
+  EXPECT_EQ(rightTrim("no_trim"), "no_trim");
+  EXPECT_EQ(rightTrim(""), "");
+  EXPECT_EQ(rightTrim("   "), "");
+}
+
 } // namespace
 } // namespace ros2_livekit_bridge::ros2_cli

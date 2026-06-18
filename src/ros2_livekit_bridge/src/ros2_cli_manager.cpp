@@ -323,7 +323,25 @@ Ros2CliManager::handleInterfaceShowRpc(const std::string & payload) const
   try {
     const auto options = interfaceShowOptionsFromJson(payload);
     const auto output = ros2_cli::renderInterfaceDefinition(options);
-    return interfaceShowResponseToJson(true, "", output);
+    if (!output.has_value()) {
+      std::string error_message;
+      if (options.type.empty()) {
+        error_message = "the passed value is empty";
+      } else if (options.type == "-") {
+        error_message = "expected stdin pipe";
+      } else if (options.all_comments && options.no_comments) {
+        error_message =
+            "all_comments and no_comments are mutually exclusive";
+      } else {
+        error_message = "Could not find interface '" + options.type + "'";
+      }
+      RCLCPP_ERROR(
+          node_interfaces_.node_logging->get_logger(),
+          "Failed to handle LiveKit RPC '%s': %s",
+          ros2_cli::kInterfaceShowRpcMethod, error_message.c_str());
+      return interfaceShowResponseToJson(false, error_message, "");
+    }
+    return interfaceShowResponseToJson(true, "", *output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),

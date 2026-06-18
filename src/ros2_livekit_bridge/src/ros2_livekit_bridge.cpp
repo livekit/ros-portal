@@ -759,6 +759,7 @@ Ros2LiveKitBridge::determineQoS(const std::string &topic_name) const {
 bool Ros2LiveKitBridge::hasParticipant(
     const std::string &participant_id) const {
   if (!room_) {
+    RCLCPP_ERROR(this->get_logger(), "Room is not available, cannot check for participant '%s'", participant_id.c_str());
     return false;
   }
   return static_cast<bool>(room_->remoteParticipant(participant_id).lock());

@@ -304,7 +304,6 @@ void renderInterfaceDefinitionRecursive(
 
 } // namespace
 
-/// @copydoc renderInterfaceDefinition()
 std::string renderInterfaceDefinition(const InterfaceShowOptions & options)
 {
   if (options.type.empty()) {

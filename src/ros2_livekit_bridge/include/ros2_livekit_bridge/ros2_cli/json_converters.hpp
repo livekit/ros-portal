@@ -28,6 +28,7 @@ namespace ros2_livekit_bridge
 
 /**
  * @brief Formatting and graph filtering options for `ros2 topic list`.
+ * @details fields map 1:1 to the fields shown from running `ros2 topic list --help`
  */
 struct TopicListOptions
 {
@@ -43,6 +44,7 @@ struct TopicListOptions
 
 /**
  * @brief Formatting and graph filtering options for `ros2 service list`.
+ * @details fields map 1:1 to the fields shown from running `ros2 service list --help`
  */
 struct ServiceListOptions
 {
@@ -56,6 +58,7 @@ struct ServiceListOptions
 
 /**
  * @brief Arguments and formatting options for `ros2 interface show`.
+ * @details fields map 1:1 to the fields shown from running `ros2 interface show --help`
  */
 struct InterfaceShowOptions
 {

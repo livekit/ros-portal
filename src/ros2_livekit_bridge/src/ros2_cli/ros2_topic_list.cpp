@@ -24,13 +24,11 @@
 namespace ros2_livekit_bridge::ros2_cli
 {
 
-/// @copydoc isHiddenTopic()
 bool isHiddenTopic(const std::string & topic_name)
 {
   return hasHiddenNameToken(topic_name);
 }
 
-/// @copydoc formatTopicList()
 std::string
 formatTopicList(
   const std::vector<Ros2CliManager::TopicInfo> & topics,
@@ -83,7 +81,6 @@ formatTopicList(
   return stream.str();
 }
 
-/// @copydoc collectTopicInfo()
 std::vector<Ros2CliManager::TopicInfo>
 collectTopicInfo(
   const rclcpp::node_interfaces::NodeGraphInterface & graph,

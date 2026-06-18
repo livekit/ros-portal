@@ -21,7 +21,6 @@
 namespace ros2_livekit_bridge::ros2_cli
 {
 
-/// @copydoc hasHiddenNameToken()
 bool hasHiddenNameToken(const std::string & name)
 {
   size_t token_start = 0;
@@ -45,7 +44,6 @@ bool hasHiddenNameToken(const std::string & name)
   return false;
 }
 
-/// @copydoc joinTypes()
 std::string joinTypes(const std::vector<std::string> & types)
 {
   std::ostringstream stream;

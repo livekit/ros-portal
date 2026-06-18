@@ -24,13 +24,11 @@
 namespace ros2_livekit_bridge::ros2_cli
 {
 
-/// @copydoc isHiddenService()
 bool isHiddenService(const std::string & service_name)
 {
   return hasHiddenNameToken(service_name);
 }
 
-/// @copydoc formatServiceList()
 std::string
 formatServiceList(
   const std::vector<Ros2CliManager::ServiceInfo> & services,
@@ -54,7 +52,6 @@ formatServiceList(
   return stream.str();
 }
 
-/// @copydoc collectServiceInfo()
 std::vector<Ros2CliManager::ServiceInfo>
 collectServiceInfo(
   const rclcpp::node_interfaces::NodeGraphInterface & graph,

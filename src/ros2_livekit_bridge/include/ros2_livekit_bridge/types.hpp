@@ -42,12 +42,16 @@ using PerformRpcFn = std::function<std::optional<std::string>(
     const std::string & participant_id, const std::string & method,
     const std::string & payload, std::uint8_t timeout_sec)>;
 
-//! @brief Register a local handler for an RPC method.
+//! @brief Register a local handler for an RPC method. Returns false when the
+//! method could not be registered (for example, the local participant is
+//! unavailable).
 using RegisterRpcMethodFn =
-  std::function<void(const std::string & method, RpcHandler handler)>;
+  std::function<bool(const std::string & method, RpcHandler handler)>;
 
-//! @brief Remove a previously registered local RPC method.
+//! @brief Remove a previously registered local RPC method. Returns false when
+//! the method could not be unregistered (for example, the local participant is
+//! unavailable).
 using UnregisterRpcMethodFn =
-  std::function<void(const std::string & method)>;
+  std::function<bool(const std::string & method)>;
 
 }  // namespace ros2_livekit_bridge

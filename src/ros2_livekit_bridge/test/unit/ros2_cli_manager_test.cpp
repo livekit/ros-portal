@@ -62,6 +62,8 @@ public:
   RpcHandler registered_handler;
   std::vector<std::string> registered_methods;
   std::vector<std::string> unregistered_methods;
+  bool register_succeeds{true};
+  bool unregister_succeeds{true};
 
   // Safe to capture `this`: the fixture owns this recorder past the manager's
   // lifetime (the manager is reset before rpc_client in TearDown).
@@ -89,13 +91,21 @@ public:
 
     livekit_methods.register_rpc_method =
       [this](const std::string & method, RpcHandler handler) {
+        if (!register_succeeds) {
+          return false;
+        }
         registered_methods.push_back(method);
         registered_handler = std::move(handler);
+        return true;
       };
 
     livekit_methods.unregister_rpc_method =
       [this](const std::string & method) {
+        if (!unregister_succeeds) {
+          return false;
+        }
         unregistered_methods.push_back(method);
+        return true;
       };
 
     return livekit_methods;

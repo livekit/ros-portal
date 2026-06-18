@@ -36,23 +36,22 @@ Ros2CliManager::Ros2CliManager(
   livekit_methods_(std::move(livekit_methods))
 {
   if (!node_interfaces_.node_base || !node_interfaces_.node_services ||
-      !node_interfaces_.node_graph || !node_interfaces_.node_logging)
+    !node_interfaces_.node_graph || !node_interfaces_.node_logging)
   {
     throw std::invalid_argument(
-            "Ros2CliManager requires fully populated NodeInterfaces");
+        "Ros2CliManager requires fully populated NodeInterfaces");
   }
 
   if (!livekit_methods_.has_participant || !livekit_methods_.perform_rpc ||
-      !livekit_methods_.register_rpc_method ||
-      !livekit_methods_.unregister_rpc_method)
+    !livekit_methods_.register_rpc_method ||
+    !livekit_methods_.unregister_rpc_method)
   {
     throw std::invalid_argument(
-            "Ros2CliManager requires fully populated LivekitMethods");
+        "Ros2CliManager requires fully populated LivekitMethods");
   }
 
   topic_list_service_ = rclcpp::create_service<Ros2TopicList>(
-      node_interfaces_.node_base,
-      node_interfaces_.node_services,
+      node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kTopicListServiceName,
     [this](const std::shared_ptr<Ros2TopicList::Request> request,
     std::shared_ptr<Ros2TopicList::Response> response) {
@@ -61,8 +60,7 @@ Ros2CliManager::Ros2CliManager(
       rclcpp::ServicesQoS(), callback_group);
 
   service_list_service_ = rclcpp::create_service<Ros2ServiceList>(
-      node_interfaces_.node_base,
-      node_interfaces_.node_services,
+      node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kServiceListServiceName,
     [this](const std::shared_ptr<Ros2ServiceList::Request> request,
     std::shared_ptr<Ros2ServiceList::Response> response) {
@@ -71,8 +69,7 @@ Ros2CliManager::Ros2CliManager(
       rclcpp::ServicesQoS(), callback_group);
 
   interface_show_service_ = rclcpp::create_service<Ros2InterfaceShow>(
-      node_interfaces_.node_base,
-      node_interfaces_.node_services,
+      node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kInterfaceShowServiceName,
     [this](const std::shared_ptr<Ros2InterfaceShow::Request> request,
     std::shared_ptr<Ros2InterfaceShow::Response> response) {
@@ -83,17 +80,17 @@ Ros2CliManager::Ros2CliManager(
   livekit_methods_.register_rpc_method(ros2_cli::kTopicListRpcMethod,
     [this](const std::string & payload) {
       return handleTopicListRpc(payload);
-                                 });
+                  });
 
   livekit_methods_.register_rpc_method(ros2_cli::kServiceListRpcMethod,
     [this](const std::string & payload) {
       return handleServiceListRpc(payload);
-                                 });
+                  });
 
   livekit_methods_.register_rpc_method(ros2_cli::kInterfaceShowRpcMethod,
     [this](const std::string & payload) {
       return handleInterfaceShowRpc(payload);
-                                 });
+                  });
 
   RCLCPP_INFO(
       node_interfaces_.node_logging->get_logger(),
@@ -110,14 +107,12 @@ Ros2CliManager::Ros2CliManager(
   LivekitMethods livekit_methods)
 : Ros2CliManager(
     NodeInterfaces{
-      node.get_node_base_interface(),
-      node.get_node_services_interface(),
-      node.get_node_graph_interface(),
-      node.get_node_logging_interface(),
-    },
-    callback_group, std::move(livekit_methods))
-{
-}
+    node.get_node_base_interface(),
+    node.get_node_services_interface(),
+    node.get_node_graph_interface(),
+    node.get_node_logging_interface(),
+  },
+    callback_group, std::move(livekit_methods)) {}
 
 Ros2CliManager::~Ros2CliManager()
 {
@@ -166,15 +161,15 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
   const auto payload = topicListRequestToJson(request, timeout_sec);
 
   const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kTopicListRpcMethod, payload, timeout_sec);
+      request.participant_id, ros2_cli::kTopicListRpcMethod, payload,
+      timeout_sec);
   if (!rpc_response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed",
-        ros2_cli::kTopicListRpcMethod, request.participant_id.c_str());
-    return makeTopicListResponse(
-      false,
-      std::string("remote ") + ros2_cli::kTopicListRpcMethod + " RPC failed");
+    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                 "LiveKit RPC '%s' to participant '%s' failed",
+                 ros2_cli::kTopicListRpcMethod, request.participant_id.c_str());
+    return makeTopicListResponse(false, std::string("remote ") +
+                                            ros2_cli::kTopicListRpcMethod +
+                                            " RPC failed");
   }
 
   try {
@@ -183,11 +178,11 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
         "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kTopicListRpcMethod, request.participant_id.c_str(), error.what());
-    return makeTopicListResponse(
-        false,
-        std::string("remote ") + ros2_cli::kTopicListRpcMethod +
-        " returned malformed JSON");
+        ros2_cli::kTopicListRpcMethod, request.participant_id.c_str(),
+        error.what());
+    return makeTopicListResponse(false, std::string("remote ") +
+                                            ros2_cli::kTopicListRpcMethod +
+                                            " returned malformed JSON");
   }
 }
 
@@ -208,15 +203,16 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
   const auto payload = serviceListRequestToJson(request, timeout_sec);
 
   const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kServiceListRpcMethod, payload, timeout_sec);
+      request.participant_id, ros2_cli::kServiceListRpcMethod, payload,
+      timeout_sec);
   if (!rpc_response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed",
-        ros2_cli::kServiceListRpcMethod, request.participant_id.c_str());
-    return makeServiceListResponse(
-      false,
-      std::string("remote ") + ros2_cli::kServiceListRpcMethod + " RPC failed");
+    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                 "LiveKit RPC '%s' to participant '%s' failed",
+                 ros2_cli::kServiceListRpcMethod,
+                 request.participant_id.c_str());
+    return makeServiceListResponse(false, std::string("remote ") +
+                                              ros2_cli::kServiceListRpcMethod +
+                                              " RPC failed");
   }
 
   try {
@@ -225,11 +221,11 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
         "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kServiceListRpcMethod, request.participant_id.c_str(), error.what());
-    return makeServiceListResponse(
-        false,
-        std::string("remote ") + ros2_cli::kServiceListRpcMethod +
-        " returned malformed JSON");
+        ros2_cli::kServiceListRpcMethod, request.participant_id.c_str(),
+        error.what());
+    return makeServiceListResponse(false, std::string("remote ") +
+                                              ros2_cli::kServiceListRpcMethod +
+                                              " returned malformed JSON");
   }
 }
 
@@ -256,15 +252,16 @@ Ros2CliManager::callRemoteInterfaceShow(
   const auto payload = interfaceShowRequestToJson(request, timeout_sec);
 
   const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kInterfaceShowRpcMethod, payload, timeout_sec);
+      request.participant_id, ros2_cli::kInterfaceShowRpcMethod, payload,
+      timeout_sec);
   if (!rpc_response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed",
-        ros2_cli::kInterfaceShowRpcMethod, request.participant_id.c_str());
+    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                 "LiveKit RPC '%s' to participant '%s' failed",
+                 ros2_cli::kInterfaceShowRpcMethod,
+                 request.participant_id.c_str());
     return makeInterfaceShowResponse(
-        false,
-        std::string("remote ") + ros2_cli::kInterfaceShowRpcMethod + " RPC failed");
+        false, std::string("remote ") + ros2_cli::kInterfaceShowRpcMethod +
+                   " RPC failed");
   }
 
   try {
@@ -273,11 +270,11 @@ Ros2CliManager::callRemoteInterfaceShow(
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
         "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kInterfaceShowRpcMethod, request.participant_id.c_str(), error.what());
+        ros2_cli::kInterfaceShowRpcMethod, request.participant_id.c_str(),
+        error.what());
     return makeInterfaceShowResponse(
-        false,
-        std::string("remote ") + ros2_cli::kInterfaceShowRpcMethod +
-        " returned malformed JSON");
+        false, std::string("remote ") + ros2_cli::kInterfaceShowRpcMethod +
+                   " returned malformed JSON");
   }
 }
 
@@ -291,9 +288,8 @@ Ros2CliManager::handleTopicListRpc(const std::string & payload) const
         options);
     return topicListResponseToJson(true, "", output);
   } catch (const std::exception & error) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "Failed to handle LiveKit RPC '%s': %s",
+    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                 "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kTopicListRpcMethod, error.what());
     return topicListResponseToJson(false, error.what(), "");
   }
@@ -309,9 +305,8 @@ Ros2CliManager::handleServiceListRpc(const std::string & payload) const
         options);
     return serviceListResponseToJson(true, "", output);
   } catch (const std::exception & error) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "Failed to handle LiveKit RPC '%s': %s",
+    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                 "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kServiceListRpcMethod, error.what());
     return serviceListResponseToJson(false, error.what(), "");
   }
@@ -330,22 +325,19 @@ Ros2CliManager::handleInterfaceShowRpc(const std::string & payload) const
       } else if (options.type == "-") {
         error_message = "expected stdin pipe";
       } else if (options.all_comments && options.no_comments) {
-        error_message =
-            "all_comments and no_comments are mutually exclusive";
+        error_message = "all_comments and no_comments are mutually exclusive";
       } else {
         error_message = "Could not find interface '" + options.type + "'";
       }
-      RCLCPP_ERROR(
-          node_interfaces_.node_logging->get_logger(),
-          "Failed to handle LiveKit RPC '%s': %s",
-          ros2_cli::kInterfaceShowRpcMethod, error_message.c_str());
+      RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                   "Failed to handle LiveKit RPC '%s': %s",
+                   ros2_cli::kInterfaceShowRpcMethod, error_message.c_str());
       return interfaceShowResponseToJson(false, error_message, "");
     }
     return interfaceShowResponseToJson(true, "", *output);
   } catch (const std::exception & error) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "Failed to handle LiveKit RPC '%s': %s",
+    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
+                 "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kInterfaceShowRpcMethod, error.what());
     return interfaceShowResponseToJson(false, error.what(), "");
   }

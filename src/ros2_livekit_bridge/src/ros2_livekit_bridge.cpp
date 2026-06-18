@@ -23,7 +23,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <optional>
-#include <stdexcept>
 #include <utility>
 
 #include <livekit/data_track_frame.h>
@@ -144,29 +143,36 @@ bool Ros2LiveKitBridge::initialize() {
     RCLCPP_INFO(this->get_logger(), "Connecting to %s ...",
                 livekit_url.c_str());
     // The LiveKit SDK lifecycle (livekit::initialize()/shutdown()) is owned by
-    // the process entry point (the node main() or the test harness), not by
-    // this node: livekit::initialize() must be the first LiveKit API called in
-    // the process and is process-global, so a node that owns it would clash
-    // with any sibling node in the same process. We assume it has already run.
+    // the process entry point (the node main() or the test harness)
     room_ = std::make_unique<livekit::Room>();
+    if (!room_) {
+      RCLCPP_FATAL(this->get_logger(), "Failed to create LiveKit room");
+      return false;
+    }
     // Warning: avoid doing ROS operations in delegate callbacks
     room_->setDelegate(this);
 
     if (room_->connect(livekit_url, livekit_token, room_options)) {
-      auto local = room_->localParticipant().lock();
-      RCLCPP_INFO(
-          this->get_logger(), "Connected to LiveKit room '%s' as identity '%s'",
-          room_name_.c_str(), local ? local->identity().c_str() : "(unknown)");
-      Ros2CliManager::LivekitMethods lk_methods{
-          [this](const std::string &id) { return hasParticipant(id); },
-          [this](const std::string &id, const std::string &method,
+      if (auto lp = room_->localParticipant().lock()) {
+        RCLCPP_INFO(
+            this->get_logger(), "Connected to LiveKit room '%s' as identity '%s'",
+            room_name_.c_str(), lp->identity().c_str());
+      } else {
+        RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
+        return false;
+      }
+      Ros2CliManager::LivekitMethods lk_methods;
+      lk_methods.has_participant = [this](const std::string &id) { return hasParticipant(id); };
+      lk_methods.perform_rpc = [this](const std::string &id, const std::string &method,
                  const std::string &payload, std::uint8_t timeout_sec) {
             return rpcPerform(id, method, payload, timeout_sec);
-          },
-          [this](const std::string &method, RpcHandler handler) {
-            rpcRegisterMethod(method, std::move(handler));
-          },
-          [this](const std::string &method) { rpcUnregisterMethod(method); }};
+          };
+      lk_methods.register_rpc_method = [this](const std::string &method, RpcHandler handler) {
+        return rpcRegisterMethod(method, std::move(handler));
+      };
+      lk_methods.unregister_rpc_method = [this](const std::string &method) {
+        return rpcUnregisterMethod(method);
+      };
       ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
           *this, reentrant_callback_group_, std::move(lk_methods));
     } else {
@@ -217,6 +223,12 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge() {
 }
 
 void Ros2LiveKitBridge::pollTopics() {
+  if (!initialized_)
+  {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Polling topics while bridge is not initialized, skipping...");
+    return;
+  }
+
   auto topic_names_and_types = this->get_topic_names_and_types();
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
@@ -779,26 +791,54 @@ std::optional<std::string> Ros2LiveKitBridge::rpcPerform(
   }
 }
 
-void Ros2LiveKitBridge::rpcRegisterMethod(const std::string &method,
+bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string &method,
                                           RpcHandler handler) {
   const auto local_participant =
       room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
-    throw std::runtime_error("LiveKit local participant is unavailable");
+    RCLCPP_WARN(this->get_logger(),
+                "Cannot register RPC method '%s': LiveKit local participant is "
+                "unavailable",
+                method.c_str());
+    return false;
   }
 
+  try {
   local_participant->registerRpcMethod(
       method,
-      [handler = std::move(handler)](const livekit::RpcInvocationData &data)
+        [handler = std::move(handler)](const livekit::RpcInvocationData &data)
           -> std::optional<std::string> { return handler(data.payload); });
+  } catch (const livekit::RpcError &error) {
+    RCLCPP_ERROR(
+        this->get_logger(),
+        "LiveKit RPC method '%s' registration failed: code=%u message=%s",
+        method.c_str(), error.code(), error.message().c_str());
+    return false;
+  }
+  return true;
 }
 
-void Ros2LiveKitBridge::rpcUnregisterMethod(const std::string &method) {
+bool Ros2LiveKitBridge::rpcUnregisterMethod(const std::string &method) {
   const auto local_participant =
       room_ ? room_->localParticipant().lock() : nullptr;
-  if (local_participant) {
-    local_participant->unregisterRpcMethod(method);
+  if (!local_participant) {
+    RCLCPP_WARN(this->get_logger(),
+                "Cannot unregister RPC method '%s': LiveKit local participant "
+                "is unavailable",
+                method.c_str());
+    return false;
   }
+
+  try {
+    local_participant->unregisterRpcMethod(method);
+  } catch (const livekit::RpcError &error) {
+    RCLCPP_ERROR(
+        this->get_logger(),
+        "LiveKit RPC method '%s' unregistration failed: code=%u message=%s",
+        method.c_str(), error.code(), error.message().c_str());
+    return false;
+  }
+  return true;
 }
 
 } // namespace ros2_livekit_bridge

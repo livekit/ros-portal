@@ -172,16 +172,18 @@ private:
    * participant, adapting the JSON-string handler to the SDK signature.
    * @param method LiveKit RPC method name.
    * @param handler Callback that receives and returns JSON strings.
+   * @return True on success, false when the local participant is unavailable.
    */
-  void rpcRegisterMethod(
+  bool rpcRegisterMethod(
     const std::string & method, RpcHandler handler);
 
   /**
    * @brief Unregister a local LiveKit RPC handler from the room's local
-   * participant. No-op when the local participant is unavailable.
+   * participant.
    * @param method LiveKit RPC method name.
+   * @return True on success, false when the local participant is unavailable.
    */
-  void rpcUnregisterMethod(const std::string & method);
+  bool rpcUnregisterMethod(const std::string & method);
 
   //! @brief The name of the room
   std::string room_name_;

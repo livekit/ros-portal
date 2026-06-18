@@ -19,6 +19,7 @@
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 
+#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
 #include "test_common.hpp"
@@ -414,7 +415,7 @@ protected:
     const TopicListServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2TopicList>(
-      "/ros2_livekit_bridge/ros2_topic_list");
+      ros2_cli::kTopicListServiceName);
 
     if (!waitFor(
         [&]() {
@@ -449,7 +450,7 @@ protected:
     const ServiceListServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2ServiceList>(
-      "/ros2_livekit_bridge/ros2_service_list");
+      ros2_cli::kServiceListServiceName);
 
     if (!waitFor(
         [&]() {
@@ -484,7 +485,7 @@ protected:
     const InterfaceShowServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2InterfaceShow>(
-      "/ros2_livekit_bridge/ros2_interface_show");
+      ros2_cli::kInterfaceShowServiceName);
 
     if (!waitFor(
         [&]() {

@@ -215,17 +215,6 @@ public:
   static std::uint8_t effectiveTimeout(std::uint8_t timeout_sec);
 
 private:
-  static constexpr const char *kTopicListRpcMethod = "ros2_topic_list";
-  static constexpr const char *kTopicListServiceName =
-    "/ros2_livekit_bridge/ros2_topic_list";
-  static constexpr const char *kServiceListRpcMethod = "ros2_service_list";
-  static constexpr const char *kServiceListServiceName =
-    "/ros2_livekit_bridge/ros2_service_list";
-  static constexpr const char *kInterfaceShowRpcMethod = "ros2_interface_show";
-  static constexpr const char *kInterfaceShowServiceName =
-    "/ros2_livekit_bridge/ros2_interface_show";
-  static constexpr std::uint8_t kDefaultTimeoutSec = 10;
-
   /**
    * @brief Service callback that maps a ROS request into a service response.
    * @param request Shared ROS service request.

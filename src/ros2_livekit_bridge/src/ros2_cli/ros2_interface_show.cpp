@@ -27,49 +27,29 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-namespace ros2_livekit_bridge::ros2_cli
-{
-namespace
-{
+namespace ros2_livekit_bridge::ros2_cli {
+namespace {
 
-/**
- * @brief Remove leading whitespace from a string.
- * @param value String to trim.
- * @return Copy of @p value beginning at its first non-whitespace character, or
- * an empty string when @p value contains only whitespace.
- */
-std::string leftTrim(const std::string & value)
-{
+// Remove leading whitespace from a string.
+std::string leftTrim(const std::string &value) {
   const auto first =
-    std::find_if(value.begin(), value.end(), [](unsigned char character) {
+      std::find_if(value.begin(), value.end(), [](unsigned char character) {
         return !std::isspace(character);
       });
   return std::string(first, value.end());
 }
 
-/**
- * @brief Remove trailing whitespace from a string.
- * @param value String to trim. The argument is passed by value so it can be
- * modified in place.
- * @return Trimmed copy of @p value.
- */
-std::string rightTrim(std::string value)
-{
+// Remove trailing whitespace from a string.
+std::string rightTrim(std::string value) {
   while (!value.empty() &&
-    std::isspace(static_cast<unsigned char>(value.back())))
-  {
+         std::isspace(static_cast<unsigned char>(value.back()))) {
     value.pop_back();
   }
   return value;
 }
 
-/**
- * @brief Split an interface type identifier on `/` separators.
- * @param type Interface type string such as `std_msgs/msg/String`.
- * @return Type identifier parts, preserving empty parts from malformed input.
- */
-std::vector<std::string> splitInterfaceType(const std::string & type)
-{
+// Split an interface type identifier on `/` separators.
+std::vector<std::string> splitInterfaceType(const std::string &type) {
   std::vector<std::string> parts;
   size_t start = 0;
   while (start <= type.size()) {
@@ -83,50 +63,33 @@ std::vector<std::string> splitInterfaceType(const std::string & type)
   return parts;
 }
 
-/**
- * @brief Resolve an interface type identifier to its installed definition file.
- * @param type Interface type string in `package/msg/Name`,
- * `package/srv/Name`, or `package/action/Name` form.
- * @return Absolute path under the package share directory.
- * @throws std::runtime_error when @p type is malformed or uses an unsupported
- * interface kind.
- * @throws ament_index_cpp::PackageNotFoundError when the package is not
- * registered in the ament index.
- */
-std::string interfacePath(const std::string & type)
-{
+// Resolve package/msg/Name (or srv/action) to its installed definition file path.
+std::string interfacePath(const std::string &type) {
   const auto parts = splitInterfaceType(type);
   if (parts.size() != 3 || parts[0].empty() || parts[1].empty() ||
-    parts[2].empty())
-  {
+      parts[2].empty()) {
     throw std::runtime_error("Invalid name '" + type +
                              "'. Expected three parts separated by '/'");
   }
 
-  const auto & package_name = parts[0];
-  const auto & interface_kind = parts[1];
-  const auto & interface_name = parts[2];
+  const auto &package_name = parts[0];
+  const auto &interface_kind = parts[1];
+  const auto &interface_name = parts[2];
   if (interface_kind != "msg" && interface_kind != "srv" &&
-    interface_kind != "action")
-  {
+      interface_kind != "action") {
     throw std::runtime_error("Invalid interface kind '" + interface_kind +
                              "'. Expected 'msg', 'srv', or 'action'");
   }
 
   const auto share_directory =
-    ament_index_cpp::get_package_share_directory(package_name);
+      ament_index_cpp::get_package_share_directory(package_name);
   const auto extension = "." + interface_kind;
   return share_directory + "/" + interface_kind + "/" + interface_name +
          extension;
 }
 
-/**
- * @brief Remove array and bounded-string suffixes from a field type token.
- * @param type Field type token that may include `[]`, `[N]`, or `<N>` syntax.
- * @return Base field type without array or bound suffixes.
- */
-std::string removeArraySuffix(std::string type)
-{
+// Remove array and bounded-string suffixes from a field type token.
+std::string removeArraySuffix(std::string type) {
   const auto array_start = type.find('[');
   if (array_start != std::string::npos) {
     type = type.substr(0, array_start);
@@ -139,29 +102,18 @@ std::string removeArraySuffix(std::string type)
   return type;
 }
 
-/**
- * @brief Check whether a field type token is a ROS primitive scalar/string.
- * @param type Field type token after array and bound suffixes have been
- * removed.
- * @return True when @p type is one of the ROS primitive interface types.
- */
-bool isPrimitiveInterfaceType(const std::string & type)
-{
+// Return true when the field type token is a ROS primitive scalar/string.
+bool isPrimitiveInterfaceType(const std::string &type) {
   static const std::set<std::string> kPrimitives{
-    "bool", "byte", "char", "float32", "float64",
-    "int8", "uint8", "int16", "uint16", "int32",
-    "uint32", "int64", "uint64", "string", "wstring",
+      "bool",   "byte",  "char",   "float32", "float64",
+      "int8",   "uint8", "int16",  "uint16",  "int32",
+      "uint32", "int64", "uint64", "string",  "wstring",
   };
   return kPrimitives.count(type) > 0;
 }
 
-/**
- * @brief Remove a trailing ROS interface comment from one definition line.
- * @param line Interface definition line.
- * @return Line content before `#`, with trailing whitespace removed.
- */
-std::string stripTrailingComment(const std::string & line)
-{
+// Remove a trailing ROS interface comment from one definition line.
+std::string stripTrailingComment(const std::string &line) {
   const auto comment_start = line.find('#');
   if (comment_start == std::string::npos) {
     return rightTrim(line);
@@ -169,19 +121,10 @@ std::string stripTrailingComment(const std::string & line)
   return rightTrim(line.substr(0, comment_start));
 }
 
-/**
- * @brief Infer a nested message interface referenced by one definition line.
- * @param package_name Package name of the currently rendered root or nested
- * interface.
- * @param line Raw interface definition line.
- * @return Fully qualified nested message type, or empty when the line is a
- * comment, separator, constant, primitive field, or unsupported type reference.
- */
+// Infer a nested message interface referenced by one definition line.
 std::optional<std::string>
-nestedInterfaceTypeFromLine(
-  const std::string & package_name,
-  const std::string & line)
-{
+nestedInterfaceTypeFromLine(const std::string &package_name,
+                            const std::string &line) {
   const auto without_comment = stripTrailingComment(line);
   const auto trimmed = leftTrim(without_comment);
   if (trimmed.empty() || trimmed == "---") {
@@ -193,8 +136,7 @@ nestedInterfaceTypeFromLine(
   std::string name_token;
   stream >> type_token >> name_token;
   if (type_token.empty() || name_token.empty() ||
-    name_token.find('=') != std::string::npos)
-  {
+      name_token.find('=') != std::string::npos) {
     return std::nullopt;
   }
 
@@ -206,8 +148,7 @@ nestedInterfaceTypeFromLine(
   const auto parts = splitInterfaceType(type_token);
   if (parts.size() == 1) {
     if (!type_token.empty() &&
-      std::isupper(static_cast<unsigned char>(type_token.front())))
-    {
+        std::isupper(static_cast<unsigned char>(type_token.front()))) {
       return package_name + "/msg/" + type_token;
     }
     return std::nullopt;
@@ -221,19 +162,10 @@ nestedInterfaceTypeFromLine(
   return std::nullopt;
 }
 
-/**
- * @brief Append one rendered definition line using the requested comment mode.
- * @param output Destination stream.
- * @param line Raw interface definition line.
- * @param show_comments Whether comments and blank lines should be preserved.
- * @param indent_level Number of tab characters to prefix before rendered
- * content.
- */
-void appendRenderedInterfaceLine(
-  std::ostringstream & output,
-  const std::string & line, bool show_comments,
-  int indent_level)
-{
+// Append one rendered definition line using the requested comment mode.
+void appendRenderedInterfaceLine(std::ostringstream &output,
+                                 const std::string &line, bool show_comments,
+                                 int indent_level) {
   if (show_comments) {
     if (!line.empty()) {
       output << std::string(static_cast<size_t>(indent_level), '\t') << line;
@@ -255,25 +187,13 @@ void appendRenderedInterfaceLine(
          << without_comment << '\n';
 }
 
-/**
- * @brief Render an interface definition and recursively inline nested messages.
- * @param type Interface type to render.
- * @param show_comments Whether to preserve comments for the current interface.
- * @param show_nested_comments Whether nested interface definitions should
- * preserve comments.
- * @param indent_level Number of tab characters used for the current interface.
- * @param active_types Recursion stack used to avoid cycles in nested messages.
- * @param output Destination stream for rendered output.
- * @throws std::runtime_error when an interface file cannot be opened.
- */
-void renderInterfaceDefinitionRecursive(
-  const std::string & type,
-  bool show_comments,
-  bool show_nested_comments,
-  int indent_level,
-  std::set<std::string> & active_types,
-  std::ostringstream & output)
-{
+// Render an interface definition and recursively inline nested messages.
+void renderInterfaceDefinitionRecursive(const std::string &type,
+                                        bool show_comments,
+                                        bool show_nested_comments,
+                                        int indent_level,
+                                        std::set<std::string> &active_types,
+                                        std::ostringstream &output) {
   const auto parts = splitInterfaceType(type);
   const auto path = interfacePath(type);
   std::ifstream input(path);
@@ -304,8 +224,7 @@ void renderInterfaceDefinitionRecursive(
 
 } // namespace
 
-std::string renderInterfaceDefinition(const InterfaceShowOptions & options)
-{
+std::string renderInterfaceDefinition(const InterfaceShowOptions &options) {
   if (options.type.empty()) {
     throw std::runtime_error("the passed value is empty");
   }

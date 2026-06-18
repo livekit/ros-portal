@@ -29,8 +29,9 @@ namespace ros2_livekit_bridge
 Ros2CliManager::Ros2CliManager(
   NodeInterfaces node_interfaces,
   rclcpp::CallbackGroup::SharedPtr callback_group,
-  RpcTransport transport)
-: node_interfaces_(std::move(node_interfaces)), transport_(std::move(transport))
+  LivekitMethods livekit_methods)
+: node_interfaces_(std::move(node_interfaces)),
+  livekit_methods_(std::move(livekit_methods))
 {
   if (!node_interfaces_.node_base || !node_interfaces_.node_services ||
       !node_interfaces_.node_graph || !node_interfaces_.node_logging)
@@ -39,11 +40,12 @@ Ros2CliManager::Ros2CliManager(
             "Ros2CliManager requires fully populated NodeInterfaces");
   }
 
-  if (!transport_.has_participant || !transport_.perform_rpc ||
-      !transport_.register_rpc_method || !transport_.unregister_rpc_method)
+  if (!livekit_methods_.has_participant || !livekit_methods_.perform_rpc ||
+      !livekit_methods_.register_rpc_method ||
+      !livekit_methods_.unregister_rpc_method)
   {
     throw std::invalid_argument(
-            "Ros2CliManager requires a fully populated RpcTransport");
+            "Ros2CliManager requires fully populated LivekitMethods");
   }
 
   topic_list_service_ = rclcpp::create_service<Ros2TopicList>(
@@ -76,17 +78,17 @@ Ros2CliManager::Ros2CliManager(
       },
       rclcpp::ServicesQoS(), callback_group);
 
-  transport_.register_rpc_method(kTopicListRpcMethod,
+  livekit_methods_.register_rpc_method(kTopicListRpcMethod,
     [this](const std::string & payload) {
       return handleTopicListRpc(payload);
                                  });
 
-  transport_.register_rpc_method(kServiceListRpcMethod,
+  livekit_methods_.register_rpc_method(kServiceListRpcMethod,
     [this](const std::string & payload) {
       return handleServiceListRpc(payload);
                                  });
 
-  transport_.register_rpc_method(kInterfaceShowRpcMethod,
+  livekit_methods_.register_rpc_method(kInterfaceShowRpcMethod,
     [this](const std::string & payload) {
       return handleInterfaceShowRpc(payload);
                                  });
@@ -103,7 +105,7 @@ Ros2CliManager::Ros2CliManager(
 Ros2CliManager::Ros2CliManager(
   rclcpp::Node & node,
   rclcpp::CallbackGroup::SharedPtr callback_group,
-  RpcTransport transport)
+  LivekitMethods livekit_methods)
 : Ros2CliManager(
     NodeInterfaces{
       node.get_node_base_interface(),
@@ -111,16 +113,16 @@ Ros2CliManager::Ros2CliManager(
       node.get_node_graph_interface(),
       node.get_node_logging_interface(),
     },
-    callback_group, std::move(transport))
+    callback_group, std::move(livekit_methods))
 {
 }
 
 Ros2CliManager::~Ros2CliManager()
 {
-  if (transport_.unregister_rpc_method) {
-    transport_.unregister_rpc_method(kTopicListRpcMethod);
-    transport_.unregister_rpc_method(kServiceListRpcMethod);
-    transport_.unregister_rpc_method(kInterfaceShowRpcMethod);
+  if (livekit_methods_.unregister_rpc_method) {
+    livekit_methods_.unregister_rpc_method(kTopicListRpcMethod);
+    livekit_methods_.unregister_rpc_method(kServiceListRpcMethod);
+    livekit_methods_.unregister_rpc_method(kInterfaceShowRpcMethod);
   }
 }
 
@@ -152,7 +154,7 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
     return makeTopicListResponse(false, "participant_id must be non-empty");
   }
 
-  if (!transport_.has_participant(request.participant_id)) {
+  if (!livekit_methods_.has_participant(request.participant_id)) {
     return makeTopicListResponse(false, "LiveKit participant '" +
                                             request.participant_id +
                                             "' was not found");
@@ -161,7 +163,7 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = topicListRequestToJson(request, timeout_sec);
 
-  const auto rpc_response = transport_.perform_rpc(
+  const auto rpc_response = livekit_methods_.perform_rpc(
       request.participant_id, kTopicListRpcMethod, payload, timeout_sec);
   if (!rpc_response) {
     RCLCPP_ERROR(
@@ -190,7 +192,7 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
     return makeServiceListResponse(false, "participant_id must be non-empty");
   }
 
-  if (!transport_.has_participant(request.participant_id)) {
+  if (!livekit_methods_.has_participant(request.participant_id)) {
     return makeServiceListResponse(false, "LiveKit participant '" +
                                               request.participant_id +
                                               "' was not found");
@@ -199,7 +201,7 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = serviceListRequestToJson(request, timeout_sec);
 
-  const auto rpc_response = transport_.perform_rpc(
+  const auto rpc_response = livekit_methods_.perform_rpc(
       request.participant_id, kServiceListRpcMethod, payload, timeout_sec);
   if (!rpc_response) {
     RCLCPP_ERROR(
@@ -234,7 +236,7 @@ Ros2CliManager::callRemoteInterfaceShow(
         false, "all_comments and no_comments are mutually exclusive");
   }
 
-  if (!transport_.has_participant(request.participant_id)) {
+  if (!livekit_methods_.has_participant(request.participant_id)) {
     return makeInterfaceShowResponse(false, "LiveKit participant '" +
                                                 request.participant_id +
                                                 "' was not found");
@@ -243,7 +245,7 @@ Ros2CliManager::callRemoteInterfaceShow(
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = interfaceShowRequestToJson(request, timeout_sec);
 
-  const auto rpc_response = transport_.perform_rpc(
+  const auto rpc_response = livekit_methods_.perform_rpc(
       request.participant_id, kInterfaceShowRpcMethod, payload, timeout_sec);
   if (!rpc_response) {
     RCLCPP_ERROR(

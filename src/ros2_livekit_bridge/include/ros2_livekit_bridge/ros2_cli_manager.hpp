@@ -49,14 +49,14 @@ public:
   using Ros2ServiceList = ros2_cli::Ros2ServiceList;
 
   /**
-   * @brief Set of RPC callbacks the bridge supplies to the manager.
+   * @brief LiveKit methods the bridge supplies to the manager.
    *
    * This struct isolates LiveKit-specific calls from ROS CLI request handling
    * so the manager owns no reference to a `livekit::Room` and can be
    * unit-tested without connecting to a LiveKit room. The bridge populates each
    * callback from its own room and passes the struct in at construction.
    */
-  struct RpcTransport
+  struct LivekitMethods
   {
     HasParticipantFn has_participant;
     PerformRpcFn perform_rpc;
@@ -113,15 +113,16 @@ public:
    * @param node_interfaces Node interfaces for service hosting, graph queries,
    * and logs.
    * @param callback_group Callback group used by the ROS service.
-   * @param transport RPC callbacks supplied by the bridge.
-   * @throws std::invalid_argument when any interface or @p transport callback is
+   * @param livekit_methods LiveKit methods supplied by the bridge.
+   * @throws std::invalid_argument when any interface or @p livekit_methods
+   * callback is
    * unset.
    * @throws std::exception when RPC registration fails.
    */
   Ros2CliManager(
     NodeInterfaces node_interfaces,
     rclcpp::CallbackGroup::SharedPtr callback_group,
-    RpcTransport transport);
+    LivekitMethods livekit_methods);
 
   /**
    * @brief Construct the manager from a bridge node.
@@ -130,15 +131,15 @@ public:
    * required node interfaces from @p node.
    * @param node Bridge node used for service hosting, graph queries, and logs.
    * @param callback_group Callback group used by the ROS service.
-   * @param transport RPC callbacks supplied by the bridge.
-   * @throws std::invalid_argument when any extracted interface or @p transport
-   * callback is unset.
+   * @param livekit_methods LiveKit methods supplied by the bridge.
+   * @throws std::invalid_argument when any extracted interface or @p
+   * livekit_methods callback is unset.
    * @throws std::exception when RPC registration fails.
    */
   Ros2CliManager(
     rclcpp::Node & node,
     rclcpp::CallbackGroup::SharedPtr callback_group,
-    RpcTransport transport);
+    LivekitMethods livekit_methods);
 
   /**
    * @brief Unregister the LiveKit RPC method before destruction.
@@ -253,7 +254,7 @@ private:
     std::shared_ptr<Ros2InterfaceShow::Response> response) const;
 
   NodeInterfaces node_interfaces_;
-  RpcTransport transport_;
+  LivekitMethods livekit_methods_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;

@@ -165,7 +165,7 @@ bool Ros2LiveKitBridge::initialize()
                   "Connected to LiveKit room '%s' as identity '%s'",
                   room_name_.c_str(),
                   local ? local->identity().c_str() : "(unknown)");
-      Ros2CliManager::RpcTransport transport{
+      Ros2CliManager::LivekitMethods lk_methods{
         [this](const std::string & id) { return hasParticipant(id); },
         [this](const std::string & id, const std::string & method,
                const std::string & payload, std::uint8_t timeout_sec) {
@@ -178,7 +178,7 @@ bool Ros2LiveKitBridge::initialize()
       ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
         *this,
         reentrant_callback_group_,
-        std::move(transport));
+        std::move(lk_methods));
     } else {
       room_.reset();
       RCLCPP_FATAL(this->get_logger(), "Failed to connect to LiveKit room.");

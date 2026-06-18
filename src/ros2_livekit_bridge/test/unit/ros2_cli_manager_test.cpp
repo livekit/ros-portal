@@ -42,8 +42,8 @@ using ros2_cli::Ros2InterfaceShow;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 
-// Records the calls the manager makes and produces an Ros2CliManager::
-// RpcTransport whose callbacks drive this recorder. This replaces the former
+// Records the calls the manager makes and produces a Ros2CliManager::
+// LivekitMethods whose callbacks drive this recorder. This replaces the former
 // Ros2CliRpcClient subclass now that the manager takes a struct of callbacks
 // instead of a polymorphic interface.
 class FakeRpcClient
@@ -64,14 +64,14 @@ public:
 
   // Safe to capture `this`: the fixture owns this recorder past the manager's
   // lifetime (the manager is reset before rpc_client in TearDown).
-  Ros2CliManager::RpcTransport makeTransport()
+  Ros2CliManager::LivekitMethods makeLivekitMethods()
   {
-    Ros2CliManager::RpcTransport transport;
+    Ros2CliManager::LivekitMethods livekit_methods;
 
-    transport.has_participant =
+    livekit_methods.has_participant =
       [this](const std::string &) { return has_participant; };
 
-    transport.perform_rpc =
+    livekit_methods.perform_rpc =
       [this](const std::string & participant_id, const std::string & method,
         const std::string & payload, std::uint8_t timeout_sec)
         -> std::optional<std::string> {
@@ -86,18 +86,18 @@ public:
         return response_json;
       };
 
-    transport.register_rpc_method =
+    livekit_methods.register_rpc_method =
       [this](const std::string & method, RpcHandler handler) {
         registered_methods.push_back(method);
         registered_handler = std::move(handler);
       };
 
-    transport.unregister_rpc_method =
+    livekit_methods.unregister_rpc_method =
       [this](const std::string & method) {
         unregistered_methods.push_back(method);
       };
 
-    return transport;
+    return livekit_methods;
   }
 };
 
@@ -123,7 +123,7 @@ protected:
       node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     rpc_client = std::make_shared<FakeRpcClient>();
     manager = std::make_unique<Ros2CliManager>(
-      *node, callback_group, rpc_client->makeTransport());
+      *node, callback_group, rpc_client->makeLivekitMethods());
   }
 
   void TearDown() override

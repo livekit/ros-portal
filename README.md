@@ -4,6 +4,10 @@ ROS2 workspace for the LiveKit bridge. This repo is used as a development enviro
 
 It is intended that all development and builds are done in the devcontainer.
 
+For the `ros2_livekit_bridge` node — architecture, configuration, running, and
+integration testing — see
+[src/ros2_livekit_bridge/README.md](src/ros2_livekit_bridge/README.md).
+
 ## Devcontainer layout
 
 - Livekit WS in container: `/livekit_ws`
@@ -88,9 +92,13 @@ __NOTE:__ see `setup-shell-env.sh` for more build helpers such as `bros`, `dros`
 
 To build just the LiveKit bridge package and download the pinned LiveKit SDK
 release from GitHub during CMake configure, run:
+
 ```bash
 colcon build --packages-select ros2_livekit_bridge
 ```
+
+See [src/ros2_livekit_bridge/README.md](src/ros2_livekit_bridge/README.md) for
+configuration, launch, and integration-test details.
 
 The pinned version lives in `src/ros2_livekit_bridge/colcon.pkg` (currently
 `0.3.4`) and as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable

@@ -25,7 +25,7 @@ The two halves connect across the network:
   `success` / `err_msg` indicating whether the RPC round-trip succeeded.
 
 ```
-ros2 service call  ──>  Ros2CliManager  ──> LiveKit RPC  ──>  remote Ros2CliManager  ──>  remote ROS graph
+ros2 service call  ──>  ROS2 LiveKit Bridge  ──> LiveKit RPC  ──>  remote ROS2 LiveKit Bridge  ──>  remote ROS graph
    (your machine)        (local bridge)                         (robot bridge)            (introspection)
 ```
 
@@ -40,8 +40,9 @@ The remaining request fields mirror the flags of the corresponding native
 directly on the robot.
 
 ---
-
-## `ros2 topic list`
+## `ros2 topic`
+- currently only supports topic list
+### `ros2 topic list`
 
 **ROS service:** `/ros2_livekit_bridge/ros2_topic_list`
 (type `ros2_livekit_bridge_msgs/srv/Ros2TopicList`)
@@ -76,8 +77,9 @@ ros2 service call /ros2_livekit_bridge/ros2_topic_list \
 ```
 
 ---
-
-## `ros2 service list`
+## `ros2 service`
+- currently only supports service list
+### `ros2 service list`
 
 **ROS service:** `/ros2_livekit_bridge/ros2_service_list`
 (type `ros2_livekit_bridge_msgs/srv/Ros2ServiceList`)
@@ -112,7 +114,9 @@ ros2 service call /ros2_livekit_bridge/ros2_service_list \
 
 ---
 
-## `ros2 interface show`
+## `ros2 interface`
+- currently only supports interface show
+### `ros2 interface show`
 
 **ROS service:** `/ros2_livekit_bridge/ros2_interface_show`
 (type `ros2_livekit_bridge_msgs/srv/Ros2InterfaceShow`)

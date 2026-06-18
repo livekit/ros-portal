@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -59,21 +58,10 @@ public:
    */
   struct RpcTransport
   {
-    //! @brief Return true when a remote participant identity is present.
-    std::function<bool(const std::string & participant_id)> has_participant;
-
-    //! @brief Invoke an RPC method on a remote participant and return its JSON
-    //! response. Returns std::nullopt when the RPC call fails.
-    std::function<std::optional<std::string>(
-        const std::string & participant_id, const std::string & method,
-        const std::string & payload, std::uint8_t timeout_sec)> perform_rpc;
-
-    //! @brief Register a local handler for an RPC method.
-    std::function<void(
-        const std::string & method, RpcHandler handler)> register_rpc_method;
-
-    //! @brief Remove a previously registered local RPC method.
-    std::function<void(const std::string & method)> unregister_rpc_method;
+    HasParticipantFn has_participant;
+    PerformRpcFn perform_rpc;
+    RegisterRpcMethodFn register_rpc_method;
+    UnregisterRpcMethodFn unregister_rpc_method;
   };
 
   /**

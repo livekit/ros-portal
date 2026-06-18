@@ -28,9 +28,8 @@
 #include <rclcpp/node_interfaces/node_logging_interface.hpp>
 #include <rclcpp/node_interfaces/node_services_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
-#include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
-#include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
+
+#include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
 namespace ros2_livekit_bridge
 {
@@ -44,12 +43,9 @@ namespace ros2_livekit_bridge
  */
 class Ros2CliManager {
 public:
-  //! @brief Generated ROS service type for remote `ros2 interface show`.
-  using Ros2InterfaceShow = ros2_livekit_bridge_msgs::srv::Ros2InterfaceShow;
-  //! @brief Generated ROS service type for remote `ros2 topic list` requests.
-  using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
-  //! @brief Generated ROS service type for remote `ros2 service list` requests.
-  using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
+  using Ros2InterfaceShow = ros2_cli::Ros2InterfaceShow;
+  using Ros2TopicList = ros2_cli::Ros2TopicList;
+  using Ros2ServiceList = ros2_cli::Ros2ServiceList;
 
   /**
    * @brief Handler for inbound RPC payloads.

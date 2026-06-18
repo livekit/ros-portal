@@ -15,6 +15,7 @@
  */
 
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
 #include <gtest/gtest.h>
 
@@ -29,6 +30,9 @@ namespace
 {
 
 using json = nlohmann::json;
+using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceList;
+using ros2_cli::Ros2TopicList;
 
 Ros2TopicList::Request makeRequest()
 {

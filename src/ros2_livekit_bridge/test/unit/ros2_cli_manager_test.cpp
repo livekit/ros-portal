@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 
 #include <gtest/gtest.h>
@@ -37,9 +38,9 @@ namespace
 {
 
 using json = nlohmann::json;
-using Ros2InterfaceShow = Ros2CliManager::Ros2InterfaceShow;
-using Ros2ServiceList = Ros2CliManager::Ros2ServiceList;
-using Ros2TopicList = Ros2CliManager::Ros2TopicList;
+using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceList;
+using ros2_cli::Ros2TopicList;
 
 // Records the calls the manager makes and produces an Ros2CliManager::
 // RpcTransport whose callbacks drive this recorder. This replaces the former

@@ -21,6 +21,9 @@
 namespace ros2_livekit_bridge
 {
 using json = nlohmann::json;
+using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceList;
+using ros2_cli::Ros2TopicList;
 
 TopicListOptions
 topicListOptionsFromRequest(const Ros2TopicList::Request & request)

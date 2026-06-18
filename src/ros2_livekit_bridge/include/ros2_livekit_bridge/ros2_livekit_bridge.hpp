@@ -160,11 +160,10 @@ private:
    * @param method LiveKit RPC method name.
    * @param payload JSON request payload.
    * @param timeout_sec Response timeout in seconds.
-   * @return JSON response payload returned by the remote participant.
-   * @throws std::runtime_error on transport failure or translated LiveKit RPC
-   * errors so callers need not depend on the LiveKit SDK.
+   * @return JSON response payload returned by the remote participant, or
+   * std::nullopt when the RPC call fails.
    */
-  std::string rpcPerform(
+  std::optional<std::string> rpcPerform(
     const std::string & participant_id, const std::string & method,
     const std::string & payload, std::uint8_t timeout_sec);
 

@@ -161,20 +161,18 @@ Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = topicListRequestToJson(request, timeout_sec);
 
-  std::string rpc_response;
-  try {
-    rpc_response = transport_.perform_rpc(
-        request.participant_id, kTopicListRpcMethod, payload, timeout_sec);
-  } catch (const std::exception & error) {
+  const auto rpc_response = transport_.perform_rpc(
+      request.participant_id, kTopicListRpcMethod, payload, timeout_sec);
+  if (!rpc_response) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed: %s",
-        kTopicListRpcMethod, request.participant_id.c_str(), error.what());
-    return makeTopicListResponse(false, error.what());
+        "LiveKit RPC '%s' to participant '%s' failed",
+        kTopicListRpcMethod, request.participant_id.c_str());
+    return makeTopicListResponse(false, "remote ros2_topic_list RPC failed");
   }
 
   try {
-    return topicListResponseFromJson(rpc_response);
+    return topicListResponseFromJson(*rpc_response);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
@@ -201,20 +199,18 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = serviceListRequestToJson(request, timeout_sec);
 
-  std::string rpc_response;
-  try {
-    rpc_response = transport_.perform_rpc(
-        request.participant_id, kServiceListRpcMethod, payload, timeout_sec);
-  } catch (const std::exception & error) {
+  const auto rpc_response = transport_.perform_rpc(
+      request.participant_id, kServiceListRpcMethod, payload, timeout_sec);
+  if (!rpc_response) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed: %s",
-        kServiceListRpcMethod, request.participant_id.c_str(), error.what());
-    return makeServiceListResponse(false, error.what());
+        "LiveKit RPC '%s' to participant '%s' failed",
+        kServiceListRpcMethod, request.participant_id.c_str());
+    return makeServiceListResponse(false, "remote ros2_service_list RPC failed");
   }
 
   try {
-    return serviceListResponseFromJson(rpc_response);
+    return serviceListResponseFromJson(*rpc_response);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
@@ -247,20 +243,19 @@ Ros2CliManager::callRemoteInterfaceShow(
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = interfaceShowRequestToJson(request, timeout_sec);
 
-  std::string rpc_response;
-  try {
-    rpc_response = transport_.perform_rpc(
-        request.participant_id, kInterfaceShowRpcMethod, payload, timeout_sec);
-  } catch (const std::exception & error) {
+  const auto rpc_response = transport_.perform_rpc(
+      request.participant_id, kInterfaceShowRpcMethod, payload, timeout_sec);
+  if (!rpc_response) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' to participant '%s' failed: %s",
-        kInterfaceShowRpcMethod, request.participant_id.c_str(), error.what());
-    return makeInterfaceShowResponse(false, error.what());
+        "LiveKit RPC '%s' to participant '%s' failed",
+        kInterfaceShowRpcMethod, request.participant_id.c_str());
+    return makeInterfaceShowResponse(
+        false, "remote ros2_interface_show RPC failed");
   }
 
   try {
-    return interfaceShowResponseFromJson(rpc_response);
+    return interfaceShowResponseFromJson(*rpc_response);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),

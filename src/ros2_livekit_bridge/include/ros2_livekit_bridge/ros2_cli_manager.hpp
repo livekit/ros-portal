@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -62,9 +63,8 @@ public:
     std::function<bool(const std::string & participant_id)> has_participant;
 
     //! @brief Invoke an RPC method on a remote participant and return its JSON
-    //! response. Throws std::exception (including translated LiveKit RPC
-    //! errors) on failure.
-    std::function<std::string(
+    //! response. Returns std::nullopt when the RPC call fails.
+    std::function<std::optional<std::string>(
         const std::string & participant_id, const std::string & method,
         const std::string & payload, std::uint8_t timeout_sec)> perform_rpc;
 

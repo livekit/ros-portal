@@ -73,19 +73,15 @@ public:
 
     transport.perform_rpc =
       [this](const std::string & participant_id, const std::string & method,
-        const std::string & payload, std::uint8_t timeout_sec) {
+        const std::string & payload, std::uint8_t timeout_sec)
+        -> std::optional<std::string> {
         last_participant_id = participant_id;
         last_method = method;
         last_payload = payload;
         last_timeout_sec = timeout_sec;
 
-        // The bridge translates a LiveKit RpcError into a std::runtime_error
-        // before it reaches the manager; mirror that boundary here.
-        if (rpc_error) {
-          throw std::runtime_error(rpc_error->message());
-        }
-        if (runtime_error) {
-          throw *runtime_error;
+        if (rpc_error || runtime_error) {
+          return std::nullopt;
         }
         return response_json;
       };
@@ -433,7 +429,7 @@ TEST_F(Ros2CliManagerTest, RpcErrorFailsService)
   const auto response = manager->callRemoteTopicList(makeRequest());
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "unsupported method");
+  EXPECT_EQ(response.err_msg, "remote ros2_topic_list RPC failed");
   EXPECT_TRUE(response.output.empty());
 }
 
@@ -446,7 +442,7 @@ TEST_F(Ros2CliManagerTest, RpcErrorFailsServiceList)
   const auto response = manager->callRemoteServiceList(makeServiceRequest());
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "unsupported method");
+  EXPECT_EQ(response.err_msg, "remote ros2_service_list RPC failed");
   EXPECT_TRUE(response.output.empty());
 }
 
@@ -460,7 +456,7 @@ TEST_F(Ros2CliManagerTest, RpcErrorFailsInterfaceShow)
     makeInterfaceRequest());
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "unsupported method");
+  EXPECT_EQ(response.err_msg, "remote ros2_interface_show RPC failed");
   EXPECT_TRUE(response.output.empty());
 }
 
@@ -471,7 +467,7 @@ TEST_F(Ros2CliManagerTest, RuntimeErrorFailsService)
   const auto response = manager->callRemoteTopicList(makeRequest());
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "send failed");
+  EXPECT_EQ(response.err_msg, "remote ros2_topic_list RPC failed");
   EXPECT_TRUE(response.output.empty());
 }
 
@@ -482,7 +478,7 @@ TEST_F(Ros2CliManagerTest, RuntimeErrorFailsServiceList)
   const auto response = manager->callRemoteServiceList(makeServiceRequest());
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "send failed");
+  EXPECT_EQ(response.err_msg, "remote ros2_service_list RPC failed");
   EXPECT_TRUE(response.output.empty());
 }
 
@@ -494,7 +490,7 @@ TEST_F(Ros2CliManagerTest, RuntimeErrorFailsInterfaceShow)
     makeInterfaceRequest());
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "send failed");
+  EXPECT_EQ(response.err_msg, "remote ros2_interface_show RPC failed");
   EXPECT_TRUE(response.output.empty());
 }
 

@@ -782,29 +782,31 @@ bool Ros2LiveKitBridge::hasParticipant(
   return static_cast<bool>(room_->remoteParticipant(participant_id).lock());
 }
 
-std::string Ros2LiveKitBridge::rpcPerform(
+std::optional<std::string> Ros2LiveKitBridge::rpcPerform(
   const std::string & participant_id, const std::string & method,
   const std::string & payload, std::uint8_t timeout_sec)
 {
   const auto local_participant =
     room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
-    throw std::runtime_error("LiveKit local participant is unavailable");
+    RCLCPP_ERROR(
+      this->get_logger(),
+      "LiveKit RPC '%s' to participant '%s' failed: local participant "
+      "is unavailable",
+      method.c_str(), participant_id.c_str());
+    return std::nullopt;
   }
 
   try {
     return local_participant->performRpc(participant_id, method, payload,
                                          static_cast<double>(timeout_sec));
   } catch (const livekit::RpcError & error) {
-    // Translate LiveKit-specific errors into a plain std::exception so the
-    // CLI manager stays free of any LiveKit dependency. The numeric code is
-    // logged here, the LiveKit-aware layer, before it is discarded.
     RCLCPP_ERROR(
       this->get_logger(),
       "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s",
       method.c_str(), participant_id.c_str(), error.code(),
       error.message().c_str());
-    throw std::runtime_error(error.message());
+    return std::nullopt;
   }
 }
 

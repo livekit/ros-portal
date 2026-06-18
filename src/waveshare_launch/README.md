@@ -12,6 +12,8 @@ Optional flags:
 - `rviz:=true` also launches `waver_viz`
 - `sim_gui:=true` launches the Gazebo GUI client when display forwarding is available
 - `foxglove:=true` launches the Foxglove bridge with its default settings
+- `livekit:=true` launches `ros2_livekit_bridge`
+- `livekit_config:=/path/to/config.yaml` selects the LiveKit bridge config file
 
 For keyboard teleop, run:
 

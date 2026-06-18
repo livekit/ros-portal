@@ -13,80 +13,85 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ============================================================================
-# Unit Tests
-# ============================================================================
-
-if(BUILD_TESTING)
-  file(GLOB UNIT_TEST_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
-  )
-  list(SORT UNIT_TEST_SOURCES)
-
-  if(UNIT_TEST_SOURCES)
-    ament_auto_add_gtest(ros2_livekit_bridge_unit_tests
-      ${UNIT_TEST_SOURCES}
-    )
-  endif()
-
-  if(TARGET ros2_livekit_bridge_unit_tests)
-    target_link_libraries(ros2_livekit_bridge_unit_tests
-      ros2_livekit_bridge_lib
-    )
-    set_target_properties(ros2_livekit_bridge_unit_tests PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-  endif()
+if(NOT BUILD_TESTING)
+  return()
 endif()
 
-# ============================================================================
-# Integration Tests
-# ============================================================================
+find_package(ament_cmake_gtest REQUIRED)
+find_package(ament_cmake_pytest REQUIRED)
+find_package(ament_lint_auto REQUIRED)
 
-if(BUILD_TESTING)
-  file(GLOB INTEGRATION_TEST_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_test.cpp"
-  )
-  list(SORT INTEGRATION_TEST_SOURCES)
+ament_add_pytest_test(livekit_bridge_local_launch_test
+  launch/test_livekit_bridge_local_launch.py
+)
 
-  if(INTEGRATION_TEST_SOURCES)
-    ament_auto_add_gtest(ros2_livekit_bridge_integration_tests
-      ${INTEGRATION_TEST_SOURCES}
-    )
-  endif()
+# ---------------------------------------------------------------------------
+# Unit tests
+# ---------------------------------------------------------------------------
+file(GLOB UNIT_TEST_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/unit/ros2_cli/*.cpp"
+)
+list(SORT UNIT_TEST_SOURCES)
 
-  if(TARGET ros2_livekit_bridge_integration_tests)
-    target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
-      "${CMAKE_CURRENT_SOURCE_DIR}/common"
-    )
-    target_link_libraries(ros2_livekit_bridge_integration_tests
-      ros2_livekit_bridge_lib
-    )
-    set_target_properties(ros2_livekit_bridge_integration_tests PROPERTIES
-      BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-      INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    )
-    set_tests_properties(ros2_livekit_bridge_integration_tests PROPERTIES
-      TIMEOUT 240
-    )
-  endif()
-endif()
-
-# ============================================================================
-# Standalone Integration Executable
-# ============================================================================
-
-if(BUILD_TESTING)
-  ament_auto_add_executable(livekit_connect_node
-    integration/livekit_connect_node.cpp
-  )
-  target_link_libraries(livekit_connect_node
-    "${LIVEKIT_CORE_TARGET}"
-    ${LIVEKIT_EXTRA_LINK_LIBS}
-  )
-  set_target_properties(livekit_connect_node PROPERTIES
-    BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
+if(UNIT_TEST_SOURCES)
+  ament_auto_add_gtest(ros2_livekit_bridge_unit_tests
+    ${UNIT_TEST_SOURCES}
   )
 endif()
+
+if(TARGET ros2_livekit_bridge_unit_tests)
+  target_link_libraries(ros2_livekit_bridge_unit_tests
+    ros2_livekit_bridge_lib
+  )
+  livekit_set_runtime_rpath(ros2_livekit_bridge_unit_tests)
+endif()
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+file(GLOB INTEGRATION_TEST_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_e2e.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/ros2_cli/*_e2e.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/ros2_cli/*_test.cpp"
+)
+list(SORT INTEGRATION_TEST_SOURCES)
+
+if(INTEGRATION_TEST_SOURCES)
+  ament_auto_add_gtest(ros2_livekit_bridge_integration_tests
+    ${INTEGRATION_TEST_SOURCES}
+  )
+endif()
+
+if(TARGET ros2_livekit_bridge_integration_tests)
+  target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/common"
+  )
+  target_link_libraries(ros2_livekit_bridge_integration_tests
+    ros2_livekit_bridge_lib
+  )
+  livekit_set_runtime_rpath(ros2_livekit_bridge_integration_tests)
+  set_tests_properties(ros2_livekit_bridge_integration_tests PROPERTIES
+    TIMEOUT 240
+  )
+endif()
+
+# ---------------------------------------------------------------------------
+# Standalone integration executable
+# ---------------------------------------------------------------------------
+ament_auto_add_executable(livekit_connect_node
+  integration/livekit_connect_node.cpp
+)
+target_link_libraries(livekit_connect_node
+  "${LIVEKIT_CORE_TARGET}"
+  ${LIVEKIT_EXTRA_LINK_LIBS}
+)
+livekit_set_runtime_rpath(livekit_connect_node)
+
+# ---------------------------------------------------------------------------
+# Lint
+# ---------------------------------------------------------------------------
+set(ament_cmake_copyright_FOUND TRUE)
+set(ament_cmake_cpplint_FOUND TRUE)
+ament_lint_auto_find_test_dependencies()

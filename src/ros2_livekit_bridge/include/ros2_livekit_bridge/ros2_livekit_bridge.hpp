@@ -41,6 +41,9 @@
 #include <rclcpp/serialized_message.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
+#include "ros2_livekit_bridge/ros2_cli_manager.hpp"
+#include "ros2_livekit_bridge/types.hpp"
+
 namespace ros2_livekit_bridge
 {
 
@@ -111,7 +114,9 @@ private:
     const std::string & topic_type);
 
   /**
-   * @brief Handle remote LiveKit data tracks and republish them into ROS.
+   * @brief Check if the topic matches the allowed topics
+   * @param topic_name The name of the topic
+   * @return True if the topic matches the allowed topics, false otherwise
    */
   void onDataTrackPublished(
     livekit::Room & room,
@@ -141,6 +146,44 @@ private:
    * TRANSIENT_LOCAL.
    */
   rclcpp::QoS determineQoS(const std::string & topic_name) const;
+
+  /**
+   * @brief Check whether a remote participant identity is present in the room.
+   * @param participant_id LiveKit participant identity to look up.
+   * @return True when the participant exists in the connected room.
+   */
+  bool hasParticipant(const std::string & participant_id) const;
+
+  /**
+   * @brief Invoke a LiveKit RPC method through the room's local participant.
+   * @param participant_id LiveKit participant identity to call.
+   * @param method LiveKit RPC method name.
+   * @param payload JSON request payload.
+   * @param timeout_sec Response timeout in seconds.
+   * @return JSON response payload returned by the remote participant, or
+   * std::nullopt when the RPC call fails.
+   */
+  std::optional<std::string> rpcPerform(
+    const std::string & participant_id, const std::string & method,
+    const std::string & payload, std::uint8_t timeout_sec);
+
+  /**
+   * @brief Register a local LiveKit RPC handler on the room's local
+   * participant, adapting the JSON-string handler to the SDK signature.
+   * @param method LiveKit RPC method name.
+   * @param handler Callback that receives and returns JSON strings.
+   * @return True on success, false when the local participant is unavailable.
+   */
+  bool rpcRegisterMethod(
+    const std::string & method, RpcHandler handler);
+
+  /**
+   * @brief Unregister a local LiveKit RPC handler from the room's local
+   * participant.
+   * @param method LiveKit RPC method name.
+   * @return True on success, false when the local participant is unavailable.
+   */
+  bool rpcUnregisterMethod(const std::string & method);
 
   //! @brief The name of the room
   std::string room_name_;
@@ -176,8 +219,8 @@ private:
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
-  //! @brief Tracks whether livekit::initialize() has been called.
-  bool sdk_initialized_{false};
+  //! @brief ROS CLI service/RPC manager for remote graph introspection.
+  std::unique_ptr<Ros2CliManager> ros2_cli_manager_;
 
   //! @brief Per-image-topic state: lazily created video source/track pair plus
   //! conversion buffer. Declared after room_ so it is destroyed first (tracks

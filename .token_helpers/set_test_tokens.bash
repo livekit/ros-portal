@@ -113,7 +113,7 @@ _emit_eval() {
 
 if [[ "$_sourced" -eq 1 ]]; then
   _apply
-  echo "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B set for this shell." >&2
+  echo "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B set for this shell. using LIVEKIT_ROOM: $LIVEKIT_ROOM" >&2
 else
   _emit_eval
   echo "set_test_tokens.bash: for this shell run: source $0   or: eval \"\$(bash $0)\"" >&2

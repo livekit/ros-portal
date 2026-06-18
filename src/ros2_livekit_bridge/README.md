@@ -105,17 +105,25 @@ schema-driven `ros2_livekit_bridge_config` parser. Launch files pass this path
 to the node with the `config_path` ROS parameter. See the
 [configuration guide](../../docs/configuration.md) for the supported schema.
 
-For topic routing, the config uses a single `topics` list where each entry
-contains:
-
-- `topic`: an ECMAScript regex matched with `std::regex_match` against full topic names.
-- `direction`: one of `in`, `out`, or `bidirectional`.
-
 Direction handling:
 
 - `out`: allow ROS -> LiveKit forwarding.
 - `in`: allow LiveKit -> ROS forwarding.
 - `bidirectional`: `in` and `out` forwarding/functionality
+
+## Remote ROS2 CLI Calls
+
+The bridge exposes ROS2 services (backed by LiveKit RPC) that run a subset of
+the `ros2` CLI introspection commands against other connected bridges, including
+`ros2 topic list`, `ros2 service list`, and `ros2 interface show`. See the
+[ROS2 CLI Manager guide](docs/ROS2_CLI_MANAGER.md) for the supported
+commands, request fields, and sample `ros2 service call` invocations.
+
+Because each service callback blocks until the remote LiveKit RPC returns or
+times out, keep `ros_threads` greater than `1` (the default `ros_threads: 4` is
+recommended) so topic forwarding and timers continue while a remote
+introspection request is pending.
+
 
 ### LiveKit-to-ROS topic names
 

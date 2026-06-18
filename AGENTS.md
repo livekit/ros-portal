@@ -41,6 +41,7 @@ with existing package structure.
   assumptions.
 - Make code as performant as practical. Avoid unnecessary copies, allocations,
   blocking work, and ROS graph churn on hot paths.
+- avoid duplicating code by utilizing functions and classes with well-defined interfaces and minimal scope.
 
 ## Documentation
 

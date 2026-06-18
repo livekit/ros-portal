@@ -20,6 +20,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include <livekit/livekit.h>
+
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 
 int main(int argc, char *argv[])
@@ -27,36 +29,38 @@ int main(int argc, char *argv[])
   rclcpp::init(argc, argv);
   const auto logger = rclcpp::get_logger("ros2_livekit_bridge_node");
 
+  livekit::initialize(livekit::LogLevel::Info);
+
+  int exit_code = EXIT_SUCCESS;
+
   try {
     auto node = std::make_shared<ros2_livekit_bridge::Ros2LiveKitBridge>();
     if (!node->initialize()) {
       RCLCPP_FATAL(logger, "Failed to initialize ROS2 LiveKit bridge");
-      rclcpp::shutdown();
-      return EXIT_FAILURE;
+      exit_code = EXIT_FAILURE;
+    } else {
+      rclcpp::ExecutorOptions exec_options;
+      const size_t num_threads =
+        node->ros_threads() > 0 ? static_cast<size_t>(node->ros_threads()) : 0;
+
+      std::cout << "Starting executor with " << num_threads << " threads"
+                << std::endl;
+      rclcpp::executors::MultiThreadedExecutor executor(
+        exec_options, num_threads);
+      executor.add_node(node);
+      executor.spin();
     }
-
-    rclcpp::ExecutorOptions exec_options;
-    const size_t num_threads =
-      node->ros_threads() > 0 ? static_cast<size_t>(node->ros_threads()) : 0;
-
-    std::cout << "Starting executor with " << num_threads << " threads"
-              << std::endl;
-    rclcpp::executors::MultiThreadedExecutor executor(
-      exec_options, num_threads);
-    executor.add_node(node);
-    executor.spin();
   } catch (const std::exception & e) {
     RCLCPP_FATAL(logger, "Unhandled exception in ROS2 LiveKit bridge: %s",
                  e.what());
-    rclcpp::shutdown();
-    return EXIT_FAILURE;
+    exit_code = EXIT_FAILURE;
   } catch (...) {
     RCLCPP_FATAL(logger, "Unknown unhandled exception in ROS2 LiveKit bridge");
-    rclcpp::shutdown();
-    return EXIT_FAILURE;
+    exit_code = EXIT_FAILURE;
   }
 
+  livekit::shutdown();
   rclcpp::shutdown();
 
-  return EXIT_SUCCESS;
+  return exit_code;
 }

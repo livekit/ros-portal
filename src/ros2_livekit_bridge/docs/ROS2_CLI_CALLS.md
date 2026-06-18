@@ -2,7 +2,7 @@
 
 The `Ros2CliManager` ([src/ros2_cli_manager.cpp](../src/ros2_cli_manager.cpp))
 lets you run a subset of the `ros2` CLI introspection commands against a
-**remote** robot that is connected to the same LiveKit room. It is the bridge
+**remote** robot's ROS graph that is connected to the same LiveKit room. It is the bridge
 component that makes commands like `ros2 topic list` work across the network.
 
 ## How it works

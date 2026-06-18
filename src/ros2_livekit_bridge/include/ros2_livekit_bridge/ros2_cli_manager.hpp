@@ -30,6 +30,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
+#include "ros2_livekit_bridge/types.hpp"
 
 namespace ros2_livekit_bridge
 {
@@ -46,14 +47,6 @@ public:
   using Ros2InterfaceShow = ros2_cli::Ros2InterfaceShow;
   using Ros2TopicList = ros2_cli::Ros2TopicList;
   using Ros2ServiceList = ros2_cli::Ros2ServiceList;
-
-  /**
-   * @brief Handler for inbound RPC payloads.
-   *
-   * The input and return value are JSON strings. The owning transport wraps
-   * this callback in the LiveKit SDK-specific RPC handler signature.
-   */
-  using RpcHandler = std::function<std::string(const std::string &)>;
 
   /**
    * @brief Set of RPC callbacks the bridge supplies to the manager.

@@ -171,7 +171,7 @@ bool Ros2LiveKitBridge::initialize()
                const std::string & payload, std::uint8_t timeout_sec) {
           return rpcPerform(id, method, payload, timeout_sec);
         },
-        [this](const std::string & method, Ros2CliManager::RpcHandler handler) {
+        [this](const std::string & method, RpcHandler handler) {
           rpcRegisterMethod(method, std::move(handler));
         },
         [this](const std::string & method) { rpcUnregisterMethod(method); }};
@@ -809,7 +809,7 @@ std::string Ros2LiveKitBridge::rpcPerform(
 }
 
 void Ros2LiveKitBridge::rpcRegisterMethod(
-  const std::string & method, Ros2CliManager::RpcHandler handler)
+  const std::string & method, RpcHandler handler)
 {
   const auto local_participant =
     room_ ? room_->localParticipant().lock() : nullptr;

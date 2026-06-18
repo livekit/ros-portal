@@ -42,6 +42,7 @@
 #include <sensor_msgs/msg/image.hpp>
 
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
+#include "ros2_livekit_bridge/types.hpp"
 
 namespace ros2_livekit_bridge
 {
@@ -174,7 +175,7 @@ private:
    * @param handler Callback that receives and returns JSON strings.
    */
   void rpcRegisterMethod(
-    const std::string & method, Ros2CliManager::RpcHandler handler);
+    const std::string & method, RpcHandler handler);
 
   /**
    * @brief Unregister a local LiveKit RPC handler from the room's local

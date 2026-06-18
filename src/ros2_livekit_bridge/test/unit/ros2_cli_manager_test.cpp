@@ -58,7 +58,7 @@ public:
   std::string last_method;
   std::string last_payload;
   std::uint8_t last_timeout_sec{0};
-  Ros2CliManager::RpcHandler registered_handler;
+  RpcHandler registered_handler;
   std::vector<std::string> registered_methods;
   std::vector<std::string> unregistered_methods;
 
@@ -91,7 +91,7 @@ public:
       };
 
     transport.register_rpc_method =
-      [this](const std::string & method, Ros2CliManager::RpcHandler handler) {
+      [this](const std::string & method, RpcHandler handler) {
         registered_methods.push_back(method);
         registered_handler = std::move(handler);
       };

@@ -20,6 +20,8 @@ endif()
 find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
 find_package(ament_lint_auto REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(test_msgs REQUIRED)
 
 ament_add_pytest_test(livekit_bridge_local_launch_test
   launch/test_livekit_bridge_local_launch.py
@@ -44,6 +46,7 @@ if(TARGET ros2_livekit_bridge_unit_tests)
   target_link_libraries(ros2_livekit_bridge_unit_tests
     ros2_livekit_bridge_lib
   )
+  ament_target_dependencies(ros2_livekit_bridge_unit_tests nav_msgs test_msgs)
   livekit_set_runtime_rpath(ros2_livekit_bridge_unit_tests)
 endif()
 

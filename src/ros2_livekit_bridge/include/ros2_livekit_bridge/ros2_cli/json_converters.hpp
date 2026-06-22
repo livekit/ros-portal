@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
@@ -25,56 +26,20 @@ namespace ros2_livekit_bridge
 {
 
 /**
- * @brief Formatting and graph filtering options for `ros2 topic list`.
- * @details fields map 1:1 to the fields shown from running `ros2 topic list --help`
- */
-struct TopicListOptions
-{
-  //! @brief Render topic types next to each topic name.
-  bool show_types{false};
-  //! @brief Render only the number of discovered topics.
-  bool count_topics{false};
-  //! @brief Include hidden topics whose names contain hidden tokens.
-  bool include_hidden_topics{false};
-  //! @brief Render full publisher/subscriber details.
-  bool verbose{false};
-};
-
-/**
- * @brief Formatting and graph filtering options for `ros2 service list`.
- * @details fields map 1:1 to the fields shown from running `ros2 service list --help`
- */
-struct ServiceListOptions
-{
-  //! @brief Render service types next to each service name.
-  bool show_types{false};
-  //! @brief Render only the number of discovered services.
-  bool count_services{false};
-  //! @brief Include hidden services whose names contain hidden tokens.
-  bool include_hidden_services{false};
-};
-
-/**
- * @brief Arguments and formatting options for `ros2 interface show`.
- * @details fields map 1:1 to the fields shown from running `ros2 interface show --help`
- */
-struct InterfaceShowOptions
-{
-  //! @brief Interface type identifier to show, such as `std_msgs/msg/String`.
-  std::string type;
-  //! @brief Show all comments, including nested interface comments.
-  bool all_comments{false};
-  //! @brief Hide comments and whitespace.
-  bool no_comments{false};
-};
-
-/**
  * @brief Convert a ROS service request to local topic-list options.
  * @param request ROS service request.
  * @return Topic-list options from the request flags.
  */
 TopicListOptions topicListOptionsFromRequest(
   const ros2_cli::Ros2TopicList::Request & request);
+
+/**
+ * @brief Convert a ROS service request to local topic-pub options.
+ * @param request ROS service request.
+ * @return Topic-pub options from the request fields.
+ */
+TopicPubOptions topicPubOptionsFromRequest(
+  const ros2_cli::Ros2TopicPub::Request & request);
 
 /**
  * @brief Convert a ROS service request to local service-list options.
@@ -108,6 +73,16 @@ std::string topicListRequestToJson(
  * @param timeout_sec Effective timeout to include in the payload.
  * @return JSON request payload.
  */
+std::string topicPubRequestToJson(
+  const ros2_cli::Ros2TopicPub::Request & request,
+  std::uint8_t timeout_sec);
+
+/**
+ * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+ * @param request ROS service request.
+ * @param timeout_sec Effective timeout to include in the payload.
+ * @return JSON request payload.
+ */
 std::string serviceListRequestToJson(
   const ros2_cli::Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec);
@@ -125,26 +100,42 @@ std::string interfaceShowRequestToJson(
 /**
  * @brief Parse topic-list options from a LiveKit RPC JSON request payload.
  * @param payload JSON request payload.
- * @return Topic-list options from the payload flags.
- * @throws nlohmann::json::exception when @p payload is malformed.
+ * @param error Set to a description when @p payload is malformed.
+ * @return Topic-list options, or `std::nullopt` when @p payload is malformed.
  */
-TopicListOptions topicListOptionsFromJson(const std::string & payload);
+std::optional<TopicListOptions> topicListOptionsFromJson(
+  const std::string & payload,
+  std::string & error);
+
+/**
+ * @brief Parse topic-pub options from a LiveKit RPC JSON request payload.
+ * @param payload JSON request payload.
+ * @param error Set to a description when @p payload is malformed or invalid.
+ * @return Topic-pub options, or `std::nullopt` when @p payload is invalid.
+ */
+std::optional<TopicPubOptions> topicPubOptionsFromJson(
+  const std::string & payload,
+  std::string & error);
 
 /**
  * @brief Parse service-list options from a LiveKit RPC JSON request payload.
  * @param payload JSON request payload.
- * @return Service-list options from the payload flags.
- * @throws nlohmann::json::exception when @p payload is malformed.
+ * @param error Set to a description when @p payload is malformed.
+ * @return Service-list options, or `std::nullopt` when @p payload is malformed.
  */
-ServiceListOptions serviceListOptionsFromJson(const std::string & payload);
+std::optional<ServiceListOptions> serviceListOptionsFromJson(
+  const std::string & payload,
+  std::string & error);
 
 /**
  * @brief Parse interface-show options from a LiveKit RPC JSON request payload.
  * @param payload JSON request payload.
- * @return Interface-show options from the payload fields.
- * @throws nlohmann::json::exception when @p payload is malformed.
+ * @param error Set to a description when @p payload is malformed.
+ * @return Interface-show options, or `std::nullopt` when @p payload is malformed.
  */
-InterfaceShowOptions interfaceShowOptionsFromJson(const std::string & payload);
+std::optional<InterfaceShowOptions> interfaceShowOptionsFromJson(
+  const std::string & payload,
+  std::string & error);
 
 /**
  * @brief Construct a ROS service response.
@@ -154,6 +145,18 @@ InterfaceShowOptions interfaceShowOptionsFromJson(const std::string & payload);
  * @return ROS service response.
  */
 ros2_cli::Ros2TopicList::Response makeTopicListResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output = {});
+
+/**
+ * @brief Construct a ROS service response.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return ROS service response.
+ */
+ros2_cli::Ros2TopicPub::Response makeTopicPubResponse(
   bool success,
   const std::string & err_msg,
   const std::string & output = {});
@@ -195,6 +198,18 @@ std::string topicListResponseToJson(
   const std::string & output);
 
 /**
+ * @brief Serialize a topic-pub result as a LiveKit RPC JSON response.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return JSON response payload.
+ */
+std::string topicPubResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output);
+
+/**
  * @brief Serialize a service-list result as a LiveKit RPC JSON response.
  * @param success Whether the operation succeeded.
  * @param err_msg Human-readable error message.
@@ -221,27 +236,42 @@ std::string interfaceShowResponseToJson(
 /**
  * @brief Parse a LiveKit RPC JSON response into a ROS service response.
  * @param payload JSON response payload.
- * @return ROS service response.
- * @throws nlohmann::json::exception when @p payload is malformed or incomplete.
+ * @param error Set to a description when @p payload is malformed or incomplete.
+ * @return ROS service response, or `std::nullopt` when @p payload is invalid.
  */
-ros2_cli::Ros2TopicList::Response topicListResponseFromJson(const std::string & payload);
+std::optional<ros2_cli::Ros2TopicList::Response> topicListResponseFromJson(
+  const std::string & payload,
+  std::string & error);
 
 /**
  * @brief Parse a LiveKit RPC JSON response into a ROS service response.
  * @param payload JSON response payload.
- * @return ROS service response.
- * @throws nlohmann::json::exception when @p payload is malformed or incomplete.
+ * @param error Set to a description when @p payload is malformed or incomplete.
+ * @return ROS service response, or `std::nullopt` when @p payload is invalid.
  */
-ros2_cli::Ros2ServiceList::Response serviceListResponseFromJson(
-  const std::string & payload);
+std::optional<ros2_cli::Ros2TopicPub::Response> topicPubResponseFromJson(
+  const std::string & payload,
+  std::string & error);
 
 /**
  * @brief Parse a LiveKit RPC JSON response into a ROS service response.
  * @param payload JSON response payload.
- * @return ROS service response.
- * @throws nlohmann::json::exception when @p payload is malformed or incomplete.
+ * @param error Set to a description when @p payload is malformed or incomplete.
+ * @return ROS service response, or `std::nullopt` when @p payload is invalid.
  */
-ros2_cli::Ros2InterfaceShow::Response interfaceShowResponseFromJson(
-  const std::string & payload);
+std::optional<ros2_cli::Ros2ServiceList::Response> serviceListResponseFromJson(
+  const std::string & payload,
+  std::string & error);
+
+/**
+ * @brief Parse a LiveKit RPC JSON response into a ROS service response.
+ * @param payload JSON response payload.
+ * @param error Set to a description when @p payload is malformed or incomplete.
+ * @return ROS service response, or `std::nullopt` when @p payload is invalid.
+ */
+std::optional<ros2_cli::Ros2InterfaceShow::Response>
+interfaceShowResponseFromJson(
+  const std::string & payload,
+  std::string & error);
 
 }  // namespace ros2_livekit_bridge

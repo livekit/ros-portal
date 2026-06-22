@@ -177,8 +177,13 @@ bool Ros2LiveKitBridge::initialize()
       lk_methods.unregister_rpc_method = [this](const std::string & method) {
           return rpcUnregisterMethod(method);
         };
+      auto topic_publish_allowed = [this](const std::string & topic_name) {
+          return utils::matchesAnyPattern(topic_name,
+                                          incoming_topic_compiled_patterns_);
+        };
       ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
-          *this, reentrant_callback_group_, std::move(lk_methods));
+            *this, reentrant_callback_group_, std::move(lk_methods),
+            std::move(topic_publish_allowed));
     } else {
       connection_diagnostics_->markDisconnected();
       room_.reset();
@@ -501,9 +506,7 @@ void Ros2LiveKitBridge::onDataTrackPublished(
   // TODO: Handle these various error cases below when ROS diagnostics are
   // implemented
   if (!event.track) {
-    RCLCPP_ERROR(this->get_logger(),
-                 "Received empty data track event from participant '%s'",
-                 event.track->publisherIdentity().c_str());
+    RCLCPP_ERROR(this->get_logger(), "Received empty data track event track!");
     return;
   }
 

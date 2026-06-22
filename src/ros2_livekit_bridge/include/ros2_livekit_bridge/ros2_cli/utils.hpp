@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include <nlohmann/json_fwd.hpp>
+
 namespace ros2_livekit_bridge::ros2_cli
 {
 
@@ -51,6 +53,32 @@ inline std::string rightTrim(std::string value)
   }
   return value;
 }
+
+/**
+ * @brief Read a required, non-empty string field from a JSON object.
+ * @param body JSON object to read.
+ * @param field_name Required field name.
+ * @param missing_message Error message for a missing or non-string field.
+ * @param empty_message Error message for an empty or whitespace-only field.
+ * @return Trimmed string field value.
+ * @throws std::invalid_argument when the field is missing, not a string, or
+ * empty after trimming.
+ */
+std::string requiredStringField(
+  const nlohmann::json & body,
+  const char * field_name,
+  const char * missing_message,
+  const char * empty_message);
+
+/**
+ * @brief Check whether a graph-discovered type list contains an interface type.
+ * @param graph_types Interface type names returned by the ROS graph.
+ * @param interface_type Interface type to find.
+ * @return True when @p interface_type appears in @p graph_types.
+ */
+bool topicTypeMatches(
+  const std::vector<std::string> & graph_types,
+  const std::string & interface_type);
 
 /**
  * @brief Detect ROS hidden-name tokens in a slash-delimited graph name.

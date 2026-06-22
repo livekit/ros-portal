@@ -16,9 +16,78 @@
 
 #pragma once
 
+#include <string>
+
+#include <rclcpp/serialized_message.hpp>
+
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_topic_pub.hpp>
+
+namespace ros2_livekit_bridge
+{
+
+/**
+ * @brief Formatting and graph filtering options for `ros2 topic list`.
+ * @details fields map 1:1 to the fields shown from running `ros2 topic list --help`
+ */
+struct TopicListOptions
+{
+  //! @brief Render topic types next to each topic name.
+  bool show_types{false};
+  //! @brief Render only the number of discovered topics.
+  bool count_topics{false};
+  //! @brief Include hidden topics whose names contain hidden tokens.
+  bool include_hidden_topics{false};
+  //! @brief Render full publisher/subscriber details.
+  bool verbose{false};
+};
+
+/**
+ * @brief Arguments for a one-shot `ros2 topic pub`.
+ */
+struct TopicPubOptions
+{
+  //! @brief ROS topic name to publish to; may be relative before resolution.
+  std::string topic;
+  //! @brief ROS interface type identifier, such as `std_msgs/msg/String`.
+  std::string interface_type;
+  //! @brief Native YAML message payload accepted by `ros2 topic pub`.
+  std::string payload;
+  //! @brief Decoded ROS CDR payload for local publishing.
+  rclcpp::SerializedMessage message;
+};
+
+/**
+ * @brief Formatting and graph filtering options for `ros2 service list`.
+ * @details fields map 1:1 to the fields shown from running `ros2 service list --help`
+ */
+struct ServiceListOptions
+{
+  //! @brief Render service types next to each service name.
+  bool show_types{false};
+  //! @brief Render only the number of discovered services.
+  bool count_services{false};
+  //! @brief Include hidden services whose names contain hidden tokens.
+  bool include_hidden_services{false};
+};
+
+/**
+ * @brief Arguments and formatting options for `ros2 interface show`.
+ * @details fields map 1:1 to the fields shown from running `ros2 interface show --help`
+ */
+struct InterfaceShowOptions
+{
+  //! @brief Interface type identifier to show, such as `std_msgs/msg/String`.
+  std::string type;
+  //! @brief Show all comments, including nested interface comments.
+  bool all_comments{false};
+  //! @brief Hide comments and whitespace.
+  bool no_comments{false};
+};
+
+}  // namespace ros2_livekit_bridge
 
 namespace ros2_livekit_bridge::ros2_cli
 {
@@ -27,6 +96,8 @@ namespace ros2_livekit_bridge::ros2_cli
 using Ros2InterfaceShow = ros2_livekit_bridge_msgs::srv::Ros2InterfaceShow;
 //! @brief Generated ROS service type for remote `ros2 topic list` requests.
 using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
+//! @brief Generated ROS service type for remote `ros2 topic pub` requests.
+using Ros2TopicPub = ros2_livekit_bridge_msgs::srv::Ros2TopicPub;
 //! @brief Generated ROS service type for remote `ros2 service list` requests.
 using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
 

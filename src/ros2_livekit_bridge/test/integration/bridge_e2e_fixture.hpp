@@ -52,6 +52,7 @@ using namespace std::chrono_literals;
 using ros2_cli::Ros2InterfaceShow;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
+using ros2_cli::Ros2TopicPub;
 
 inline constexpr auto kGraphTimeout = 15s;
 inline constexpr auto kMessageTimeout = 20s;
@@ -82,6 +83,11 @@ struct InterfaceShowServiceOptions
   bool no_comments{false};
 };
 
+struct TopicPubServiceOptions
+{
+  std::uint8_t timeout_sec{5};
+};
+
 inline bool contains(const std::string & value, const std::string & needle)
 {
   return value.find(needle) != std::string::npos;
@@ -102,6 +108,17 @@ inline bool serviceExists(rclcpp::Node & node, const std::string & service_name)
     [&](const auto & name_and_types) {
       return name_and_types.first == service_name;
     });
+}
+
+inline std::string resolveRelativeServiceName(
+  const rclcpp::Node & node,
+  const std::string & service_name)
+{
+  const std::string node_namespace = node.get_namespace();
+  if (node_namespace.empty() || node_namespace == "/") {
+    return "/" + service_name;
+  }
+  return node_namespace + "/" + service_name;
 }
 
 inline rclcpp::NodeOptions createBridgeOptions(
@@ -409,13 +426,27 @@ protected:
     return publisher_b_;
   }
 
+  std::string bridgeServiceName(
+    const std::shared_ptr<rclcpp::Node> & client_node,
+    const std::string & service_name) const
+  {
+    if (client_node == robot_a_node_ && bridge_a_) {
+      return resolveRelativeServiceName(*bridge_a_, service_name);
+    }
+    if (client_node == robot_b_node_ && bridge_b_) {
+      return resolveRelativeServiceName(*bridge_b_, service_name);
+    }
+    ADD_FAILURE() << "No bridge node found for service " << service_name;
+    return "/" + service_name;
+  }
+
   Ros2TopicList::Response::SharedPtr callTopicListService(
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
     const TopicListServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2TopicList>(
-      ros2_cli::kTopicListServiceName);
+      bridgeServiceName(node, ros2_cli::kTopicListServiceName));
 
     if (!waitFor(
         [&]() {
@@ -450,7 +481,7 @@ protected:
     const ServiceListServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2ServiceList>(
-      ros2_cli::kServiceListServiceName);
+      bridgeServiceName(node, ros2_cli::kServiceListServiceName));
 
     if (!waitFor(
         [&]() {
@@ -485,7 +516,7 @@ protected:
     const InterfaceShowServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2InterfaceShow>(
-      ros2_cli::kInterfaceShowServiceName);
+      bridgeServiceName(node, ros2_cli::kInterfaceShowServiceName));
 
     if (!waitFor(
         [&]() {
@@ -507,6 +538,43 @@ protected:
     auto future = client->async_send_request(request);
     if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
       ADD_FAILURE() << "ros2_interface_show service timed out";
+      return nullptr;
+    }
+
+    return future.get();
+  }
+
+  Ros2TopicPub::Response::SharedPtr callTopicPubService(
+    const std::shared_ptr<rclcpp::Node> & node,
+    const std::string & participant_id,
+    const std::string & topic,
+    const std::string & interface_type,
+    const std::string & payload,
+    const TopicPubServiceOptions & options = {})
+  {
+    auto client = node->create_client<Ros2TopicPub>(
+      bridgeServiceName(node, ros2_cli::kTopicPubServiceName));
+
+    if (!waitFor(
+        [&]() {
+          return client->wait_for_service(100ms);
+        },
+        kGraphTimeout))
+    {
+      ADD_FAILURE() << "ros2_topic_pub service was not available";
+      return nullptr;
+    }
+
+    auto request = std::make_shared<Ros2TopicPub::Request>();
+    request->participant_id = participant_id;
+    request->topic = topic;
+    request->interface_type = interface_type;
+    request->payload = payload;
+    request->timeout_sec = options.timeout_sec;
+
+    auto future = client->async_send_request(request);
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << "ros2_topic_pub service timed out";
       return nullptr;
     }
 

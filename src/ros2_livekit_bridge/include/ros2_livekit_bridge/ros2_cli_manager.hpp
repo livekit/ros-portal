@@ -27,8 +27,10 @@
 #include <rclcpp/node_interfaces/node_graph_interface.hpp>
 #include <rclcpp/node_interfaces/node_logging_interface.hpp>
 #include <rclcpp/node_interfaces/node_services_interface.hpp>
+#include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "ros2_livekit_bridge/ros2_cli/ros2_topic_pub.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
@@ -46,7 +48,9 @@ class Ros2CliManager {
 public:
   using Ros2InterfaceShow = ros2_cli::Ros2InterfaceShow;
   using Ros2TopicList = ros2_cli::Ros2TopicList;
+  using Ros2TopicPub = ros2_cli::Ros2TopicPub;
   using Ros2ServiceList = ros2_cli::Ros2ServiceList;
+  using TopicPublishAllowedFn = ros2_cli::TopicPublishAllowedFn;
 
   /**
    * @brief LiveKit methods the bridge supplies to the manager.
@@ -104,6 +108,8 @@ public:
     rclcpp::node_interfaces::NodeServicesInterface::SharedPtr node_services;
     //! @brief Graph APIs used for topic and service discovery.
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph;
+    //! @brief Topic APIs used to resolve names and create publishers.
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics;
     //! @brief Logger used for manager diagnostics.
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
   };
@@ -122,7 +128,8 @@ public:
   Ros2CliManager(
     NodeInterfaces node_interfaces,
     rclcpp::CallbackGroup::SharedPtr callback_group,
-    LivekitMethods livekit_methods);
+    LivekitMethods livekit_methods,
+    TopicPublishAllowedFn topic_publish_allowed = {});
 
   /**
    * @brief Construct the manager from a bridge node.
@@ -139,7 +146,8 @@ public:
   Ros2CliManager(
     rclcpp::Node & node,
     rclcpp::CallbackGroup::SharedPtr callback_group,
-    LivekitMethods livekit_methods);
+    LivekitMethods livekit_methods,
+    TopicPublishAllowedFn topic_publish_allowed = {});
 
   /**
    * @brief Unregister the LiveKit RPC method before destruction.
@@ -153,6 +161,14 @@ public:
    */
   Ros2TopicList::Response
   callRemoteTopicList(const Ros2TopicList::Request & request) const;
+
+  /**
+   * @brief Execute a ROS service request by calling a remote LiveKit RPC.
+   * @param request ROS service request from the local developer.
+   * @return ROS service response with success, err_msg, and output.
+   */
+  Ros2TopicPub::Response
+  callRemoteTopicPub(const Ros2TopicPub::Request & request) const;
 
   /**
    * @brief Execute a ROS service request by calling a remote LiveKit RPC.
@@ -177,6 +193,13 @@ public:
    * @return JSON response payload containing success, err_msg, and output.
    */
   std::string handleTopicListRpc(const std::string & payload) const;
+
+  /**
+   * @brief Fulfill an inbound LiveKit `ros2_topic_pub` RPC.
+   * @param payload JSON request payload from the remote participant.
+   * @return JSON response payload containing success, err_msg, and output.
+   */
+  std::string handleTopicPubRpc(const std::string & payload) const;
 
   /**
    * @brief Fulfill an inbound LiveKit `ros2_service_list` RPC.
@@ -229,6 +252,15 @@ private:
    * @param request Shared ROS service request.
    * @param response Shared ROS service response to populate.
    */
+  void handleTopicPubRosService(
+    const std::shared_ptr<Ros2TopicPub::Request> request,
+    std::shared_ptr<Ros2TopicPub::Response> response) const;
+
+  /**
+   * @brief Service callback that maps a ROS request into a service response.
+   * @param request Shared ROS service request.
+   * @param response Shared ROS service response to populate.
+   */
   void handleServiceListRosService(
     const std::shared_ptr<Ros2ServiceList::Request> request,
     std::shared_ptr<Ros2ServiceList::Response> response) const;
@@ -244,7 +276,11 @@ private:
 
   NodeInterfaces node_interfaces_;
   LivekitMethods livekit_methods_;
+  /// Use a function rather than a static list to account for a dynamic set of allowed topics.
+  TopicPublishAllowedFn topic_publish_allowed_;
+  std::unique_ptr<ros2_cli::TopicPublisher> topic_publisher_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
+  rclcpp::Service<Ros2TopicPub>::SharedPtr topic_pub_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;
 };

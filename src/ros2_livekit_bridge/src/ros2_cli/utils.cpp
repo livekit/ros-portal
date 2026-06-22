@@ -16,10 +16,40 @@
 
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
+#include <algorithm>
+#include <stdexcept>
 #include <sstream>
+
+#include <nlohmann/json.hpp>
 
 namespace ros2_livekit_bridge::ros2_cli
 {
+
+std::string requiredStringField(
+  const nlohmann::json & body,
+  const char * field_name,
+  const char * missing_message,
+  const char * empty_message)
+{
+  const auto field = body.find(field_name);
+  if (field == body.end() || !field->is_string()) {
+    throw std::invalid_argument(missing_message);
+  }
+
+  auto value = rightTrim(leftTrim(field->get<std::string>()));
+  if (value.empty()) {
+    throw std::invalid_argument(empty_message);
+  }
+  return value;
+}
+
+bool topicTypeMatches(
+  const std::vector<std::string> & graph_types,
+  const std::string & interface_type)
+{
+  return std::find(graph_types.begin(), graph_types.end(), interface_type) !=
+         graph_types.end();
+}
 
 bool hasHiddenNameToken(const std::string & name)
 {

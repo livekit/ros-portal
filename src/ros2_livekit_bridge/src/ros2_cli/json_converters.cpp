@@ -16,6 +16,11 @@
 
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
+#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
+
+#include <exception>
+#include <optional>
+
 #include <nlohmann/json.hpp>
 
 namespace ros2_livekit_bridge
@@ -24,6 +29,7 @@ using json = nlohmann::json;
 using ros2_cli::Ros2InterfaceShow;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
+using ros2_cli::Ros2TopicPub;
 
 TopicListOptions
 topicListOptionsFromRequest(const Ros2TopicList::Request & request)
@@ -33,6 +39,15 @@ topicListOptionsFromRequest(const Ros2TopicList::Request & request)
   options.count_topics = request.count_topics;
   options.include_hidden_topics = request.include_hidden_topics;
   options.verbose = request.verbose;
+  return options;
+}
+
+TopicPubOptions topicPubOptionsFromRequest(const Ros2TopicPub::Request & request)
+{
+  TopicPubOptions options;
+  options.topic = request.topic;
+  options.interface_type = request.interface_type;
+  options.payload = request.payload;
   return options;
 }
 
@@ -72,6 +87,20 @@ std::string topicListRequestToJson(
          .dump();
 }
 
+std::string topicPubRequestToJson(
+  const Ros2TopicPub::Request & request,
+  std::uint8_t timeout_sec)
+{
+  const auto options = topicPubOptionsFromRequest(request);
+  return json{
+    {"topic", options.topic},
+    {"interface_type", options.interface_type},
+    {"payload", options.payload},
+    {"timeout_sec", timeout_sec},
+  }
+         .dump();
+}
+
 std::string serviceListRequestToJson(
   const Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec)
@@ -103,39 +132,88 @@ interfaceShowRequestToJson(
          .dump();
 }
 
-TopicListOptions topicListOptionsFromJson(const std::string & payload)
+std::optional<TopicListOptions> topicListOptionsFromJson(
+  const std::string & payload,
+  std::string & error)
 {
-  const auto request = json::parse(payload);
+  try {
+    const auto request = json::parse(payload);
 
-  TopicListOptions options;
-  options.show_types = request.value("show_types", false);
-  options.count_topics = request.value("count_topics", false);
-  options.include_hidden_topics = request.value("include_hidden_topics", false);
-  options.verbose = request.value("verbose", false);
-  return options;
+    TopicListOptions options;
+    options.show_types = request.value("show_types", false);
+    options.count_topics = request.value("count_topics", false);
+    options.include_hidden_topics =
+      request.value("include_hidden_topics", false);
+    options.verbose = request.value("verbose", false);
+    return options;
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
 }
 
-ServiceListOptions serviceListOptionsFromJson(const std::string & payload)
+std::optional<TopicPubOptions> topicPubOptionsFromJson(
+  const std::string & payload,
+  std::string & error)
 {
-  const auto request = json::parse(payload);
+  try {
+    const auto request = json::parse(payload);
+    if (!request.is_object()) {
+      error = "Topic pub request must be a JSON object";
+      return std::nullopt;
+    }
 
-  ServiceListOptions options;
-  options.show_types = request.value("show_types", false);
-  options.count_services = request.value("count_services", false);
-  options.include_hidden_services =
-    request.value("include_hidden_services", false);
-  return options;
+    TopicPubOptions options;
+    options.topic = ros2_cli::requiredStringField(
+      request, "topic", "topic must be a string", "topic must be non-empty");
+    options.interface_type = ros2_cli::requiredStringField(
+      request, "interface_type", "interface_type must be a string",
+      "interface_type must be non-empty");
+    options.payload = ros2_cli::requiredStringField(
+      request, "payload", "payload must be a string",
+      "payload must be non-empty");
+    return options;
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
 }
 
-InterfaceShowOptions interfaceShowOptionsFromJson(const std::string & payload)
+std::optional<ServiceListOptions> serviceListOptionsFromJson(
+  const std::string & payload,
+  std::string & error)
 {
-  const auto request = json::parse(payload);
+  try {
+    const auto request = json::parse(payload);
 
-  InterfaceShowOptions options;
-  options.type = request.value("type", "");
-  options.all_comments = request.value("all_comments", false);
-  options.no_comments = request.value("no_comments", false);
-  return options;
+    ServiceListOptions options;
+    options.show_types = request.value("show_types", false);
+    options.count_services = request.value("count_services", false);
+    options.include_hidden_services =
+      request.value("include_hidden_services", false);
+    return options;
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
+}
+
+std::optional<InterfaceShowOptions> interfaceShowOptionsFromJson(
+  const std::string & payload,
+  std::string & error)
+{
+  try {
+    const auto request = json::parse(payload);
+
+    InterfaceShowOptions options;
+    options.type = request.value("type", "");
+    options.all_comments = request.value("all_comments", false);
+    options.no_comments = request.value("no_comments", false);
+    return options;
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
 }
 
 Ros2TopicList::Response makeTopicListResponse(
@@ -144,6 +222,18 @@ Ros2TopicList::Response makeTopicListResponse(
   const std::string & output)
 {
   Ros2TopicList::Response response;
+  response.success = success;
+  response.err_msg = err_msg;
+  response.output = output;
+  return response;
+}
+
+Ros2TopicPub::Response makeTopicPubResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  Ros2TopicPub::Response response;
   response.success = success;
   response.err_msg = err_msg;
   response.output = output;
@@ -186,6 +276,19 @@ std::string topicListResponseToJson(
          .dump();
 }
 
+std::string topicPubResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  return json{
+    {"success", success},
+    {"err_msg", err_msg},
+    {"output", output},
+  }
+         .dump();
+}
+
 std::string serviceListResponseToJson(
   bool success, const std::string & err_msg,
   const std::string & output)
@@ -211,30 +314,62 @@ std::string interfaceShowResponseToJson(
          .dump();
 }
 
-Ros2TopicList::Response topicListResponseFromJson(const std::string & payload)
+std::optional<Ros2TopicList::Response> topicListResponseFromJson(
+  const std::string & payload,
+  std::string & error)
 {
-  const auto parsed = json::parse(payload);
-  return makeTopicListResponse(parsed.at("success").get<bool>(),
-                               parsed.at("err_msg").get<std::string>(),
-                               parsed.at("output").get<std::string>());
-}
-
-Ros2ServiceList::Response
-serviceListResponseFromJson(const std::string & payload)
-{
-  const auto parsed = json::parse(payload);
-  return makeServiceListResponse(parsed.at("success").get<bool>(),
+  try {
+    const auto parsed = json::parse(payload);
+    return makeTopicListResponse(parsed.at("success").get<bool>(),
                                  parsed.at("err_msg").get<std::string>(),
                                  parsed.at("output").get<std::string>());
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
 }
 
-Ros2InterfaceShow::Response
-interfaceShowResponseFromJson(const std::string & payload)
+std::optional<Ros2TopicPub::Response> topicPubResponseFromJson(
+  const std::string & payload,
+  std::string & error)
 {
-  const auto parsed = json::parse(payload);
-  return makeInterfaceShowResponse(parsed.at("success").get<bool>(),
+  try {
+    const auto parsed = json::parse(payload);
+    return makeTopicPubResponse(parsed.at("success").get<bool>(),
+                                parsed.at("err_msg").get<std::string>(),
+                                parsed.at("output").get<std::string>());
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
+}
+
+std::optional<Ros2ServiceList::Response>
+serviceListResponseFromJson(const std::string & payload, std::string & error)
+{
+  try {
+    const auto parsed = json::parse(payload);
+    return makeServiceListResponse(parsed.at("success").get<bool>(),
                                    parsed.at("err_msg").get<std::string>(),
                                    parsed.at("output").get<std::string>());
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
+}
+
+std::optional<Ros2InterfaceShow::Response>
+interfaceShowResponseFromJson(const std::string & payload, std::string & error)
+{
+  try {
+    const auto parsed = json::parse(payload);
+    return makeInterfaceShowResponse(parsed.at("success").get<bool>(),
+                                     parsed.at("err_msg").get<std::string>(),
+                                     parsed.at("output").get<std::string>());
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
 }
 
 } // namespace ros2_livekit_bridge

@@ -65,3 +65,6 @@ local-sdk-*/
 
 # Machine-specific devcontainer settings (e.g. macOS SSH agent path)
 .devcontainer/.env
+
+# Agents
+.claude/

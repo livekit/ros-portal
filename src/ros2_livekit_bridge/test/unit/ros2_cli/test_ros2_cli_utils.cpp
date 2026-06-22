@@ -18,10 +18,16 @@
 
 #include <gtest/gtest.h>
 
+#include <stdexcept>
+
+#include <nlohmann/json.hpp>
+
 namespace ros2_livekit_bridge::ros2_cli
 {
 namespace
 {
+
+using json = nlohmann::json;
 
 TEST(Ros2CliUtilsTest, DetectsHiddenNameTokens) {
   EXPECT_FALSE(hasHiddenNameToken(""));
@@ -54,6 +60,61 @@ TEST(Ros2CliUtilsTest, TrimsLeadingAndTrailingWhitespace) {
   EXPECT_EQ(rightTrim("no_trim"), "no_trim");
   EXPECT_EQ(rightTrim(""), "");
   EXPECT_EQ(rightTrim("   "), "");
+}
+
+TEST(Ros2CliUtilsTest, ReadsRequiredStringField) {
+  const json body{{"topic", " /cmd_vel "}};
+
+  EXPECT_EQ(
+    requiredStringField(
+      body, "topic", "topic must be a string", "topic must be non-empty"),
+    "/cmd_vel");
+}
+
+TEST(Ros2CliUtilsTest, RejectsMissingRequiredStringField) {
+  const json body = json::object();
+
+  EXPECT_THROW(
+    requiredStringField(
+      body, "topic", "topic must be a string", "topic must be non-empty"),
+    std::invalid_argument);
+}
+
+TEST(Ros2CliUtilsTest, RejectsNonStringRequiredStringField) {
+  const json body{{"topic", 42}};
+
+  EXPECT_THROW(
+    requiredStringField(
+      body, "topic", "topic must be a string", "topic must be non-empty"),
+    std::invalid_argument);
+}
+
+TEST(Ros2CliUtilsTest, RejectsEmptyRequiredStringField) {
+  const json body{{"topic", " \t\n "}};
+
+  EXPECT_THROW(
+    requiredStringField(
+      body, "topic", "topic must be a string", "topic must be non-empty"),
+    std::invalid_argument);
+}
+
+TEST(Ros2CliUtilsTest, MatchesTopicTypeFromGraphTypes) {
+  EXPECT_TRUE(
+    topicTypeMatches(
+      {"std_msgs/msg/String", "std_msgs/msg/Header"},
+      "std_msgs/msg/String"));
+  EXPECT_TRUE(
+    topicTypeMatches(
+      {"std_msgs/msg/String", "std_msgs/msg/Header"},
+      "std_msgs/msg/Header"));
+}
+
+TEST(Ros2CliUtilsTest, RejectsMissingTopicTypeFromGraphTypes) {
+  EXPECT_FALSE(
+    topicTypeMatches(
+      {"std_msgs/msg/String", "std_msgs/msg/Header"},
+      "geometry_msgs/msg/Twist"));
+  EXPECT_FALSE(topicTypeMatches({}, "std_msgs/msg/String"));
 }
 
 } // namespace

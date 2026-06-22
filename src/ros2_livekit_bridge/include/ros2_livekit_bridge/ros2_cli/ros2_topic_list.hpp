@@ -21,7 +21,7 @@
 
 #include <rclcpp/node_interfaces/node_graph_interface.hpp>
 
-#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli

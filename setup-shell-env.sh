@@ -59,7 +59,13 @@ uncrust()
 
 cbpu()
 {
-    cd "\${WS}" && sros && colcon build --packages-up-to "\$@"
+    cd "\${WS}" && sros
+    if [ "\$#" -eq 0 ]; then
+        colcon build --packages-up-to ros2_livekit_bridge
+    else
+        colcon build --packages-up-to "\$@"
+    fi
+    
 }
 
 cbps()

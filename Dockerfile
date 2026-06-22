@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM ros:jazzy
+FROM ros:jazzy@sha256:6513503d0b10e919fbe8134981d4f9d19b5c1f9b045b87a9fe3b0b9e03e7c2a9
 
 ARG OS
 ARG WS_ROS
@@ -42,6 +42,9 @@ RUN git lfs install --system
 
 # Install LiveKit CLI
 RUN curl -sSL https://get.livekit.io/cli | bash
+
+RUN apt-get update && apt-get install -y \
+    ros-${ROS_DISTRO}-test-msgs
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-joint-state-publisher

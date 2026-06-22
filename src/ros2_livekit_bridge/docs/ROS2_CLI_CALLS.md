@@ -41,7 +41,6 @@ directly on the robot.
 
 ---
 ## `ros2 topic`
-- currently only supports topic list
 ### `ros2 topic list`
 
 **ROS service:** `/ros2_livekit_bridge/ros2_topic_list`
@@ -74,6 +73,49 @@ ros2 service call /ros2_livekit_bridge/ros2_topic_list \
 ros2 service call /ros2_livekit_bridge/ros2_topic_list \
   ros2_livekit_bridge_msgs/srv/Ros2TopicList \
   "{participant_id: 'robot-01', count_topics: true}"
+```
+
+### `ros2 topic pub`
+
+**ROS service:** `ros2_livekit_bridge/ros2_topic_pub` (resolved in the bridge node namespace;
+`/ros2_livekit_bridge/ros2_topic_pub` when the bridge runs in `/`)
+
+(type `ros2_livekit_bridge_msgs/srv/Ros2TopicPub`)
+**LiveKit RPC method:** `ros2_topic_pub`
+
+Request fields (beyond `participant_id` / `timeout_sec`):
+
+| Field | Maps to `ros2 topic pub` argument |
+| --- | --- |
+| `topic` | topic name, such as `/cmd_vel`; relative names resolve in the remote bridge node context |
+| `msg_type` | message type, such as `geometry_msgs/msg/Twist` |
+| `payload` | native YAML message payload, such as `{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}` |
+
+This command accepts the same YAML-style message payload that native
+`ros2 topic pub` accepts. The LiveKit RPC payload carries the YAML string to the
+remote bridge, where it is converted into the requested ROS message type and
+published:
+
+```json
+{
+  "topic": "/cmd_vel",
+  "msg_type": "geometry_msgs/msg/Twist",
+  "payload": "{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}",
+  "timeout_sec": 10
+}
+```
+
+The remote bridge resolves the topic name, checks it against configured
+LiveKit-to-ROS topic rules (`in` or `bidirectional`), verifies the requested
+type against the ROS graph when the topic is already known, then publishes the
+serialized message with a cached generic publisher.
+
+Sample call:
+
+```bash
+ros2 service call /ros2_livekit_bridge/ros2_topic_pub \
+  ros2_livekit_bridge_msgs/srv/Ros2TopicPub \
+  "{participant_id: 'robot-01', topic: '/test/cmd_vel', msg_type: 'geometry_msgs/msg/Twist', payload: '{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}'}"
 ```
 
 ---
@@ -156,7 +198,7 @@ ros2 service call /ros2_livekit_bridge/ros2_interface_show \
 
 ## Response format
 
-All three services share the same response shape:
+All services share the same response shape:
 
 | Field | Description |
 | --- | --- |

@@ -41,6 +41,7 @@ namespace
 
 using json = nlohmann::json;
 using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceCall;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -181,10 +182,28 @@ protected:
     return request;
   }
 
-  Ros2TopicPubSrv::Request makeTopicPubRequest(
-    std::string participant_id = "robot-b", std::string topic = "/cmd_vel",
-    std::string msg_type = "std_msgs/msg/String",
-    std::string payload = "{data: hello}", std::uint8_t timeout_sec = 0)
+  Ros2ServiceCall::Request makeServiceCallRequest(
+    std::string participant_id = "robot-b",
+    std::string service = "/set_bool",
+    std::string interface_type = "std_srvs/srv/SetBool",
+    std::string payload = "{data: true}",
+    std::uint8_t timeout_sec = 0)
+  {
+    Ros2ServiceCall::Request request;
+    request.participant_id = std::move(participant_id);
+    request.service = std::move(service);
+    request.interface_type = std::move(interface_type);
+    request.payload = std::move(payload);
+    request.timeout_sec = timeout_sec;
+    return request;
+  }
+
+  Ros2TopicPub::Request makeTopicPubRequest(
+    std::string participant_id = "robot-b",
+    std::string topic = "/cmd_vel",
+    std::string interface_type = "std_msgs/msg/String",
+    std::string payload = "{data: hello}",
+    std::uint8_t timeout_sec = 0)
   {
     Ros2TopicPubSrv::Request request;
     request.participant_id = std::move(participant_id);
@@ -238,7 +257,18 @@ TEST_F(Ros2CliManagerTest, EmptyParticipantFailsForServiceList) {
   EXPECT_TRUE(response.output.empty());
 }
 
-TEST_F(Ros2CliManagerTest, EmptyParticipantFailsForTopicPub) {
+TEST_F(Ros2CliManagerTest, EmptyParticipantFailsForServiceCall)
+{
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest(""));
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "participant_id must be non-empty");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, EmptyParticipantFailsForTopicPub)
+{
   const auto response = manager->callRemoteTopicPub(makeTopicPubRequest(""));
 
   EXPECT_FALSE(response.success);
@@ -276,7 +306,20 @@ TEST_F(Ros2CliManagerTest, MissingParticipantFailsForServiceList) {
   EXPECT_TRUE(response.output.empty());
 }
 
-TEST_F(Ros2CliManagerTest, MissingParticipantFailsForTopicPub) {
+TEST_F(Ros2CliManagerTest, MissingParticipantFailsForServiceCall)
+{
+  rpc_client->has_participant = false;
+
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest("missing"));
+
+  EXPECT_FALSE(response.success);
+  EXPECT_NE(response.err_msg.find("missing"), std::string::npos);
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, MissingParticipantFailsForTopicPub)
+{
   rpc_client->has_participant = false;
 
   const auto response =
@@ -339,8 +382,34 @@ TEST_F(Ros2CliManagerTest,
   EXPECT_EQ(payload.at("timeout_sec"), ros2_cli::kDefaultTimeoutSec);
 }
 
-TEST_F(Ros2CliManagerTest, SuccessfulTopicPubRpcMapsResponseAndDefaultTimeout) {
-  rpc_client->response_json = R"({"success":true,"err_msg":"","output":""})";
+TEST_F(Ros2CliManagerTest, SuccessfulServiceCallRpcMapsResponseAndDefaultTimeout)
+{
+  rpc_client->response_json =
+    R"({"success":true,"err_msg":"",)"
+    R"("output":"success: true\nmessage: enabled\n"})";
+
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest());
+
+  EXPECT_TRUE(response.success);
+  EXPECT_EQ(response.err_msg, "");
+  EXPECT_EQ(response.output, "success: true\nmessage: enabled\n");
+  EXPECT_EQ(rpc_client->last_participant_id, "robot-b");
+  EXPECT_EQ(rpc_client->last_method, ros2_cli::kServiceCallRpcMethod);
+  EXPECT_EQ(rpc_client->last_timeout_sec, ros2_cli::kDefaultTimeoutSec);
+
+  const auto payload = json::parse(rpc_client->last_payload);
+  EXPECT_EQ(payload.at("service"), "/set_bool");
+  EXPECT_EQ(payload.at("interface_type"), "std_srvs/srv/SetBool");
+  EXPECT_EQ(payload.at("timeout_sec"), ros2_cli::kDefaultTimeoutSec);
+  ASSERT_TRUE(payload.at("request").is_object());
+  EXPECT_EQ(payload.at("request").at("content_type"), "application/x-ros-cdr");
+}
+
+TEST_F(Ros2CliManagerTest, SuccessfulTopicPubRpcMapsResponseAndDefaultTimeout)
+{
+  rpc_client->response_json =
+    R"({"success":true,"err_msg":"","output":""})";
 
   const auto response = manager->callRemoteTopicPub(makeTopicPubRequest());
 
@@ -410,8 +479,28 @@ TEST_F(Ros2CliManagerTest, PositiveServiceListTimeoutPassesThrough) {
   EXPECT_EQ(payload.at("timeout_sec"), 3);
 }
 
-TEST_F(Ros2CliManagerTest, PositiveTopicPubTimeoutPassesThrough) {
-  rpc_client->response_json = R"({"success":true,"err_msg":"","output":""})";
+TEST_F(Ros2CliManagerTest, PositiveServiceCallTimeoutPassesThrough)
+{
+  rpc_client->response_json =
+    R"({"success":true,"err_msg":"","output":"success: true\n"})";
+
+  const auto response = manager->callRemoteServiceCall(
+    makeServiceCallRequest(
+      "robot-b", "/set_bool", "std_srvs/srv/SetBool", "{data: true}", 3));
+
+  EXPECT_TRUE(response.success);
+  EXPECT_EQ(rpc_client->last_timeout_sec, 3);
+
+  const auto payload = json::parse(rpc_client->last_payload);
+  EXPECT_EQ(payload.at("service"), "/set_bool");
+  EXPECT_EQ(payload.at("interface_type"), "std_srvs/srv/SetBool");
+  EXPECT_EQ(payload.at("timeout_sec"), 3);
+}
+
+TEST_F(Ros2CliManagerTest, PositiveTopicPubTimeoutPassesThrough)
+{
+  rpc_client->response_json =
+    R"({"success":true,"err_msg":"","output":""})";
 
   const auto response = manager->callRemoteTopicPub(makeTopicPubRequest(
       "robot-b", "/cmd_vel", "std_msgs/msg/String", "{data: hello}", 3));
@@ -462,7 +551,36 @@ TEST_F(Ros2CliManagerTest, InvalidTopicPubPayloadFailsBeforeRpc) {
   EXPECT_TRUE(rpc_client->last_method.empty());
 }
 
-TEST_F(Ros2CliManagerTest, RemoteFailureResponsePassesThrough) {
+TEST_F(Ros2CliManagerTest, InvalidServiceCallPayloadFailsBeforeRpc)
+{
+  auto request = makeServiceCallRequest();
+  request.payload = "";
+
+  const auto response = manager->callRemoteServiceCall(request);
+
+  EXPECT_FALSE(response.success);
+  EXPECT_NE(
+    response.err_msg.find("failed to build service request"),
+    std::string::npos);
+  EXPECT_TRUE(response.output.empty());
+  EXPECT_TRUE(rpc_client->last_method.empty());
+}
+
+TEST_F(Ros2CliManagerTest, EmptyServiceCallInterfaceTypeFailsBeforeRpc)
+{
+  auto request = makeServiceCallRequest();
+  request.interface_type = "";
+
+  const auto response = manager->callRemoteServiceCall(request);
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "interface_type must be non-empty");
+  EXPECT_TRUE(response.output.empty());
+  EXPECT_TRUE(rpc_client->last_method.empty());
+}
+
+TEST_F(Ros2CliManagerTest, RemoteFailureResponsePassesThrough)
+{
   rpc_client->response_json =
     R"({"success":false,"err_msg":"remote parse failed","output":""})";
 
@@ -484,7 +602,21 @@ TEST_F(Ros2CliManagerTest, ServiceListRemoteFailureResponsePassesThrough) {
   EXPECT_TRUE(response.output.empty());
 }
 
-TEST_F(Ros2CliManagerTest, TopicPubRemoteFailureResponsePassesThrough) {
+TEST_F(Ros2CliManagerTest, ServiceCallRemoteFailureResponsePassesThrough)
+{
+  rpc_client->response_json =
+    R"({"success":false,"err_msg":"remote call failed","output":""})";
+
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(response.err_msg, "remote call failed");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, TopicPubRemoteFailureResponsePassesThrough)
+{
   rpc_client->response_json =
     R"({"success":false,"err_msg":"remote publish failed","output":""})";
 
@@ -533,7 +665,24 @@ TEST_F(Ros2CliManagerTest, RpcErrorFailsServiceList) {
   EXPECT_TRUE(response.output.empty());
 }
 
-TEST_F(Ros2CliManagerTest, RpcErrorFailsTopicPub) {
+TEST_F(Ros2CliManagerTest, RpcErrorFailsServiceCall)
+{
+  rpc_client->rpc_error = livekit::RpcError(
+    livekit::RpcError::ErrorCode::UNSUPPORTED_METHOD,
+    "unsupported method");
+
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(
+    response.err_msg,
+    std::string("remote ") + ros2_cli::kServiceCallRpcMethod + " RPC failed");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, RpcErrorFailsTopicPub)
+{
   rpc_client->rpc_error = livekit::RpcError(
       livekit::RpcError::ErrorCode::UNSUPPORTED_METHOD, "unsupported method");
 
@@ -583,7 +732,22 @@ TEST_F(Ros2CliManagerTest, RuntimeErrorFailsServiceList) {
   EXPECT_TRUE(response.output.empty());
 }
 
-TEST_F(Ros2CliManagerTest, RuntimeErrorFailsTopicPub) {
+TEST_F(Ros2CliManagerTest, RuntimeErrorFailsServiceCall)
+{
+  rpc_client->runtime_error = std::runtime_error("send failed");
+
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(
+    response.err_msg,
+    std::string("remote ") + ros2_cli::kServiceCallRpcMethod + " RPC failed");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, RuntimeErrorFailsTopicPub)
+{
   rpc_client->runtime_error = std::runtime_error("send failed");
 
   const auto response = manager->callRemoteTopicPub(makeTopicPubRequest());
@@ -631,7 +795,23 @@ TEST_F(Ros2CliManagerTest, MalformedServiceListRpcResponseFailsService) {
   EXPECT_TRUE(response.output.empty());
 }
 
-TEST_F(Ros2CliManagerTest, MalformedTopicPubRpcResponseFailsService) {
+TEST_F(Ros2CliManagerTest, MalformedServiceCallRpcResponseFailsService)
+{
+  rpc_client->response_json = "not-json";
+
+  const auto response =
+    manager->callRemoteServiceCall(makeServiceCallRequest());
+
+  EXPECT_FALSE(response.success);
+  EXPECT_EQ(
+    response.err_msg,
+    std::string("remote ") + ros2_cli::kServiceCallRpcMethod +
+    " returned malformed JSON");
+  EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(Ros2CliManagerTest, MalformedTopicPubRpcResponseFailsService)
+{
   rpc_client->response_json = "not-json";
 
   const auto response = manager->callRemoteTopicPub(makeTopicPubRequest());
@@ -676,7 +856,20 @@ TEST_F(Ros2CliManagerTest, MalformedInboundServiceListRpcReturnsFailureJson) {
   EXPECT_EQ(response.at("output"), "");
 }
 
-TEST_F(Ros2CliManagerTest, MalformedInboundTopicPubRpcReturnsFailureJson) {
+TEST_F(Ros2CliManagerTest, MalformedInboundServiceCallRpcReturnsFailureJson)
+{
+  const auto response_json = manager->handleServiceCallRpc("not-json");
+  const auto response = json::parse(response_json);
+
+  EXPECT_EQ(response.at("success"), false);
+  EXPECT_NE(
+    response.at("err_msg").get<std::string>().find("parse error"),
+    std::string::npos);
+  EXPECT_EQ(response.at("output"), "");
+}
+
+TEST_F(Ros2CliManagerTest, MalformedInboundTopicPubRpcReturnsFailureJson)
+{
   const auto response_json = manager->handleTopicPubRpc("not-json");
   const auto response = json::parse(response_json);
 
@@ -710,22 +903,36 @@ TEST_F(Ros2CliManagerTest, InvalidInboundInterfaceShowRpcReturnsFailureJson) {
 TEST_F(Ros2CliManagerTest, DestructorUnregistersRpcMethods) {
   manager.reset();
 
-  EXPECT_NE(std::find(rpc_client->unregistered_methods.begin(),
-                      rpc_client->unregistered_methods.end(),
-                      ros2_cli::kTopicListRpcMethod),
-            rpc_client->unregistered_methods.end());
-  EXPECT_NE(std::find(rpc_client->unregistered_methods.begin(),
-                      rpc_client->unregistered_methods.end(),
-                      ros2_cli::kTopicPubRpcMethod),
-            rpc_client->unregistered_methods.end());
-  EXPECT_NE(std::find(rpc_client->unregistered_methods.begin(),
-                      rpc_client->unregistered_methods.end(),
-                      ros2_cli::kServiceListRpcMethod),
-            rpc_client->unregistered_methods.end());
-  EXPECT_NE(std::find(rpc_client->unregistered_methods.begin(),
-                      rpc_client->unregistered_methods.end(),
-                      ros2_cli::kInterfaceShowRpcMethod),
-            rpc_client->unregistered_methods.end());
+  EXPECT_NE(
+    std::find(
+      rpc_client->unregistered_methods.begin(),
+      rpc_client->unregistered_methods.end(),
+      ros2_cli::kTopicListRpcMethod),
+    rpc_client->unregistered_methods.end());
+  EXPECT_NE(
+    std::find(
+      rpc_client->unregistered_methods.begin(),
+      rpc_client->unregistered_methods.end(),
+      ros2_cli::kTopicPubRpcMethod),
+    rpc_client->unregistered_methods.end());
+  EXPECT_NE(
+    std::find(
+      rpc_client->unregistered_methods.begin(),
+      rpc_client->unregistered_methods.end(),
+      ros2_cli::kServiceListRpcMethod),
+    rpc_client->unregistered_methods.end());
+  EXPECT_NE(
+    std::find(
+      rpc_client->unregistered_methods.begin(),
+      rpc_client->unregistered_methods.end(),
+      ros2_cli::kServiceCallRpcMethod),
+    rpc_client->unregistered_methods.end());
+  EXPECT_NE(
+    std::find(
+      rpc_client->unregistered_methods.begin(),
+      rpc_client->unregistered_methods.end(),
+      ros2_cli::kInterfaceShowRpcMethod),
+    rpc_client->unregistered_methods.end());
 }
 
 } // namespace

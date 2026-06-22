@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -32,6 +33,7 @@ namespace
 
 using json = nlohmann::json;
 using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceCall;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -59,7 +61,19 @@ Ros2ServiceList::Request makeServiceListRequest()
   return request;
 }
 
-Ros2TopicPubSrv::Request makeTopicPubRequest()
+Ros2ServiceCall::Request makeServiceCallRequest(
+  std::string interface_type = "std_srvs/srv/SetBool")
+{
+  Ros2ServiceCall::Request request;
+  request.participant_id = "robot-b";
+  request.service = "/set_bool";
+  request.interface_type = std::move(interface_type);
+  request.payload = "{data: true}";
+  request.timeout_sec = 0;
+  return request;
+}
+
+Ros2TopicPub::Request makeTopicPubRequest()
 {
   Ros2TopicPubSrv::Request request;
   request.participant_id = "robot-b";
@@ -109,6 +123,13 @@ TEST(JsonConvertersTest, ConvertsServiceListRequestToOptions) {
   EXPECT_TRUE(options.include_hidden_services);
 }
 
+TEST(JsonConvertersTest, ConvertsServiceCallRequestToOptions) {
+  const auto options = serviceCallOptionsFromRequest(makeServiceCallRequest());
+
+  EXPECT_EQ(options.service, "/set_bool");
+  EXPECT_EQ(options.interface_type, "std_srvs/srv/SetBool");
+}
+
 TEST(JsonConvertersTest, ConvertsInterfaceShowRequestToOptions) {
   const auto options =
     interfaceShowOptionsFromRequest(makeInterfaceShowRequest());
@@ -150,6 +171,30 @@ TEST(JsonConvertersTest, SerializesServiceListRequestPayload) {
   EXPECT_EQ(payload.at("count_services"), false);
   EXPECT_EQ(payload.at("include_hidden_services"), true);
   EXPECT_EQ(payload.at("timeout_sec"), 7);
+}
+
+TEST(JsonConvertersTest, SerializesExplicitServiceCallRequestPayloadAsCdr) {
+  std::string error;
+  const auto payload = serviceCallRequestToJson(makeServiceCallRequest(), 7, error);
+  ASSERT_TRUE(payload.has_value()) << error;
+  const auto body = json::parse(*payload);
+
+  EXPECT_EQ(body.at("service"), "/set_bool");
+  EXPECT_EQ(body.at("interface_type"), "std_srvs/srv/SetBool");
+  EXPECT_EQ(body.at("timeout_sec"), 7);
+  ASSERT_TRUE(body.at("request").is_object());
+  EXPECT_EQ(body.at("request").at("content_type"), "application/x-ros-cdr");
+  EXPECT_FALSE(body.at("request").at("payload_base64").get<std::string>().empty());
+  EXPECT_FALSE(body.contains("payload"));
+}
+
+TEST(JsonConvertersTest, EmptyServiceCallInterfaceTypeFailsSerialization) {
+  std::string error;
+  const auto payload = serviceCallRequestToJson(
+    makeServiceCallRequest(""), 7, error);
+
+  EXPECT_FALSE(payload.has_value());
+  EXPECT_EQ(error, "interface_type must be non-empty");
 }
 
 TEST(JsonConvertersTest, SerializesInterfaceShowRequestPayload) {
@@ -197,6 +242,31 @@ TEST(JsonConvertersTest, ParsesServiceListOptionsPayload) {
   EXPECT_TRUE(options.show_types);
   EXPECT_TRUE(options.count_services);
   EXPECT_TRUE(options.include_hidden_services);
+}
+
+TEST(JsonConvertersTest, ParsesServiceCallOptionsPayloadWithCdr) {
+  std::string error;
+  const auto payload = serviceCallRequestToJson(makeServiceCallRequest(), 7, error);
+  ASSERT_TRUE(payload.has_value()) << error;
+
+  const auto options = serviceCallOptionsFromJson(*payload, error).value();
+
+  EXPECT_EQ(options.service, "/set_bool");
+  EXPECT_EQ(options.interface_type, "std_srvs/srv/SetBool");
+  EXPECT_EQ(options.timeout_sec, 7);
+  EXPECT_GT(options.request_payload.size(), 0U);
+}
+
+TEST(JsonConvertersTest, EmptyServiceCallInterfaceTypeFailsParsing) {
+  std::string error;
+  const auto options = serviceCallOptionsFromJson(
+      R"({"service":"/set_bool","interface_type":"",)"
+      R"("request":{"content_type":"application/x-ros-cdr",)"
+      R"("payload_base64":"AQID"}})",
+      error);
+
+  EXPECT_FALSE(options.has_value());
+  EXPECT_EQ(error, "interface_type must be non-empty");
 }
 
 TEST(JsonConvertersTest, ParsesInterfaceShowOptionsPayload) {
@@ -251,6 +321,15 @@ TEST(JsonConvertersTest, BuildsServiceListResponse) {
   EXPECT_EQ(response.output, "/service\n");
 }
 
+TEST(JsonConvertersTest, BuildsServiceCallResponse) {
+  const auto response = makeServiceCallResponse(
+    true, "", "success: true\n");
+
+  EXPECT_TRUE(response.success);
+  EXPECT_EQ(response.err_msg, "");
+  EXPECT_EQ(response.output, "success: true\n");
+}
+
 TEST(JsonConvertersTest, BuildsInterfaceShowResponse) {
   const auto response = makeInterfaceShowResponse(true, "ok", "string data\n");
 
@@ -284,6 +363,15 @@ TEST(JsonConvertersTest, SerializesServiceListResponsePayload) {
   EXPECT_EQ(payload.at("success"), false);
   EXPECT_EQ(payload.at("err_msg"), "timeout");
   EXPECT_EQ(payload.at("output"), "");
+}
+
+TEST(JsonConvertersTest, SerializesServiceCallResponsePayload) {
+  const auto payload = json::parse(serviceCallResponseToJson(
+      true, "", "success: true\n"));
+
+  EXPECT_EQ(payload.at("success"), true);
+  EXPECT_EQ(payload.at("err_msg"), "");
+  EXPECT_EQ(payload.at("output"), "success: true\n");
 }
 
 TEST(JsonConvertersTest, SerializesInterfaceShowResponsePayload) {
@@ -327,6 +415,17 @@ TEST(JsonConvertersTest, ParsesServiceListResponsePayload) {
   EXPECT_EQ(response.output, "/service\n");
 }
 
+TEST(JsonConvertersTest, ParsesServiceCallResponsePayload) {
+  std::string error;
+  const auto response = serviceCallResponseFromJson(
+      R"({"success":true,"err_msg":"","output":"success: true\n"})",
+      error).value();
+
+  EXPECT_TRUE(response.success);
+  EXPECT_EQ(response.err_msg, "");
+  EXPECT_EQ(response.output, "success: true\n");
+}
+
 TEST(JsonConvertersTest, ParsesInterfaceShowResponsePayload) {
   const auto response =
     interfaceShowResponseFromJson(
@@ -339,29 +438,48 @@ TEST(JsonConvertersTest, ParsesInterfaceShowResponsePayload) {
 }
 
 TEST(JsonConvertersTest, MalformedPayloadsFail) {
-  const auto topic_list_options = topicListOptionsFromJson("not-json");
-  EXPECT_FALSE(topic_list_options);
-  EXPECT_FALSE(topic_list_options.error().empty());
-
-  EXPECT_FALSE(topicListResponseFromJson("not-json"));
-  EXPECT_FALSE(topicListResponseFromJson(R"({"success":true})"));
-
-  EXPECT_FALSE(topicPubOptionsFromJson("not-json"));
-  EXPECT_FALSE(topicPubOptionsFromJson(
-      R"({"topic":"/cmd","msg_type":"std_msgs/msg/String"})"));
-  EXPECT_FALSE(topicPubOptionsFromJson(
-      R"({"topic":"/cmd","msg_type":"std_msgs/msg/String","payload":""})"));
-
-  EXPECT_FALSE(topicPubResponseFromJson("not-json"));
-  EXPECT_FALSE(topicPubResponseFromJson(R"({"success":true})"));
-
-  EXPECT_FALSE(serviceListOptionsFromJson("not-json"));
-  EXPECT_FALSE(serviceListResponseFromJson("not-json"));
-  EXPECT_FALSE(serviceListResponseFromJson(R"({"success":true})"));
-
-  EXPECT_FALSE(interfaceShowOptionsFromJson("not-json"));
-  EXPECT_FALSE(interfaceShowResponseFromJson("not-json"));
-  EXPECT_FALSE(interfaceShowResponseFromJson(R"({"success":true})"));
+  std::string error;
+  EXPECT_FALSE(topicListOptionsFromJson("not-json", error).has_value());
+  EXPECT_FALSE(error.empty());
+  EXPECT_FALSE(topicListResponseFromJson("not-json", error).has_value());
+  EXPECT_FALSE(topicListResponseFromJson(R"({"success":true})", error)
+    .has_value());
+  EXPECT_FALSE(topicPubOptionsFromJson("not-json", error).has_value());
+  EXPECT_FALSE(
+    topicPubOptionsFromJson(
+      R"({"topic":"/cmd","interface_type":"std_msgs/msg/String"})", error)
+    .has_value());
+  EXPECT_FALSE(
+    topicPubOptionsFromJson(
+      R"({"topic":"/cmd","interface_type":"std_msgs/msg/String","payload":""})",
+      error)
+    .has_value());
+  EXPECT_FALSE(topicPubResponseFromJson("not-json", error).has_value());
+  EXPECT_FALSE(topicPubResponseFromJson(R"({"success":true})", error)
+    .has_value());
+  EXPECT_FALSE(serviceListOptionsFromJson("not-json", error).has_value());
+  EXPECT_FALSE(serviceListResponseFromJson("not-json", error).has_value());
+  EXPECT_FALSE(serviceListResponseFromJson(R"({"success":true})", error)
+    .has_value());
+  EXPECT_FALSE(serviceCallOptionsFromJson("not-json", error).has_value());
+  EXPECT_FALSE(
+    serviceCallOptionsFromJson(
+      R"({"service":"/set_bool","interface_type":"std_srvs/srv/SetBool",)"
+      R"("request":{"content_type":"text/plain","payload_base64":"AQID"}})",
+      error)
+    .has_value());
+  EXPECT_FALSE(
+    serviceCallOptionsFromJson(
+      R"({"service":"/set_bool","interface_type":"std_srvs/srv/SetBool"})",
+      error)
+    .has_value());
+  EXPECT_FALSE(serviceCallResponseFromJson("not-json", error).has_value());
+  EXPECT_FALSE(serviceCallResponseFromJson(R"({"success":true})", error)
+    .has_value());
+  EXPECT_FALSE(interfaceShowOptionsFromJson("not-json", error).has_value());
+  EXPECT_FALSE(interfaceShowResponseFromJson("not-json", error).has_value());
+  EXPECT_FALSE(interfaceShowResponseFromJson(R"({"success":true})", error)
+    .has_value());
 }
 
 } // namespace

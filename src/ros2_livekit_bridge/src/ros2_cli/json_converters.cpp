@@ -17,6 +17,7 @@
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
+#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include <exception>
 
@@ -27,6 +28,7 @@ namespace ros2_livekit_bridge
 using json = nlohmann::json;
 using ros2_cli::requiredStringField;
 using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceCall;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -59,6 +61,16 @@ serviceListOptionsFromRequest(const Ros2ServiceList::Request & request)
   options.show_types = request.show_types;
   options.count_services = request.count_services;
   options.include_hidden_services = request.include_hidden_services;
+  return options;
+}
+
+ServiceCallOptions
+serviceCallOptionsFromRequest(const Ros2ServiceCall::Request & request)
+{
+  ServiceCallOptions options;
+  options.service = request.service;
+  options.interface_type = request.interface_type;
+  options.timeout_sec = request.timeout_sec;
   return options;
 }
 
@@ -100,6 +112,20 @@ std::string topicPubRequestToJson(
   }.dump();
 }
 
+std::string topicPubRequestToJson(
+  const Ros2TopicPub::Request & request,
+  std::uint8_t timeout_sec)
+{
+  const auto options = topicPubOptionsFromRequest(request);
+  return json{
+    {"topic", options.topic},
+    {"interface_type", options.interface_type},
+    {"payload", options.payload},
+    {"timeout_sec", timeout_sec},
+  }
+         .dump();
+}
+
 std::string serviceListRequestToJson(
   const Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec)
@@ -112,6 +138,41 @@ std::string serviceListRequestToJson(
     {"include_hidden_services", options.include_hidden_services},
     {"timeout_sec", timeout_sec},
   }.dump();
+}
+
+std::optional<std::string> serviceCallRequestToJson(
+  const Ros2ServiceCall::Request & request,
+  std::uint8_t timeout_sec,
+  std::string & error)
+{
+  const auto options = serviceCallOptionsFromRequest(request);
+  json body{
+    {"service", options.service},
+    {"interface_type", options.interface_type},
+    {"timeout_sec", timeout_sec},
+  };
+
+  if (options.interface_type.empty()) {
+    error = "interface_type must be non-empty";
+    return std::nullopt;
+  }
+
+  auto serialized = ros2_cli::serializedMessageFromYaml(
+    options.interface_type + "_Request", request.payload, error);
+  if (!serialized) {
+    return std::nullopt;
+  }
+  const auto & raw = serialized->get_rcl_serialized_message();
+  std::vector<std::uint8_t> bytes;
+  if (raw.buffer != nullptr && serialized->size() > 0U) {
+    bytes.assign(raw.buffer, raw.buffer + serialized->size());
+  }
+  body["request"] = json{
+    {"content_type", "application/x-ros-cdr"},
+    {"payload_base64", ros2_cli::base64Encode(bytes)},
+  };
+
+  return body.dump();
 }
 
 std::string
@@ -241,6 +302,18 @@ Ros2ServiceList::Response makeServiceListResponse(
   return response;
 }
 
+Ros2ServiceCall::Response makeServiceCallResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  Ros2ServiceCall::Response response;
+  response.success = success;
+  response.err_msg = err_msg;
+  response.output = output;
+  return response;
+}
+
 Ros2InterfaceShow::Response
 makeInterfaceShowResponse(
   bool success, const std::string & err_msg,
@@ -275,6 +348,19 @@ std::string topicPubResponseToJson(
   }.dump();
 }
 
+std::string topicPubResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  return json{
+    {"success", success},
+    {"err_msg", err_msg},
+    {"output", output},
+  }
+         .dump();
+}
+
 std::string serviceListResponseToJson(
   bool success, const std::string & err_msg,
   const std::string & output)
@@ -284,6 +370,19 @@ std::string serviceListResponseToJson(
     {"err_msg", err_msg},
     {"output", output},
   }.dump();
+}
+
+std::string serviceCallResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  return json{
+    {"success", success},
+    {"err_msg", err_msg},
+    {"output", output},
+  }
+         .dump();
 }
 
 std::string interfaceShowResponseToJson(

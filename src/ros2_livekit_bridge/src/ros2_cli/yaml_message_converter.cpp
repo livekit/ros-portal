@@ -17,6 +17,7 @@
 #include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
+#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -27,7 +28,6 @@
 
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/typesupport_helpers.hpp>
-#include <rosidl_runtime_cpp/message_initialization.hpp>
 #include <rosidl_typesupport_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/field_types.hpp>
 #include <rosidl_typesupport_introspection_cpp/identifier.hpp>

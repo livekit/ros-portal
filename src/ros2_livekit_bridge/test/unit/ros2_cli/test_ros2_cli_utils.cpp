@@ -18,7 +18,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -115,6 +118,69 @@ TEST(Ros2CliUtilsTest, RejectsMissingTopicTypeFromGraphTypes) {
       {"std_msgs/msg/String", "std_msgs/msg/Header"},
       "geometry_msgs/msg/Twist"));
   EXPECT_FALSE(topicTypeMatches({}, "std_msgs/msg/String"));
+}
+
+TEST(Ros2CliUtilsTest, EncodesKnownBase64Value) {
+  EXPECT_EQ(base64Encode({0x01U, 0x02U, 0x03U}), "AQID");
+}
+
+TEST(Ros2CliUtilsTest, DecodesKnownBase64Value) {
+  std::string error;
+
+  const auto decoded = base64Decode("AQID", error);
+
+  ASSERT_TRUE(decoded.has_value()) << error;
+  EXPECT_EQ(*decoded, (std::vector<std::uint8_t>{0x01U, 0x02U, 0x03U}));
+  EXPECT_TRUE(error.empty());
+}
+
+TEST(Ros2CliUtilsTest, RoundTripsBase64Bytes) {
+  const std::vector<std::uint8_t> bytes{0x00U, 0x01U, 0x02U, 0xffU};
+  std::string error;
+
+  const auto decoded = base64Decode(base64Encode(bytes), error);
+
+  ASSERT_TRUE(decoded.has_value()) << error;
+  EXPECT_EQ(*decoded, bytes);
+}
+
+TEST(Ros2CliUtilsTest, RoundTripsEmptyBase64Bytes) {
+  const std::vector<std::uint8_t> bytes;
+  std::string error;
+
+  const auto encoded = base64Encode(bytes);
+  const auto decoded = base64Decode(encoded, error);
+
+  EXPECT_TRUE(encoded.empty());
+  ASSERT_TRUE(decoded.has_value()) << error;
+  EXPECT_TRUE(decoded->empty());
+}
+
+TEST(Ros2CliUtilsTest, RejectsBase64WithoutRequiredPadding) {
+  std::string error;
+
+  const auto decoded = base64Decode("AQI", error);
+
+  EXPECT_FALSE(decoded.has_value());
+  EXPECT_EQ(error, "payload_base64 must be padded standard base64");
+}
+
+TEST(Ros2CliUtilsTest, RejectsBase64WithInvalidCharacters) {
+  std::string error;
+
+  const auto decoded = base64Decode("AQ!D", error);
+
+  EXPECT_FALSE(decoded.has_value());
+  EXPECT_EQ(error, "payload_base64 is not valid base64");
+}
+
+TEST(Ros2CliUtilsTest, RejectsBase64PaddingBeforeEnd) {
+  std::string error;
+
+  const auto decoded = base64Decode("AQ==AQID", error);
+
+  EXPECT_FALSE(decoded.has_value());
+  EXPECT_EQ(error, "payload_base64 padding may only appear at the end");
 }
 
 } // namespace

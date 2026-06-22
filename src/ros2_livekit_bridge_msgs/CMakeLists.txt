@@ -22,6 +22,7 @@ ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Ros2InterfaceShow.srv"
+  "srv/Ros2ServiceCall.srv"
   "srv/Ros2ServiceList.srv"
   "srv/Ros2TopicList.srv"
   "srv/Ros2TopicPub.srv"

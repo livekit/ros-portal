@@ -120,7 +120,6 @@ ros2 service call /ros2_livekit_bridge/ros2_topic_pub \
 
 ---
 ## `ros2 service`
-- currently only supports service list
 ### `ros2 service list`
 
 **ROS service:** `/ros2_livekit_bridge/ros2_service_list`
@@ -153,6 +152,35 @@ ros2 service call /ros2_livekit_bridge/ros2_service_list \
   ros2_livekit_bridge_msgs/srv/Ros2ServiceList \
   "{participant_id: 'robot-01', count_services: true, include_hidden_services: true}"
 ```
+
+### `ros2 service call`
+
+**ROS service:** `/ros2_livekit_bridge/ros2_service_call`
+(type `ros2_livekit_bridge_msgs/srv/Ros2ServiceCall`)
+**LiveKit RPC method:** `ros2_service_call`
+
+Request fields (beyond `participant_id` / `timeout_sec`):
+
+| Field | Maps to `ros2 service call` argument |
+| --- | --- |
+| `service` | service name, such as `/set_bool`; relative names resolve in the remote bridge node context |
+| `interface_type` | required service type, such as `std_srvs/srv/SetBool` |
+| `payload` | native YAML request payload, such as `{data: true}` |
+
+The local bridge validates the YAML request using `interface_type` and sends the
+request over LiveKit RPC.
+
+Sample calls
+
+```bash
+# Call a remote SetBool service on participant "robot-01"
+ros2 service call /ros2_livekit_bridge/ros2_service_call \
+  ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
+  "{participant_id: 'robot-01', timeout_sec: 0, service: '/set_bool', interface_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
+```
+
+The response `output` field contains CLI-friendly YAML text rendered from the
+remote service response.
 
 ---
 
@@ -211,5 +239,7 @@ Common failure cases reported through `err_msg`:
 - `participant_id must be non-empty`
 - `LiveKit participant '<id>' was not found`
 - `all_comments and no_comments are mutually exclusive` (interface show only)
+- `interface_type must be non-empty` (service call and topic pub)
+- `Service call timed out.` (service call only)
 - LiveKit RPC errors (e.g. timeout, remote handler failure)
 - malformed JSON returned by the remote bridge

@@ -173,6 +173,13 @@ ros2 run diagnostic_aggregator aggregator_node \
   --ros-args --params-file livekit_bridge_diagnostics_aggregator.yaml
 ```
 
+or put the following in your launch file:
+```xml
+<node pkg="diagnostic_aggregator" exec="aggregator_node" name="diagnostic_aggregator">
+  <param name="config_file" value="$(find ros2_livekit_bridge)/config/livekit_bridge_diagnostics_aggregator.yaml"/>
+</node>
+```
+
 Inspect the grouped output:
 
 ```bash

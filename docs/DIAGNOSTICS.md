@@ -11,9 +11,9 @@ configuration, not by the bridge node itself.
 ## Publication
 
 Diagnostics are published periodically, not only when connection events occur.
-The bridge calls the diagnostic updater from an internal 1 Hz wall timer while a
-LiveKit room is active. The updater's `diagnostic_updater.period` ROS parameter
-controls the effective diagnostic publication period when set.
+`diagnostic_updater` publishes diagnostics on its own timer (configured via the
+`diagnostic_updater.period` ROS parameter, defaulting to 1 Hz). Separately, the
+bridge polls LiveKit RTC stats from an internal 1 Hz wall timer while connected.
 
 LiveKit connection callbacks update cached state only. They do not publish
 diagnostics directly from SDK callback threads.

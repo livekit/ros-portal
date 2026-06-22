@@ -39,7 +39,7 @@ namespace
 
 constexpr double kDefaultDiagnosticPeriodSec = 1.0;
 constexpr double kSecondsToMilliseconds = 1000.0;
-constexpr double kMillisecondsToSeconds = 1000.0;
+constexpr double kMillisecondsPerSecond = 1000.0;
 constexpr double kBitsPerByte = 8.0;
 
 struct CandidatePairSnapshot
@@ -311,7 +311,7 @@ std::optional<double> computeBitrate(
   }
 
   return static_cast<double>(current_bytes - previous_bytes) * kBitsPerByte *
-         kMillisecondsToSeconds / static_cast<double>(elapsed_ms);
+         kMillisecondsPerSecond / static_cast<double>(elapsed_ms);
 }
 
 void updateBitrates(

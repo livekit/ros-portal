@@ -61,19 +61,6 @@ constexpr char kResponseMessageTypeSuffix[] = "_Response";
 namespace
 {
 
-/// @brief Construct a Ros2ServiceCall response.
-Ros2ServiceCall::Response makeResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {})
-{
-  Ros2ServiceCall::Response response;
-  response.success = success;
-  response.err_msg = err_msg;
-  response.output = output;
-  return response;
-}
-
 /// @brief Load service type support by symbol from the typesupport library.
 const rosidl_service_type_support_t * serviceTypeSupportHandle(
   const std::string & type,
@@ -428,14 +415,14 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
     resolved_service = rclcpp::expand_topic_or_service_name(
       options.service, base_->get_name(), base_->get_namespace(), true);
   } catch (const std::exception & error) {
-    return makeResponse(false, error.what());
+    return makeCliResponse<Ros2ServiceCall::Response>(false, error.what());
   }
 
   if (options.interface_type.empty()) {
-    return makeResponse(false, "interface_type must be non-empty");
+    return makeCliResponse<Ros2ServiceCall::Response>(false, "interface_type must be non-empty");
   }
   if (options.request_payload.empty()) {
-    return makeResponse(false, "request payload must be non-empty");
+    return makeCliResponse<Ros2ServiceCall::Response>(false, "request payload must be non-empty");
   }
 
   rclcpp::SerializedMessage serialized_request(options.request_payload.size());
@@ -451,7 +438,7 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
   try {
     client = getClient(resolved_service, interface_type);
   } catch (const std::exception & error) {
-    return makeResponse(
+    return makeCliResponse<Ros2ServiceCall::Response>(
       false, std::string("failed to create service client: ") +
                error.what());
   }
@@ -463,7 +450,7 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
     client->support->request.serializer.deserialize_message(
       &serialized_request, request_message.data());
   } catch (const std::exception & error) {
-    return makeResponse(
+    return makeCliResponse<Ros2ServiceCall::Response>(
       false, std::string("failed to build service request: ") +
                error.what());
   }
@@ -475,7 +462,7 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
   if (send_ret != RCL_RET_OK) {
     const std::string message = rcl_get_error_string().str;
     rcl_reset_error();
-    return makeResponse(false, "failed to send service request: " + message);
+    return makeCliResponse<Ros2ServiceCall::Response>(false, "failed to send service request: " + message);
   }
 
   const auto timeout = std::chrono::seconds(
@@ -489,7 +476,7 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
     std::this_thread::sleep_for(kPollPeriod);
   }
 
-  return makeResponse(false, "Service call timed out.");
+  return makeCliResponse<Ros2ServiceCall::Response>(false, "Service call timed out.");
 }
 
 ServiceCaller::ClientPtr ServiceCaller::getClient(
@@ -531,9 +518,9 @@ std::optional<Ros2ServiceCall::Response> ServiceCaller::takeResponse(
     try {
       const auto output = responseOutput(
         client.support->response.members, response_message.data());
-      return makeResponse(true, "", output);
+      return makeCliResponse<Ros2ServiceCall::Response>(true, "", output);
     } catch (const std::exception & error) {
-      return makeResponse(
+      return makeCliResponse<Ros2ServiceCall::Response>(
         false, std::string("failed to convert service response: ") +
                  error.what());
     }

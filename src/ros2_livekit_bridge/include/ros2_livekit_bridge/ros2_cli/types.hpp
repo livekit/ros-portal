@@ -103,6 +103,30 @@ struct InterfaceShowOptions
   bool no_comments{false};
 };
 
+/**
+ * @brief Construct a ROS CLI service response.
+ *
+ * Every `ros2 ...` RPC response type shares the {success, err_msg, output}
+ * fields, so one builder covers all command response types.
+ * @tparam ResponseT Generated ROS service Response type.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return ROS service response.
+ */
+template <typename ResponseT>
+ResponseT makeCliResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output = {})
+{
+  ResponseT response;
+  response.success = success;
+  response.err_msg = err_msg;
+  response.output = output;
+  return response;
+}
+
 }  // namespace ros2_livekit_bridge
 
 namespace ros2_livekit_bridge::ros2_cli

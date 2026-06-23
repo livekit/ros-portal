@@ -19,7 +19,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -308,37 +307,18 @@ TEST(JsonConvertersTest, MissingInterfaceShowOptionFieldsDefaultToFalse) {
   EXPECT_FALSE(options.no_comments);
 }
 
-TEST(JsonConvertersTest, BuildsTopicListResponse) {
-  const auto response = makeTopicListResponse(true, "ok", "/topic\n");
+TEST(JsonConvertersTest, BuildsCliResponse) {
+  const auto error_response =
+    makeCliResponse<Ros2TopicList::Response>(false, "boom", "");
+  EXPECT_FALSE(error_response.success);
+  EXPECT_EQ(error_response.err_msg, "boom");
+  EXPECT_EQ(error_response.output, "");
 
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "ok");
-  EXPECT_EQ(response.output, "/topic\n");
-}
-
-TEST(JsonConvertersTest, BuildsServiceListResponse) {
-  const auto response = makeServiceListResponse(true, "ok", "/service\n");
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "ok");
-  EXPECT_EQ(response.output, "/service\n");
-}
-
-TEST(JsonConvertersTest, BuildsServiceCallResponse) {
-  const auto response = makeServiceCallResponse(
-    true, "", "success: true\n");
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "");
-  EXPECT_EQ(response.output, "success: true\n");
-}
-
-TEST(JsonConvertersTest, BuildsInterfaceShowResponse) {
-  const auto response = makeInterfaceShowResponse(true, "ok", "string data\n");
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "ok");
-  EXPECT_EQ(response.output, "string data\n");
+  const auto ok_response =
+    makeCliResponse<Ros2ServiceCall::Response>(true, "", "success: true\n");
+  EXPECT_TRUE(ok_response.success);
+  EXPECT_EQ(ok_response.err_msg, "");
+  EXPECT_EQ(ok_response.output, "success: true\n");
 }
 
 TEST(JsonConvertersTest, SerializesErrorResponsePayload) {
@@ -358,39 +338,9 @@ TEST(JsonConvertersTest, SerializesSuccessResponsePayload) {
   EXPECT_EQ(payload.at("output"), "success: true\n");
 }
 
-TEST(JsonConvertersTest, ParsesTopicListResponsePayload) {
+TEST(JsonConvertersTest, ParsesResponsePayload) {
   std::string error;
-  const auto response = topicListResponseFromJson(
-      R"({"success":true,"err_msg":"","output":"/topic\n"})", error).value();
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "");
-  EXPECT_EQ(response.output, "/topic\n");
-}
-
-TEST(JsonConvertersTest, ParsesTopicPubResponsePayload) {
-  std::string error;
-  const auto response = topicPubResponseFromJson(
-      R"({"success":true,"err_msg":"","output":""})", error).value();
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "");
-  EXPECT_EQ(response.output, "");
-}
-
-TEST(JsonConvertersTest, ParsesServiceListResponsePayload) {
-  std::string error;
-  const auto response = serviceListResponseFromJson(
-      R"({"success":true,"err_msg":"","output":"/service\n"})", error).value();
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "");
-  EXPECT_EQ(response.output, "/service\n");
-}
-
-TEST(JsonConvertersTest, ParsesServiceCallResponsePayload) {
-  std::string error;
-  const auto response = serviceCallResponseFromJson(
+  const auto response = cliResponseFromJson<Ros2ServiceCall::Response>(
       R"({"success":true,"err_msg":"","output":"success: true\n"})",
       error).value();
 
@@ -399,24 +349,10 @@ TEST(JsonConvertersTest, ParsesServiceCallResponsePayload) {
   EXPECT_EQ(response.output, "success: true\n");
 }
 
-TEST(JsonConvertersTest, ParsesInterfaceShowResponsePayload) {
-  std::string error;
-  const auto response = interfaceShowResponseFromJson(
-      R"({"success":true,"err_msg":"","output":"string data\n"})",
-      error).value();
-
-  EXPECT_TRUE(response.success);
-  EXPECT_EQ(response.err_msg, "");
-  EXPECT_EQ(response.output, "string data\n");
-}
-
 TEST(JsonConvertersTest, MalformedPayloadsFail) {
   std::string error;
   EXPECT_FALSE(topicListOptionsFromJson("not-json", error).has_value());
   EXPECT_FALSE(error.empty());
-  EXPECT_FALSE(topicListResponseFromJson("not-json", error).has_value());
-  EXPECT_FALSE(topicListResponseFromJson(R"({"success":true})", error)
-    .has_value());
   EXPECT_FALSE(topicPubOptionsFromJson("not-json", error).has_value());
   EXPECT_FALSE(
     topicPubOptionsFromJson(
@@ -427,13 +363,7 @@ TEST(JsonConvertersTest, MalformedPayloadsFail) {
       R"({"topic":"/cmd","interface_type":"std_msgs/msg/String","payload":""})",
       error)
     .has_value());
-  EXPECT_FALSE(topicPubResponseFromJson("not-json", error).has_value());
-  EXPECT_FALSE(topicPubResponseFromJson(R"({"success":true})", error)
-    .has_value());
   EXPECT_FALSE(serviceListOptionsFromJson("not-json", error).has_value());
-  EXPECT_FALSE(serviceListResponseFromJson("not-json", error).has_value());
-  EXPECT_FALSE(serviceListResponseFromJson(R"({"success":true})", error)
-    .has_value());
   EXPECT_FALSE(serviceCallOptionsFromJson("not-json", error).has_value());
   EXPECT_FALSE(
     serviceCallOptionsFromJson(
@@ -446,12 +376,15 @@ TEST(JsonConvertersTest, MalformedPayloadsFail) {
       R"({"service":"/set_bool","interface_type":"std_srvs/srv/SetBool"})",
       error)
     .has_value());
-  EXPECT_FALSE(serviceCallResponseFromJson("not-json", error).has_value());
-  EXPECT_FALSE(serviceCallResponseFromJson(R"({"success":true})", error)
-    .has_value());
   EXPECT_FALSE(interfaceShowOptionsFromJson("not-json", error).has_value());
-  EXPECT_FALSE(interfaceShowResponseFromJson("not-json", error).has_value());
-  EXPECT_FALSE(interfaceShowResponseFromJson(R"({"success":true})", error)
+
+  // The response parser is command-agnostic; one type exercises both the
+  // malformed-JSON and missing-field paths for all commands.
+  EXPECT_FALSE(
+    cliResponseFromJson<Ros2TopicList::Response>("not-json", error)
+    .has_value());
+  EXPECT_FALSE(
+    cliResponseFromJson<Ros2TopicList::Response>(R"({"success":true})", error)
     .has_value());
 }
 

@@ -54,11 +54,11 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
   try {
     resolved_topic = topics_->resolve_topic_name(options.topic);
   } catch (const std::exception & error) {
-    return makeTopicPubResponse(false, error.what());
+    return makeCliResponse<Ros2TopicPub::Response>(false, error.what());
   }
 
   if (!topic_publish_allowed_(resolved_topic)) {
-    return makeTopicPubResponse(false, "topic '" + resolved_topic +
+    return makeCliResponse<Ros2TopicPub::Response>(false, "topic '" + resolved_topic +
                                          "' is not allowed for publishing");
   }
 
@@ -69,7 +69,7 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
     const auto cached = publishers_.find(resolved_topic);
     if (cached != publishers_.end()) {
       if (cached->second.interface_type != options.interface_type) {
-        return makeTopicPubResponse(
+        return makeCliResponse<Ros2TopicPub::Response>(
           false, "topic '" + resolved_topic + "' is cached with type '" +
                    cached->second.interface_type + "', not '" +
                    options.interface_type + "'");
@@ -77,7 +77,7 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
       publisher = cached->second.publisher;
       was_cached = true;
     } else if (publishers_.size() >= kMaxCachedTopicPublishers) {
-      return makeTopicPubResponse(false, "topic publisher cache limit reached");
+      return makeCliResponse<Ros2TopicPub::Response>(false, "topic publisher cache limit reached");
     }
   }
 
@@ -88,7 +88,7 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
       !graph_entry->second.empty() &&
       !topicTypeMatches(graph_entry->second, options.interface_type))
     {
-      return makeTopicPubResponse(
+      return makeCliResponse<Ros2TopicPub::Response>(
         false, "topic '" + resolved_topic + "' has type(s) '" +
                  joinTypes(graph_entry->second) + "', not '" +
                  options.interface_type + "'");
@@ -99,7 +99,7 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
         topics_, resolved_topic, options.interface_type,
         rclcpp::QoS(kTopicPublisherHistoryDepth));
     } catch (const std::exception & error) {
-      return makeTopicPubResponse(
+      return makeCliResponse<Ros2TopicPub::Response>(
         false, std::string("failed to create publisher: ") + error.what());
     }
   }
@@ -108,14 +108,14 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
   auto serialized =
     serializedMessageFromYaml(options.interface_type, options.payload, yaml_error);
   if (!serialized) {
-    return makeTopicPubResponse(
+    return makeCliResponse<Ros2TopicPub::Response>(
       false, "failed to publish message: " + yaml_error);
   }
 
   try {
     publisher->publish(*serialized);
   } catch (const std::exception & error) {
-    return makeTopicPubResponse(
+    return makeCliResponse<Ros2TopicPub::Response>(
       false, std::string("failed to publish message: ") + error.what());
   }
 
@@ -129,7 +129,7 @@ Ros2TopicPub::Response TopicPublisher::publish(TopicPubOptions options) const
     }
   }
 
-  return makeTopicPubResponse(true, "", "");
+  return makeCliResponse<Ros2TopicPub::Response>(true, "", "");
 }
 
 }  // namespace ros2_livekit_bridge::ros2_cli

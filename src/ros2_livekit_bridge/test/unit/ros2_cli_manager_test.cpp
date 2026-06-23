@@ -249,6 +249,14 @@ TEST(Ros2CliManagerUtilityTest, EffectiveTimeoutUsesTenSecondDefault)
   EXPECT_EQ(Ros2CliManager::effectiveTimeout(7), 7);
 }
 
+TEST(Ros2CliManagerUtilityTest, ServiceCallRpcTimeoutAddsMargin)
+{
+  EXPECT_EQ(Ros2CliManager::serviceCallRpcTimeout(1), 2);
+  EXPECT_EQ(
+    Ros2CliManager::serviceCallRpcTimeout(ros2_cli::kDefaultTimeoutSec),
+    ros2_cli::kDefaultTimeoutSec + ros2_cli::kServiceCallRpcTimeoutMarginSec);
+}
+
 TEST_F(Ros2CliManagerTest, EmptyParticipantFails)
 {
   const auto response = manager->callRemoteTopicList(makeRequest(""));
@@ -411,7 +419,9 @@ TEST_F(Ros2CliManagerTest, SuccessfulServiceCallRpcMapsResponseAndDefaultTimeout
   EXPECT_EQ(response.output, "success: true\nmessage: enabled\n");
   EXPECT_EQ(rpc_client->last_participant_id, "robot-b");
   EXPECT_EQ(rpc_client->last_method, ros2_cli::kServiceCallRpcMethod);
-  EXPECT_EQ(rpc_client->last_timeout_sec, ros2_cli::kDefaultTimeoutSec);
+  EXPECT_EQ(
+    rpc_client->last_timeout_sec,
+    Ros2CliManager::serviceCallRpcTimeout(ros2_cli::kDefaultTimeoutSec));
 
   const auto payload = json::parse(rpc_client->last_payload);
   EXPECT_EQ(payload.at("service"), "/set_bool");
@@ -506,7 +516,7 @@ TEST_F(Ros2CliManagerTest, PositiveServiceCallTimeoutPassesThrough)
       "robot-b", "/set_bool", "std_srvs/srv/SetBool", "{data: true}", 3));
 
   EXPECT_TRUE(response.success);
-  EXPECT_EQ(rpc_client->last_timeout_sec, 3);
+  EXPECT_EQ(rpc_client->last_timeout_sec, Ros2CliManager::serviceCallRpcTimeout(3));
 
   const auto payload = json::parse(rpc_client->last_payload);
   EXPECT_EQ(payload.at("service"), "/set_bool");

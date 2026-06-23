@@ -246,9 +246,16 @@ public:
   /**
    * @brief Resolve the user-provided timeout field to an actual timeout.
    * @param timeout_sec Request timeout field; zero means use the default.
-   * @return Timeout in seconds to pass to LiveKit RPC.
+   * @return Effective timeout in seconds for the remote operation.
    */
   static std::uint8_t effectiveTimeout(std::uint8_t timeout_sec);
+
+  /**
+   * @brief Resolve the LiveKit RPC timeout for remote `ros2 service call`.
+   * @param service_timeout_sec Effective remote ROS service-call timeout.
+   * @return LiveKit RPC timeout in seconds.
+   */
+  static std::uint8_t serviceCallRpcTimeout(std::uint8_t service_timeout_sec);
 
 private:
   /**

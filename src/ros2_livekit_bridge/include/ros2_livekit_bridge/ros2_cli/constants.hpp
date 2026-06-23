@@ -56,6 +56,10 @@ inline constexpr const char *kInterfaceShowServiceName =
 /// zero.
 inline constexpr std::uint8_t kDefaultTimeoutSec = 10;
 
+/// @brief Extra LiveKit RPC timeout margin for remote `ros2 service call`.
+/// The RPC round-trip must outlive the remote ROS service-call wait.
+inline constexpr std::uint8_t kServiceCallRpcTimeoutMarginSec = 1;
+
 /// @brief Maximum number of reusable generic topic publishers cached by topic.
 inline constexpr std::size_t kMaxCachedTopicPublishers = 20U;
 /// @brief Maximum number of reusable generic service clients cached by service.

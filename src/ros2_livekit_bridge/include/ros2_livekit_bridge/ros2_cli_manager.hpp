@@ -294,6 +294,26 @@ private:
     const std::shared_ptr<Ros2InterfaceShow::Request> request,
     std::shared_ptr<Ros2InterfaceShow::Response> response) const;
 
+  /**
+   * @brief Perform one LiveKit RPC and parse its JSON response.
+   *
+   * Shared tail for every callRemote* method: dispatches @p request_payload to
+   * the remote participant, logs and returns an error response on transport
+   * failure or malformed JSON, and otherwise returns the parsed response.
+   * @tparam ResponseT Generated ROS service Response type for the command.
+   * @param participant_id Target LiveKit participant.
+   * @param rpc_method RPC method name to invoke.
+   * @param request_payload JSON request payload.
+   * @param timeout_sec Effective timeout in seconds.
+   * @return Parsed remote response, or an error response on failure.
+   */
+  template <typename ResponseT>
+  ResponseT performRemoteRpc(
+    const std::string & participant_id,
+    const char * rpc_method,
+    const std::string & request_payload,
+    std::uint8_t timeout_sec) const;
+
   NodeInterfaces node_interfaces_;
   LivekitMethods livekit_methods_;
   /// Use a function rather than a static list to account for a dynamic set of allowed topics.

@@ -213,59 +213,16 @@ ros2_cli::Ros2InterfaceShow::Response makeInterfaceShowResponse(
   const std::string & output = {});
 
 /**
- * @brief Serialize a topic-list result as a LiveKit RPC JSON response.
+ * @brief Serialize a CLI command result as a LiveKit RPC JSON response.
+ *
+ * Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
+ * so a single serializer covers all commands.
  * @param success Whether the operation succeeded.
  * @param err_msg Human-readable error message.
  * @param output Human-readable command output.
  * @return JSON response payload.
  */
-std::string topicListResponseToJson(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output);
-
-/**
- * @brief Serialize a topic-pub result as a LiveKit RPC JSON response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return JSON response payload.
- */
-std::string topicPubResponseToJson(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output);
-
-/**
- * @brief Serialize a service-list result as a LiveKit RPC JSON response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return JSON response payload.
- */
-std::string serviceListResponseToJson(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output);
-
-/// @brief Serialize a service-call result as a LiveKit RPC JSON response.
-/// @param success Whether the operation succeeded.
-/// @param err_msg Human-readable error message.
-/// @param output Human-readable command output.
-/// @return JSON response payload.
-std::string serviceCallResponseToJson(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output);
-
-/**
- * @brief Serialize an interface-show result as a LiveKit RPC JSON response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return JSON response payload.
- */
-std::string interfaceShowResponseToJson(
+std::string cliResponseToJson(
   bool success,
   const std::string & err_msg,
   const std::string & output);

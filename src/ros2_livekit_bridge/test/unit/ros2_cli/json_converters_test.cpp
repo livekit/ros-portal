@@ -338,49 +338,21 @@ TEST(JsonConvertersTest, BuildsInterfaceShowResponse) {
   EXPECT_EQ(response.output, "string data\n");
 }
 
-TEST(JsonConvertersTest, SerializesTopicListResponsePayload) {
-  const auto payload =
-    json::parse(topicListResponseToJson(false, "timeout", ""));
+TEST(JsonConvertersTest, SerializesErrorResponsePayload) {
+  const auto payload = json::parse(cliResponseToJson(false, "timeout", ""));
 
   EXPECT_EQ(payload.at("success"), false);
   EXPECT_EQ(payload.at("err_msg"), "timeout");
   EXPECT_EQ(payload.at("output"), "");
 }
 
-TEST(JsonConvertersTest, SerializesTopicPubResponsePayload) {
+TEST(JsonConvertersTest, SerializesSuccessResponsePayload) {
   const auto payload =
-    json::parse(topicPubResponseToJson(false, "timeout", ""));
-
-  EXPECT_EQ(payload.at("success"), false);
-  EXPECT_EQ(payload.at("err_msg"), "timeout");
-  EXPECT_EQ(payload.at("output"), "");
-}
-
-TEST(JsonConvertersTest, SerializesServiceListResponsePayload) {
-  const auto payload =
-    json::parse(serviceListResponseToJson(false, "timeout", ""));
-
-  EXPECT_EQ(payload.at("success"), false);
-  EXPECT_EQ(payload.at("err_msg"), "timeout");
-  EXPECT_EQ(payload.at("output"), "");
-}
-
-TEST(JsonConvertersTest, SerializesServiceCallResponsePayload) {
-  const auto payload = json::parse(serviceCallResponseToJson(
-      true, "", "success: true\n"));
+    json::parse(cliResponseToJson(true, "", "success: true\n"));
 
   EXPECT_EQ(payload.at("success"), true);
   EXPECT_EQ(payload.at("err_msg"), "");
   EXPECT_EQ(payload.at("output"), "success: true\n");
-}
-
-TEST(JsonConvertersTest, SerializesInterfaceShowResponsePayload) {
-  const auto payload =
-    json::parse(interfaceShowResponseToJson(false, "timeout", ""));
-
-  EXPECT_EQ(payload.at("success"), false);
-  EXPECT_EQ(payload.at("err_msg"), "timeout");
-  EXPECT_EQ(payload.at("output"), "");
 }
 
 TEST(JsonConvertersTest, ParsesTopicListResponsePayload) {

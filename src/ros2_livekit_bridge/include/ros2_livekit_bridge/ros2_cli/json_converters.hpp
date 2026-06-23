@@ -49,6 +49,12 @@ TopicPubOptions topicPubOptionsFromRequest(
 ServiceListOptions serviceListOptionsFromRequest(
   const ros2_cli::Ros2ServiceList::Request & request);
 
+/// @brief Convert a ROS service request to local service-call options.
+/// @param request ROS service request.
+/// @return Service-call options from the request fields.
+ServiceCallOptions serviceCallOptionsFromRequest(
+  const ros2_cli::Ros2ServiceCall::Request & request);
+
 /**
  * @brief Convert a ROS service request to local interface-show options.
  * @param request ROS service request.
@@ -87,6 +93,16 @@ std::string serviceListRequestToJson(
   const ros2_cli::Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec);
 
+/// @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+/// @param request ROS service request.
+/// @param timeout_sec Effective timeout to include in the payload.
+/// @param error Set to a description when required-type YAML cannot be encoded as CDR.
+/// @return JSON request payload, or `std::nullopt` when validation fails.
+std::optional<std::string> serviceCallRequestToJson(
+  const ros2_cli::Ros2ServiceCall::Request & request,
+  std::uint8_t timeout_sec,
+  std::string & error);
+
 /**
  * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
  * @param request ROS service request.
@@ -124,6 +140,14 @@ std::optional<TopicPubOptions> topicPubOptionsFromJson(
  * @return Service-list options, or `std::nullopt` when @p payload is malformed.
  */
 std::optional<ServiceListOptions> serviceListOptionsFromJson(
+  const std::string & payload,
+  std::string & error);
+
+/// @brief Parse service-call options from a LiveKit RPC JSON request payload.
+/// @param payload JSON request payload.
+/// @param error Set to a description when @p payload is malformed or invalid.
+/// @return Service-call options, or `std::nullopt` when @p payload is invalid.
+std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
   const std::string & payload,
   std::string & error);
 
@@ -169,6 +193,16 @@ ros2_cli::Ros2TopicPub::Response makeTopicPubResponse(
  * @return ROS service response.
  */
 ros2_cli::Ros2ServiceList::Response makeServiceListResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output = {});
+
+/// @brief Construct a ROS service response.
+/// @param success Whether the operation succeeded.
+/// @param err_msg Human-readable error message.
+/// @param output Human-readable command output.
+/// @return ROS service response.
+ros2_cli::Ros2ServiceCall::Response makeServiceCallResponse(
   bool success,
   const std::string & err_msg,
   const std::string & output = {});
@@ -221,6 +255,16 @@ std::string serviceListResponseToJson(
   const std::string & err_msg,
   const std::string & output);
 
+/// @brief Serialize a service-call result as a LiveKit RPC JSON response.
+/// @param success Whether the operation succeeded.
+/// @param err_msg Human-readable error message.
+/// @param output Human-readable command output.
+/// @return JSON response payload.
+std::string serviceCallResponseToJson(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output);
+
 /**
  * @brief Serialize an interface-show result as a LiveKit RPC JSON response.
  * @param success Whether the operation succeeded.
@@ -260,6 +304,14 @@ std::optional<ros2_cli::Ros2TopicPub::Response> topicPubResponseFromJson(
  * @return ROS service response, or `std::nullopt` when @p payload is invalid.
  */
 std::optional<ros2_cli::Ros2ServiceList::Response> serviceListResponseFromJson(
+  const std::string & payload,
+  std::string & error);
+
+/// @brief Parse a LiveKit RPC JSON response into a ROS service response.
+/// @param payload JSON response payload.
+/// @param error Set to a description when @p payload is malformed or incomplete.
+/// @return ROS service response, or `std::nullopt` when @p payload is invalid.
+std::optional<ros2_cli::Ros2ServiceCall::Response> serviceCallResponseFromJson(
   const std::string & payload,
   std::string & error);
 

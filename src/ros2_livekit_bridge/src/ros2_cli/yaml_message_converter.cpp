@@ -17,6 +17,7 @@
 #include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
+#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -27,7 +28,6 @@
 
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/typesupport_helpers.hpp>
-#include <rosidl_runtime_cpp/message_initialization.hpp>
 #include <rosidl_typesupport_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/field_types.hpp>
 #include <rosidl_typesupport_introspection_cpp/identifier.hpp>
@@ -462,43 +462,6 @@ bool assignField(
       return false;
   }
 }
-
-class DynamicMessage
-{
-public:
-  explicit DynamicMessage(const MessageMembers & members)
-  : members_(members), data_(::operator new(members.size_of_))
-  {
-    try {
-      members_.init_function(
-        data_, rosidl_runtime_cpp::MessageInitialization::ALL);
-    } catch (...) {
-      ::operator delete(data_);
-      data_ = nullptr;
-      throw;
-    }
-  }
-
-  DynamicMessage(const DynamicMessage &) = delete;
-  DynamicMessage & operator=(const DynamicMessage &) = delete;
-
-  ~DynamicMessage()
-  {
-    if (data_ != nullptr) {
-      members_.fini_function(data_);
-      ::operator delete(data_);
-    }
-  }
-
-  void * get()
-  {
-    return data_;
-  }
-
-private:
-  const MessageMembers & members_;
-  void * data_;
-};
 
 }  // namespace
 

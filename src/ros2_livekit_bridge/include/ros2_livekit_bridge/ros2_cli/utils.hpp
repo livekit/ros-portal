@@ -18,6 +18,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -98,5 +100,18 @@ bool hasHiddenNameToken(const std::string & name);
  *   Joined: std_msgs/msg/String, std_msgs/msg/Header
  */
 std::string joinTypes(const std::vector<std::string> & types);
+
+/// @brief Encode bytes as padded standard base64.
+/// @param bytes Bytes to encode.
+/// @return Base64 text.
+std::string base64Encode(const std::vector<std::uint8_t> & bytes);
+
+/// @brief Decode padded standard base64 text.
+/// @param encoded Base64 text to decode.
+/// @param error Set to a description when @p encoded is invalid.
+/// @return Decoded bytes, or `std::nullopt` when decoding fails.
+std::optional<std::vector<std::uint8_t>> base64Decode(
+  const std::string & encoded,
+  std::string & error);
 
 }  // namespace ros2_livekit_bridge::ros2_cli

@@ -16,11 +16,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include <rclcpp/serialized_message.hpp>
 
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_service_call.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_pub.hpp>
@@ -73,6 +76,19 @@ struct ServiceListOptions
   bool include_hidden_services{false};
 };
 
+/// @brief Arguments for a one-shot `ros2 service call`.
+struct ServiceCallOptions
+{
+  /// @brief ROS service name to call; may be relative before resolution.
+  std::string service;
+  /// @brief Required service type identifier, such as `std_srvs/srv/SetBool`.
+  std::string interface_type;
+  /// @brief Decoded ROS CDR request payload for runtime service dispatch.
+  std::vector<std::uint8_t> request_payload;
+  /// @brief Effective timeout in seconds for the remote ROS service call.
+  std::uint8_t timeout_sec{0};
+};
+
 /**
  * @brief Arguments and formatting options for `ros2 interface show`.
  * @details fields map 1:1 to the fields shown from running `ros2 interface show --help`
@@ -100,5 +116,7 @@ using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
 using Ros2TopicPub = ros2_livekit_bridge_msgs::srv::Ros2TopicPub;
 //! @brief Generated ROS service type for remote `ros2 service list` requests.
 using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
+/// @brief Generated ROS service type for remote `ros2 service call` requests.
+using Ros2ServiceCall = ros2_livekit_bridge_msgs::srv::Ros2ServiceCall;
 
 }  // namespace ros2_livekit_bridge::ros2_cli

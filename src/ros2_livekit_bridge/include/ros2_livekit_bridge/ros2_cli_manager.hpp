@@ -30,6 +30,7 @@
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "ros2_livekit_bridge/ros2_cli/ros2_service_call.hpp"
 #include "ros2_livekit_bridge/ros2_cli/ros2_topic_pub.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/types.hpp"
@@ -50,6 +51,7 @@ public:
   using Ros2TopicList = ros2_cli::Ros2TopicList;
   using Ros2TopicPub = ros2_cli::Ros2TopicPub;
   using Ros2ServiceList = ros2_cli::Ros2ServiceList;
+  using Ros2ServiceCall = ros2_cli::Ros2ServiceCall;
   using TopicPublishAllowedFn = ros2_cli::TopicPublishAllowedFn;
 
   /**
@@ -179,6 +181,12 @@ public:
   Ros2ServiceList::Response
   callRemoteServiceList(const Ros2ServiceList::Request & request) const;
 
+  /// @brief Execute a ROS service request by calling a remote LiveKit RPC.
+  /// @param request ROS service request from the local developer.
+  /// @return ROS service response with success, err_msg, and output.
+  Ros2ServiceCall::Response
+  callRemoteServiceCall(const Ros2ServiceCall::Request & request) const;
+
   /**
    * @brief Execute a ROS service request by calling a remote LiveKit RPC.
    * @param request ROS service request from the local developer.
@@ -207,6 +215,11 @@ public:
    * @return JSON response payload containing success, err_msg, and output.
    */
   std::string handleServiceListRpc(const std::string & payload) const;
+
+  /// @brief Fulfill an inbound LiveKit `ros2_service_call` RPC.
+  /// @param payload JSON request payload from the remote participant.
+  /// @return JSON response payload containing success, err_msg, and output.
+  std::string handleServiceCallRpc(const std::string & payload) const;
 
   /**
    * @brief Fulfill an inbound LiveKit `ros2_interface_show` RPC.
@@ -265,6 +278,13 @@ private:
     const std::shared_ptr<Ros2ServiceList::Request> request,
     std::shared_ptr<Ros2ServiceList::Response> response) const;
 
+  /// @brief Service callback that maps a ROS request into a service response.
+  /// @param request Shared ROS service request.
+  /// @param response Shared ROS service response to populate.
+  void handleServiceCallRosService(
+    const std::shared_ptr<Ros2ServiceCall::Request> request,
+    std::shared_ptr<Ros2ServiceCall::Response> response) const;
+
   /**
    * @brief Service callback that maps a ROS request into a service response.
    * @param request Shared ROS service request.
@@ -279,9 +299,11 @@ private:
   /// Use a function rather than a static list to account for a dynamic set of allowed topics.
   TopicPublishAllowedFn topic_publish_allowed_;
   std::unique_ptr<ros2_cli::TopicPublisher> topic_publisher_;
+  std::unique_ptr<ros2_cli::ServiceCaller> service_caller_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
   rclcpp::Service<Ros2TopicPub>::SharedPtr topic_pub_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
+  rclcpp::Service<Ros2ServiceCall>::SharedPtr service_call_service_;
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;
 };
 

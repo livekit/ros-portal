@@ -114,9 +114,10 @@ Direction handling:
 ## Remote ROS2 CLI Calls
 
 The bridge exposes ROS2 services (backed by LiveKit RPC) that run a subset of
-the `ros2` CLI introspection commands against other connected bridges, including
-`ros2 topic list`, `ros2 service list`, and `ros2 interface show`. See the
-[ROS2 CLI Manager guide](docs/ROS2_CLI_MANAGER.md) for the supported
+the `ros2` CLI commands against other connected bridges, including
+`ros2 topic list`, `ros2 topic pub`, `ros2 service list`,
+`ros2 service call`, and `ros2 interface show`. See the
+[ROS2 CLI calls guide](docs/ROS2_CLI_CALLS.md) for the supported
 commands, request fields, and sample `ros2 service call` invocations.
 
 Because each service callback blocks until the remote LiveKit RPC returns or

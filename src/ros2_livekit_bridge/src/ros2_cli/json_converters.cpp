@@ -17,9 +17,12 @@
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
+#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include <exception>
 #include <optional>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -27,6 +30,7 @@ namespace ros2_livekit_bridge
 {
 using json = nlohmann::json;
 using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceCall;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPub;
@@ -58,6 +62,16 @@ serviceListOptionsFromRequest(const Ros2ServiceList::Request & request)
   options.show_types = request.show_types;
   options.count_services = request.count_services;
   options.include_hidden_services = request.include_hidden_services;
+  return options;
+}
+
+ServiceCallOptions
+serviceCallOptionsFromRequest(const Ros2ServiceCall::Request & request)
+{
+  ServiceCallOptions options;
+  options.service = request.service;
+  options.interface_type = request.interface_type;
+  options.timeout_sec = request.timeout_sec;
   return options;
 }
 
@@ -114,6 +128,41 @@ std::string serviceListRequestToJson(
     {"timeout_sec", timeout_sec},
   }
          .dump();
+}
+
+std::optional<std::string> serviceCallRequestToJson(
+  const Ros2ServiceCall::Request & request,
+  std::uint8_t timeout_sec,
+  std::string & error)
+{
+  const auto options = serviceCallOptionsFromRequest(request);
+  json body{
+    {"service", options.service},
+    {"interface_type", options.interface_type},
+    {"timeout_sec", timeout_sec},
+  };
+
+  if (options.interface_type.empty()) {
+    error = "interface_type must be non-empty";
+    return std::nullopt;
+  }
+
+  auto serialized = ros2_cli::serializedMessageFromYaml(
+    options.interface_type + "_Request", request.payload, error);
+  if (!serialized) {
+    return std::nullopt;
+  }
+  const auto & raw = serialized->get_rcl_serialized_message();
+  std::vector<std::uint8_t> bytes;
+  if (raw.buffer != nullptr && serialized->size() > 0U) {
+    bytes.assign(raw.buffer, raw.buffer + serialized->size());
+  }
+  body["request"] = json{
+    {"content_type", "application/x-ros-cdr"},
+    {"payload_base64", ros2_cli::base64Encode(bytes)},
+  };
+
+  return body.dump();
 }
 
 std::string
@@ -198,6 +247,63 @@ std::optional<ServiceListOptions> serviceListOptionsFromJson(
   }
 }
 
+std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
+  const std::string & payload,
+  std::string & error)
+{
+  try {
+    const auto request = json::parse(payload);
+    if (!request.is_object()) {
+      error = "Service call request must be a JSON object";
+      return std::nullopt;
+    }
+
+    ServiceCallOptions options;
+    options.service = ros2_cli::requiredStringField(
+      request, "service", "service must be a string",
+      "service must be non-empty");
+    options.interface_type = ros2_cli::requiredStringField(
+      request, "interface_type", "interface_type must be a string",
+      "interface_type must be non-empty");
+    options.timeout_sec = request.value("timeout_sec", 0);
+
+    const auto request_envelope = request.find("request");
+    if (request_envelope == request.end() || !request_envelope->is_object()) {
+      error = "request must be a JSON object";
+      return std::nullopt;
+    }
+    const auto content_type = request_envelope->find("content_type");
+    if (content_type == request_envelope->end() ||
+      !content_type->is_string() ||
+      content_type->get<std::string>() != "application/x-ros-cdr")
+    {
+      error = "request.content_type must be application/x-ros-cdr";
+      return std::nullopt;
+    }
+    const auto payload_base64 = request_envelope->find("payload_base64");
+    if (payload_base64 == request_envelope->end() ||
+      !payload_base64->is_string())
+    {
+      error = "request.payload_base64 must be a string";
+      return std::nullopt;
+    }
+    auto bytes = ros2_cli::base64Decode(
+      payload_base64->get<std::string>(), error);
+    if (!bytes) {
+      return std::nullopt;
+    }
+    if (bytes->empty()) {
+      error = "request.payload_base64 must not be empty";
+      return std::nullopt;
+    }
+    options.request_payload = std::move(*bytes);
+    return options;
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
+}
+
 std::optional<InterfaceShowOptions> interfaceShowOptionsFromJson(
   const std::string & payload,
   std::string & error)
@@ -252,6 +358,18 @@ Ros2ServiceList::Response makeServiceListResponse(
   return response;
 }
 
+Ros2ServiceCall::Response makeServiceCallResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output)
+{
+  Ros2ServiceCall::Response response;
+  response.success = success;
+  response.err_msg = err_msg;
+  response.output = output;
+  return response;
+}
+
 Ros2InterfaceShow::Response
 makeInterfaceShowResponse(
   bool success, const std::string & err_msg,
@@ -291,6 +409,19 @@ std::string topicPubResponseToJson(
 
 std::string serviceListResponseToJson(
   bool success, const std::string & err_msg,
+  const std::string & output)
+{
+  return json{
+    {"success", success},
+    {"err_msg", err_msg},
+    {"output", output},
+  }
+         .dump();
+}
+
+std::string serviceCallResponseToJson(
+  bool success,
+  const std::string & err_msg,
   const std::string & output)
 {
   return json{
@@ -352,6 +483,21 @@ serviceListResponseFromJson(const std::string & payload, std::string & error)
     return makeServiceListResponse(parsed.at("success").get<bool>(),
                                    parsed.at("err_msg").get<std::string>(),
                                    parsed.at("output").get<std::string>());
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
+}
+
+std::optional<Ros2ServiceCall::Response>
+serviceCallResponseFromJson(const std::string & payload, std::string & error)
+{
+  try {
+    const auto parsed = json::parse(payload);
+    return makeServiceCallResponse(
+      parsed.at("success").get<bool>(),
+      parsed.at("err_msg").get<std::string>(),
+      parsed.at("output").get<std::string>());
   } catch (const std::exception & parse_error) {
     error = parse_error.what();
     return std::nullopt;

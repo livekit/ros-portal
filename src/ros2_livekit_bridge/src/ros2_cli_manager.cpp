@@ -22,6 +22,7 @@
 #include "ros2_livekit_bridge/ros2_cli/ros2_service_list.hpp"
 #include "ros2_livekit_bridge/ros2_cli/ros2_topic_list.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <stdexcept>
 #include <string>
@@ -332,10 +333,11 @@ Ros2CliManager::callRemoteServiceCall(
                "' was not found");
   }
 
-  const auto timeout_sec = effectiveTimeout(request.timeout_sec);
+  const auto service_timeout_sec = effectiveTimeout(request.timeout_sec);
+  const auto rpc_timeout_sec = serviceCallRpcTimeout(service_timeout_sec);
   std::string payload_error;
   const auto payload = serviceCallRequestToJson(
-    request, timeout_sec, payload_error);
+    request, service_timeout_sec, payload_error);
   if (!payload) {
     return makeCliResponse<Ros2ServiceCall::Response>(
       false, "failed to build service request: " + payload_error);
@@ -343,7 +345,7 @@ Ros2CliManager::callRemoteServiceCall(
 
   return performRemoteRpc<Ros2ServiceCall::Response>(
     request.participant_id, ros2_cli::kServiceCallRpcMethod, *payload,
-    timeout_sec);
+    rpc_timeout_sec);
 }
 
 Ros2CliManager::Ros2InterfaceShow::Response
@@ -512,6 +514,15 @@ bool Ros2CliManager::isHiddenService(const std::string & service_name)
 std::uint8_t Ros2CliManager::effectiveTimeout(std::uint8_t timeout_sec)
 {
   return timeout_sec == 0 ? ros2_cli::kDefaultTimeoutSec : timeout_sec;
+}
+
+std::uint8_t Ros2CliManager::serviceCallRpcTimeout(
+  std::uint8_t service_timeout_sec)
+{
+  const unsigned total =
+    static_cast<unsigned>(service_timeout_sec) +
+    ros2_cli::kServiceCallRpcTimeoutMarginSec;
+  return static_cast<std::uint8_t>(std::min(total, 255U));
 }
 
 } // namespace ros2_livekit_bridge

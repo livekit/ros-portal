@@ -35,6 +35,11 @@ default", which is **10 seconds**. If the participant is unknown or
 `participant_id` is empty, the call fails fast with an error message before any
 RPC is attempted.
 
+For `ros2 service call` only, the LiveKit RPC timeout is the requested
+service-call timeout plus a **1 second** margin. That lets the remote bridge
+return service-level errors such as `Service call timed out.` before the RPC
+layer aborts the round-trip.
+
 The remaining request fields mirror the flags of the corresponding native
 `ros2` CLI command 1:1, so output matches what you'd see running the command
 directly on the robot.
@@ -168,7 +173,9 @@ Request fields (beyond `participant_id` / `timeout_sec`):
 | `payload` | native YAML request payload, such as `{data: true}` |
 
 The local bridge validates the YAML request using `interface_type` and sends the
-request over LiveKit RPC.
+request over LiveKit RPC. The JSON payload carries the requested
+`timeout_sec` for the remote ROS service wait; the LiveKit RPC itself waits one
+second longer so timeout responses can propagate back to the caller.
 
 Sample calls
 

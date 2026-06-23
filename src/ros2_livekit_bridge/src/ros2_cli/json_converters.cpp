@@ -266,66 +266,6 @@ interfaceShowOptionsFromJson(const std::string & payload)
   }
 }
 
-Ros2TopicList::Response makeTopicListResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output)
-{
-  Ros2TopicList::Response response;
-  response.success = success;
-  response.err_msg = err_msg;
-  response.output = output;
-  return response;
-}
-
-Ros2TopicPubSrv::Response makeTopicPubResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output)
-{
-  Ros2TopicPubSrv::Response response;
-  response.success = success;
-  response.err_msg = err_msg;
-  response.output = output;
-  return response;
-}
-
-Ros2ServiceList::Response makeServiceListResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output)
-{
-  Ros2ServiceList::Response response;
-  response.success = success;
-  response.err_msg = err_msg;
-  response.output = output;
-  return response;
-}
-
-Ros2ServiceCall::Response makeServiceCallResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output)
-{
-  Ros2ServiceCall::Response response;
-  response.success = success;
-  response.err_msg = err_msg;
-  response.output = output;
-  return response;
-}
-
-Ros2InterfaceShow::Response
-makeInterfaceShowResponse(
-  bool success, const std::string & err_msg,
-  const std::string & output)
-{
-  Ros2InterfaceShow::Response response;
-  response.success = success;
-  response.err_msg = err_msg;
-  response.output = output;
-  return response;
-}
-
 std::string cliResponseToJson(
   bool success,
   const std::string & err_msg,
@@ -336,62 +276,6 @@ std::string cliResponseToJson(
     {"err_msg", err_msg},
     {"output", output},
   }.dump();
-}
-
-Result<Ros2TopicList::Response, std::string>
-topicListResponseFromJson(const std::string & payload)
-{
-  try {
-    const auto parsed = json::parse(payload);
-    return Result<Ros2TopicList::Response, std::string>::ok(makeTopicListResponse(
-        parsed.at("success").get<bool>(),
-        parsed.at("err_msg").get<std::string>(),
-        parsed.at("output").get<std::string>()));
-  } catch (const std::exception & parse_error) {
-    return Result<Ros2TopicList::Response, std::string>::err(parse_error.what());
-  }
-}
-
-Result<Ros2TopicPubSrv::Response, std::string>
-topicPubResponseFromJson(const std::string & payload)
-{
-  try {
-    const auto parsed = json::parse(payload);
-    return Result<Ros2TopicPubSrv::Response, std::string>::ok(makeTopicPubResponse(
-        parsed.at("success").get<bool>(),
-        parsed.at("err_msg").get<std::string>(),
-        parsed.at("output").get<std::string>()));
-  } catch (const std::exception & parse_error) {
-    return Result<Ros2TopicPubSrv::Response, std::string>::err(parse_error.what());
-  }
-}
-
-Result<Ros2ServiceList::Response, std::string>
-serviceListResponseFromJson(const std::string & payload)
-{
-  try {
-    const auto parsed = json::parse(payload);
-    return Result<Ros2ServiceList::Response, std::string>::ok(makeServiceListResponse(
-        parsed.at("success").get<bool>(),
-        parsed.at("err_msg").get<std::string>(),
-        parsed.at("output").get<std::string>()));
-  } catch (const std::exception & parse_error) {
-    return Result<Ros2ServiceList::Response, std::string>::err(parse_error.what());
-  }
-}
-
-Result<Ros2InterfaceShow::Response, std::string>
-interfaceShowResponseFromJson(const std::string & payload)
-{
-  try {
-    const auto parsed = json::parse(payload);
-    return Result<Ros2InterfaceShow::Response, std::string>::ok(
-        makeInterfaceShowResponse(parsed.at("success").get<bool>(),
-                                  parsed.at("err_msg").get<std::string>(),
-                                  parsed.at("output").get<std::string>()));
-  } catch (const std::exception & parse_error) {
-    return Result<Ros2InterfaceShow::Response, std::string>::err(parse_error.what());
-  }
 }
 
 } // namespace ros2_livekit_bridge

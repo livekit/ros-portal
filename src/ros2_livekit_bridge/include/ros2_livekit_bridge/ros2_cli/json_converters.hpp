@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <optional>
 #include <string>
 
@@ -155,64 +156,6 @@ Result<InterfaceShowOptions, std::string> interfaceShowOptionsFromJson(
   const std::string & payload);
 
 /**
- * @brief Construct a ROS service response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return ROS service response.
- */
-ros2_cli::Ros2TopicList::Response makeTopicListResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {});
-
-/**
- * @brief Construct a ROS service response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return ROS service response.
- */
-ros2_cli::Ros2TopicPubSrv::Response makeTopicPubResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {});
-
-/**
- * @brief Construct a ROS service response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return ROS service response.
- */
-ros2_cli::Ros2ServiceList::Response makeServiceListResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {});
-
-/// @brief Construct a ROS service response.
-/// @param success Whether the operation succeeded.
-/// @param err_msg Human-readable error message.
-/// @param output Human-readable command output.
-/// @return ROS service response.
-ros2_cli::Ros2ServiceCall::Response makeServiceCallResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {});
-
-/**
- * @brief Construct a ROS service response.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return ROS service response.
- */
-ros2_cli::Ros2InterfaceShow::Response makeInterfaceShowResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {});
-
-/**
  * @brief Serialize a CLI command result as a LiveKit RPC JSON response.
  *
  * Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
@@ -229,42 +172,28 @@ std::string cliResponseToJson(
 
 /**
  * @brief Parse a LiveKit RPC JSON response into a ROS service response.
+ *
+ * Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
+ * so a single parser covers all command response types.
+ * @tparam ResponseT Generated ROS service Response type.
  * @param payload JSON response payload.
  * @return Parsed response, or an error description when @p payload is invalid.
  */
-Result<ros2_cli::Ros2TopicList::Response, std::string> topicListResponseFromJson(
-  const std::string & payload);
-
-/**
- * @brief Parse a LiveKit RPC JSON response into a ROS service response.
- * @param payload JSON response payload.
- * @return Parsed response, or an error description when @p payload is invalid.
- */
-Result<ros2_cli::Ros2TopicPubSrv::Response, std::string> topicPubResponseFromJson(
-  const std::string & payload);
-
-/**
- * @brief Parse a LiveKit RPC JSON response into a ROS service response.
- * @param payload JSON response payload.
- * @return Parsed response, or an error description when @p payload is invalid.
- */
-Result<ros2_cli::Ros2ServiceList::Response, std::string>
-serviceListResponseFromJson(const std::string & payload);
-
-/// @brief Parse a LiveKit RPC JSON response into a ROS service response.
-/// @param payload JSON response payload.
-/// @param error Set to a description when @p payload is malformed or incomplete.
-/// @return ROS service response, or `std::nullopt` when @p payload is invalid.
-std::optional<ros2_cli::Ros2ServiceCall::Response> serviceCallResponseFromJson(
+template <typename ResponseT>
+std::optional<ResponseT> cliResponseFromJson(
   const std::string & payload,
-  std::string & error);
-
-/**
- * @brief Parse a LiveKit RPC JSON response into a ROS service response.
- * @param payload JSON response payload.
- * @return Parsed response, or an error description when @p payload is invalid.
- */
-Result<ros2_cli::Ros2InterfaceShow::Response, std::string>
-interfaceShowResponseFromJson(const std::string & payload);
+  std::string & error)
+{
+  try {
+    const auto parsed = nlohmann::json::parse(payload);
+    return makeCliResponse<ResponseT>(
+      parsed.at("success").template get<bool>(),
+      parsed.at("err_msg").template get<std::string>(),
+      parsed.at("output").template get<std::string>());
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
+  }
+}
 
 }  // namespace ros2_livekit_bridge

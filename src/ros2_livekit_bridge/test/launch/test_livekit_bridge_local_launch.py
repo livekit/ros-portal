@@ -38,7 +38,7 @@ def _load_launch_module():
 
 def _write_config(path, *, room_name='robo_room'):
     path.write_text(
-        f'''ros2_livekit_bridge:
+        f"""ros2_livekit_bridge:
   version: "0.0.1"
   room_name: "{room_name}"
   topic_polling_period_ms: 500
@@ -46,7 +46,7 @@ def _write_config(path, *, room_name='robo_room'):
   topics:
     - topic: "/camera/image_raw"
       direction: "out"
-''',
+""",
         encoding='utf-8',
     )
 
@@ -63,12 +63,12 @@ def test_room_name_from_config_rejects_missing_room_name(tmp_path):
     module = _load_launch_module()
     config_path = tmp_path / 'bridge.yaml'
     config_path.write_text(
-        '''ros2_livekit_bridge:
+        """ros2_livekit_bridge:
   version: "0.0.1"
   topic_polling_period_ms: 500
   ros_threads: 4
   topics: []
-''',
+""",
         encoding='utf-8',
     )
 

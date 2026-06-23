@@ -28,13 +28,16 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies(REQUIRED
   ament_index_cpp
+  diagnostic_msgs
+  diagnostic_updater
   geometry_msgs
   nav_msgs
-  ros2_livekit_bridge_msgs
   rclcpp
   ros2_livekit_bridge_config
+  ros2_livekit_bridge_msgs
   sensor_msgs
-  std_msgs)
+  std_msgs
+)
 
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
@@ -59,7 +62,7 @@ ament_auto_find_build_dependencies(REQUIRED
 # -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
 # affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "1.0.0" CACHE STRING
+set(LIVEKIT_SDK_VERSION "1.1.1" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
   "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
@@ -206,6 +209,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 # Bridge library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
+  src/diagnostics/connection_health.cpp
   src/ros2_livekit_bridge.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp

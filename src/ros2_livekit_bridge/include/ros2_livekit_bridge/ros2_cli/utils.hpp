@@ -33,7 +33,7 @@ inline std::string leftTrim(const std::string & value)
 {
   const auto first = std::find_if(
     value.begin(), value.end(),
-    [](unsigned char character) { return !std::isspace(character); });
+    [](unsigned char character) {return !std::isspace(character);});
   return std::string(first, value.end());
 }
 
@@ -45,7 +45,8 @@ inline std::string leftTrim(const std::string & value)
 inline std::string rightTrim(std::string value)
 {
   while (!value.empty() &&
-    std::isspace(static_cast<unsigned char>(value.back()))) {
+    std::isspace(static_cast<unsigned char>(value.back())))
+  {
     value.pop_back();
   }
   return value;

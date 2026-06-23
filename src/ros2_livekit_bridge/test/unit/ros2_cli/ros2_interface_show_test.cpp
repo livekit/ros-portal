@@ -49,9 +49,9 @@ makeInterfaceOptions(
 
 TEST(Ros2InterfaceShowUtilsTest, SplitsInterfaceTypeOnSlashes) {
   EXPECT_EQ(splitInterfaceType("std_msgs/msg/String"),
-            (std::vector<std::string>{"std_msgs", "msg", "String"}));
+    (std::vector<std::string>{"std_msgs", "msg", "String"}));
   EXPECT_EQ(splitInterfaceType("pkg/"),
-            (std::vector<std::string>{"pkg", ""}));
+    (std::vector<std::string>{"pkg", ""}));
 }
 
 TEST(Ros2InterfaceShowUtilsTest, RemovesArrayAndBoundedSuffixes) {
@@ -149,12 +149,12 @@ TEST(Ros2InterfaceShowTest, RendersInterfaceWithoutCommentsOrWhitespace) {
 
 TEST(Ros2InterfaceShowTest, InterfaceShowRejectsInvalidArguments) {
   EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(makeInterfaceOptions(""))
-                   .has_value());
+    .has_value());
   EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("-"))
-                   .has_value());
+    .has_value());
   EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(
                    makeInterfaceOptions("std_msgs/msg/Header", true, true))
-                   .has_value());
+    .has_value());
 }
 
 } // namespace

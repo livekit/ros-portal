@@ -68,7 +68,8 @@ inline std::optional<std::string> interfacePath(const std::string & type)
 {
   const auto parts = splitInterfaceType(type);
   if (parts.size() != 3 || parts[0].empty() || parts[1].empty() ||
-    parts[2].empty()) {
+    parts[2].empty())
+  {
     return std::nullopt;
   }
 
@@ -76,7 +77,8 @@ inline std::optional<std::string> interfacePath(const std::string & type)
   const auto & interface_kind = parts[1];
   const auto & interface_name = parts[2];
   if (interface_kind != "msg" && interface_kind != "srv" &&
-    interface_kind != "action") {
+    interface_kind != "action")
+  {
     return std::nullopt;
   }
 
@@ -159,7 +161,8 @@ nestedInterfaceTypeFromLine(const std::string & package_name, const std::string 
   std::string name_token;
   stream >> type_token >> name_token;
   if (type_token.empty() || name_token.empty() ||
-    name_token.find('=') != std::string::npos) {
+    name_token.find('=') != std::string::npos)
+  {
     return std::nullopt;
   }
 
@@ -171,7 +174,8 @@ nestedInterfaceTypeFromLine(const std::string & package_name, const std::string 
   const auto parts = splitInterfaceType(type_token);
   if (parts.size() == 1) {
     if (!type_token.empty() &&
-      std::isupper(static_cast<unsigned char>(type_token.front()))) {
+      std::isupper(static_cast<unsigned char>(type_token.front())))
+    {
       return package_name + "/msg/" + type_token;
     }
     return std::nullopt;

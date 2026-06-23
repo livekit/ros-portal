@@ -47,6 +47,11 @@
 namespace ros2_livekit_bridge
 {
 
+namespace diagnostics
+{
+class ConnectionHealthDiagnostics;
+} // namespace diagnostics
+
 /**
  * @brief The main bridge node for the ROS2 LiveKit bridge.
  *
@@ -79,6 +84,11 @@ private:
    * @brief Poll the topics and create subscribers for the allowed topics
    */
   void pollTopics();
+
+  /**
+   * @brief Poll LiveKit stats used by connection-health diagnostics.
+   */
+  void pollConnectionStats();
 
   /**
    * @brief Create a subscriber for the topic
@@ -128,6 +138,49 @@ private:
   void onDataTrackUnpublished(
     livekit::Room & room,
     const livekit::DataTrackUnpublishedEvent & event) override;
+
+  // The LiveKit room exposes a single delegate, so the bridge owns it and
+  // forwards connection-health events to the diagnostics helper below.
+
+  /// @brief Forward participant-connected events to connection diagnostics.
+  void onParticipantConnected(
+    livekit::Room & room,
+    const livekit::ParticipantConnectedEvent & event) override;
+
+  /// @brief Forward participant-disconnected events to connection diagnostics.
+  void onParticipantDisconnected(
+    livekit::Room & room,
+    const livekit::ParticipantDisconnectedEvent & event) override;
+
+  /// @brief Forward connection-state changes to connection diagnostics.
+  void onConnectionStateChanged(
+    livekit::Room & room,
+    const livekit::ConnectionStateChangedEvent & event) override;
+
+  /// @brief Forward terminal disconnect events to connection diagnostics.
+  void onDisconnected(
+    livekit::Room & room,
+    const livekit::DisconnectedEvent & event) override;
+
+  /// @brief Forward reconnecting events to connection diagnostics.
+  void onReconnecting(
+    livekit::Room & room,
+    const livekit::ReconnectingEvent & event) override;
+
+  /// @brief Forward reconnected events to connection diagnostics.
+  void onReconnected(
+    livekit::Room & room,
+    const livekit::ReconnectedEvent & event) override;
+
+  /// @brief Forward room-updated events to connection diagnostics.
+  void onRoomUpdated(
+    livekit::Room & room,
+    const livekit::RoomUpdatedEvent & event) override;
+
+  /// @brief Forward participants-updated events to connection diagnostics.
+  void onParticipantsUpdated(
+    livekit::Room & room,
+    const livekit::ParticipantsUpdatedEvent & event) override;
 
   /**
    * @brief Resolve the ROS message type for an inbound LiveKit data track.
@@ -221,6 +274,11 @@ private:
   std::unique_ptr<livekit::Room> room_;
   //! @brief ROS CLI service/RPC manager for remote graph introspection.
   std::unique_ptr<Ros2CliManager> ros2_cli_manager_;
+  //! @brief LiveKit connection health diagnostics publisher.
+  std::unique_ptr<diagnostics::ConnectionHealthDiagnostics>
+  connection_diagnostics_;
+  //! @brief Timer for best-effort LiveKit stats polling.
+  rclcpp::TimerBase::SharedPtr connection_stats_timer_;
 
   //! @brief Per-image-topic state: lazily created video source/track pair plus
   //! conversion buffer. Declared after room_ so it is destroyed first (tracks

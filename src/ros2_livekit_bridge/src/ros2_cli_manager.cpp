@@ -210,60 +210,68 @@ void Ros2CliManager::handleInterfaceShowRosService(
   *response = callRemoteInterfaceShow(*request);
 }
 
-Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
-  const Ros2TopicList::Request & request) const
+template <typename ResponseT>
+ResponseT Ros2CliManager::performRemoteRpc(
+  const std::string & participant_id,
+  const char * rpc_method,
+  const std::string & request_payload,
+  std::uint8_t timeout_sec) const
 {
-  if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2TopicList::Response>(false, "participant_id must be non-empty");
-  }
-
-  if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2TopicList::Response>(false, "LiveKit participant '" +
-                                            request.participant_id +
-                                            "' was not found");
-  }
-
-  const auto timeout_sec = effectiveTimeout(request.timeout_sec);
-  const auto payload = topicListRequestToJson(request, timeout_sec);
-
   const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kTopicListRpcMethod, payload,
-      timeout_sec);
+      participant_id, rpc_method, request_payload, timeout_sec);
   if (!rpc_response) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "LiveKit RPC '%s' to participant '%s' failed",
-                 ros2_cli::kTopicListRpcMethod, request.participant_id.c_str());
-    return makeCliResponse<Ros2TopicList::Response>(false, std::string("remote ") +
-                                            ros2_cli::kTopicListRpcMethod +
-                                            " RPC failed");
+                 rpc_method, participant_id.c_str());
+    return makeCliResponse<ResponseT>(
+      false, std::string("remote ") + rpc_method + " RPC failed");
   }
 
   std::string parse_error;
-  auto response = cliResponseFromJson<Ros2TopicList::Response>(*rpc_response, parse_error);
+  auto response = cliResponseFromJson<ResponseT>(*rpc_response, parse_error);
   if (!response) {
     RCLCPP_ERROR(
         node_interfaces_.node_logging->get_logger(),
         "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kTopicListRpcMethod, request.participant_id.c_str(),
-        parse_error.c_str());
-    return makeCliResponse<Ros2TopicList::Response>(false, std::string("remote ") +
-                                            ros2_cli::kTopicListRpcMethod +
-                                            " returned malformed JSON");
+        rpc_method, participant_id.c_str(), parse_error.c_str());
+    return makeCliResponse<ResponseT>(
+      false, std::string("remote ") + rpc_method + " returned malformed JSON");
   }
   return response.value();
 }
 
-Ros2CliManager::Ros2TopicPubSrv::Response
-Ros2CliManager::callRemoteTopicPub(const Ros2TopicPubSrv::Request & request) const
+Ros2CliManager::Ros2TopicPubSrv::Response Ros2CliManager::callRemoteTopicList(
+  const Ros2TopicList::Request & request) const
 {
   if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2TopicPub::Response>(false, "participant_id must be non-empty");
+    return makeCliResponse<Ros2TopicList::Response>(
+      false, "participant_id must be non-empty");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2TopicPub::Response>(false, "LiveKit participant '" +
-                                           request.participant_id +
-                                           "' was not found");
+    return makeCliResponse<Ros2TopicList::Response>(
+      false, "LiveKit participant '" + request.participant_id +
+               "' was not found");
+  }
+
+  const auto timeout_sec = effectiveTimeout(request.timeout_sec);
+  const auto payload = topicListRequestToJson(request, timeout_sec);
+  return performRemoteRpc<Ros2TopicList::Response>(
+    request.participant_id, ros2_cli::kTopicListRpcMethod, payload, timeout_sec);
+}
+
+Ros2CliManager::Ros2TopicPub::Response
+Ros2CliManager::callRemoteTopicPub(const Ros2TopicPub::Request & request) const
+{
+  if (request.participant_id.empty()) {
+    return makeCliResponse<Ros2TopicPub::Response>(
+      false, "participant_id must be non-empty");
+  }
+
+  if (!livekit_methods_.has_participant(request.participant_id)) {
+    return makeCliResponse<Ros2TopicPub::Response>(
+      false, "LiveKit participant '" + request.participant_id +
+               "' was not found");
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
@@ -274,75 +282,29 @@ Ros2CliManager::callRemoteTopicPub(const Ros2TopicPubSrv::Request & request) con
     return makeCliResponse<Ros2TopicPub::Response>(false, options_error);
   }
 
-  const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kTopicPubRpcMethod, payload,
-      timeout_sec);
-  if (!rpc_response) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
-                 "LiveKit RPC '%s' to participant '%s' failed",
-                 ros2_cli::kTopicPubRpcMethod, request.participant_id.c_str());
-    return makeCliResponse<Ros2TopicPub::Response>(false, std::string("remote ") +
-                                           ros2_cli::kTopicPubRpcMethod +
-                                           " RPC failed");
-  }
-
-  std::string parse_error;
-  auto response = cliResponseFromJson<Ros2TopicPub::Response>(*rpc_response, parse_error);
-  if (!response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kTopicPubRpcMethod, request.participant_id.c_str(),
-        parse_error.c_str());
-    return makeCliResponse<Ros2TopicPub::Response>(false, std::string("remote ") +
-                                           ros2_cli::kTopicPubRpcMethod +
-                                           " returned malformed JSON");
-  }
-  return response.value();
+  return performRemoteRpc<Ros2TopicPub::Response>(
+    request.participant_id, ros2_cli::kTopicPubRpcMethod, payload, timeout_sec);
 }
 
 Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
   const Ros2ServiceList::Request & request) const
 {
   if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2ServiceList::Response>(false, "participant_id must be non-empty");
+    return makeCliResponse<Ros2ServiceList::Response>(
+      false, "participant_id must be non-empty");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2ServiceList::Response>(false, "LiveKit participant '" +
-                                              request.participant_id +
-                                              "' was not found");
+    return makeCliResponse<Ros2ServiceList::Response>(
+      false, "LiveKit participant '" + request.participant_id +
+               "' was not found");
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = serviceListRequestToJson(request, timeout_sec);
-
-  const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kServiceListRpcMethod, payload,
-      timeout_sec);
-  if (!rpc_response) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
-                 "LiveKit RPC '%s' to participant '%s' failed",
-                 ros2_cli::kServiceListRpcMethod,
-                 request.participant_id.c_str());
-    return makeCliResponse<Ros2ServiceList::Response>(false, std::string("remote ") +
-                                              ros2_cli::kServiceListRpcMethod +
-                                              " RPC failed");
-  }
-
-  std::string parse_error;
-  auto response = cliResponseFromJson<Ros2ServiceList::Response>(*rpc_response, parse_error);
-  if (!response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kServiceListRpcMethod, request.participant_id.c_str(),
-        parse_error.c_str());
-    return makeCliResponse<Ros2ServiceList::Response>(false, std::string("remote ") +
-                                              ros2_cli::kServiceListRpcMethod +
-                                              " returned malformed JSON");
-  }
-  return response.value();
+  return performRemoteRpc<Ros2ServiceList::Response>(
+    request.participant_id, ros2_cli::kServiceListRpcMethod, payload,
+    timeout_sec);
 }
 
 Ros2CliManager::Ros2ServiceCall::Response
@@ -350,21 +312,24 @@ Ros2CliManager::callRemoteServiceCall(
   const Ros2ServiceCall::Request & request) const
 {
   if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "participant_id must be non-empty");
+    return makeCliResponse<Ros2ServiceCall::Response>(
+      false, "participant_id must be non-empty");
   }
 
   if (request.service.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "service must be non-empty");
+    return makeCliResponse<Ros2ServiceCall::Response>(
+      false, "service must be non-empty");
   }
 
   if (request.interface_type.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "interface_type must be non-empty");
+    return makeCliResponse<Ros2ServiceCall::Response>(
+      false, "interface_type must be non-empty");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "LiveKit participant '" +
-                                              request.participant_id +
-                                              "' was not found");
+    return makeCliResponse<Ros2ServiceCall::Response>(
+      false, "LiveKit participant '" + request.participant_id +
+               "' was not found");
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
@@ -376,32 +341,9 @@ Ros2CliManager::callRemoteServiceCall(
       false, "failed to build service request: " + payload_error);
   }
 
-  const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kServiceCallRpcMethod, *payload,
-      timeout_sec);
-  if (!rpc_response) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
-                 "LiveKit RPC '%s' to participant '%s' failed",
-                 ros2_cli::kServiceCallRpcMethod,
-                 request.participant_id.c_str());
-    return makeCliResponse<Ros2ServiceCall::Response>(false, std::string("remote ") +
-                                              ros2_cli::kServiceCallRpcMethod +
-                                              " RPC failed");
-  }
-
-  std::string parse_error;
-  auto response = cliResponseFromJson<Ros2ServiceCall::Response>(*rpc_response, parse_error);
-  if (!response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kServiceCallRpcMethod, request.participant_id.c_str(),
-        parse_error.c_str());
-    return makeCliResponse<Ros2ServiceCall::Response>(false, std::string("remote ") +
-                                              ros2_cli::kServiceCallRpcMethod +
-                                              " returned malformed JSON");
-  }
-  return *response;
+  return performRemoteRpc<Ros2ServiceCall::Response>(
+    request.participant_id, ros2_cli::kServiceCallRpcMethod, *payload,
+    timeout_sec);
 }
 
 Ros2CliManager::Ros2InterfaceShow::Response
@@ -409,49 +351,26 @@ Ros2CliManager::callRemoteInterfaceShow(
   const Ros2InterfaceShow::Request & request) const
 {
   if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2InterfaceShow::Response>(false, "participant_id must be non-empty");
+    return makeCliResponse<Ros2InterfaceShow::Response>(
+      false, "participant_id must be non-empty");
   }
 
   if (request.all_comments && request.no_comments) {
     return makeCliResponse<Ros2InterfaceShow::Response>(
-        false, "all_comments and no_comments are mutually exclusive");
+      false, "all_comments and no_comments are mutually exclusive");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2InterfaceShow::Response>(false, "LiveKit participant '" +
-                                                request.participant_id +
-                                                "' was not found");
+    return makeCliResponse<Ros2InterfaceShow::Response>(
+      false, "LiveKit participant '" + request.participant_id +
+               "' was not found");
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = interfaceShowRequestToJson(request, timeout_sec);
-
-  const auto rpc_response = livekit_methods_.perform_rpc(
-      request.participant_id, ros2_cli::kInterfaceShowRpcMethod, payload,
-      timeout_sec);
-  if (!rpc_response) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
-                 "LiveKit RPC '%s' to participant '%s' failed",
-                 ros2_cli::kInterfaceShowRpcMethod,
-                 request.participant_id.c_str());
-    return makeCliResponse<Ros2InterfaceShow::Response>(
-        false, std::string("remote ") + ros2_cli::kInterfaceShowRpcMethod +
-                   " RPC failed");
-  }
-
-  std::string parse_error;
-  auto response = cliResponseFromJson<Ros2InterfaceShow::Response>(*rpc_response, parse_error);
-  if (!response) {
-    RCLCPP_ERROR(
-        node_interfaces_.node_logging->get_logger(),
-        "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s",
-        ros2_cli::kInterfaceShowRpcMethod, request.participant_id.c_str(),
-        parse_error.c_str());
-    return makeCliResponse<Ros2InterfaceShow::Response>(
-        false, std::string("remote ") + ros2_cli::kInterfaceShowRpcMethod +
-                   " returned malformed JSON");
-  }
-  return response.value();
+  return performRemoteRpc<Ros2InterfaceShow::Response>(
+    request.participant_id, ros2_cli::kInterfaceShowRpcMethod, payload,
+    timeout_sec);
 }
 
 std::string

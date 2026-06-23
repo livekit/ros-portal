@@ -462,19 +462,19 @@ Ros2CliManager::handleTopicListRpc(const std::string & payload) const
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kTopicListRpcMethod, options_error.c_str());
-    return topicListResponseToJson(false, options_error, "");
+    return cliResponseToJson(false, options_error, "");
   }
 
   try {
     const auto output = ros2_cli::formatTopicList(
         ros2_cli::collectTopicInfo(*node_interfaces_.node_graph, *options),
         *options);
-    return topicListResponseToJson(true, "", output);
+    return cliResponseToJson(true, "", output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kTopicListRpcMethod, error.what());
-    return topicListResponseToJson(false, error.what(), "");
+    return cliResponseToJson(false, error.what(), "");
   }
 }
 
@@ -487,18 +487,18 @@ Ros2CliManager::handleTopicPubRpc(const std::string & payload) const
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kTopicPubRpcMethod, options_error.c_str());
-    return topicPubResponseToJson(false, options_error, "");
+    return cliResponseToJson(false, options_error, "");
   }
 
   try {
     const auto response = topic_publisher_->publish(*options);
-    return topicPubResponseToJson(response.success, response.err_msg,
+    return cliResponseToJson(response.success, response.err_msg,
                                   response.output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kTopicPubRpcMethod, error.what());
-    return topicPubResponseToJson(false, error.what(), "");
+    return cliResponseToJson(false, error.what(), "");
   }
 }
 
@@ -511,19 +511,19 @@ Ros2CliManager::handleServiceListRpc(const std::string & payload) const
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kServiceListRpcMethod, options_error.c_str());
-    return serviceListResponseToJson(false, options_error, "");
+    return cliResponseToJson(false, options_error, "");
   }
 
   try {
     const auto output = ros2_cli::formatServiceList(
         ros2_cli::collectServiceInfo(*node_interfaces_.node_graph, *options),
         *options);
-    return serviceListResponseToJson(true, "", output);
+    return cliResponseToJson(true, "", output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kServiceListRpcMethod, error.what());
-    return serviceListResponseToJson(false, error.what(), "");
+    return cliResponseToJson(false, error.what(), "");
   }
 }
 
@@ -536,11 +536,11 @@ Ros2CliManager::handleServiceCallRpc(const std::string & payload) const
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kServiceCallRpcMethod, options_error.c_str());
-    return serviceCallResponseToJson(false, options_error, "");
+    return cliResponseToJson(false, options_error, "");
   }
 
   const auto response = service_caller_->call(*options);
-  return serviceCallResponseToJson(
+  return cliResponseToJson(
     response.success, response.err_msg, response.output);
 }
 
@@ -553,7 +553,7 @@ Ros2CliManager::handleInterfaceShowRpc(const std::string & payload) const
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kInterfaceShowRpcMethod, options_error.c_str());
-    return interfaceShowResponseToJson(false, options_error, "");
+    return cliResponseToJson(false, options_error, "");
   }
 
   try {
@@ -572,14 +572,14 @@ Ros2CliManager::handleInterfaceShowRpc(const std::string & payload) const
       RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                    "Failed to handle LiveKit RPC '%s': %s",
                    ros2_cli::kInterfaceShowRpcMethod, error_message.c_str());
-      return interfaceShowResponseToJson(false, error_message, "");
+      return cliResponseToJson(false, error_message, "");
     }
-    return interfaceShowResponseToJson(true, "", *output);
+    return cliResponseToJson(true, "", *output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
                  ros2_cli::kInterfaceShowRpcMethod, error.what());
-    return interfaceShowResponseToJson(false, error.what(), "");
+    return cliResponseToJson(false, error.what(), "");
   }
 }
 

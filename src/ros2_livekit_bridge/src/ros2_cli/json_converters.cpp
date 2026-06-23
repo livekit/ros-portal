@@ -382,57 +382,7 @@ makeInterfaceShowResponse(
   return response;
 }
 
-std::string topicListResponseToJson(
-  bool success, const std::string & err_msg,
-  const std::string & output)
-{
-  return json{
-    {"success", success},
-    {"err_msg", err_msg},
-    {"output", output},
-  }
-         .dump();
-}
-
-std::string topicPubResponseToJson(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output)
-{
-  return json{
-    {"success", success},
-    {"err_msg", err_msg},
-    {"output", output},
-  }
-         .dump();
-}
-
-std::string serviceListResponseToJson(
-  bool success, const std::string & err_msg,
-  const std::string & output)
-{
-  return json{
-    {"success", success},
-    {"err_msg", err_msg},
-    {"output", output},
-  }
-         .dump();
-}
-
-std::string serviceCallResponseToJson(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output)
-{
-  return json{
-    {"success", success},
-    {"err_msg", err_msg},
-    {"output", output},
-  }
-         .dump();
-}
-
-std::string interfaceShowResponseToJson(
+std::string cliResponseToJson(
   bool success,
   const std::string & err_msg,
   const std::string & output)

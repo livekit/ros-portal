@@ -18,9 +18,9 @@
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
+#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include <chrono>
-#include <cstring>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -327,12 +327,12 @@ struct ServiceClient : public rclcpp::ClientBase
   /// @brief Construct a ClientBase-backed runtime service client.
   ServiceClient(
     const std::string & service_name,
-    const std::string & interface_type,
+    const std::string & msg_type,
     std::shared_ptr<ServiceTypeSupport> support,
     rclcpp::node_interfaces::NodeBaseInterface * node_base,
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph)
   : rclcpp::ClientBase(node_base, std::move(node_graph)),
-    interface_type(interface_type),
+    msg_type(msg_type),
     support(std::move(support))
   {
     rcl_client_options_t options = rcl_client_get_default_options();
@@ -389,7 +389,7 @@ struct ServiceClient : public rclcpp::ClientBase
   }
 
   /// @brief Service type used by this client.
-  std::string interface_type;
+  std::string msg_type;
   /// @brief Service, request, and response type support.
   std::shared_ptr<ServiceTypeSupport> support;
 };
@@ -418,25 +418,25 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
     return makeCliResponse<Ros2ServiceCall::Response>(false, error.what());
   }
 
-  if (options.interface_type.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "interface_type must be non-empty");
-  }
-  if (options.request_payload.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "request payload must be non-empty");
+  if (options.msg_type.empty()) {
+    return makeCliResponse<Ros2ServiceCall::Response>(false, "msg_type must be non-empty");
   }
 
-  rclcpp::SerializedMessage serialized_request(options.request_payload.size());
-  auto & raw_request = serialized_request.get_rcl_serialized_message();
-  std::memcpy(
-    raw_request.buffer, options.request_payload.data(),
-    options.request_payload.size());
-  raw_request.buffer_length = options.request_payload.size();
+  // The request arrives as native YAML; serialize it into the request type on
+  // this side, mirroring how `ros2 topic pub` is handled.
+  std::string yaml_error;
+  auto serialized_request = serializedMessageFromYaml(
+    options.msg_type + "_Request", options.payload, yaml_error);
+  if (!serialized_request) {
+    return makeCliResponse<Ros2ServiceCall::Response>(
+      false, "failed to build service request: " + yaml_error);
+  }
 
-  const auto & interface_type = options.interface_type;
+  const auto & msg_type = options.msg_type;
 
   ClientPtr client;
   try {
-    client = getClient(resolved_service, interface_type);
+    client = getClient(resolved_service, msg_type);
   } catch (const std::exception & error) {
     return makeCliResponse<Ros2ServiceCall::Response>(
       false, std::string("failed to create service client: ") +
@@ -448,7 +448,7 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
     rosidl_runtime_cpp::MessageInitialization::ZERO);
   try {
     client->support->request.serializer.deserialize_message(
-      &serialized_request, request_message.data());
+      &*serialized_request, request_message.data());
   } catch (const std::exception & error) {
     return makeCliResponse<Ros2ServiceCall::Response>(
       false, std::string("failed to build service request: ") +
@@ -462,7 +462,8 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
   if (send_ret != RCL_RET_OK) {
     const std::string message = rcl_get_error_string().str;
     rcl_reset_error();
-    return makeCliResponse<Ros2ServiceCall::Response>(false, "failed to send service request: " + message);
+    return makeCliResponse<Ros2ServiceCall::Response>(false,
+        "failed to send service request: " + message);
   }
 
   const auto timeout = std::chrono::seconds(
@@ -481,10 +482,10 @@ Ros2ServiceCall::Response ServiceCaller::call(ServiceCallOptions options)
 
 ServiceCaller::ClientPtr ServiceCaller::getClient(
   const std::string & service,
-  const std::string & interface_type)
+  const std::string & msg_type)
 {
   std::lock_guard<std::mutex> lock(mutex_);
-  const std::string key = service + ":" + interface_type;
+  const std::string key = service + ":" + msg_type;
   const auto existing = clients_.find(key);
   if (existing != clients_.end()) {
     return existing->second;
@@ -493,9 +494,9 @@ ServiceCaller::ClientPtr ServiceCaller::getClient(
     throw std::runtime_error("service client cache limit reached");
   }
 
-  auto support = std::make_shared<ServiceTypeSupport>(interface_type);
+  auto support = std::make_shared<ServiceTypeSupport>(msg_type);
   auto client = std::make_shared<ServiceClient>(
-    service, interface_type, std::move(support), base_.get(), graph_);
+    service, msg_type, std::move(support), base_.get(), graph_);
   return clients_.emplace(key, std::move(client)).first->second;
 }
 

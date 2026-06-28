@@ -518,7 +518,7 @@ protected:
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
     const std::string & service,
-    const std::string & interface_type,
+    const std::string & msg_type,
     const std::string & payload,
     const ServiceCallServiceOptions & options = {})
   {
@@ -538,7 +538,7 @@ protected:
     auto request = std::make_shared<Ros2ServiceCall::Request>();
     request->participant_id = participant_id;
     request->service = service;
-    request->interface_type = interface_type;
+    request->msg_type = msg_type;
     request->payload = payload;
     request->timeout_sec = options.timeout_sec;
 

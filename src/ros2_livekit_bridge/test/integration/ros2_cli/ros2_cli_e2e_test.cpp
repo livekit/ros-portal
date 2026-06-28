@@ -231,7 +231,7 @@ TEST_F(BridgeTestE2E, CallsRemoteRosServiceOverRpc) {
   EXPECT_FALSE(missing_type_response->success);
   EXPECT_TRUE(
       contains(missing_type_response->err_msg,
-               "interface_type must be non-empty"));
+               "msg_type must be non-empty"));
 
   ServiceCallServiceOptions timeout_options;
   timeout_options.timeout_sec = 1;

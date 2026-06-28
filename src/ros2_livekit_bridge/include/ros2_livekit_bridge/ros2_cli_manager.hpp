@@ -316,7 +316,7 @@ private:
    * @param timeout_sec Effective timeout in seconds.
    * @return Parsed remote response, or an error response on failure.
    */
-  template <typename ResponseT>
+  template<typename ResponseT>
   ResponseT performRemoteRpc(
     const std::string & participant_id,
     const char * rpc_method,

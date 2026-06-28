@@ -143,7 +143,8 @@ Ros2CliManager::Ros2CliManager(
       ros2_cli::kServiceListServiceName, ros2_cli::kInterfaceShowServiceName);
   RCLCPP_INFO(
       node_interfaces_.node_logging->get_logger(),
-      "Registered LiveKit RPC methods:\n   - %s\n   - %s\n   - %s\n   - %s",
+      "Registered LiveKit RPC methods:\n   - %s\n   - %s\n   - %s\n   - %s\n"
+      "   - %s",
       ros2_cli::kTopicListRpcMethod, ros2_cli::kTopicPubRpcMethod,
       ros2_cli::kServiceListRpcMethod, ros2_cli::kServiceCallRpcMethod,
       ros2_cli::kInterfaceShowRpcMethod);
@@ -211,7 +212,7 @@ void Ros2CliManager::handleInterfaceShowRosService(
   *response = callRemoteInterfaceShow(*request);
 }
 
-template <typename ResponseT>
+template<typename ResponseT>
 ResponseT Ros2CliManager::performRemoteRpc(
   const std::string & participant_id,
   const char * rpc_method,
@@ -241,7 +242,7 @@ ResponseT Ros2CliManager::performRemoteRpc(
   return response.value();
 }
 
-Ros2CliManager::Ros2TopicPubSrv::Response Ros2CliManager::callRemoteTopicList(
+Ros2CliManager::Ros2TopicList::Response Ros2CliManager::callRemoteTopicList(
   const Ros2TopicList::Request & request) const
 {
   if (request.participant_id.empty()) {
@@ -261,16 +262,17 @@ Ros2CliManager::Ros2TopicPubSrv::Response Ros2CliManager::callRemoteTopicList(
     request.participant_id, ros2_cli::kTopicListRpcMethod, payload, timeout_sec);
 }
 
-Ros2CliManager::Ros2TopicPub::Response
-Ros2CliManager::callRemoteTopicPub(const Ros2TopicPub::Request & request) const
+Ros2CliManager::Ros2TopicPubSrv::Response
+Ros2CliManager::callRemoteTopicPub(
+  const Ros2TopicPubSrv::Request & request) const
 {
   if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2TopicPub::Response>(
+    return makeCliResponse<Ros2TopicPubSrv::Response>(
       false, "participant_id must be non-empty");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2TopicPub::Response>(
+    return makeCliResponse<Ros2TopicPubSrv::Response>(
       false, "LiveKit participant '" + request.participant_id +
                "' was not found");
   }
@@ -278,12 +280,12 @@ Ros2CliManager::callRemoteTopicPub(const Ros2TopicPub::Request & request) const
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = topicPubRequestToJson(request, timeout_sec);
 
-  std::string options_error;
-  if (!topicPubOptionsFromJson(payload, options_error)) {
-    return makeCliResponse<Ros2TopicPub::Response>(false, options_error);
+  const auto options = topicPubOptionsFromJson(payload);
+  if (!options) {
+    return makeCliResponse<Ros2TopicPubSrv::Response>(false, options.error());
   }
 
-  return performRemoteRpc<Ros2TopicPub::Response>(
+  return performRemoteRpc<Ros2TopicPubSrv::Response>(
     request.participant_id, ros2_cli::kTopicPubRpcMethod, payload, timeout_sec);
 }
 
@@ -322,9 +324,14 @@ Ros2CliManager::callRemoteServiceCall(
       false, "service must be non-empty");
   }
 
-  if (request.interface_type.empty()) {
+  if (request.msg_type.empty()) {
     return makeCliResponse<Ros2ServiceCall::Response>(
-      false, "interface_type must be non-empty");
+      false, "msg_type must be non-empty");
+  }
+
+  if (request.payload.empty()) {
+    return makeCliResponse<Ros2ServiceCall::Response>(
+      false, "payload must be non-empty");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
@@ -335,16 +342,10 @@ Ros2CliManager::callRemoteServiceCall(
 
   const auto service_timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto rpc_timeout_sec = serviceCallRpcTimeout(service_timeout_sec);
-  std::string payload_error;
-  const auto payload = serviceCallRequestToJson(
-    request, service_timeout_sec, payload_error);
-  if (!payload) {
-    return makeCliResponse<Ros2ServiceCall::Response>(
-      false, "failed to build service request: " + payload_error);
-  }
+  const auto payload = serviceCallRequestToJson(request, service_timeout_sec);
 
   return performRemoteRpc<Ros2ServiceCall::Response>(
-    request.participant_id, ros2_cli::kServiceCallRpcMethod, *payload,
+    request.participant_id, ros2_cli::kServiceCallRpcMethod, payload,
     rpc_timeout_sec);
 }
 
@@ -382,14 +383,15 @@ Ros2CliManager::handleTopicListRpc(const std::string & payload) const
   if (!options) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
-                 ros2_cli::kTopicListRpcMethod, options_error.c_str());
-    return cliResponseToJson(false, options_error, "");
+                 ros2_cli::kTopicListRpcMethod, options.error().c_str());
+    return cliResponseToJson(false, options.error(), "");
   }
 
   try {
     const auto output = ros2_cli::formatTopicList(
-        ros2_cli::collectTopicInfo(*node_interfaces_.node_graph, *options),
-        *options);
+        ros2_cli::collectTopicInfo(
+          *node_interfaces_.node_graph, options.value()),
+        options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
@@ -406,12 +408,12 @@ Ros2CliManager::handleTopicPubRpc(const std::string & payload) const
   if (!options) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
-                 ros2_cli::kTopicPubRpcMethod, options_error.c_str());
-    return cliResponseToJson(false, options_error, "");
+                 ros2_cli::kTopicPubRpcMethod, options.error().c_str());
+    return cliResponseToJson(false, options.error(), "");
   }
 
   try {
-    const auto response = topic_publisher_->publish(*options);
+    const auto response = topic_publisher_->publish(options.value());
     return cliResponseToJson(response.success, response.err_msg,
                                   response.output);
   } catch (const std::exception & error) {
@@ -429,14 +431,15 @@ Ros2CliManager::handleServiceListRpc(const std::string & payload) const
   if (!options) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
-                 ros2_cli::kServiceListRpcMethod, options_error.c_str());
-    return cliResponseToJson(false, options_error, "");
+                 ros2_cli::kServiceListRpcMethod, options.error().c_str());
+    return cliResponseToJson(false, options.error(), "");
   }
 
   try {
     const auto output = ros2_cli::formatServiceList(
-        ros2_cli::collectServiceInfo(*node_interfaces_.node_graph, *options),
-        *options);
+        ros2_cli::collectServiceInfo(
+          *node_interfaces_.node_graph, options.value()),
+        options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception & error) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
@@ -470,8 +473,8 @@ Ros2CliManager::handleInterfaceShowRpc(const std::string & payload) const
   if (!options) {
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "Failed to handle LiveKit RPC '%s': %s",
-                 ros2_cli::kInterfaceShowRpcMethod, options_error.c_str());
-    return cliResponseToJson(false, options_error, "");
+                 ros2_cli::kInterfaceShowRpcMethod, options.error().c_str());
+    return cliResponseToJson(false, options.error(), "");
   }
 
   try {

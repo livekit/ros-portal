@@ -21,6 +21,8 @@
 #include <optional>
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 #include "ros2_livekit_bridge/result.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
@@ -96,14 +98,15 @@ std::string serviceListRequestToJson(
   std::uint8_t timeout_sec);
 
 /// @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+///
+/// Ships the native YAML request payload as-is; the remote participant
+/// serializes it into the request type, mirroring `ros2 topic pub`.
 /// @param request ROS service request.
 /// @param timeout_sec Effective timeout to include in the payload.
-/// @param error Set to a description when required-type YAML cannot be encoded as CDR.
-/// @return JSON request payload, or `std::nullopt` when validation fails.
-std::optional<std::string> serviceCallRequestToJson(
+/// @return JSON request payload.
+std::string serviceCallRequestToJson(
   const ros2_cli::Ros2ServiceCall::Request & request,
-  std::uint8_t timeout_sec,
-  std::string & error);
+  std::uint8_t timeout_sec);
 
 /**
  * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
@@ -179,7 +182,7 @@ std::string cliResponseToJson(
  * @param payload JSON response payload.
  * @return Parsed response, or an error description when @p payload is invalid.
  */
-template <typename ResponseT>
+template<typename ResponseT>
 std::optional<ResponseT> cliResponseFromJson(
   const std::string & payload,
   std::string & error)

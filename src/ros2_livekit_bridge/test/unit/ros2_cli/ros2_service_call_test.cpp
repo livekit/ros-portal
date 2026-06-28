@@ -15,7 +15,6 @@
  */
 
 #include "ros2_livekit_bridge/ros2_cli/ros2_service_call.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include <gtest/gtest.h>
 
@@ -64,23 +63,14 @@ ServiceCaller makeCaller(const std::shared_ptr<rclcpp::Node> & node)
 /// @brief Construct service-call options for SetBool.
 ServiceCallOptions makeSetBoolOptions(
   std::string service = "/service_call/set_bool",
-  std::string interface_type = "std_srvs/srv/SetBool",
+  std::string msg_type = "std_srvs/srv/SetBool",
   std::string payload = "{data: true}",
   std::uint8_t timeout_sec = 2)
 {
   ServiceCallOptions options;
   options.service = std::move(service);
-  options.interface_type = std::move(interface_type);
-  std::string error;
-  auto serialized = serializedMessageFromYaml(
-    options.interface_type + "_Request", payload, error);
-  if (serialized) {
-    const auto & raw = serialized->get_rcl_serialized_message();
-    if (raw.buffer != nullptr && serialized->size() > 0U) {
-      options.request_payload.assign(
-        raw.buffer, raw.buffer + serialized->size());
-    }
-  }
+  options.msg_type = std::move(msg_type);
+  options.payload = std::move(payload);
   options.timeout_sec = timeout_sec;
   return options;
 }
@@ -136,17 +126,17 @@ TEST_F(ServiceCallerTest, CallsServiceAndReturnsYamlAndCdrResponse)
 TEST_F(ServiceCallerTest, RejectsEmptyInterfaceType)
 {
   auto caller_node = std::make_shared<rclcpp::Node>(
-    "service_call_empty_interface_type_node");
+    "service_call_empty_msg_type_node");
   auto caller = makeCaller(caller_node);
 
   ServiceCallOptions options;
   options.service = "/service_call/missing";
   options.timeout_sec = 1;
-  options.request_payload = {0x01, 0x02, 0x03};
+  options.payload = "{data: true}";
   const auto response = caller.call(options);
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "interface_type must be non-empty");
+  EXPECT_EQ(response.err_msg, "msg_type must be non-empty");
 }
 
 TEST_F(ServiceCallerTest, HandlesUnavailableServiceTimeout)
@@ -217,12 +207,14 @@ TEST_F(ServiceCallerTest, RejectsEmptyRequestPayload)
 
   ServiceCallOptions options;
   options.service = "/service_call/empty_payload";
-  options.interface_type = "std_srvs/srv/SetBool";
+  options.msg_type = "std_srvs/srv/SetBool";
   options.timeout_sec = 1;
   const auto response = caller.call(options);
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "request payload must be non-empty");
+  EXPECT_EQ(
+    response.err_msg,
+    "failed to build service request: payload must be non-empty");
 }
 
 }  // namespace

@@ -134,3 +134,42 @@ def test_launch_setup_rejects_missing_config_path(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         module._launch_setup(context)
+
+
+def test_generate_launch_description_includes_service_stub_when_enabled():
+    module = _load_launch_module()
+    description = module.generate_launch_description()
+    entity_types = {type(entity).__name__ for entity in description.entities}
+
+    assert 'IncludeLaunchDescription' in entity_types
+    assert 'DeclareLaunchArgument' in entity_types
+
+
+STUB_LAUNCH_FILE = (
+    Path(__file__).resolve().parents[2]
+    / 'launch'
+    / 'stubs'
+    / 'server_stub.launch.py'
+)
+
+
+def _load_stub_launch_module():
+    spec = spec_from_file_location('server_stub_launch', STUB_LAUNCH_FILE)
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_server_stub_launch_setup_starts_inline_set_bool_process():
+    from launch.actions import ExecuteProcess
+
+    module = _load_stub_launch_module()
+    context = LaunchContext()
+    context.launch_configurations['service_name'] = '/bridge/set_bool'
+
+    actions = module._launch_setup(context)
+
+    assert len(actions) == 1
+    assert isinstance(actions[0], ExecuteProcess)
+    assert 'SetBoolStub' in module._STUB_SCRIPT
+    assert 'std_srvs.srv import SetBool' in module._STUB_SCRIPT

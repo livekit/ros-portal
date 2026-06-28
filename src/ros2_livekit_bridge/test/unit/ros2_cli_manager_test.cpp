@@ -185,23 +185,23 @@ protected:
   Ros2ServiceCall::Request makeServiceCallRequest(
     std::string participant_id = "robot-b",
     std::string service = "/set_bool",
-    std::string interface_type = "std_srvs/srv/SetBool",
+    std::string msg_type = "std_srvs/srv/SetBool",
     std::string payload = "{data: true}",
     std::uint8_t timeout_sec = 0)
   {
     Ros2ServiceCall::Request request;
     request.participant_id = std::move(participant_id);
     request.service = std::move(service);
-    request.interface_type = std::move(interface_type);
+    request.msg_type = std::move(msg_type);
     request.payload = std::move(payload);
     request.timeout_sec = timeout_sec;
     return request;
   }
 
-  Ros2TopicPub::Request makeTopicPubRequest(
+  Ros2TopicPubSrv::Request makeTopicPubRequest(
     std::string participant_id = "robot-b",
     std::string topic = "/cmd_vel",
-    std::string interface_type = "std_msgs/msg/String",
+    std::string msg_type = "std_msgs/msg/String",
     std::string payload = "{data: hello}",
     std::uint8_t timeout_sec = 0)
   {
@@ -411,10 +411,10 @@ TEST_F(Ros2CliManagerTest, SuccessfulServiceCallRpcMapsResponseAndDefaultTimeout
 
   const auto payload = json::parse(rpc_client->last_payload);
   EXPECT_EQ(payload.at("service"), "/set_bool");
-  EXPECT_EQ(payload.at("interface_type"), "std_srvs/srv/SetBool");
+  EXPECT_EQ(payload.at("msg_type"), "std_srvs/srv/SetBool");
+  EXPECT_EQ(payload.at("payload"), "{data: true}");
   EXPECT_EQ(payload.at("timeout_sec"), ros2_cli::kDefaultTimeoutSec);
-  ASSERT_TRUE(payload.at("request").is_object());
-  EXPECT_EQ(payload.at("request").at("content_type"), "application/x-ros-cdr");
+  EXPECT_FALSE(payload.contains("request"));
 }
 
 TEST_F(Ros2CliManagerTest, SuccessfulTopicPubRpcMapsResponseAndDefaultTimeout)
@@ -504,7 +504,7 @@ TEST_F(Ros2CliManagerTest, PositiveServiceCallTimeoutPassesThrough)
 
   const auto payload = json::parse(rpc_client->last_payload);
   EXPECT_EQ(payload.at("service"), "/set_bool");
-  EXPECT_EQ(payload.at("interface_type"), "std_srvs/srv/SetBool");
+  EXPECT_EQ(payload.at("msg_type"), "std_srvs/srv/SetBool");
   EXPECT_EQ(payload.at("timeout_sec"), 3);
 }
 
@@ -570,9 +570,7 @@ TEST_F(Ros2CliManagerTest, InvalidServiceCallPayloadFailsBeforeRpc)
   const auto response = manager->callRemoteServiceCall(request);
 
   EXPECT_FALSE(response.success);
-  EXPECT_NE(
-    response.err_msg.find("failed to build service request"),
-    std::string::npos);
+  EXPECT_EQ(response.err_msg, "payload must be non-empty");
   EXPECT_TRUE(response.output.empty());
   EXPECT_TRUE(rpc_client->last_method.empty());
 }
@@ -580,12 +578,12 @@ TEST_F(Ros2CliManagerTest, InvalidServiceCallPayloadFailsBeforeRpc)
 TEST_F(Ros2CliManagerTest, EmptyServiceCallInterfaceTypeFailsBeforeRpc)
 {
   auto request = makeServiceCallRequest();
-  request.interface_type = "";
+  request.msg_type = "";
 
   const auto response = manager->callRemoteServiceCall(request);
 
   EXPECT_FALSE(response.success);
-  EXPECT_EQ(response.err_msg, "interface_type must be non-empty");
+  EXPECT_EQ(response.err_msg, "msg_type must be non-empty");
   EXPECT_TRUE(response.output.empty());
   EXPECT_TRUE(rpc_client->last_method.empty());
 }

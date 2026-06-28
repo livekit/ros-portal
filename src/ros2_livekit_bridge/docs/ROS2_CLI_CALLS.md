@@ -169,13 +169,77 @@ Request fields (beyond `participant_id` / `timeout_sec`):
 | Field | Maps to `ros2 service call` argument |
 | --- | --- |
 | `service` | service name, such as `/set_bool`; relative names resolve in the remote bridge node context |
-| `interface_type` | required service type, such as `std_srvs/srv/SetBool` |
+| `msg_type` | required service type, such as `std_srvs/srv/SetBool` |
 | `payload` | native YAML request payload, such as `{data: true}` |
 
-The local bridge validates the YAML request using `interface_type` and sends the
-request over LiveKit RPC. The JSON payload carries the requested
-`timeout_sec` for the remote ROS service wait; the LiveKit RPC itself waits one
-second longer so timeout responses can propagate back to the caller.
+The local bridge forwards the service name, type, and native YAML payload over
+LiveKit RPC; the remote participant serializes the YAML into the request type
+and dispatches the ROS service call (the same way `ros2 topic pub` is handled).
+The JSON payload carries the requested `timeout_sec` for the remote ROS service
+wait; the LiveKit RPC itself waits one second longer so timeout responses can
+propagate back to the caller.
+
+Unlike `ros2 topic pub`, a remote service call requires a matching ROS service
+server to already exist in the target bridge's graph. For local two-bridge
+testing, use the SetBool stub described below.
+
+#### Local testing with the SetBool stub
+
+The launch stub ([launch/stubs/server_stub.launch.py](../launch/stubs/server_stub.launch.py))
+starts an inline `std_srvs/srv/SetBool` server. By default it advertises
+`/test/set_bool` and echoes `request.data` into `success` / `message`.
+
+Use two terminals on the same LiveKit room. Give each bridge a distinct
+`identity`; the caller's `participant_id` must match the remote bridge's
+identity exactly.
+
+**Terminal 1 — remote bridge (stub server):**
+
+```bash
+source install/setup.bash
+ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
+  identity:=bridge-b service_stub:=true
+```
+
+The stub can also be launched on its own if the bridge is already running:
+
+```bash
+ros2 launch ros2_livekit_bridge stubs/server_stub.launch.py
+```
+
+Override the service name with `stub_service_name` (via `livekit_bridge_local.launch.py`)
+or `service_name` (via `stubs/server_stub.launch.py`).
+
+**Terminal 2 — caller bridge:**
+
+```bash
+source install/setup.bash
+ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
+  identity:=bridge-a
+```
+
+**Call the stub from bridge A** (via bridge A's local ROS graph):
+
+```bash
+ros2 service call /ros2_livekit_bridge/ros2_service_call \
+  ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
+  "{participant_id: 'bridge-b', service: '/test/set_bool', msg_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
+```
+
+On success, `output` contains YAML similar to native `ros2 service call`:
+
+```yaml
+success: true
+message: enabled
+```
+
+Confirm the stub is visible on the remote side first if needed:
+
+```bash
+ros2 service call /ros2_livekit_bridge/ros2_service_list \
+  ros2_livekit_bridge_msgs/srv/Ros2ServiceList \
+  "{participant_id: 'bridge-b', show_types: true}"
+```
 
 Sample calls
 
@@ -183,7 +247,7 @@ Sample calls
 # Call a remote SetBool service on participant "robot-01"
 ros2 service call /ros2_livekit_bridge/ros2_service_call \
   ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
-  "{participant_id: 'robot-01', timeout_sec: 0, service: '/set_bool', interface_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
+  "{participant_id: 'robot-01', timeout_sec: 0, service: '/set_bool', msg_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
 ```
 
 The response `output` field contains CLI-friendly YAML text rendered from the
@@ -246,7 +310,7 @@ Common failure cases reported through `err_msg`:
 - `participant_id must be non-empty`
 - `LiveKit participant '<id>' was not found`
 - `all_comments and no_comments are mutually exclusive` (interface show only)
-- `interface_type must be non-empty` (service call and topic pub)
+- `msg_type must be non-empty` (service call and topic pub)
 - `Service call timed out.` (service call only)
 - LiveKit RPC errors (e.g. timeout, remote handler failure)
 - malformed JSON returned by the remote bridge

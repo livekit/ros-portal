@@ -17,7 +17,6 @@
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 #include <exception>
 
@@ -69,7 +68,8 @@ serviceCallOptionsFromRequest(const Ros2ServiceCall::Request & request)
 {
   ServiceCallOptions options;
   options.service = request.service;
-  options.interface_type = request.interface_type;
+  options.msg_type = request.msg_type;
+  options.payload = request.payload;
   options.timeout_sec = request.timeout_sec;
   return options;
 }
@@ -112,20 +112,6 @@ std::string topicPubRequestToJson(
   }.dump();
 }
 
-std::string topicPubRequestToJson(
-  const Ros2TopicPub::Request & request,
-  std::uint8_t timeout_sec)
-{
-  const auto options = topicPubOptionsFromRequest(request);
-  return json{
-    {"topic", options.topic},
-    {"interface_type", options.interface_type},
-    {"payload", options.payload},
-    {"timeout_sec", timeout_sec},
-  }
-         .dump();
-}
-
 std::string serviceListRequestToJson(
   const Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec)
@@ -140,39 +126,17 @@ std::string serviceListRequestToJson(
   }.dump();
 }
 
-std::optional<std::string> serviceCallRequestToJson(
+std::string serviceCallRequestToJson(
   const Ros2ServiceCall::Request & request,
-  std::uint8_t timeout_sec,
-  std::string & error)
+  std::uint8_t timeout_sec)
 {
   const auto options = serviceCallOptionsFromRequest(request);
-  json body{
+  return json{
     {"service", options.service},
-    {"interface_type", options.interface_type},
+    {"msg_type", options.msg_type},
+    {"payload", options.payload},
     {"timeout_sec", timeout_sec},
-  };
-
-  if (options.interface_type.empty()) {
-    error = "interface_type must be non-empty";
-    return std::nullopt;
-  }
-
-  auto serialized = ros2_cli::serializedMessageFromYaml(
-    options.interface_type + "_Request", request.payload, error);
-  if (!serialized) {
-    return std::nullopt;
-  }
-  const auto & raw = serialized->get_rcl_serialized_message();
-  std::vector<std::uint8_t> bytes;
-  if (raw.buffer != nullptr && serialized->size() > 0U) {
-    bytes.assign(raw.buffer, raw.buffer + serialized->size());
-  }
-  body["request"] = json{
-    {"content_type", "application/x-ros-cdr"},
-    {"payload_base64", ros2_cli::base64Encode(bytes)},
-  };
-
-  return body.dump();
+  }.dump();
 }
 
 std::string
@@ -247,6 +211,35 @@ serviceListOptionsFromJson(const std::string & payload)
     return Result<ServiceListOptions, std::string>::ok(std::move(options));
   } catch (const std::exception & parse_error) {
     return Result<ServiceListOptions, std::string>::err(parse_error.what());
+  }
+}
+
+std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
+  const std::string & payload,
+  std::string & error)
+{
+  try {
+    const auto request = json::parse(payload);
+    if (!request.is_object()) {
+      error = "Service call request must be a JSON object";
+      return std::nullopt;
+    }
+
+    ServiceCallOptions options;
+    options.service = ros2_cli::requiredStringField(
+      request, "service", "service must be a string",
+      "service must be non-empty");
+    options.msg_type = ros2_cli::requiredStringField(
+      request, "msg_type", "msg_type must be a string",
+      "msg_type must be non-empty");
+    options.payload = ros2_cli::requiredStringField(
+      request, "payload", "payload must be a string",
+      "payload must be non-empty");
+    options.timeout_sec = request.value("timeout_sec", 0);
+    return options;
+  } catch (const std::exception & parse_error) {
+    error = parse_error.what();
+    return std::nullopt;
   }
 }
 

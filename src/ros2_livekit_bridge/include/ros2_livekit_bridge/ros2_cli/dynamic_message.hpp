@@ -36,7 +36,7 @@ public:
   explicit DynamicMessage(
     const rosidl_typesupport_introspection_cpp::MessageMembers & members,
     rosidl_runtime_cpp::MessageInitialization initialization =
-      rosidl_runtime_cpp::MessageInitialization::ALL)
+    rosidl_runtime_cpp::MessageInitialization::ALL)
   : members_(members),
     data_(::operator new(members.size_of_))
   {

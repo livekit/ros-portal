@@ -442,39 +442,6 @@ bool assignField(
   }
 }
 
-class DynamicMessage {
-public:
-  explicit DynamicMessage(const MessageMembers & members)
-  : members_(members), data_(::operator new(members.size_of_))
-  {
-    try {
-      members_.init_function(data_,
-                             rosidl_runtime_cpp::MessageInitialization::ALL);
-    } catch (...) {
-      ::operator delete(data_);
-      data_ = nullptr;
-      throw;
-    }
-  }
-
-  DynamicMessage(const DynamicMessage &) = delete;
-  DynamicMessage & operator=(const DynamicMessage &) = delete;
-
-  ~DynamicMessage()
-  {
-    if (data_ != nullptr) {
-      members_.fini_function(data_);
-      ::operator delete(data_);
-    }
-  }
-
-  void * get() {return data_;}
-
-private:
-  const MessageMembers & members_;
-  void *data_;
-};
-
 } // namespace
 
 std::optional<rclcpp::SerializedMessage>

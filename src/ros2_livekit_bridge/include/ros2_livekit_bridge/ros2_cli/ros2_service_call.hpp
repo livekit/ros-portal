@@ -37,8 +37,9 @@ struct ServiceClient;
 /// @brief Implements the ROS-side behavior for one-shot `ros2 service call`.
 ///
 /// The manager owns transport concerns. This class owns command behavior:
-/// resolving service names, dispatching a runtime-typed service client with a
-/// typed CDR request, and formatting the response for CLI-style consumers.
+/// resolving service names, serializing the native YAML request into the
+/// request type, dispatching a runtime-typed service client, and formatting the
+/// response for CLI-style consumers.
 class ServiceCaller
 {
 public:
@@ -58,11 +59,11 @@ public:
 
   /// @brief Call one ROS service using runtime service type support.
   ///
-  /// Resolves the service name in the bridge node context, deserializes the CDR
-  /// request into the runtime request message type, sends the request, waits for
-  /// a matching response or timeout, and returns a ROS service response object.
+  /// Resolves the service name in the bridge node context, serializes the native
+  /// YAML payload into the runtime request message type, sends the request, waits
+  /// for a matching response or timeout, and returns a ROS service response.
   ///
-  /// @param options Service name, required type, CDR request payload, and timeout.
+  /// @param options Service name, required type, YAML request payload, and timeout.
   /// @return Service-call response with success false and err_msg filled when
   ///   validation, request conversion, client creation, dispatch, timeout, or
   ///   response conversion fails.
@@ -74,13 +75,13 @@ private:
 
   /// @brief Return a cached client, creating it if needed.
   /// @param service Resolved ROS service name.
-  /// @param interface_type Required service type identifier.
+  /// @param msg_type Required service type identifier.
   /// @return Cached or newly created runtime service client.
   /// @throws std::runtime_error if the client cache limit is reached.
   /// @throws std::exception if type support or client construction fails.
   ClientPtr getClient(
     const std::string & service,
-    const std::string & interface_type);
+    const std::string & msg_type);
 
   /// @brief Take and convert a matching service response when available.
   /// @param client Runtime service client to poll for a response.

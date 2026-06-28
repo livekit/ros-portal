@@ -20,7 +20,7 @@ uint8 timeout_sec 0
 # The rest of the fields map to a one-shot "ros2 service call" request.
 string service
 # Required service type identifier, such as "std_srvs/srv/SetBool".
-string interface_type
+string msg_type
 string payload
 ---
 bool success

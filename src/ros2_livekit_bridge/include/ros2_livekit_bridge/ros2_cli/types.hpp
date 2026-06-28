@@ -18,7 +18,6 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_call.hpp>
@@ -80,9 +79,9 @@ struct ServiceCallOptions
   /// @brief ROS service name to call; may be relative before resolution.
   std::string service;
   /// @brief Required service type identifier, such as `std_srvs/srv/SetBool`.
-  std::string interface_type;
-  /// @brief Decoded ROS CDR request payload for runtime service dispatch.
-  std::vector<std::uint8_t> request_payload;
+  std::string msg_type;
+  /// @brief Native YAML request payload accepted by `ros2 service call`.
+  std::string payload;
   /// @brief Effective timeout in seconds for the remote ROS service call.
   std::uint8_t timeout_sec{0};
 };
@@ -113,7 +112,7 @@ struct InterfaceShowOptions
  * @param output Human-readable command output.
  * @return ROS service response.
  */
-template <typename ResponseT>
+template<typename ResponseT>
 ResponseT makeCliResponse(
   bool success,
   const std::string & err_msg,

@@ -27,4 +27,4 @@ ros2_livekit_bridge:
       direction: "out"
 
     - topic: "/test/.*"
-      direction: "out"
+      direction: "bidirectional"

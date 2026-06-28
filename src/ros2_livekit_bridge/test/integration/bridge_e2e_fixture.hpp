@@ -52,11 +52,12 @@ using namespace std::chrono_literals;
 using ros2_cli::Ros2InterfaceShow;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
+using ros2_cli::Ros2TopicPubSrv;
 
 inline constexpr auto kGraphTimeout = 15s;
 inline constexpr auto kMessageTimeout = 20s;
 inline constexpr auto kNegativeAssertionTimeout = 3s;
-inline constexpr const char * kBidirectionalTopic = "/bridge/out";
+inline constexpr const char *kBidirectionalTopic = "/bridge/out";
 
 struct TopicListServiceOptions
 {
@@ -82,6 +83,11 @@ struct InterfaceShowServiceOptions
   bool no_comments{false};
 };
 
+struct TopicPubServiceOptions
+{
+  std::uint8_t timeout_sec{5};
+};
+
 inline bool contains(const std::string & value, const std::string & needle)
 {
   return value.find(needle) != std::string::npos;
@@ -89,22 +95,32 @@ inline bool contains(const std::string & value, const std::string & needle)
 
 inline std::size_t lineCount(const std::string & value)
 {
-  return static_cast<std::size_t>(
-    std::count(value.begin(), value.end(), '\n'));
+  return static_cast<std::size_t>(std::count(value.begin(), value.end(), '\n'));
 }
 
 inline bool serviceExists(rclcpp::Node & node, const std::string & service_name)
 {
   const auto service_names_and_types = node.get_service_names_and_types();
-  return std::any_of(
-    service_names_and_types.begin(),
-    service_names_and_types.end(),
-    [&](const auto & name_and_types) {
-      return name_and_types.first == service_name;
-    });
+  return std::any_of(service_names_and_types.begin(),
+                     service_names_and_types.end(),
+           [&](const auto & name_and_types) {
+             return name_and_types.first == service_name;
+                     });
 }
 
-inline rclcpp::NodeOptions createBridgeOptions(
+inline std::string resolveRelativeServiceName(
+  const rclcpp::Node & node,
+  const std::string & service_name)
+{
+  const std::string node_namespace = node.get_namespace();
+  if (node_namespace.empty() || node_namespace == "/") {
+    return "/" + service_name;
+  }
+  return node_namespace + "/" + service_name;
+}
+
+inline rclcpp::NodeOptions
+createBridgeOptions(
   const rclcpp::Context::SharedPtr & context,
   const std::string & node_namespace,
   const std::string & config_path)
@@ -114,7 +130,7 @@ inline rclcpp::NodeOptions createBridgeOptions(
          .arguments({"--ros-args", "-r", "__ns:=" + node_namespace})
          .parameter_overrides({
       rclcpp::Parameter("config_path", config_path),
-    });
+      });
 }
 
 inline std::string bridgeConfigYaml(
@@ -122,15 +138,14 @@ inline std::string bridgeConfigYaml(
   const std::string & topic_pattern)
 {
   std::ostringstream stream;
-  stream
-    << "ros2_livekit_bridge:\n"
-    << "  version: \"0.0.1\"\n"
-    << "  room_name: \"" << room_name << "\"\n"
-    << "  topic_polling_period_ms: 50\n"
-    << "  ros_threads: 4\n"
-    << "  topics:\n"
-    << "    - topic: \"" << topic_pattern << "\"\n"
-    << "      direction: \"bidirectional\"\n";
+  stream << "ros2_livekit_bridge:\n"
+         << "  version: \"0.0.1\"\n"
+         << "  room_name: \"" << room_name << "\"\n"
+         << "  topic_polling_period_ms: 50\n"
+         << "  ros_threads: 4\n"
+         << "  topics:\n"
+         << "    - topic: \"" << topic_pattern << "\"\n"
+         << "      direction: \"bidirectional\"\n";
   return stream.str();
 }
 
@@ -144,21 +159,14 @@ inline std::string testLiveKitRoom()
   return "ros_bridge_participant_id_test";
 }
 
-class BridgeTestE2E : public ::testing::Test
-{
+class BridgeTestE2E : public ::testing::Test {
 protected:
   // The LiveKit SDK lifecycle is process-global, so it is owned by the test
   // harness rather than by individual bridges: initialize once before any
   // bridge in the suite is constructed, and shut down once after the last test.
-  static void SetUpTestSuite()
-  {
-    livekit::initialize(livekit::LogLevel::Info);
-  }
+  static void SetUpTestSuite() {livekit::initialize(livekit::LogLevel::Info);}
 
-  static void TearDownTestSuite()
-  {
-    livekit::shutdown();
-  }
+  static void TearDownTestSuite() {livekit::shutdown();}
 
   void SetUp() override
   {
@@ -170,12 +178,15 @@ protected:
     const auto original_token =
       utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", source);
     original_token_ = original_token.empty() ?
-      std::nullopt : std::optional<std::string>(original_token);
+      std::nullopt :
+      std::optional<std::string>(original_token);
 
     const auto original_livekit_url =
       utils::resolveEnvironmentCredential("LIVEKIT_URL", source);
-    original_livekit_url_ = original_livekit_url.empty() ?
-      std::nullopt : std::optional<std::string>(original_livekit_url);
+    original_livekit_url_ =
+      original_livekit_url.empty() ?
+      std::nullopt :
+      std::optional<std::string>(original_livekit_url);
 
     identity_a_ =
       utils::resolveEnvironmentCredential("LIVEKIT_IDENTITY_A", source);
@@ -203,7 +214,8 @@ protected:
 
   void initializeRuntime(const std::string & topic_pattern)
   {
-    initializeRuntime(topic_pattern, topic_pattern, topic_pattern, topic_pattern);
+    initializeRuntime(topic_pattern, topic_pattern, topic_pattern,
+                      topic_pattern);
   }
 
   void initializeRuntime(
@@ -212,44 +224,44 @@ protected:
     const std::string & publish_topic_a,
     const std::string & publish_topic_b)
   {
-    ASSERT_TRUE(configured()) <<
-      "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+    ASSERT_TRUE(configured())
+        << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
     const auto [domain_id_a, domain_id_b] = testDomainIds();
     ASSERT_NE(domain_id_a, domain_id_b);
     graph_a_ = std::make_unique<ScopedRosGraph>(domain_id_a);
     graph_b_ = std::make_unique<ScopedRosGraph>(domain_id_b);
     SCOPED_TRACE(
-      "ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()) +
-      ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
+        "ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()) +
+        ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
     config_file_a_ = std::make_unique<TemporaryConfigFile>(
-      bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a),
-      "ros2_livekit_bridge_bridge_test_e2e_a_");
+        bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a),
+        "ros2_livekit_bridge_bridge_test_e2e_a_");
     config_file_b_ = std::make_unique<TemporaryConfigFile>(
-      bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b),
-      "ros2_livekit_bridge_bridge_test_e2e_b_");
+        bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b),
+        "ros2_livekit_bridge_bridge_test_e2e_b_");
 
-    bridge_a_ = createBridge(
-      *graph_a_, "/bridge_a_node", token_a_, config_file_a_->path().string());
-    bridge_b_ = createBridge(
-      *graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());
+    bridge_a_ = createBridge(*graph_a_, "/bridge_a_node", token_a_,
+                             config_file_a_->path().string());
+    bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_,
+                             config_file_b_->path().string());
     ASSERT_NE(bridge_a_, nullptr);
     ASSERT_NE(bridge_b_, nullptr);
 
     robot_a_node_ = std::make_shared<rclcpp::Node>(
-      "participant_id_bridge_integration_robot_a",
-      rclcpp::NodeOptions().context(graph_a_->context()));
+        "participant_id_bridge_integration_robot_a",
+        rclcpp::NodeOptions().context(graph_a_->context()));
     robot_b_node_ = std::make_shared<rclcpp::Node>(
-      "participant_id_bridge_integration_robot_b",
-      rclcpp::NodeOptions().context(graph_b_->context()));
+        "participant_id_bridge_integration_robot_b",
+        rclcpp::NodeOptions().context(graph_b_->context()));
 
     graph_a_executor_ =
       std::make_unique<rclcpp::executors::MultiThreadedExecutor>(
-      executorOptions(graph_a_->context()), 2);
+            executorOptions(graph_a_->context()), 2);
     graph_b_executor_ =
       std::make_unique<rclcpp::executors::MultiThreadedExecutor>(
-      executorOptions(graph_b_->context()), 2);
+            executorOptions(graph_b_->context()), 2);
 
     graph_a_executor_->add_node(bridge_a_);
     graph_a_executor_->add_node(robot_a_node_);
@@ -267,27 +279,30 @@ protected:
           graph_b_spinning_.store(false);
     });
 
-    publisher_a_ =
-      robot_a_node_->create_publisher<std_msgs::msg::String>(publish_topic_a, 10);
-    publisher_b_ =
-      robot_b_node_->create_publisher<std_msgs::msg::String>(publish_topic_b, 10);
+    publisher_a_ = robot_a_node_->create_publisher<std_msgs::msg::String>(
+        publish_topic_a, 10);
+    publisher_b_ = robot_b_node_->create_publisher<std_msgs::msg::String>(
+        publish_topic_b, 10);
 
     ASSERT_TRUE(waitFor(
         [&]() {
           return topicExists(*robot_a_node_, publish_topic_a) &&
                  topicExists(*robot_b_node_, publish_topic_b);
-      },
-      kGraphTimeout));
+        },
+        kGraphTimeout));
   }
 
   bool verifyDirection(
-    const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>> & publisher,
+    const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>
+    & publisher,
     const std::shared_ptr<rclcpp::Node> & receiver_node,
     const std::string & source_topic,
     const std::string & expected_inbound_topic,
     const std::string & expected_payload)
   {
-    if (!waitFor([&]() {return publisher->get_subscription_count() > 0;}, kGraphTimeout)) {
+    if (!waitFor([&]() {return publisher->get_subscription_count() > 0;},
+                 kGraphTimeout))
+    {
       ADD_FAILURE() << "Bridge did not subscribe to " << source_topic;
       return false;
     }
@@ -296,13 +311,14 @@ protected:
     if (!waitFor(
         [&]() {
           publisher->publish(makeMessage("warmup:" + expected_payload));
-          inbound_topic = findParticipantPrefixedTopic(*receiver_node, source_topic);
+          inbound_topic =
+          findParticipantPrefixedTopic(*receiver_node, source_topic);
           return inbound_topic.has_value();
-        },
-        kGraphTimeout))
+            },
+            kGraphTimeout))
     {
-      ADD_FAILURE()
-        << "No participant-prefixed ROS topic appeared for " << source_topic;
+      ADD_FAILURE() << "No participant-prefixed ROS topic appeared for "
+                    << source_topic;
       return false;
     }
 
@@ -326,9 +342,9 @@ protected:
     std::condition_variable cv;
     std::optional<std::string> received_payload;
 
-    auto subscription = receiver_node->create_subscription<std_msgs::msg::String>(
-      *inbound_topic,
-      10,
+    auto subscription =
+      receiver_node->create_subscription<std_msgs::msg::String>(
+            *inbound_topic, 10,
       [&](const std_msgs::msg::String::ConstSharedPtr msg) {
         if (msg->data != expected_payload) {
           return;
@@ -338,14 +354,16 @@ protected:
           received_payload = msg->data;
         }
         cv.notify_all();
-      });
+            });
 
     const auto deadline = std::chrono::steady_clock::now() + kMessageTimeout;
     while (std::chrono::steady_clock::now() < deadline) {
       publisher->publish(makeMessage(expected_payload));
 
       std::unique_lock<std::mutex> lock(mutex);
-      if (cv.wait_for(lock, 100ms, [&]() {return received_payload.has_value();})) {
+      if (cv.wait_for(lock, 100ms,
+        [&]() {return received_payload.has_value();}))
+      {
         break;
       }
     }
@@ -359,31 +377,32 @@ protected:
   }
 
   bool verifyDirectionNotForwarded(
-    const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>> & publisher,
+    const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>
+    & publisher,
     const std::shared_ptr<rclcpp::Node> & receiver_node,
     const std::string & source_topic,
-    const std::string & forbidden_inbound_topic,
-    const std::string & payload)
+    const std::string & forbidden_inbound_topic, const std::string & payload)
   {
-    if (!waitFor([&]() {return publisher->get_subscription_count() > 0;}, kGraphTimeout)) {
+    if (!waitFor([&]() {return publisher->get_subscription_count() > 0;},
+                 kGraphTimeout))
+    {
       ADD_FAILURE() << "Bridge did not subscribe to " << source_topic;
       return false;
     }
 
     std::atomic_bool received_forbidden_payload{false};
-    auto subscription = receiver_node->create_subscription<std_msgs::msg::String>(
-      forbidden_inbound_topic,
-      10,
+    auto subscription =
+      receiver_node->create_subscription<std_msgs::msg::String>(
+            forbidden_inbound_topic, 10,
       [&](const std_msgs::msg::String::ConstSharedPtr msg) {
         if (msg->data == payload) {
           received_forbidden_payload.store(true);
         }
-      });
+            });
 
     const auto deadline =
       std::chrono::steady_clock::now() + kNegativeAssertionTimeout;
-    while (
-      std::chrono::steady_clock::now() < deadline &&
+    while (std::chrono::steady_clock::now() < deadline &&
       !received_forbidden_payload.load())
     {
       publisher->publish(makeMessage(payload));
@@ -409,19 +428,32 @@ protected:
     return publisher_b_;
   }
 
-  Ros2TopicList::Response::SharedPtr callTopicListService(
+  std::string
+  bridgeServiceName(
+    const std::shared_ptr<rclcpp::Node> & client_node,
+    const std::string & service_name) const
+  {
+    if (client_node == robot_a_node_ && bridge_a_) {
+      return resolveRelativeServiceName(*bridge_a_, service_name);
+    }
+    if (client_node == robot_b_node_ && bridge_b_) {
+      return resolveRelativeServiceName(*bridge_b_, service_name);
+    }
+    ADD_FAILURE() << "No bridge node found for service " << service_name;
+    return "/" + service_name;
+  }
+
+  Ros2TopicList::Response::SharedPtr
+  callTopicListService(
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
     const TopicListServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2TopicList>(
-      ros2_cli::kTopicListServiceName);
+        bridgeServiceName(node, ros2_cli::kTopicListServiceName));
 
-    if (!waitFor(
-        [&]() {
-          return client->wait_for_service(100ms);
-        },
-        kGraphTimeout))
+    if (!waitFor([&]() {return client->wait_for_service(100ms);},
+                 kGraphTimeout))
     {
       ADD_FAILURE() << "ros2_topic_list service was not available";
       return nullptr;
@@ -444,19 +476,17 @@ protected:
     return future.get();
   }
 
-  Ros2ServiceList::Response::SharedPtr callServiceListService(
+  Ros2ServiceList::Response::SharedPtr
+  callServiceListService(
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
     const ServiceListServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2ServiceList>(
-      ros2_cli::kServiceListServiceName);
+        bridgeServiceName(node, ros2_cli::kServiceListServiceName));
 
-    if (!waitFor(
-        [&]() {
-          return client->wait_for_service(100ms);
-        },
-        kGraphTimeout))
+    if (!waitFor([&]() {return client->wait_for_service(100ms);},
+                 kGraphTimeout))
     {
       ADD_FAILURE() << "ros2_service_list service was not available";
       return nullptr;
@@ -478,20 +508,18 @@ protected:
     return future.get();
   }
 
-  Ros2InterfaceShow::Response::SharedPtr callInterfaceShowService(
+  Ros2InterfaceShow::Response::SharedPtr
+  callInterfaceShowService(
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
-    const std::string & interface_type,
+    const std::string & msg_type,
     const InterfaceShowServiceOptions & options = {})
   {
     auto client = node->create_client<Ros2InterfaceShow>(
-      ros2_cli::kInterfaceShowServiceName);
+        bridgeServiceName(node, ros2_cli::kInterfaceShowServiceName));
 
-    if (!waitFor(
-        [&]() {
-          return client->wait_for_service(100ms);
-        },
-        kGraphTimeout))
+    if (!waitFor([&]() {return client->wait_for_service(100ms);},
+                 kGraphTimeout))
     {
       ADD_FAILURE() << "ros2_interface_show service was not available";
       return nullptr;
@@ -499,7 +527,7 @@ protected:
 
     auto request = std::make_shared<Ros2InterfaceShow::Request>();
     request->participant_id = participant_id;
-    request->type = interface_type;
+    request->type = msg_type;
     request->all_comments = options.all_comments;
     request->no_comments = options.no_comments;
     request->timeout_sec = options.timeout_sec;
@@ -507,6 +535,40 @@ protected:
     auto future = client->async_send_request(request);
     if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
       ADD_FAILURE() << "ros2_interface_show service timed out";
+      return nullptr;
+    }
+
+    return future.get();
+  }
+
+  Ros2TopicPubSrv::Response::SharedPtr
+  callTopicPubService(
+    const std::shared_ptr<rclcpp::Node> & node,
+    const std::string & participant_id,
+    const std::string & topic, const std::string & msg_type,
+    const std::string & payload,
+    const TopicPubServiceOptions & options = {})
+  {
+    auto client = node->create_client<Ros2TopicPubSrv>(
+        bridgeServiceName(node, ros2_cli::kTopicPubServiceName));
+
+    if (!waitFor([&]() {return client->wait_for_service(100ms);},
+                 kGraphTimeout))
+    {
+      ADD_FAILURE() << "ros2_topic_pub service was not available";
+      return nullptr;
+    }
+
+    auto request = std::make_shared<Ros2TopicPubSrv::Request>();
+    request->participant_id = participant_id;
+    request->topic = topic;
+    request->msg_type = msg_type;
+    request->payload = payload;
+    request->timeout_sec = options.timeout_sec;
+
+    auto future = client->async_send_request(request);
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << "ros2_topic_pub service timed out";
       return nullptr;
     }
 
@@ -526,17 +588,17 @@ private:
     return msg;
   }
 
-  rclcpp::ExecutorOptions executorOptions(
-    const rclcpp::Context::SharedPtr & context) const
+  rclcpp::ExecutorOptions
+  executorOptions(const rclcpp::Context::SharedPtr & context) const
   {
     auto options = rclcpp::ExecutorOptions{};
     options.context = context;
     return options;
   }
 
-  std::shared_ptr<Ros2LiveKitBridge> createBridge(
-    const ScopedRosGraph & graph,
-    const std::string & node_namespace,
+  std::shared_ptr<Ros2LiveKitBridge>
+  createBridge(
+    const ScopedRosGraph & graph, const std::string & node_namespace,
     const std::string & livekit_token,
     const std::string & config_path)
   {
@@ -550,7 +612,7 @@ private:
     }
 
     auto bridge = std::make_shared<Ros2LiveKitBridge>(
-      createBridgeOptions(graph.context(), node_namespace, config_path));
+        createBridgeOptions(graph.context(), node_namespace, config_path));
     if (!bridge->initialize()) {
       ADD_FAILURE() << "Bridge failed to initialize for namespace "
                     << node_namespace;
@@ -635,4 +697,4 @@ private:
   std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>> publisher_b_;
 };
 
-}  // namespace ros2_livekit_bridge::test
+} // namespace ros2_livekit_bridge::test

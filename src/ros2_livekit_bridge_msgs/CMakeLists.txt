@@ -24,6 +24,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Ros2InterfaceShow.srv"
   "srv/Ros2ServiceList.srv"
   "srv/Ros2TopicList.srv"
+  "srv/Ros2TopicPub.srv"
 )
 
 ament_auto_package()

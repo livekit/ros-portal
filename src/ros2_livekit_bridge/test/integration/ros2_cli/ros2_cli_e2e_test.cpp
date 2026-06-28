@@ -19,6 +19,8 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 
 #include <std_msgs/msg/string.hpp>
@@ -242,6 +244,85 @@ TEST_F(BridgeTestE2E, ShowsRemoteRosInterfacesOverRpc) {
 
   const auto missing_response = callInterfaceShowService(
       robotANode(), "missing-livekit-participant", kInterfaceType);
+  ASSERT_NE(missing_response, nullptr);
+  EXPECT_FALSE(missing_response->success);
+  EXPECT_TRUE(
+      contains(missing_response->err_msg, "missing-livekit-participant"));
+}
+
+TEST_F(BridgeTestE2E, PublishesToRemoteRosTopicOverRpc) {
+  // A broader pattern lets a single connected room exercise an allowed publish
+  // topic, an out-of-pattern (denied) topic, and a graph type mismatch.
+  constexpr const char *kPubPattern = "/bridge/.*";
+  initializeRuntime(
+      kPubPattern, kPubPattern, kBidirectionalTopic, kBidirectionalTopic);
+
+  constexpr const char *kPubTopic = "/bridge/cmd";
+  constexpr const char *kStringType = "std_msgs/msg/String";
+  constexpr const char *kPayload = "hello-from-e2e";
+
+  std::mutex mutex;
+  std::optional<std::string> received;
+  auto subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
+      kPubTopic, 10,
+    [&](const std_msgs::msg::String::ConstSharedPtr message) {
+      if (message->data != kPayload) {
+        return;
+      }
+      std::lock_guard<std::mutex> lock(mutex);
+      received = message->data;
+      });
+  ASSERT_TRUE(
+      waitFor([&]() {return topicExists(*robotBNode(), kPubTopic);},
+              kGraphTimeout))
+      << "Subscriber topic did not appear in bridge B graph";
+
+  // `ros2 topic pub` is one-shot, so the remote generic publisher only
+  // delivers once it has matched the subscriber. Republish until the payload
+  // arrives or the message timeout elapses.
+  Ros2TopicPubSrv::Response::SharedPtr response;
+  const bool delivered = waitFor(
+    [&]() {
+      response = callTopicPubService(
+            robotANode(), identityB(), kPubTopic, kStringType,
+            std::string("{data: ") + kPayload + "}");
+      if (response == nullptr || !response->success) {
+        return false;
+      }
+      std::lock_guard<std::mutex> lock(mutex);
+      return received.has_value();
+      },
+      kMessageTimeout);
+  subscription.reset();
+
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->success) << response->err_msg;
+  EXPECT_TRUE(delivered)
+      << "Remote bridge did not deliver the published payload";
+
+  // A topic outside the configured incoming patterns must be rejected by the
+  // remote bridge before any publisher is created.
+  const auto denied_response = callTopicPubService(
+      robotANode(), identityB(), "/forbidden/topic", kStringType,
+      std::string("{data: ") + kPayload + "}");
+  ASSERT_NE(denied_response, nullptr);
+  EXPECT_FALSE(denied_response->success);
+  EXPECT_TRUE(contains(denied_response->err_msg, "/forbidden/topic"));
+  EXPECT_TRUE(contains(denied_response->err_msg, "not allowed"));
+
+  // The bidirectional topic is already in bridge B's graph as a String, so a
+  // mismatched requested type must be rejected against the known graph type.
+  const auto type_mismatch_response = callTopicPubService(
+      robotANode(), identityB(), kBidirectionalTopic, "std_msgs/msg/Int32",
+      "{data: 1}");
+  ASSERT_NE(type_mismatch_response, nullptr);
+  EXPECT_FALSE(type_mismatch_response->success);
+  EXPECT_TRUE(contains(type_mismatch_response->err_msg, kBidirectionalTopic));
+  EXPECT_TRUE(contains(type_mismatch_response->err_msg, "std_msgs/msg/String"));
+
+  const auto missing_response = callTopicPubService(
+      robotANode(), "missing-livekit-participant", kPubTopic, kStringType,
+      std::string("{data: ") + kPayload + "}");
   ASSERT_NE(missing_response, nullptr);
   EXPECT_FALSE(missing_response->success);
   EXPECT_TRUE(

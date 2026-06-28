@@ -25,7 +25,7 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli::interface_show

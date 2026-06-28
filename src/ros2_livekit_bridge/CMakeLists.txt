@@ -31,13 +31,14 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_msgs
   diagnostic_updater
   geometry_msgs
-  nav_msgs
   rclcpp
   ros2_livekit_bridge_config
   ros2_livekit_bridge_msgs
+  rosidl_typesupport_cpp
+  rosidl_typesupport_introspection_cpp
   sensor_msgs
   std_msgs
-)
+  yaml_cpp_vendor)
 
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
@@ -95,6 +96,7 @@ endif()
 
 find_package(LiveKit CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 if(TARGET LiveKit::livekit)
   set(LIVEKIT_CORE_TARGET LiveKit::livekit)
@@ -195,12 +197,15 @@ ament_auto_add_library(ros2_cli_lib SHARED
   src/ros2_cli/json_converters.cpp
   src/ros2_cli/ros2_service_list.cpp
   src/ros2_cli/ros2_topic_list.cpp
+  src/ros2_cli/ros2_topic_pub.cpp
   src/ros2_cli/utils.cpp
+  src/ros2_cli/yaml_message_converter.cpp
   src/ros2_cli_manager.cpp
 )
 target_link_libraries(ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
   nlohmann_json::nlohmann_json
+  yaml-cpp::yaml-cpp
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros2_cli_lib)

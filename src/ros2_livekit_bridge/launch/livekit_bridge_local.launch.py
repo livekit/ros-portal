@@ -91,6 +91,7 @@ def _launch_setup(context, *args, **kwargs):
             package='ros2_livekit_bridge',
             executable='ros2_livekit_bridge_node',
             name='ros2_livekit_bridge',
+            namespace=LaunchConfiguration('ns'),
             output='screen',
             parameters=[{'config_path': str(config_path)}],
             arguments=['--ros-args', '--disable-external-lib-logs'],
@@ -111,5 +112,6 @@ def generate_launch_description():
         DeclareLaunchArgument('identity', default_value='ros2-livekit-bridge'),
         DeclareLaunchArgument('token_valid_for', default_value='1h'),
         DeclareLaunchArgument('use_dev_credentials', default_value='true'),
+        DeclareLaunchArgument('ns', default_value='/'),
         OpaqueFunction(function=_launch_setup),
     ])

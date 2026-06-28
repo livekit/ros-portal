@@ -27,7 +27,7 @@ namespace ros2_livekit_bridge
 using json = nlohmann::json;
 using ros2_cli::requiredStringField;
 using ros2_cli::Ros2InterfaceShow;
-using ros2_cli::Ros2ServiceCall;
+using ros2_cli::Ros2ServiceCallSrv;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -64,7 +64,7 @@ serviceListOptionsFromRequest(const Ros2ServiceList::Request & request)
 }
 
 ServiceCallOptions
-serviceCallOptionsFromRequest(const Ros2ServiceCall::Request & request)
+serviceCallOptionsFromRequest(const Ros2ServiceCallSrv::Request & request)
 {
   ServiceCallOptions options;
   options.service = request.service;
@@ -127,7 +127,7 @@ std::string serviceListRequestToJson(
 }
 
 std::string serviceCallRequestToJson(
-  const Ros2ServiceCall::Request & request,
+  const Ros2ServiceCallSrv::Request & request,
   std::uint8_t timeout_sec)
 {
   const auto options = serviceCallOptionsFromRequest(request);
@@ -236,6 +236,7 @@ std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
       request, "payload", "payload must be a string",
       "payload must be non-empty");
     options.timeout_sec = request.value("timeout_sec", 0);
+    error.clear(); // success, clear any previous error
     return options;
   } catch (const std::exception & parse_error) {
     error = parse_error.what();

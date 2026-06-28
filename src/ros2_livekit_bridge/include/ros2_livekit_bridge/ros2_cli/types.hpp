@@ -139,6 +139,6 @@ using Ros2TopicPubSrv = ros2_livekit_bridge_msgs::srv::Ros2TopicPub;
 //! @brief Generated ROS service type for remote `ros2 service list` requests.
 using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
 /// @brief Generated ROS service type for remote `ros2 service call` requests.
-using Ros2ServiceCall = ros2_livekit_bridge_msgs::srv::Ros2ServiceCall;
+using Ros2ServiceCallSrv = ros2_livekit_bridge_msgs::srv::Ros2ServiceCall;
 
 } // namespace ros2_livekit_bridge::ros2_cli

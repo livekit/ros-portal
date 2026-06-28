@@ -57,7 +57,7 @@ ServiceListOptions serviceListOptionsFromRequest(
 /// @param request ROS service request.
 /// @return Service-call options from the request fields.
 ServiceCallOptions serviceCallOptionsFromRequest(
-  const ros2_cli::Ros2ServiceCall::Request & request);
+  const ros2_cli::Ros2ServiceCallSrv::Request & request);
 
 /**
  * @brief Convert a ROS service request to local interface-show options.
@@ -105,7 +105,7 @@ std::string serviceListRequestToJson(
 /// @param timeout_sec Effective timeout to include in the payload.
 /// @return JSON request payload.
 std::string serviceCallRequestToJson(
-  const ros2_cli::Ros2ServiceCall::Request & request,
+  const ros2_cli::Ros2ServiceCallSrv::Request & request,
   std::uint8_t timeout_sec);
 
 /**
@@ -189,6 +189,7 @@ std::optional<ResponseT> cliResponseFromJson(
 {
   try {
     const auto parsed = nlohmann::json::parse(payload);
+    error.clear(); // success, clear any previous error
     return makeCliResponse<ResponseT>(
       parsed.at("success").template get<bool>(),
       parsed.at("err_msg").template get<std::string>(),

@@ -181,44 +181,23 @@ propagate back to the caller.
 
 Unlike `ros2 topic pub`, a remote service call requires a matching ROS service
 server to already exist in the target bridge's graph. For local two-bridge
-testing, use the SetBool stub described below.
+testing, launch the service stub manually on the remote side as described
+below.
 
-#### Local testing with the SetBool stub
+#### Local testing with the service stub
 
-The launch stub ([launch/stubs/server_stub.launch.py](../launch/stubs/server_stub.launch.py))
-starts an inline `std_srvs/srv/SetBool` server. By default it advertises
-`/test/set_bool` and echoes `request.data` into `success` / `message`.
+The service stub
+([test_utilities/launch/stubs/server_stub.launch.py](../../test/test_utilities/launch/stubs/server_stub.launch.py))
+is a standalone launch file (not part of the bridge). It starts inline
+`std_srvs/srv/SetBool` and `std_srvs/srv/Trigger` servers:
 
-Use two terminals on the same LiveKit room. Give each bridge a distinct
-`identity`; the caller's `participant_id` must match the remote bridge's
-identity exactly.
+| Service | Type | Behavior |
+| --- | --- | --- |
+| `/test/set_bool` | `std_srvs/srv/SetBool` | Stores `request.data` and echoes it into `success` / `message` |
+| `/test/get_bool` | `std_srvs/srv/Trigger` | Returns `message: "state is: <last set_bool value>"` |
 
-**Terminal 1 — remote bridge (stub server):**
 
-```bash
-source install/setup.bash
-ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  identity:=bridge-b service_stub:=true
-```
-
-The stub can also be launched on its own if the bridge is already running:
-
-```bash
-ros2 launch ros2_livekit_bridge stubs/server_stub.launch.py
-```
-
-Override the service name with `stub_service_name` (via `livekit_bridge_local.launch.py`)
-or `service_name` (via `stubs/server_stub.launch.py`).
-
-**Terminal 2 — caller bridge:**
-
-```bash
-source install/setup.bash
-ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  identity:=bridge-a
-```
-
-**Call the stub from bridge A** (via bridge A's local ROS graph):
+**Set state on the remote side**:
 
 ```bash
 ros2 service call /ros2_livekit_bridge/ros2_service_call \
@@ -233,25 +212,20 @@ success: true
 message: enabled
 ```
 
-Confirm the stub is visible on the remote side first if needed:
+**Read state back:**
 
 ```bash
-ros2 service call /ros2_livekit_bridge/ros2_service_list \
-  ros2_livekit_bridge_msgs/srv/Ros2ServiceList \
-  "{participant_id: 'bridge-b', show_types: true}"
-```
-
-Sample calls
-
-```bash
-# Call a remote SetBool service on participant "robot-01"
 ros2 service call /ros2_livekit_bridge/ros2_service_call \
   ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
-  "{participant_id: 'robot-01', timeout_sec: 0, service: '/set_bool', msg_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
+  "{participant_id: 'bridge-b', service: '/test/get_bool', msg_type: 'std_srvs/srv/Trigger', payload: '{}'}"
 ```
 
-The response `output` field contains CLI-friendly YAML text rendered from the
-remote service response.
+Expected `output`:
+
+```yaml
+success: true
+message: 'state is: True'
+```
 
 ---
 

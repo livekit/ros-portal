@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <memory>
 #include <new>
 
 #include <rosidl_runtime_cpp/message_initialization.hpp>
@@ -38,40 +39,56 @@ public:
     rosidl_runtime_cpp::MessageInitialization initialization =
     rosidl_runtime_cpp::MessageInitialization::ALL)
   : members_(members),
-    data_(::operator new(members.size_of_))
+    data_(::operator new(members.size_of_), StorageDeleter{&members_, false})
   {
     try {
-      members_.init_function(data_, initialization);
+      members_.init_function(data_.get(), initialization);
+      data_.get_deleter().initialized = true;
     } catch (...) {
-      ::operator delete(data_);
-      data_ = nullptr;
+      data_.reset();
       throw;
     }
   }
 
   DynamicMessage(const DynamicMessage &) = delete;
   DynamicMessage & operator=(const DynamicMessage &) = delete;
-
-  /// @brief Finalize and free message storage.
-  ~DynamicMessage()
-  {
-    if (data_ != nullptr) {
-      members_.fini_function(data_);
-      ::operator delete(data_);
-    }
-  }
+  DynamicMessage(DynamicMessage &&) noexcept = default;
+  DynamicMessage & operator=(DynamicMessage &&) = delete;
 
   /// @brief Access mutable message storage.
-  void * data() {return data_;}
+  void * data() {return data_.get();}
 
   /// @brief Access mutable message storage.
-  void * get() {return data_;}
+  void * get() {return data_.get();}
 
 private:
+  /// @brief Deleter that runs ROS fini before freeing untyped message storage.
+  struct StorageDeleter
+  {
+    /// @brief Introspection members used for fini.
+    const rosidl_typesupport_introspection_cpp::MessageMembers * members{nullptr};
+    /// @brief Whether init_function completed successfully.
+    bool initialized{false};
+
+    /// @brief Finalize initialized storage, then release raw memory.
+    void operator()(void * ptr) const noexcept
+    {
+      if (ptr == nullptr) {
+        return;
+      }
+      if (initialized && members != nullptr) {
+        members->fini_function(ptr);
+      }
+      ::operator delete(ptr);
+    }
+  };
+
+  using StoragePtr = std::unique_ptr<void, StorageDeleter>;
+
   /// @brief Introspection members used for init/fini.
   const rosidl_typesupport_introspection_cpp::MessageMembers & members_;
   /// @brief Allocated message memory.
-  void * data_;
+  StoragePtr data_;
 };
 
 }  // namespace ros2_livekit_bridge::ros2_cli

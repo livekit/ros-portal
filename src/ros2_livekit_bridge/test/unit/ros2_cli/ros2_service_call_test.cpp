@@ -25,6 +25,7 @@
 #include <thread>
 #include <utility>
 
+#include <nav_msgs/srv/get_plan.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/set_bool.hpp>
@@ -52,10 +53,42 @@ bool waitForService(
   return false;
 }
 
-/// @brief Construct a ServiceCaller from a node.
-ServiceCaller makeCaller(const std::shared_ptr<rclcpp::Node> & node)
+/// @brief RAII guard that spins an executor on a background thread and
+/// guarantees it is cancelled and joined on scope exit. This keeps the test
+/// process from terminating on a joinable thread when an ASSERT_* macro
+/// triggers an early return before manual cleanup would run.
+class ScopedExecutorSpin
 {
-  return ServiceCaller(
+public:
+  explicit ScopedExecutorSpin(
+    rclcpp::executors::SingleThreadedExecutor & executor)
+  : executor_(executor),
+    spin_thread_([&executor]() {executor.spin();})
+  {
+  }
+
+  ~ScopedExecutorSpin()
+  {
+    executor_.cancel();
+    if (spin_thread_.joinable()) {
+      spin_thread_.join();
+    }
+  }
+
+  ScopedExecutorSpin(const ScopedExecutorSpin &) = delete;
+  ScopedExecutorSpin & operator=(const ScopedExecutorSpin &) = delete;
+  ScopedExecutorSpin(ScopedExecutorSpin &&) = delete;
+  ScopedExecutorSpin & operator=(ScopedExecutorSpin &&) = delete;
+
+private:
+  rclcpp::executors::SingleThreadedExecutor & executor_;
+  std::thread spin_thread_;
+};
+
+/// @brief Construct a Ros2ServiceCall from a node.
+Ros2ServiceCall makeCaller(const std::shared_ptr<rclcpp::Node> & node)
+{
+  return Ros2ServiceCall(
     node->get_node_base_interface(),
     node->get_node_graph_interface());
 }
@@ -75,7 +108,7 @@ ServiceCallOptions makeSetBoolOptions(
   return options;
 }
 
-class ServiceCallerTest : public ::testing::Test
+class Ros2ServiceCallTest : public ::testing::Test
 {
 protected:
   static void SetUpTestSuite()
@@ -91,7 +124,7 @@ protected:
   }
 };
 
-TEST_F(ServiceCallerTest, CallsServiceAndReturnsYamlAndCdrResponse)
+TEST_F(Ros2ServiceCallTest, CallsServiceAndReturnsYamlAndCdrResponse)
 {
   auto caller_node = std::make_shared<rclcpp::Node>("service_call_caller_node");
   auto server_node = std::make_shared<rclcpp::Node>("service_call_server_node");
@@ -108,22 +141,75 @@ TEST_F(ServiceCallerTest, CallsServiceAndReturnsYamlAndCdrResponse)
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(caller_node);
   executor.add_node(server_node);
-  std::thread spin_thread([&executor]() {executor.spin();});
+  ScopedExecutorSpin spin_guard(executor);
 
   ASSERT_TRUE(waitForService(*caller_node, "/service_call/set_bool"));
 
   auto caller = makeCaller(caller_node);
   const auto response = caller.call(makeSetBoolOptions());
 
-  executor.cancel();
-  spin_thread.join();
-
   ASSERT_TRUE(response.success) << response.err_msg;
   EXPECT_NE(response.output.find("success: true"), std::string::npos);
   EXPECT_NE(response.output.find("message: enabled"), std::string::npos);
 }
 
-TEST_F(ServiceCallerTest, RejectsEmptyInterfaceType)
+TEST_F(Ros2ServiceCallTest, RendersNestedResponseFieldsWithAccumulatingIndent)
+{
+  auto caller_node =
+    std::make_shared<rclcpp::Node>("service_call_nested_caller_node");
+  auto server_node =
+    std::make_shared<rclcpp::Node>("service_call_nested_server_node");
+
+  // GetPlan's response is a single nav_msgs/Path plan, which nests
+  // plan -> header -> stamp, exercising three levels of YAML indentation.
+  auto service = server_node->create_service<nav_msgs::srv::GetPlan>(
+    "/service_call/get_plan",
+    [](const nav_msgs::srv::GetPlan::Request::SharedPtr request,
+    nav_msgs::srv::GetPlan::Response::SharedPtr response) {
+      (void)request;
+      response->plan.header.frame_id = "map";
+      response->plan.header.stamp.sec = 7;
+      response->plan.header.stamp.nanosec = 0U;
+    });
+  ASSERT_NE(service, nullptr);
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(caller_node);
+  executor.add_node(server_node);
+  ScopedExecutorSpin spin_guard(executor);
+
+  ASSERT_TRUE(waitForService(*caller_node, "/service_call/get_plan"));
+
+  auto caller = makeCaller(caller_node);
+  const auto response = caller.call(
+    makeSetBoolOptions(
+      "/service_call/get_plan", "nav_msgs/srv/GetPlan", "{}", 2));
+
+  ASSERT_TRUE(response.success) << response.err_msg;
+  // Indentation must accumulate two spaces per nesting level relative to the
+  // parent, rather than resetting to a fixed depth:
+  //   plan:           (0)
+  //     header:       (2)
+  //       stamp:      (4)
+  //         sec: 7    (6)
+  //         nanosec: 0(6)
+  //       frame_id: map (4)
+  //     poses: []     (2)
+  EXPECT_NE(response.output.find("\n  header: \n"), std::string::npos)
+    << response.output;
+  EXPECT_NE(response.output.find("\n    stamp: \n"), std::string::npos)
+    << response.output;
+  EXPECT_NE(response.output.find("\n      sec: 7\n"), std::string::npos)
+    << response.output;
+  EXPECT_NE(response.output.find("\n      nanosec: 0\n"), std::string::npos)
+    << response.output;
+  EXPECT_NE(response.output.find("\n    frame_id: map\n"), std::string::npos)
+    << response.output;
+  EXPECT_NE(response.output.find("\n  poses: ["), std::string::npos)
+    << response.output;
+}
+
+TEST_F(Ros2ServiceCallTest, RejectsEmptyInterfaceType)
 {
   auto caller_node = std::make_shared<rclcpp::Node>(
     "service_call_empty_msg_type_node");
@@ -139,7 +225,7 @@ TEST_F(ServiceCallerTest, RejectsEmptyInterfaceType)
   EXPECT_EQ(response.err_msg, "msg_type must be non-empty");
 }
 
-TEST_F(ServiceCallerTest, HandlesUnavailableServiceTimeout)
+TEST_F(Ros2ServiceCallTest, HandlesUnavailableServiceTimeout)
 {
   auto caller_node =
     std::make_shared<rclcpp::Node>("service_call_timeout_node");
@@ -153,7 +239,7 @@ TEST_F(ServiceCallerTest, HandlesUnavailableServiceTimeout)
   EXPECT_EQ(response.err_msg, "Service call timed out.");
 }
 
-TEST_F(ServiceCallerTest, DropsLateTimedOutResponseBeforeLaterCall)
+TEST_F(Ros2ServiceCallTest, DropsLateTimedOutResponseBeforeLaterCall)
 {
   auto caller_node =
     std::make_shared<rclcpp::Node>("service_call_late_caller_node");
@@ -175,7 +261,7 @@ TEST_F(ServiceCallerTest, DropsLateTimedOutResponseBeforeLaterCall)
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(caller_node);
   executor.add_node(server_node);
-  std::thread spin_thread([&executor]() {executor.spin();});
+  ScopedExecutorSpin spin_guard(executor);
 
   ASSERT_TRUE(waitForService(*caller_node, "/service_call/late_response"));
 
@@ -192,14 +278,11 @@ TEST_F(ServiceCallerTest, DropsLateTimedOutResponseBeforeLaterCall)
       "/service_call/late_response", "std_srvs/srv/SetBool",
       "{data: false}", 3));
 
-  executor.cancel();
-  spin_thread.join();
-
   ASSERT_TRUE(response.success) << response.err_msg;
   EXPECT_NE(response.output.find("message: current"), std::string::npos);
 }
 
-TEST_F(ServiceCallerTest, RejectsEmptyRequestPayload)
+TEST_F(Ros2ServiceCallTest, RejectsEmptyRequestPayload)
 {
   auto caller_node =
     std::make_shared<rclcpp::Node>("service_call_empty_payload_node");

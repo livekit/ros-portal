@@ -50,7 +50,7 @@ namespace ros2_livekit_bridge::test
 
 using namespace std::chrono_literals;
 using ros2_cli::Ros2InterfaceShow;
-using ros2_cli::Ros2ServiceCall;
+using ros2_cli::Ros2ServiceCallSrv;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -514,7 +514,7 @@ protected:
     return future.get();
   }
 
-  Ros2ServiceCall::Response::SharedPtr callServiceCallService(
+  Ros2ServiceCallSrv::Response::SharedPtr callServiceCallService(
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
     const std::string & service,
@@ -522,7 +522,7 @@ protected:
     const std::string & payload,
     const ServiceCallServiceOptions & options = {})
   {
-    auto client = node->create_client<Ros2ServiceCall>(
+    auto client = node->create_client<Ros2ServiceCallSrv>(
       bridgeServiceName(node, ros2_cli::kServiceCallServiceName));
 
     if (!waitFor(
@@ -535,7 +535,7 @@ protected:
       return nullptr;
     }
 
-    auto request = std::make_shared<Ros2ServiceCall::Request>();
+    auto request = std::make_shared<Ros2ServiceCallSrv::Request>();
     request->participant_id = participant_id;
     request->service = service;
     request->msg_type = msg_type;

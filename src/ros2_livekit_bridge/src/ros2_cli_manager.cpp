@@ -63,7 +63,7 @@ Ros2CliManager::Ros2CliManager(
   topic_publisher_ = std::make_unique<ros2_cli::Ros2TopicPub>(
     node_interfaces_.node_topics, node_interfaces_.node_graph,
     topic_publish_allowed_);
-  service_caller_ = std::make_unique<ros2_cli::ServiceCaller>(
+  service_caller_ = std::make_unique<ros2_cli::Ros2ServiceCall>(
     node_interfaces_.node_base, node_interfaces_.node_graph);
 
   topic_list_service_ = rclcpp::create_service<Ros2TopicList>(
@@ -93,11 +93,11 @@ Ros2CliManager::Ros2CliManager(
       },
       rclcpp::ServicesQoS(), callback_group);
 
-  service_call_service_ = rclcpp::create_service<Ros2ServiceCall>(
+  service_call_service_ = rclcpp::create_service<Ros2ServiceCallSrv>(
       node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kServiceCallServiceName,
-    [this](const std::shared_ptr<Ros2ServiceCall::Request> request,
-    std::shared_ptr<Ros2ServiceCall::Response> response) {
+    [this](const std::shared_ptr<Ros2ServiceCallSrv::Request> request,
+    std::shared_ptr<Ros2ServiceCallSrv::Response> response) {
       handleServiceCallRosService(request, response);
       },
       rclcpp::ServicesQoS(), callback_group);
@@ -138,9 +138,10 @@ Ros2CliManager::Ros2CliManager(
 
   RCLCPP_INFO(
       node_interfaces_.node_logging->get_logger(),
-      "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s",
+      "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s",
       ros2_cli::kTopicListServiceName, ros2_cli::kTopicPubServiceName,
-      ros2_cli::kServiceListServiceName, ros2_cli::kInterfaceShowServiceName);
+      ros2_cli::kServiceListServiceName, ros2_cli::kServiceCallServiceName,
+      ros2_cli::kInterfaceShowServiceName);
   RCLCPP_INFO(
       node_interfaces_.node_logging->get_logger(),
       "Registered LiveKit RPC methods:\n   - %s\n   - %s\n   - %s\n   - %s\n"
@@ -199,8 +200,8 @@ void Ros2CliManager::handleServiceListRosService(
 }
 
 void Ros2CliManager::handleServiceCallRosService(
-  const std::shared_ptr<Ros2ServiceCall::Request> request,
-  std::shared_ptr<Ros2ServiceCall::Response> response) const
+  const std::shared_ptr<Ros2ServiceCallSrv::Request> request,
+  std::shared_ptr<Ros2ServiceCallSrv::Response> response) const
 {
   *response = callRemoteServiceCall(*request);
 }
@@ -310,32 +311,32 @@ Ros2CliManager::Ros2ServiceList::Response Ros2CliManager::callRemoteServiceList(
     timeout_sec);
 }
 
-Ros2CliManager::Ros2ServiceCall::Response
+Ros2CliManager::Ros2ServiceCallSrv::Response
 Ros2CliManager::callRemoteServiceCall(
-  const Ros2ServiceCall::Request & request) const
+  const Ros2ServiceCallSrv::Request & request) const
 {
   if (request.participant_id.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(
       false, "participant_id must be non-empty");
   }
 
   if (request.service.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(
       false, "service must be non-empty");
   }
 
   if (request.msg_type.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(
       false, "msg_type must be non-empty");
   }
 
   if (request.payload.empty()) {
-    return makeCliResponse<Ros2ServiceCall::Response>(
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(
       false, "payload must be non-empty");
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    return makeCliResponse<Ros2ServiceCall::Response>(
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(
       false, "LiveKit participant '" + request.participant_id +
                "' was not found");
   }
@@ -344,7 +345,7 @@ Ros2CliManager::callRemoteServiceCall(
   const auto rpc_timeout_sec = serviceCallRpcTimeout(service_timeout_sec);
   const auto payload = serviceCallRequestToJson(request, service_timeout_sec);
 
-  return performRemoteRpc<Ros2ServiceCall::Response>(
+  return performRemoteRpc<Ros2ServiceCallSrv::Response>(
     request.participant_id, ros2_cli::kServiceCallRpcMethod, payload,
     rpc_timeout_sec);
 }

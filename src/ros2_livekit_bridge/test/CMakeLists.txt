@@ -33,6 +33,7 @@ ament_add_pytest_test(livekit_bridge_local_launch_test
 # ---------------------------------------------------------------------------
 file(GLOB UNIT_TEST_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/unit/introspection/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/ros2_cli/*.cpp"
 )
 list(SORT UNIT_TEST_SOURCES)

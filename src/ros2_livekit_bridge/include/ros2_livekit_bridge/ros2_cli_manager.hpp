@@ -53,7 +53,7 @@ public:
   using Ros2TopicPubSrv = ros2_cli::Ros2TopicPubSrv;
   using Ros2ServiceList = ros2_cli::Ros2ServiceList;
   using TopicPublishAllowed = ros2_cli::TopicPublishAllowed;
-  using Ros2ServiceCall = ros2_cli::Ros2ServiceCall;
+  using Ros2ServiceCallSrv = ros2_cli::Ros2ServiceCallSrv;
 
   /**
    * @brief LiveKit methods the bridge supplies to the manager.
@@ -186,8 +186,8 @@ public:
   /// @brief Execute a ROS service request by calling a remote LiveKit RPC.
   /// @param request ROS service request from the local developer.
   /// @return ROS service response with success, err_msg, and output.
-  Ros2ServiceCall::Response
-  callRemoteServiceCall(const Ros2ServiceCall::Request & request) const;
+  Ros2ServiceCallSrv::Response
+  callRemoteServiceCall(const Ros2ServiceCallSrv::Request & request) const;
 
   /**
    * @brief Execute a ROS service request by calling a remote LiveKit RPC.
@@ -291,8 +291,8 @@ private:
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
   void handleServiceCallRosService(
-    const std::shared_ptr<Ros2ServiceCall::Request> request,
-    std::shared_ptr<Ros2ServiceCall::Response> response) const;
+    const std::shared_ptr<Ros2ServiceCallSrv::Request> request,
+    std::shared_ptr<Ros2ServiceCallSrv::Response> response) const;
 
   /**
    * @brief Service callback that maps a ROS request into a service response.
@@ -329,11 +329,11 @@ private:
   /// allowed topics.
   TopicPublishAllowed topic_publish_allowed_;
   std::unique_ptr<ros2_cli::Ros2TopicPub> topic_publisher_;
-  std::unique_ptr<ros2_cli::ServiceCaller> service_caller_;
+  std::unique_ptr<ros2_cli::Ros2ServiceCall> service_caller_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
   rclcpp::Service<Ros2TopicPubSrv>::SharedPtr topic_pub_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
-  rclcpp::Service<Ros2ServiceCall>::SharedPtr service_call_service_;
+  rclcpp::Service<Ros2ServiceCallSrv>::SharedPtr service_call_service_;
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;
 };
 

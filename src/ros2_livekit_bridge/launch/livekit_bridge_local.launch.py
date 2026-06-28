@@ -20,12 +20,8 @@ import subprocess
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
 from launch.actions import SetEnvironmentVariable
-from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import EqualsSubstitution
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
@@ -110,13 +106,6 @@ def generate_launch_description():
         'ros2_livekit_bridge.yaml',
     ])
 
-    stub_launch = PathJoinSubstitution([
-        FindPackageShare('ros2_livekit_bridge'),
-        'launch',
-        'stubs',
-        'server_stub.launch.py',
-    ])
-
     return LaunchDescription([
         DeclareLaunchArgument('config', default_value=default_config),
         DeclareLaunchArgument('livekit_url', default_value='ws://host.docker.internal:7880'),
@@ -124,23 +113,5 @@ def generate_launch_description():
         DeclareLaunchArgument('token_valid_for', default_value='1h'),
         DeclareLaunchArgument('use_dev_credentials', default_value='true'),
         DeclareLaunchArgument('ns', default_value='/'),
-        DeclareLaunchArgument(
-            'service_stub',
-            default_value='false',
-            description='When true, launch a local std_srvs/srv/SetBool stub server.',
-        ),
-        DeclareLaunchArgument(
-            'stub_service_name',
-            default_value='/test/set_bool',
-            description='Service name for the SetBool stub when service_stub is true.',
-        ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(stub_launch),
-            condition=IfCondition(
-                EqualsSubstitution(LaunchConfiguration('service_stub'), 'true')),
-            launch_arguments={
-                'service_name': LaunchConfiguration('stub_service_name'),
-            }.items(),
-        ),
         OpaqueFunction(function=_launch_setup),
     ])

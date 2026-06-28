@@ -38,7 +38,6 @@ ament_auto_find_build_dependencies(REQUIRED
   rosidl_typesupport_introspection_cpp
   sensor_msgs
   std_msgs
-  std_srvs
   yaml_cpp_vendor)
 
 # ---------------------------------------------------------------------------
@@ -194,6 +193,7 @@ endif()
 # ROS2 CLI library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_cli_lib SHARED
+  src/introspection/message_render.cpp  # if introspection ever grows, break out to separate library
   src/ros2_cli/ros2_interface_show.cpp
   src/ros2_cli/json_converters.cpp
   src/ros2_cli/ros2_service_call.cpp

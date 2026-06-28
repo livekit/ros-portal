@@ -32,7 +32,7 @@ namespace
 
 using json = nlohmann::json;
 using ros2_cli::Ros2InterfaceShow;
-using ros2_cli::Ros2ServiceCall;
+using ros2_cli::Ros2ServiceCallSrv;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -60,10 +60,10 @@ Ros2ServiceList::Request makeServiceListRequest()
   return request;
 }
 
-Ros2ServiceCall::Request makeServiceCallRequest(
+Ros2ServiceCallSrv::Request makeServiceCallRequest(
   std::string msg_type = "std_srvs/srv/SetBool")
 {
-  Ros2ServiceCall::Request request;
+  Ros2ServiceCallSrv::Request request;
   request.participant_id = "robot-b";
   request.service = "/set_bool";
   request.msg_type = std::move(msg_type);
@@ -296,7 +296,7 @@ TEST(JsonConvertersTest, BuildsCliResponse) {
   EXPECT_EQ(error_response.output, "");
 
   const auto ok_response =
-    makeCliResponse<Ros2ServiceCall::Response>(true, "", "success: true\n");
+    makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", "success: true\n");
   EXPECT_TRUE(ok_response.success);
   EXPECT_EQ(ok_response.err_msg, "");
   EXPECT_EQ(ok_response.output, "success: true\n");
@@ -321,7 +321,7 @@ TEST(JsonConvertersTest, SerializesSuccessResponsePayload) {
 
 TEST(JsonConvertersTest, ParsesResponsePayload) {
   std::string error;
-  const auto response = cliResponseFromJson<Ros2ServiceCall::Response>(
+  const auto response = cliResponseFromJson<Ros2ServiceCallSrv::Response>(
       R"({"success":true,"err_msg":"","output":"success: true\n"})",
       error).value();
 

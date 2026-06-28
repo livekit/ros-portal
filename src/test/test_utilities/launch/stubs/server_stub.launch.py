@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Launch a minimal std_srvs/srv/SetBool server for local bridge testing."""
+"""Launch minimal std_srvs stub servers for manual bridge testing."""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -27,24 +27,33 @@ import os
 
 import rclpy
 from rclpy.node import Node
-from std_srvs.srv import SetBool
+from std_srvs.srv import SetBool, Trigger
 
 
 class SetBoolStub(Node):
-    def __init__(self, service_name):
+    def __init__(self, set_service_name, get_service_name):
         super().__init__('set_bool_stub')
-        self.create_service(SetBool, service_name, self.handle)
+        self._state = False
+        self.create_service(SetBool, set_service_name, self.on_set_bool)
+        self.create_service(Trigger, get_service_name, self.on_get_bool)
 
-    def handle(self, request, response):
+    def on_set_bool(self, request, response):
+        self._state = request.data
         response.success = request.data
         response.message = 'enabled' if request.data else 'disabled'
         return response
 
+    def on_get_bool(self, _request, response):
+        response.success = True
+        response.message = f'state is: {self._state}'
+        return response
+
 
 def main():
-    service_name = os.environ.get('ROS2_LK_STUB_SERVICE_NAME', '/test/set_bool')
+    set_service_name = os.environ.get('ROS2_LK_STUB_SERVICE_NAME', '/test/set_bool')
+    get_service_name = os.environ.get('ROS2_LK_STUB_GET_SERVICE_NAME', '/test/get_bool')
     rclpy.init()
-    node = SetBoolStub(service_name)
+    node = SetBoolStub(set_service_name, get_service_name)
     try:
         rclpy.spin(node)
     finally:
@@ -59,11 +68,13 @@ if __name__ == '__main__':
 
 def _launch_setup(context, *args, **kwargs):
     service_name = LaunchConfiguration('service_name').perform(context)
+    get_service_name = LaunchConfiguration('get_service_name').perform(context)
     return [
         ExecuteProcess(
             cmd=['python3', '-c', _STUB_SCRIPT],
             additional_env={
                 'ROS2_LK_STUB_SERVICE_NAME': service_name,
+                'ROS2_LK_STUB_GET_SERVICE_NAME': get_service_name,
             },
             output='screen',
             name='set_bool_stub',
@@ -77,6 +88,11 @@ def generate_launch_description():
             'service_name',
             default_value='/test/set_bool',
             description='Absolute service name for the SetBool stub server.',
+        ),
+        DeclareLaunchArgument(
+            'get_service_name',
+            default_value='/test/get_bool',
+            description='Absolute service name for the Trigger get-state stub server.',
         ),
         OpaqueFunction(function=_launch_setup),
     ])

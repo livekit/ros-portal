@@ -41,7 +41,7 @@ namespace
 
 using json = nlohmann::json;
 using ros2_cli::Ros2InterfaceShow;
-using ros2_cli::Ros2ServiceCall;
+using ros2_cli::Ros2ServiceCallSrv;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -182,14 +182,14 @@ protected:
     return request;
   }
 
-  Ros2ServiceCall::Request makeServiceCallRequest(
+  Ros2ServiceCallSrv::Request makeServiceCallRequest(
     std::string participant_id = "robot-b",
     std::string service = "/set_bool",
     std::string msg_type = "std_srvs/srv/SetBool",
     std::string payload = "{data: true}",
     std::uint8_t timeout_sec = 0)
   {
-    Ros2ServiceCall::Request request;
+    Ros2ServiceCallSrv::Request request;
     request.participant_id = std::move(participant_id);
     request.service = std::move(service);
     request.msg_type = std::move(msg_type);

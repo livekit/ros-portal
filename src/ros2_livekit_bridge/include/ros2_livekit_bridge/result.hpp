@@ -22,11 +22,9 @@
 namespace ros2_livekit_bridge
 {
 
-/**
- * @brief Success-or-error return value for fallible operations.
- * @tparam T Success payload type.
- * @tparam E Error payload type.
- */
+/// @brief Success-or-error return value for fallible operations.
+/// @tparam T Success payload type.
+/// @tparam E Error payload type.
 template<typename T, typename E>
 class Result {
 public:
@@ -71,6 +69,41 @@ private:
 
   std::optional<T> value_;
   E error_{};
+};
+
+/// @brief Success-or-error return value for fallible operations with no success
+/// payload.
+/// @tparam E Error payload type.
+template<typename E>
+class Result<void, E> {
+public:
+  /// @brief Construct a successful result.
+  static Result success() {return Result();}
+
+  /// @brief Construct a failed result.
+  static Result err(E error) {return Result(std::move(error));}
+
+  /// @brief True when the operation succeeded.
+  bool ok() const {return !error_.has_value();}
+
+  /// @brief True when the operation succeeded.
+  explicit operator bool() const {return ok();}
+
+  /// @brief Access the error payload.
+  /// @pre `ok()` is false.
+  const E & error() const & {return error_.value();}
+
+  /// @brief Access the error payload.
+  /// @pre `ok()` is false.
+  E & error() & {return error_.value();}
+
+private:
+  Result() = default;
+
+  explicit Result(E error)
+  : error_(std::move(error)) {}
+
+  std::optional<E> error_;
 };
 
 } // namespace ros2_livekit_bridge

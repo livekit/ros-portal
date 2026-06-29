@@ -574,6 +574,22 @@ bool Ros2LiveKitBridge::hasParticipant(const std::string& participant_id) const 
   return static_cast<bool>(room_->remoteParticipant(participant_id).lock());
 }
 
+livekit::Result<std::future<livekit::SessionStats>, std::string> Ros2LiveKitBridge::getLiveKitSessionStats() const {
+  if (!room_) {
+    return livekit::Result<std::future<livekit::SessionStats>, std::string>::failure("LiveKit room is not initialized");
+  }
+
+  if (room_->connectionState() != livekit::ConnectionState::Connected) {
+    return livekit::Result<std::future<livekit::SessionStats>, std::string>::failure("LiveKit room is not connected");
+  }
+
+  try {
+    return Result<std::future<livekit::SessionStats>, std::string>::ok(room_->getStats());
+  } catch (const std::exception& error) {
+    return Result<std::future<livekit::SessionStats>, std::string>::err(error.what());
+  }
+}
+
 std::optional<std::string> Ros2LiveKitBridge::rpcPerform(const std::string& participant_id, const std::string& method,
                                                          const std::string& payload, std::uint8_t timeout_sec) {
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;

@@ -69,8 +69,7 @@ cbps()
 
 cbtps()
 {
-    pkgs="\$@"
-    cd "\${WS}" && sros && colcon build --packages-select "\$pkgs" && colcon test --packages-select "\$pkgs" && colcon test-result --verbose
+    cd "\${WS}" && sros && colcon build --packages-select "\$@" && colcon test --packages-select "\$@" && colcon test-result --verbose
 }
 
 cbtpu()

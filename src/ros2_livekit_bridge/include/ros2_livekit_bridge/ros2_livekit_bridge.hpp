@@ -16,11 +16,14 @@
 
 #pragma once
 
+#include <livekit/result.h>
 #include <livekit/room.h>
 #include <livekit/room_delegate.h>
+#include <livekit/stats.h>
 
 #include <cstdint>
 #include <diagnostic_updater/diagnostic_updater.hpp>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -30,6 +33,7 @@
 #include <vector>
 
 #include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
+#include "ros2_livekit_bridge/result.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
@@ -79,6 +83,11 @@ public:
   /// connect/disconnect signaling, so callers that need a peer to be reachable
   /// should poll this until it returns true rather than assuming immediacy.
   bool hasParticipant(const std::string& participant_id) const;
+
+  /// @brief Request a LiveKit session stats snapshot for this bridge room.
+  /// @return Future resolving to the stats snapshot, or an error string when
+  /// the bridge is not connected or the SDK rejects the request synchronously.
+  livekit::Result<std::future<livekit::SessionStats>, std::string> getLiveKitSessionStats() const;
 
 private:
   /// @brief Poll the topics and create subscribers for the allowed topics
@@ -172,8 +181,8 @@ private:
   /// configured.
   /// @param topics Configured topics; latched outbound/inbound sets are derived
   /// here.
-  /// @return True on success (including when there is nothing to do), false when
-  /// the forwarder could not be initialized.
+  /// @return True on success (including when there is nothing to do), false when the forwarder could not be
+  /// initialized.
   bool initializeLatchedTopicForwarder(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
   //! @brief The period for polling the topics
@@ -183,8 +192,7 @@ private:
   size_t min_qos_depth_;
   //! @brief The maximum QoS depth
   size_t max_qos_depth_;
-  //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
-  //! default)
+  //! @brief Number of threads for the MultiThreadedExecutor (0 = use system default)
   int ros_threads_;
   //! @brief Tracks whether bridge initialization has completed.
   bool initialized_;

@@ -16,7 +16,11 @@
 
 #include "ros2_livekit_bridge/introspection/message_render.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
+#include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <string>
 
@@ -28,6 +32,106 @@ namespace ros2_livekit_bridge::message_render
 
 using introspection::MessageMember;
 using introspection::MessageMembers;
+
+bool isYamlKeyword(const std::string & value)
+{
+  std::string lower;
+  lower.reserve(value.size());
+  std::transform(
+    value.begin(), value.end(), std::back_inserter(lower),
+    [](unsigned char ch) {return static_cast<char>(std::tolower(ch));});
+  return lower == "true" || lower == "false" || lower == "null" ||
+         lower == "~" || lower == "yes" || lower == "no" ||
+         lower == "on" || lower == "off";
+}
+
+bool canRenderPlainString(const std::string & value)
+{
+  if (value.empty() || isYamlKeyword(value)) {
+    return false;
+  }
+  return std::all_of(
+    value.begin(), value.end(),
+    [](unsigned char ch) {
+      return std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' ||
+             ch == '/';
+    });
+}
+
+void renderQuotedString(std::ostringstream & stream, const std::string & value)
+{
+  stream << '"';
+  for (const unsigned char ch : value) {
+    switch (ch) {
+      case '\\':
+        stream << "\\\\";
+        break;
+      case '"':
+        stream << "\\\"";
+        break;
+      case '\n':
+        stream << "\\n";
+        break;
+      case '\r':
+        stream << "\\r";
+        break;
+      case '\t':
+        stream << "\\t";
+        break;
+      default:
+        if (std::isprint(ch)) {
+          stream << static_cast<char>(ch);
+        } else {
+          stream << "\\x" << std::uppercase << std::hex << std::setw(2)
+                 << std::setfill('0') << static_cast<int>(ch)
+                 << std::nouppercase << std::dec << std::setfill(' ');
+        }
+        break;
+    }
+  }
+  stream << '"';
+}
+
+void renderString(std::ostringstream & stream, const std::string & value)
+{
+  if (canRenderPlainString(value)) {
+    stream << value;
+    return;
+  }
+  renderQuotedString(stream, value);
+}
+
+bool isNestedMessageBlock(const MessageMember & member)
+{
+  return !member.is_array_ &&
+         member.type_id_ == introspection::ROS_TYPE_MESSAGE &&
+         member.members_ != nullptr &&
+         member.members_->data != nullptr;
+}
+
+void renderMessageArrayItem(
+  std::ostringstream & stream,
+  const MessageMembers & members,
+  const void * message,
+  std::size_t indent)
+{
+  const std::string item_padding(indent + 2U, ' ');
+  const std::string field_padding(indent + 4U, ' ');
+  if (members.member_count_ == 0U) {
+    stream << item_padding << "- {}";
+    return;
+  }
+
+  for (std::uint32_t index = 0; index < members.member_count_; ++index) {
+    const auto & member = members.members_[index];
+    stream << (index == 0U ? item_padding + "- " : field_padding)
+           << member.name_ << ": ";
+    renderField(stream, member, memberMemory(message, member), indent + 4U);
+    if (!isNestedMessageBlock(member) && index + 1U < members.member_count_) {
+      stream << '\n';
+    }
+  }
+}
 
 const void * memberMemory(const void * message, const MessageMember & member)
 {
@@ -46,7 +150,9 @@ void renderMessage(
     const auto & member = members.members_[index];
     stream << padding << member.name_ << ": ";
     renderField(stream, member, memberMemory(message, member), indent);
-    stream << '\n';
+    if (!isNestedMessageBlock(member)) {
+      stream << '\n';
+    }
   }
 }
 
@@ -83,7 +189,8 @@ void renderSingleField(
       renderScalar<long double>(stream, field_memory);
       break;
     case introspection::ROS_TYPE_CHAR:
-      stream << *static_cast<const char *>(field_memory);
+      stream << static_cast<unsigned>(
+        *static_cast<const unsigned char *>(field_memory));
       break;
     case introspection::ROS_TYPE_WCHAR:
       stream << static_cast<std::uint32_t>(
@@ -120,13 +227,17 @@ void renderSingleField(
       renderScalar<std::int64_t>(stream, field_memory);
       break;
     case introspection::ROS_TYPE_STRING:
-      stream << *static_cast<const std::string *>(field_memory);
+      renderString(stream, *static_cast<const std::string *>(field_memory));
       break;
-    case introspection::ROS_TYPE_WSTRING:
-      for (const auto code_unit :
-        *static_cast<const std::u16string *>(field_memory))
-      {
-        stream << static_cast<char>(code_unit);
+    case introspection::ROS_TYPE_WSTRING: {
+        std::string value;
+        const auto & wide_value =
+          *static_cast<const std::u16string *>(field_memory);
+        value.reserve(wide_value.size());
+        for (const auto code_unit : wide_value) {
+          value.push_back(static_cast<char>(code_unit));
+        }
+        renderString(stream, value);
       }
       break;
     case introspection::ROS_TYPE_MESSAGE:
@@ -146,6 +257,27 @@ void renderArrayField(
 {
   const auto size = member.size_function == nullptr ?
     member.array_size_ : member.size_function(field_memory);
+  if (member.type_id_ == introspection::ROS_TYPE_MESSAGE) {
+    if (size == 0U ||
+      member.members_ == nullptr || member.members_->data == nullptr)
+    {
+      stream << "[]";
+      return;
+    }
+    stream << '\n';
+    const auto & members =
+      *static_cast<const MessageMembers *>(member.members_->data);
+    for (std::size_t index = 0; index < size; ++index) {
+      if (index > 0U) {
+        stream << '\n';
+      }
+      const auto * item = member.get_function(
+        const_cast<void *>(field_memory), index);
+      renderMessageArrayItem(stream, members, item, indent);
+    }
+    return;
+  }
+
   stream << '[';
   for (std::size_t index = 0; index < size; ++index) {
     if (index > 0U) {

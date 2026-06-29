@@ -46,6 +46,30 @@ void renderScalar(std::ostringstream & stream, const void * data)
   stream << *static_cast<const T *>(data);
 }
 
+/// @brief Return whether @p value is a YAML keyword that needs quoting.
+/// @param value String value to inspect.
+/// @return True when @p value is a YAML boolean/null-style keyword.
+bool isYamlKeyword(const std::string & value);
+
+/// @brief Return whether @p value can be rendered as an unquoted YAML scalar.
+/// @param value String value to inspect.
+/// @return True when @p value is safe to render without quotes.
+bool canRenderPlainString(const std::string & value);
+
+/// @brief Render a double-quoted YAML string scalar with escapes.
+/// @param stream Destination stream for the rendered value.
+/// @param value String value to quote.
+void renderQuotedString(
+  std::ostringstream & stream,
+  const std::string & value);
+
+/// @brief Render a string as plain YAML when safe, otherwise quoted.
+/// @param stream Destination stream for the rendered value.
+/// @param value String value to render.
+void renderString(
+  std::ostringstream & stream,
+  const std::string & value);
+
 /// @brief Return a pointer to a member inside a message buffer.
 /// @param message Pointer to the start of the message memory.
 /// @param member Introspection metadata describing the member offset.
@@ -53,6 +77,11 @@ void renderScalar(std::ostringstream & stream, const void * data)
 const void * memberMemory(
   const void * message,
   const introspection::MessageMember & member);
+
+/// @brief Return whether a member renders as a nested message block.
+/// @param member Introspection metadata for the field.
+/// @return True when @p member is a non-array message with metadata.
+bool isNestedMessageBlock(const introspection::MessageMember & member);
 
 /// @brief Render one message as CLI-style YAML.
 /// @param stream Destination stream for the rendered message.
@@ -76,6 +105,17 @@ void renderNestedMessage(
   const void * field_memory,
   std::size_t indent);
 
+/// @brief Render one element of an array-of-messages YAML block sequence.
+/// @param stream Destination stream for the rendered item.
+/// @param members Introspection metadata for the array element message type.
+/// @param message Pointer to the array element message memory.
+/// @param indent Parent field indentation depth in spaces.
+void renderMessageArrayItem(
+  std::ostringstream & stream,
+  const introspection::MessageMembers & members,
+  const void * message,
+  std::size_t indent);
+
 /// @brief Render one non-array scalar or nested field.
 /// @param stream Destination stream for the rendered value.
 /// @param member Introspection metadata for the field.
@@ -87,7 +127,7 @@ void renderSingleField(
   const void * field_memory,
   std::size_t indent);
 
-/// @brief Render one array field as a compact YAML sequence.
+/// @brief Render one array field as a YAML sequence.
 /// @param stream Destination stream for the rendered value.
 /// @param member Introspection metadata for the array field.
 /// @param field_memory Pointer to the array field memory.

@@ -133,6 +133,11 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options)
                error.what());
   }
 
+  // Serialize all send+take operations on the same client so concurrent
+  // callers cannot interleave rcl_send_request / take_type_erased_response
+  // and steal each other's responses.
+  std::lock_guard<std::mutex> client_lock(client->call_mutex);
+
   std::int64_t sequence_number = 0;
   const rcl_ret_t send_ret = rcl_send_request(
     client->get_client_handle().get(), request_message.data(),

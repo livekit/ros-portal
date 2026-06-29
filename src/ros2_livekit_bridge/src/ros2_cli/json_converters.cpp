@@ -18,6 +18,7 @@
 
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
+#include <algorithm>
 #include <exception>
 
 #include <nlohmann/json.hpp>
@@ -235,7 +236,10 @@ std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
     options.payload = ros2_cli::requiredStringField(
       request, "payload", "payload must be a string",
       "payload must be non-empty");
-    options.timeout_sec = request.value("timeout_sec", 0);
+    // Clamp to uint8_t range: negative -> 0, values above 255 -> 255.
+    const int raw_timeout_sec = request.value("timeout_sec", 0);
+    options.timeout_sec =
+      static_cast<std::uint8_t>(std::clamp(raw_timeout_sec, 0, 255));
     error.clear(); // success, clear any previous error
     return options;
   } catch (const std::exception & parse_error) {

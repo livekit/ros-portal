@@ -134,7 +134,7 @@ private:
     /// @brief Runtime serializer for this message type.
     rclcpp::SerializationBase serializer;
 
-  private:
+private:
     /// @brief Require message introspection data.
     static const MessageMembers & requireMembers(
       const rosidl_message_type_support_t * handle)
@@ -168,7 +168,7 @@ private:
     /// @brief Response message type support.
     MessageTypeSupport response;
 
-  private:
+private:
     /// @brief Request message type-name suffix.
     static constexpr char kRequestMessageTypeSuffix[] = "_Request";
     /// @brief Response message type-name suffix.
@@ -247,6 +247,8 @@ private:
     std::string msg_type;
     /// @brief Service, request, and response type support.
     std::shared_ptr<ServiceTypeSupport> support;
+    /// @brief Serializes send+take on this client across concurrent callers.
+    std::mutex call_mutex;
   };
 
   /// @brief Service client shared pointer type.

@@ -242,6 +242,24 @@ TEST(JsonConvertersTest, ParsesServiceCallOptionsPayload) {
   EXPECT_EQ(options.timeout_sec, 7);
 }
 
+TEST(JsonConvertersTest, ClampsServiceCallTimeoutSecFromJson) {
+  std::string error;
+  const auto parse_timeout = [&error](int timeout_sec) {
+      return serviceCallOptionsFromJson(
+        R"({"service":"/set_bool","msg_type":"std_srvs/srv/SetBool","payload":"{data: true}","timeout_sec":)"
+        +
+          std::to_string(timeout_sec) + "}",
+        error);
+    };
+
+  EXPECT_EQ(parse_timeout(-1)->timeout_sec, 0);
+  EXPECT_EQ(parse_timeout(0)->timeout_sec, 0);
+  EXPECT_EQ(parse_timeout(255)->timeout_sec, 255);
+  EXPECT_EQ(parse_timeout(256)->timeout_sec, 255);
+  EXPECT_EQ(parse_timeout(300)->timeout_sec, 255);
+  EXPECT_TRUE(error.empty());
+}
+
 TEST(JsonConvertersTest, EmptyServiceCallInterfaceTypeFailsParsing) {
   std::string error;
   const auto options = serviceCallOptionsFromJson(

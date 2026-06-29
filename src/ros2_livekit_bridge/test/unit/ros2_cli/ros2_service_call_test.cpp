@@ -15,15 +15,18 @@
  */
 
 #include "ros2_livekit_bridge/ros2_cli/ros2_service_call.hpp"
+#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <nav_msgs/srv/get_plan.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
@@ -298,6 +301,81 @@ TEST_F(Ros2ServiceCallTest, RejectsEmptyRequestPayload)
   EXPECT_EQ(
     response.err_msg,
     "failed to build service request: payload must be non-empty");
+}
+
+TEST_F(Ros2ServiceCallTest, ServiceTypeSupportCreationErrorForMissingSymbol)
+{
+  EXPECT_EQ(
+    Ros2ServiceCall::serviceTypeSupportCreationError(
+      "std_srvs/srv/DoesNotExist"),
+    "Service typesupport symbol not found: rosidl_typesupport_cpp"
+    "__get_service_type_support_handle__std_srvs__srv__DoesNotExist");
+}
+
+TEST_F(Ros2ServiceCallTest, ServiceTypeSupportCreationErrorForMissingPackage)
+{
+  const std::string error = Ros2ServiceCall::serviceTypeSupportCreationError(
+    "fake_msgs/srv/DoesNotExist");
+  EXPECT_NE(error.find("package 'fake_msgs' not found"), std::string::npos);
+}
+
+TEST_F(Ros2ServiceCallTest, RejectsUnknownServiceTypeWithoutThrowing)
+{
+  auto caller_node =
+    std::make_shared<rclcpp::Node>("service_call_unknown_type_node");
+  auto caller = makeCaller(caller_node);
+
+  const auto response = caller.call(
+    makeSetBoolOptions(
+      "/service_call/unknown_type", "fake_msgs/srv/DoesNotExist",
+      "{data: true}", 1));
+
+  EXPECT_FALSE(response.success);
+  EXPECT_NE(response.err_msg.find("failed to build service request:"),
+    std::string::npos);
+}
+
+TEST_F(Ros2ServiceCallTest, RejectsServiceClientCacheLimit)
+{
+  auto caller_node =
+    std::make_shared<rclcpp::Node>("service_call_cache_caller_node");
+  auto server_node =
+    std::make_shared<rclcpp::Node>("service_call_cache_server_node");
+  std::vector<rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr> services;
+  services.reserve(kMaxCachedServiceClients);
+
+  for (std::size_t index = 0; index < kMaxCachedServiceClients; ++index) {
+    const std::string service_name =
+      "/service_call/cache_fill/svc_" + std::to_string(index);
+    services.push_back(server_node->create_service<std_srvs::srv::SetBool>(
+        service_name,
+        [](const std_srvs::srv::SetBool::Request::SharedPtr request,
+        std_srvs::srv::SetBool::Response::SharedPtr response) {
+          response->success = true;
+          response->message = request->data ? "enabled" : "disabled";
+        }));
+  }
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(caller_node);
+  executor.add_node(server_node);
+  ScopedExecutorSpin spin_guard(executor);
+
+  auto caller = makeCaller(caller_node);
+  for (std::size_t index = 0; index < kMaxCachedServiceClients; ++index) {
+    const auto response = caller.call(makeSetBoolOptions(
+        "/service_call/cache_fill/svc_" + std::to_string(index),
+        "std_srvs/srv/SetBool", "{data: false}", 2));
+    ASSERT_TRUE(response.success) << response.err_msg;
+  }
+
+  const auto overflow = caller.call(makeSetBoolOptions(
+      "/service_call/cache_overflow", "std_srvs/srv/SetBool",
+      "{data: false}", 1));
+  EXPECT_FALSE(overflow.success);
+  EXPECT_EQ(
+    overflow.err_msg,
+    "failed to create service client: service client cache limit reached");
 }
 
 }  // namespace

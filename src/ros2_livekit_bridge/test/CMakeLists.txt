@@ -45,6 +45,7 @@ if(UNIT_TEST_SOURCES)
 endif()
 
 if(TARGET ros2_livekit_bridge_unit_tests)
+  target_compile_definitions(ros2_livekit_bridge_unit_tests PRIVATE BUILD_TESTING=1)
   target_link_libraries(ros2_livekit_bridge_unit_tests
     ros2_livekit_bridge_lib
   )

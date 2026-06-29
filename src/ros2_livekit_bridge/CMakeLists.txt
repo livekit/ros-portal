@@ -241,6 +241,7 @@ target_link_libraries(ros2_livekit_bridge_node
 livekit_set_runtime_rpath(ros2_livekit_bridge_node)
 
 if(BUILD_TESTING)
+  target_compile_definitions(ros2_cli_lib PRIVATE BUILD_TESTING=1)
   add_subdirectory(test)
 endif()
 

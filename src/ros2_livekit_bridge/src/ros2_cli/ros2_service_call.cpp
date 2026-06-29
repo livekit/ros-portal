@@ -48,10 +48,9 @@ constexpr auto kPollPeriod = std::chrono::milliseconds(2);
 constexpr char kServiceTypeSupportSymbolPrefix[] =
   "__get_service_type_support_handle__";
 
-const rosidl_service_type_support_t * Ros2ServiceCall::serviceTypeSupportHandle(
+std::string serviceTypeSupportSymbol(
   const std::string & type,
-  const std::string & typesupport_identifier,
-  rcpputils::SharedLibrary & library)
+  const std::string & typesupport_identifier)
 {
   std::string symbol = typesupport_identifier + kServiceTypeSupportSymbolPrefix;
   for (const char ch : type) {
@@ -61,8 +60,18 @@ const rosidl_service_type_support_t * Ros2ServiceCall::serviceTypeSupportHandle(
       symbol += ch;
     }
   }
+  return symbol;
+}
+
+const rosidl_service_type_support_t * Ros2ServiceCall::serviceTypeSupportHandle(
+  const std::string & type,
+  const std::string & typesupport_identifier,
+  rcpputils::SharedLibrary & library)
+{
+  const std::string symbol =
+    serviceTypeSupportSymbol(type, typesupport_identifier);
   if (!library.has_symbol(symbol)) {
-    throw std::runtime_error("Service typesupport symbol not found: " + symbol);
+    return nullptr;
   }
   using GetServiceTypeSupportHandleFn =
     const rosidl_service_type_support_t * (*)();
@@ -71,6 +80,51 @@ const rosidl_service_type_support_t * Ros2ServiceCall::serviceTypeSupportHandle(
     library.get_symbol(symbol));
   return get_handle();
 }
+
+Ros2ServiceCall::ServiceTypeSupport::ServiceTypeSupport(
+  const std::string & type,
+  std::shared_ptr<rcpputils::SharedLibrary> library,
+  const rosidl_service_type_support_t * handle)
+: library(std::move(library)),
+  handle(handle),
+  request(type + kRequestMessageTypeSuffix),
+  response(type + kResponseMessageTypeSuffix)
+{
+}
+
+std::shared_ptr<Ros2ServiceCall::ServiceTypeSupport>
+Ros2ServiceCall::ServiceTypeSupport::create(
+  const std::string & type,
+  std::string & error)
+{
+  try {
+    auto library = rclcpp::get_typesupport_library(
+      type, rosidl_typesupport_cpp::typesupport_identifier);
+    const auto * handle = serviceTypeSupportHandle(
+      type, rosidl_typesupport_cpp::typesupport_identifier, *library);
+    if (handle == nullptr) {
+      error = "Service typesupport symbol not found: " +
+        serviceTypeSupportSymbol(
+          type, rosidl_typesupport_cpp::typesupport_identifier);
+      return nullptr;
+    }
+    return std::shared_ptr<ServiceTypeSupport>(
+      new ServiceTypeSupport(type, std::move(library), handle));
+  } catch (const std::exception & exception) {
+    error = exception.what();
+    return nullptr;
+  }
+}
+
+#ifdef BUILD_TESTING
+std::string Ros2ServiceCall::serviceTypeSupportCreationError(
+  const std::string & type)
+{
+  std::string error;
+  (void)ServiceTypeSupport::create(type, error);
+  return error;
+}
+#endif
 
 Ros2ServiceCall::Ros2ServiceCall(
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
@@ -113,12 +167,13 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options)
   const auto & msg_type = options.msg_type;
 
   ClientPtr client;
-  try {
-    client = getClient(resolved_service, msg_type);
-  } catch (const std::exception & error) {
+  std::string client_error;
+  if (auto resolved_client = getClient(resolved_service, msg_type, client_error)) {
+    client = std::move(*resolved_client);
+  } else {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(
       false, std::string("failed to create service client: ") +
-               error.what());
+               client_error);
   }
 
   DynamicMessage request_message(
@@ -163,9 +218,10 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options)
   return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "Service call timed out.");
 }
 
-Ros2ServiceCall::ClientPtr Ros2ServiceCall::getClient(
+std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(
   const std::string & service,
-  const std::string & msg_type)
+  const std::string & msg_type,
+  std::string & error)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string key = service + ":" + msg_type;
@@ -174,13 +230,23 @@ Ros2ServiceCall::ClientPtr Ros2ServiceCall::getClient(
     return existing->second;
   }
   if (clients_.size() >= kMaxCachedServiceClients) {
-    throw std::runtime_error("service client cache limit reached");
+    error = "service client cache limit reached";
+    return std::nullopt;
   }
 
-  auto support = std::make_shared<ServiceTypeSupport>(msg_type);
-  auto client = std::make_shared<ServiceClient>(
-    service, msg_type, std::move(support), base_.get(), graph_);
-  return clients_.emplace(key, std::move(client)).first->second;
+  auto support = ServiceTypeSupport::create(msg_type, error);
+  if (!support) {
+    return std::nullopt;
+  }
+
+  try {
+    auto client = std::make_shared<ServiceClient>(
+      service, msg_type, std::move(support), base_.get(), graph_);
+    return clients_.emplace(key, std::move(client)).first->second;
+  } catch (const std::exception & exception) {
+    error = exception.what();
+    return std::nullopt;
+  }
 }
 
 std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(

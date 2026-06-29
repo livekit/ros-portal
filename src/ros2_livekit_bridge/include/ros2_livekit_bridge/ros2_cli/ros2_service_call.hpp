@@ -82,6 +82,11 @@ public:
   ///   response conversion fails.
   Ros2ServiceCallSrv::Response call(ServiceCallOptions options);
 
+#ifdef BUILD_TESTING
+  /// @brief Return the service type-support creation error for @p type.
+  static std::string serviceTypeSupportCreationError(const std::string & type);
+#endif
+
 private:
   /// @brief Introspection type-support namespace alias.
   using MessageMembers =
@@ -95,8 +100,8 @@ private:
   /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
   /// @param typesupport_identifier Type-support identifier to build the symbol.
   /// @param library Loaded type-support shared library to resolve the symbol in.
-  /// @return Service type-support handle for @p type.
-  /// @throws std::runtime_error if the type-support symbol is not found.
+  /// @return Service type-support handle for @p type, or nullptr when the
+  ///   type-support symbol is not found.
   static const rosidl_service_type_support_t * serviceTypeSupportHandle(
     const std::string & type,
     const std::string & typesupport_identifier,
@@ -150,14 +155,13 @@ private:
   struct ServiceTypeSupport
   {
     /// @brief Load service, request, and response type support for @p type.
-    explicit ServiceTypeSupport(const std::string & type)
-    : library(rclcpp::get_typesupport_library(
-          type, rosidl_typesupport_cpp::typesupport_identifier)),
-      handle(serviceTypeSupportHandle(
-          type, rosidl_typesupport_cpp::typesupport_identifier, *library)),
-      request(type + kRequestMessageTypeSuffix),
-      response(type + kResponseMessageTypeSuffix)
-    {}
+    /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
+    /// @param error Populated with a failure reason when creation fails.
+    /// @return Loaded type support, or nullptr when service type support
+    ///   cannot be resolved.
+    static std::shared_ptr<ServiceTypeSupport> create(
+      const std::string & type,
+      std::string & error);
 
     /// @brief Shared library that owns the service handle.
     std::shared_ptr<rcpputils::SharedLibrary> library;
@@ -169,6 +173,11 @@ private:
     MessageTypeSupport response;
 
 private:
+    ServiceTypeSupport(
+      const std::string & type,
+      std::shared_ptr<rcpputils::SharedLibrary> library,
+      const rosidl_service_type_support_t * handle);
+
     /// @brief Request message type-name suffix.
     static constexpr char kRequestMessageTypeSuffix[] = "_Request";
     /// @brief Response message type-name suffix.
@@ -257,12 +266,13 @@ private:
   /// @brief Return a cached client, creating it if needed.
   /// @param service Resolved ROS service name.
   /// @param msg_type Required service type identifier.
-  /// @return Cached or newly created runtime service client.
-  /// @throws std::runtime_error if the client cache limit is reached.
-  /// @throws std::exception if type support or client construction fails.
-  ClientPtr getClient(
+  /// @param error Populated with a failure reason when client creation fails.
+  /// @return Cached or newly created runtime service client, or std::nullopt
+  ///   when type support or client construction fails.
+  std::optional<ClientPtr> getClient(
     const std::string & service,
-    const std::string & msg_type);
+    const std::string & msg_type,
+    std::string & error);
 
   /// @brief Take and convert a matching service response when available.
   /// @param client Runtime service client to poll for a response.

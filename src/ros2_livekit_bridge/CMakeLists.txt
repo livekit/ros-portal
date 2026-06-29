@@ -97,6 +97,13 @@ endif()
 find_package(LiveKit CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
+if(TARGET yaml-cpp::yaml-cpp)
+  set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+elseif(TARGET yaml-cpp)
+  set(YAML_CPP_TARGET yaml-cpp)
+else()
+  message(FATAL_ERROR "Could not find a yaml-cpp target.")
+endif()
 
 if(TARGET LiveKit::livekit)
   set(LIVEKIT_CORE_TARGET LiveKit::livekit)
@@ -205,7 +212,7 @@ ament_auto_add_library(ros2_cli_lib SHARED
 target_link_libraries(ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
   nlohmann_json::nlohmann_json
-  yaml-cpp::yaml-cpp
+  "${YAML_CPP_TARGET}"
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros2_cli_lib)

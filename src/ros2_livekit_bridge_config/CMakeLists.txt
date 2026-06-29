@@ -96,9 +96,8 @@ target_include_directories(${PROJECT_NAME}
   PRIVATE
     src
 )
-target_link_libraries(${PROJECT_NAME}
-  PRIVATE
-    yaml-cpp::yaml-cpp
+ament_target_dependencies(${PROJECT_NAME}
+  yaml-cpp
 )
 
 if(BUILD_TESTING)
@@ -112,6 +111,9 @@ if(BUILD_TESTING)
     target_compile_definitions(config_parser_test PRIVATE
       ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test"
     )
+    ament_target_dependencies(config_parser_test
+      yaml-cpp
+    )
     target_link_libraries(config_parser_test
       ${PROJECT_NAME}
     )
@@ -123,8 +125,8 @@ if(BUILD_TESTING)
   )
   if(TARGET config_utils_test)
     target_include_directories(config_utils_test PRIVATE src)
-    target_link_libraries(config_utils_test
-      yaml-cpp::yaml-cpp
+    ament_target_dependencies(config_utils_test
+      yaml-cpp
     )
   endif()
 

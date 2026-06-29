@@ -16,6 +16,7 @@
 
 #include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
+#include "ros2_livekit_bridge/compat/rclcpp_compat.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 #include <cstddef>
@@ -506,7 +507,7 @@ serializedMessageFromYaml(
     auto introspection_library = rclcpp::get_typesupport_library(
         msg_type, introspection::typesupport_identifier);
     const auto *introspection_type_support =
-      rclcpp::get_message_typesupport_handle(
+      compat::get_message_typesupport_handle(
             msg_type, introspection::typesupport_identifier,
             *introspection_library);
     const auto *members = messageMembersFromTypeSupport(
@@ -523,7 +524,7 @@ serializedMessageFromYaml(
     auto serialization_library = rclcpp::get_typesupport_library(
         msg_type, rosidl_typesupport_cpp::typesupport_identifier);
     const auto *serialization_type_support =
-      rclcpp::get_message_typesupport_handle(
+      compat::get_message_typesupport_handle(
             msg_type, rosidl_typesupport_cpp::typesupport_identifier,
             *serialization_library);
 

@@ -15,6 +15,7 @@
  */
 
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
+#include "ros2_livekit_bridge/compat/rclcpp_compat.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli/ros2_interface_show.hpp"
@@ -62,41 +63,41 @@ Ros2CliManager::Ros2CliManager(
     node_interfaces_.node_topics, node_interfaces_.node_graph,
     topic_publish_allowed_);
 
-  topic_list_service_ = rclcpp::create_service<Ros2TopicList>(
+  topic_list_service_ = compat::create_service<Ros2TopicList>(
       node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kTopicListServiceName,
     [this](const std::shared_ptr<Ros2TopicList::Request> request,
     std::shared_ptr<Ros2TopicList::Response> response) {
       handleTopicListRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  topic_pub_service_ = rclcpp::create_service<Ros2TopicPubSrv>(
+  topic_pub_service_ = compat::create_service<Ros2TopicPubSrv>(
       node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kTopicPubServiceName,
     [this](const std::shared_ptr<Ros2TopicPubSrv::Request> request,
     std::shared_ptr<Ros2TopicPubSrv::Response> response) {
       handleTopicPubRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  service_list_service_ = rclcpp::create_service<Ros2ServiceList>(
+  service_list_service_ = compat::create_service<Ros2ServiceList>(
       node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kServiceListServiceName,
     [this](const std::shared_ptr<Ros2ServiceList::Request> request,
     std::shared_ptr<Ros2ServiceList::Response> response) {
       handleServiceListRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  interface_show_service_ = rclcpp::create_service<Ros2InterfaceShow>(
+  interface_show_service_ = compat::create_service<Ros2InterfaceShow>(
       node_interfaces_.node_base, node_interfaces_.node_services,
       ros2_cli::kInterfaceShowServiceName,
     [this](const std::shared_ptr<Ros2InterfaceShow::Request> request,
     std::shared_ptr<Ros2InterfaceShow::Response> response) {
       handleInterfaceShowRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
   livekit_methods_.register_rpc_method(ros2_cli::kTopicListRpcMethod,
     [this](const std::string & payload) {

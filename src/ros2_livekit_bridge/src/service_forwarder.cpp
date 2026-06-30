@@ -32,9 +32,9 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/ros2_cli/generic_service.hpp"
-#include "ros2_livekit_bridge/ros2_cli/generic_service_client.hpp"
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/generic_service.hpp"
+#include "ros2_livekit_bridge/generic_service_client.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 #include "ros2_livekit_bridge/service_rpc_codec.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 
@@ -64,7 +64,7 @@ std::string fnv1aHex(const std::string &value) {
 struct ServiceForwarder::OutboundServiceState {
   ServiceForwarderEntry entry;
   std::string rpc_method;
-  std::shared_ptr<ros2_cli::GenericService> server;
+  std::shared_ptr<GenericService> server;
 };
 
 struct ServiceForwarder::InboundServiceState {
@@ -73,7 +73,7 @@ struct ServiceForwarder::InboundServiceState {
   /// @brief Serializes lazy client creation and calls.
   std::mutex client_mutex;
   /// @brief Lazily created on the first inbound request.
-  std::unique_ptr<ros2_cli::GenericServiceClient> client;
+  std::unique_ptr<GenericServiceClient> client;
 };
 
 ServiceForwarder::ServiceForwarder(ServiceForwarderOptions options, rclcpp::Node::WeakPtr node,
@@ -166,7 +166,7 @@ std::uint8_t ServiceForwarder::rpcTimeout(std::uint8_t service_timeout_sec) {
 
 void ServiceForwarder::setupOutbound(rclcpp::Node &node, const ServiceForwarderEntry &entry) {
   std::string ts_error;
-  auto support = ros2_cli::ServiceTypeSupport::create(entry.msg_type, ts_error);
+  auto support = ServiceTypeSupport::create(entry.msg_type, ts_error);
   if (!support) {
     RCLCPP_ERROR(logger_, "Skipping outbound service '%s': failed to load type support for '%s': %s",
                  entry.service.c_str(), entry.msg_type.c_str(), ts_error.c_str());
@@ -177,14 +177,13 @@ void ServiceForwarder::setupOutbound(rclcpp::Node &node, const ServiceForwarderE
   state->entry = entry;
   state->rpc_method = rpcMethodName(entry.service);
 
-  ros2_cli::GenericService::RequestCallback callback =
+  GenericService::RequestCallback callback =
       [this, state](std::vector<std::uint8_t> request_cdr) -> std::optional<std::vector<std::uint8_t>> {
     return forwardOutboundCall(*state, request_cdr);
   };
 
   try {
-    auto server =
-        std::make_shared<ros2_cli::GenericService>(node.get_node_base_interface()->get_shared_rcl_node_handle(),
+    auto server = std::make_shared<GenericService>(node.get_node_base_interface()->get_shared_rcl_node_handle(),
                                                    entry.service, std::move(support), std::move(callback));
     node.get_node_services_interface()->add_service(std::static_pointer_cast<rclcpp::ServiceBase>(server),
                                                     callback_group_);
@@ -272,12 +271,12 @@ std::string ServiceForwarder::handleInboundRpc(const std::shared_ptr<InboundServ
       return encodeServiceResponse(false, {}, "ROS node is unavailable");
     }
     std::string ts_error;
-    auto support = ros2_cli::ServiceTypeSupport::create(state->entry.msg_type, ts_error);
+    auto support = ServiceTypeSupport::create(state->entry.msg_type, ts_error);
     if (!support) {
       return encodeServiceResponse(false, {}, "failed to load type support: " + ts_error);
     }
     try {
-      state->client = std::make_unique<ros2_cli::GenericServiceClient>(
+      state->client = std::make_unique<GenericServiceClient>(
           state->entry.service, std::move(support), node->get_node_base_interface().get(),
           node->get_node_graph_interface(), node->get_logger().get_child("service_forwarder"));
     } catch (const std::exception &error) {

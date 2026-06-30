@@ -8,22 +8,16 @@ ros2_livekit_bridge:
   ros_threads: 4
 
   services:
-    # "out": expose a local proxy ROS service that forwards calls out to the
-    # remote participant's ROS service over LiveKit RPC.
     - service: "/remote/add_two_ints"
       msg_type: "example_interfaces/srv/AddTwoInts"
       direction: "out"
       participant: "robot-a"
 
-    # "in": let remote participants invoke this node's local ROS service over
-    # LiveKit RPC.
     - service: "/set_bool"
       msg_type: "std_srvs/srv/SetBool"
       direction: "in"
       participant: "operator"
 
-    # "bidirectional": do both. The out-proxy name and the in-target name must
-    # differ on a single node to avoid a self-loop (see schema docs).
     - service: "/remote/trigger"
       msg_type: "std_srvs/srv/Trigger"
       direction: "bidirectional"

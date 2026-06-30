@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/generic_service.hpp"
+#include "ros2_livekit_bridge/generic_service.hpp"
 
 #include <rcl/error_handling.h>
 #include <rcl/service.h>
@@ -35,7 +35,7 @@
 
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge {
 
 GenericService::GenericService(std::shared_ptr<rcl_node_t> node_handle, const std::string &service_name,
                                std::shared_ptr<ServiceTypeSupport> support, RequestCallback callback)
@@ -81,7 +81,7 @@ std::shared_ptr<void> GenericService::create_request() {
           message(support->request.members, rosidl_runtime_cpp::MessageInitialization::ZERO) {}
 
     std::shared_ptr<ServiceTypeSupport> support;
-    DynamicMessage message;
+    ros2_cli::DynamicMessage message;
   };
 
   auto storage = std::make_shared<RequestStorage>(support_);
@@ -114,7 +114,7 @@ void GenericService::handle_request(std::shared_ptr<rmw_request_id_t> request_he
   }
 
   // 3) Deserialize the CDR response back into a typed response message.
-  DynamicMessage response_message(support_->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+  ros2_cli::DynamicMessage response_message(support_->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
   rclcpp::SerializedMessage serialized_response(response_cdr->size());
   auto &rcl_response = serialized_response.get_rcl_serialized_message();
   if (!response_cdr->empty()) {
@@ -144,4 +144,4 @@ void GenericService::handle_request(std::shared_ptr<rmw_request_id_t> request_he
   }
 }
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge

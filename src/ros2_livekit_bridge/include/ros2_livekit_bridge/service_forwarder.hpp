@@ -33,20 +33,18 @@
 
 namespace ros2_livekit_bridge {
 
-namespace ros2_cli {
 class GenericService;
 class GenericServiceClient;
-} // namespace ros2_cli
 
 /// @brief Forwards ROS2 service calls to LiveKit RPC and vice versa.
 ///
 /// Mirrors @ref TopicForwarder for the request/response case. For each
 /// configured service it sets up, eagerly at construction:
-/// - "out": a local proxy ROS service server (@ref ros2_cli::GenericService)
+/// - "out": a local proxy ROS service server (@ref GenericService)
 ///   that serializes inbound requests to CDR and forwards them to a remote
 ///   participant via a LiveKit RPC, then returns the CDR response.
 /// - "in": a LiveKit RPC method that, when invoked, calls the local ROS service
-///   through a @ref ros2_cli::GenericServiceClient and returns its CDR response.
+///   through a @ref GenericServiceClient and returns its CDR response.
 /// - "bidirectional": both of the above for the same entry.
 ///
 /// The forwarder owns no `livekit::Room`; it reuses the bridge's RPC callbacks.

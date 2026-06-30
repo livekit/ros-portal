@@ -37,10 +37,12 @@
 #include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
+
+using ros2_livekit_bridge::ServiceTypeSupport;
 
 using Clock = std::chrono::steady_clock;
 

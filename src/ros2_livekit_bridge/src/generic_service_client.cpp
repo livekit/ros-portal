@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/generic_service_client.hpp"
+#include "ros2_livekit_bridge/generic_service_client.hpp"
 
 #include <rcl/client.h>
 #include <rcl/error_handling.h>
@@ -39,7 +39,7 @@
 
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge {
 
 namespace {
 using Clock = std::chrono::steady_clock;
@@ -77,7 +77,7 @@ struct GenericServiceClient::Client : public rclcpp::ClientBase {
             message(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO) {}
 
       std::shared_ptr<ServiceTypeSupport> support;
-      DynamicMessage message;
+      ros2_cli::DynamicMessage message;
     };
 
     auto storage = std::make_shared<ResponseStorage>(support);
@@ -96,7 +96,8 @@ struct GenericServiceClient::Client : public rclcpp::ClientBase {
   std::mutex call_mutex;
 };
 
-GenericServiceClient::GenericServiceClient(const std::string &service_name, std::shared_ptr<ServiceTypeSupport> support,
+GenericServiceClient::GenericServiceClient(const std::string &service_name,
+                                           std::shared_ptr<ServiceTypeSupport> support,
                                            rclcpp::node_interfaces::NodeBaseInterface *node_base,
                                            rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
                                            rclcpp::Logger logger)
@@ -111,7 +112,7 @@ bool GenericServiceClient::serviceIsReady() const { return client_->service_is_r
 std::optional<std::vector<std::uint8_t>> GenericServiceClient::call(const std::vector<std::uint8_t> &request_cdr,
                                                                     std::chrono::nanoseconds timeout) {
   // Deserialize the CDR request into a runtime request message.
-  DynamicMessage request_message(support_->request.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+  ros2_cli::DynamicMessage request_message(support_->request.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
   rclcpp::SerializedMessage serialized_request(request_cdr.size());
   auto &rcl_request = serialized_request.get_rcl_serialized_message();
   if (!request_cdr.empty()) {
@@ -155,7 +156,7 @@ std::optional<std::vector<std::uint8_t>> GenericServiceClient::call(const std::v
 std::optional<std::vector<std::uint8_t>> GenericServiceClient::takeResponse(std::int64_t sequence_number) {
   std::uint8_t attempt_count = 0;
   while (attempt_count < kMaxStaleResponseDrains) {
-    DynamicMessage response_message(support_->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+    ros2_cli::DynamicMessage response_message(support_->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
     rmw_request_id_t header{};
     if (!client_->take_type_erased_response(response_message.data(), header)) {
       return std::nullopt;
@@ -180,4 +181,4 @@ std::optional<std::vector<std::uint8_t>> GenericServiceClient::takeResponse(std:
   return std::nullopt;
 }
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge

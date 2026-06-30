@@ -26,14 +26,14 @@
 #include <string>
 #include <vector>
 
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge {
 
 /// @brief A type-erased ROS service client that exchanges serialized CDR.
 ///
 /// Wraps an `rclcpp::ClientBase` initialized via `rcl_client_init` for an
-/// arbitrary service type. Like @ref Ros2ServiceCall it polls
+/// arbitrary service type. Like @ref ros2_cli::Ros2ServiceCall it polls
 /// `take_type_erased_response` directly rather than relying on executor
 /// dispatch, so @ref call is safe to invoke from a non-executor thread (such as
 /// the LiveKit room event thread); the executor still services the client's
@@ -82,4 +82,4 @@ private:
   std::shared_ptr<Client> client_;
 };
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge

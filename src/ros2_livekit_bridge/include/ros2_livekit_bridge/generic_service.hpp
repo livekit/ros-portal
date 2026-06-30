@@ -27,9 +27,9 @@
 #include <string>
 #include <vector>
 
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge {
 
 /// @brief A type-erased ROS service server for an arbitrary service type.
 ///
@@ -81,4 +81,4 @@ private:
   RequestCallback callback_;
 };
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge

@@ -175,8 +175,6 @@ bool Ros2LiveKitBridge::initialize() {
 }
 
 Ros2LiveKitBridge::~Ros2LiveKitBridge() {
-  // Reset forwarders/managers before the room so RPC unregistration and proxy
-  // server teardown still see a live local participant.
   service_forwarder_.reset();
   ros2_cli_manager_.reset();
   topic_forwarder_.reset();

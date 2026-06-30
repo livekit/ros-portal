@@ -26,7 +26,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {

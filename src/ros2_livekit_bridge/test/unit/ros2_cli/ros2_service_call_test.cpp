@@ -34,7 +34,12 @@
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
+#include "ros2_livekit_bridge/service_type_support.hpp"
+
 namespace ros2_livekit_bridge::ros2_cli {
+
+using ros2_livekit_bridge::serviceTypeSupportHandle;
+using ros2_livekit_bridge::serviceTypeSupportSymbol;
 
 class Ros2ServiceCallPrivateTest : public ::testing::Test {};
 

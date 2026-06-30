@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/generic_service.hpp"
+#include "ros2_livekit_bridge/generic_service.hpp"
 
 #include <gtest/gtest.h>
 
@@ -32,9 +32,9 @@
 #include <thread>
 #include <vector>
 
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge {
 namespace {
 
 using namespace std::chrono_literals;
@@ -145,4 +145,4 @@ TEST(GenericServiceTest, DropsResponseWhenCallbackReturnsNullopt) {
 }
 
 } // namespace
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge

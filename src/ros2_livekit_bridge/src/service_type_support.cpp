@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
+#include "ros2_livekit_bridge/service_type_support.hpp"
 
 #include <exception>
 #include <memory>
@@ -25,7 +25,7 @@
 #include <string>
 #include <utility>
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge {
 
 namespace {
 constexpr char kServiceTypeSupportSymbolPrefix[] = "__get_service_type_support_handle__";
@@ -98,4 +98,4 @@ std::shared_ptr<ServiceTypeSupport> ServiceTypeSupport::create(const std::string
   }
 }
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge

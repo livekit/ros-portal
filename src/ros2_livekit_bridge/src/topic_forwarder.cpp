@@ -64,10 +64,13 @@ TopicForwarder::createRemoteDataTrackDescriptor(
       const auto livekit_stream = subscribe_result.value();
       const auto stream =
         std::make_shared<TopicForwarder::RemoteDataTrackStream>();
+      // Forward read() to the underlying LiveKit stream.
       stream->read = [livekit_stream](livekit::DataTrackFrame & frame) {
           return livekit_stream->read(frame);
         };
+      // Forward close() to tear down the LiveKit stream.
       stream->close = [livekit_stream]() {livekit_stream->close();};
+      // Map terminalError() into our optional string representation.
       stream->terminal_error =
         [livekit_stream]() -> std::optional<std::string> {
           const auto terminal_error = livekit_stream->terminalError();

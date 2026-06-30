@@ -541,8 +541,26 @@ void TopicForwarder::onDataTrackPublished(
       descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(),
       ros_topic_name->c_str(), state->ros_topic_type.c_str());
 
-  state->thread =
-    std::thread(&TopicForwarder::readInboundDataTrack, this, state);
+  try {
+    state->thread =
+      std::thread(&TopicForwarder::readInboundDataTrack, this, state);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(
+        logger_,
+        "Failed to start inbound data track reader thread for '%s' from '%s': "
+        "%s",
+        descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(),
+        e.what());
+    state->stop.store(true);
+    if (state->stream && state->stream->close) {
+      state->stream->close();
+    }
+    {
+      std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+      inbound_data_track_states_.erase(descriptor.sid);
+      inbound_ros_topic_names_.erase(state->ros_topic_name);
+    }
+  }
 }
 
 void TopicForwarder::onDataTrackUnpublished(const std::string & sid)

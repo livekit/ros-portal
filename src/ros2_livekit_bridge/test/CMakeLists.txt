@@ -40,6 +40,8 @@ list(SORT UNIT_TEST_SOURCES)
 
 if(UNIT_TEST_SOURCES)
   ament_auto_add_gtest(ros2_livekit_bridge_unit_tests
+    SKIP_LINKING_MAIN_LIBRARIES
+    "${CMAKE_CURRENT_SOURCE_DIR}/unit/unit_test_main.cpp"
     ${UNIT_TEST_SOURCES}
   )
 endif()

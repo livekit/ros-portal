@@ -80,15 +80,6 @@ TopicForwarder::LiveKitMethods makeLiveKitMethods()
 
 class TopicForwarderTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite()
-  {
-    int argc = 0;
-    char **argv = nullptr;
-    rclcpp::init(argc, argv);
-  }
-
-  static void TearDownTestSuite() {rclcpp::shutdown();}
-
   void SetUp() override
   {
     node_ = std::make_shared<rclcpp::Node>("topic_forwarder_unit_test");

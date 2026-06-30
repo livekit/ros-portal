@@ -127,7 +127,7 @@ void TopicForwarder::pollTopics()
   {
     const auto node = node_.lock();
     if (!node) {
-      RCLCPP_DEBUG(logger_, "Skipping topic poll; ROS node has been destroyed");
+      RCLCPP_ERROR(logger_, "Skipping topic poll; ROS node has been destroyed");
       return;
     }
     topic_names_and_types = node->get_topic_names_and_types();

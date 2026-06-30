@@ -116,15 +116,6 @@ public:
 
 class Ros2CliManagerTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite()
-  {
-    int argc = 0;
-    char **argv = nullptr;
-    rclcpp::init(argc, argv);
-  }
-
-  static void TearDownTestSuite() {rclcpp::shutdown();}
-
   void SetUp() override
   {
     node = std::make_shared<rclcpp::Node>("ros2_cli_manager_unit_test");

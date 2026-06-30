@@ -72,8 +72,7 @@ bool Ros2LiveKitBridge::initialize()
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
   connection_diagnostics_ =
-    std::make_unique<diagnostics::ConnectionHealthDiagnostics>(this,
-                                                                 room_name_);
+    std::make_unique<diagnostics::ConnectionHealthDiagnostics>(this, room_name_);
 
   reentrant_callback_group_ =
     this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -500,9 +499,9 @@ bool Ros2LiveKitBridge::rpcRegisterMethod(
 
   try {
     local_participant->registerRpcMethod(
-        method,
+      method,
       [handler = std::move(handler)](const livekit::RpcInvocationData & data)
-            -> std::optional<std::string> {return handler(data.payload);});
+          -> std::optional<std::string> {return handler(data.payload);});
   } catch (const livekit::RpcError & error) {
     RCLCPP_ERROR(
         this->get_logger(),

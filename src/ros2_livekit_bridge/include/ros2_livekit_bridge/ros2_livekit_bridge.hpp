@@ -179,12 +179,14 @@ private:
   /// patterns.
   /// @param incoming_topic_compiled_patterns Compiled LiveKit-to-ROS topic
   /// patterns.
-  void initializeTopicForwarder(
+  /// @return True on success, false when the topic forwarder could not be initialized.
+  bool initializeTopicForwarder(
     std::vector<std::regex> outgoing_topic_compiled_patterns,
     std::vector<std::regex> incoming_topic_compiled_patterns);
 
   /// @brief Create Ros2CliManager after TopicForwarder is initialized.
-  void initializeRos2CliManager();
+  /// @return True on success, false when the ROS2 CLI manager could not be initialized.
+  bool initializeRos2CliManager();
 
   //! @brief The name of the room
   std::string room_name_;

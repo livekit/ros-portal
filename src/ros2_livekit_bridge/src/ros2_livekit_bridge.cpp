@@ -170,11 +170,16 @@ bool Ros2LiveKitBridge::initialize()
   }
 
 
-  initializeTopicForwarder(
+  if (!initializeTopicForwarder(
     std::move(outgoing_topic_compiled_patterns),
-    std::move(incoming_topic_compiled_patterns));
+    std::move(incoming_topic_compiled_patterns)))
+  {
+    return false;
+  }
 
-  initializeRos2CliManager();
+  if (!initializeRos2CliManager()) {
+    return false;
+  }
 
   RCLCPP_INFO(this->get_logger(),
               "Creating timer for polling topics at rate %d ms",
@@ -318,129 +323,142 @@ void Ros2LiveKitBridge::onParticipantsUpdated(
 
 /** Helpers **/
 
-void Ros2LiveKitBridge::initializeTopicForwarder(
+bool Ros2LiveKitBridge::initializeTopicForwarder(
   std::vector<std::regex> outgoing_topic_compiled_patterns,
   std::vector<std::regex> incoming_topic_compiled_patterns)
 {
-  const TopicForwarder::TopicForwarderOptions forwarder_options{
-    std::move(outgoing_topic_compiled_patterns),
-    std::move(incoming_topic_compiled_patterns),
-    best_effort_qos_topic_patterns_,
-    min_qos_depth_,
-    max_qos_depth_,
-  };
+  try {
+    const TopicForwarder::TopicForwarderOptions forwarder_options{
+      std::move(outgoing_topic_compiled_patterns),
+      std::move(incoming_topic_compiled_patterns),
+      best_effort_qos_topic_patterns_,
+      min_qos_depth_,
+      max_qos_depth_,
+    };
 
-  TopicForwarder::LiveKitMethods forwarder_lk_methods;
-  forwarder_lk_methods.publish_data_track =
-    [this](const std::string & topic_name)
-    -> Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
-      std::string> {
-      const auto participant =
-        room_ ? room_->localParticipant().lock() : nullptr;
-      if (!participant) {
-        return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
-                 std::string>::err("local participant is unavailable");
-      }
+    TopicForwarder::LiveKitMethods forwarder_lk_methods;
+    forwarder_lk_methods.publish_data_track =
+      [this](const std::string & topic_name)
+      -> Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
+        std::string> {
+        const auto participant =
+          room_ ? room_->localParticipant().lock() : nullptr;
+        if (!participant) {
+          return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
+                   std::string>::err("local participant is unavailable");
+        }
 
-      const auto publish_result = participant->publishDataTrack(topic_name);
-      if (!publish_result) {
-        const auto & error = publish_result.error();
-        return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
-                 std::string>::err("code=" +
+        const auto publish_result = participant->publishDataTrack(topic_name);
+        if (!publish_result) {
+          const auto & error = publish_result.error();
+          return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
+                   std::string>::err("code=" +
                                       std::to_string(
                                           static_cast<std::uint32_t>(
-                     error.code)) +
+                       error.code)) +
                                       " message=" + error.message);
-      }
+        }
 
-      auto track = publish_result.value();
-      if (!track) {
-        return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
-                 std::string>::err("publishDataTrack returned null track");
-      }
+        auto track = publish_result.value();
+        if (!track) {
+          return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
+                   std::string>::err("publishDataTrack returned null track");
+        }
 
-      auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-      writer->try_push = [track = std::move(track)](
-        std::vector<std::uint8_t> payload) {
-          const auto push_result = track->tryPush(std::move(payload));
-          if (!push_result) {
-            const auto & error = push_result.error();
-            return Result<void, std::string>::err(
+        auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
+        writer->try_push = [track = std::move(track)](
+          std::vector<std::uint8_t> payload) {
+            const auto push_result = track->tryPush(std::move(payload));
+            if (!push_result) {
+              const auto & error = push_result.error();
+              return Result<void, std::string>::err(
             "code=" + std::to_string(static_cast<std::uint32_t>(error.code)) +
             " message=" + error.message);
-          }
-          return Result<void, std::string>::success();
-        };
-      return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
-               std::string>::ok(std::move(writer));
-    };
-
-  forwarder_lk_methods.publish_video_track =
-    [this](const std::string & topic_name, int width, int height)
-    -> Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
-      std::string> {
-      const auto participant =
-        room_ ? room_->localParticipant().lock() : nullptr;
-      if (!participant) {
-        return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
-                 std::string>::err("local participant is unavailable");
-      }
-
-      try {
-        auto source = std::make_shared<livekit::VideoSource>(width, height);
-        auto track = participant->publishVideoTrack(
-          topic_name, source, livekit::TrackSource::SOURCE_CAMERA);
-        if (!track) {
-          return Result<
-            std::shared_ptr<TopicForwarder::VideoTrackSink>,
-            std::string>::err("publishVideoTrack returned null track");
-        }
-        auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
-        sink->width = width;
-        sink->height = height;
-        sink->capture_frame =
-          [source = std::move(source), track = std::move(track)](
-          const livekit::VideoFrame & frame, std::int64_t timestamp_us) {
-            (void)track;
-            source->captureFrame(frame, timestamp_us);
+            }
+            return Result<void, std::string>::success();
           };
-        return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
-                 std::string>::ok(std::move(sink));
-      } catch (const std::exception & error) {
-        return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
-                 std::string>::err(error.what());
-      }
-    };
+        return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
+                 std::string>::ok(std::move(writer));
+      };
 
-  topic_forwarder_ = std::make_unique<TopicForwarder>(
+    forwarder_lk_methods.publish_video_track =
+      [this](const std::string & topic_name, int width, int height)
+      -> Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
+        std::string> {
+        const auto participant =
+          room_ ? room_->localParticipant().lock() : nullptr;
+        if (!participant) {
+          return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
+                   std::string>::err("local participant is unavailable");
+        }
+
+        try {
+          auto source = std::make_shared<livekit::VideoSource>(width, height);
+          auto track = participant->publishVideoTrack(
+          topic_name, source, livekit::TrackSource::SOURCE_CAMERA);
+          if (!track) {
+            return Result<
+              std::shared_ptr<TopicForwarder::VideoTrackSink>,
+              std::string>::err("publishVideoTrack returned null track");
+          }
+          auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
+          sink->width = width;
+          sink->height = height;
+          sink->capture_frame =
+            [source = std::move(source), track = std::move(track)](
+            const livekit::VideoFrame & frame, std::int64_t timestamp_us) {
+              (void)track;
+              source->captureFrame(frame, timestamp_us);
+            };
+          return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
+                   std::string>::ok(std::move(sink));
+        } catch (const std::exception & error) {
+          return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
+                   std::string>::err(error.what());
+        }
+      };
+
+    topic_forwarder_ = std::make_unique<TopicForwarder>(
       std::move(forwarder_options),
       this->weak_from_this(), // weak_from_this() MUST be called after
                               // constructor
       std::move(forwarder_lk_methods));
+  } catch (...) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
+    return false;
+  }
+  return topic_forwarder_ != nullptr;
 }
 
-void Ros2LiveKitBridge::initializeRos2CliManager()
+bool Ros2LiveKitBridge::initializeRos2CliManager()
 {
-  const Ros2CliManager::LivekitMethods cli_lk_methods{
-    [this](const std::string & id) {return hasParticipant(id);},
-    [this](const std::string & id, const std::string & method,
-    const std::string & payload, std::uint8_t timeout_sec) {
-      return rpcPerform(id, method, payload, timeout_sec);
-    },
-    [this](const std::string & method, RpcHandler handler) {
-      return rpcRegisterMethod(method, std::move(handler));
-    },
-    [this](const std::string & method) {
-      return rpcUnregisterMethod(method);
-    },
-  };
-  const auto topic_publish_allowed = [this](const std::string & topic_name) {
-      return topic_forwarder_ &&
-             topic_forwarder_->isIncomingTopicAllowed(topic_name);
+  try {
+    const Ros2CliManager::LivekitMethods cli_lk_methods{
+      [this](const std::string & id) {return hasParticipant(id);},
+      [this](const std::string & id, const std::string & method,
+      const std::string & payload, std::uint8_t timeout_sec) {
+        return rpcPerform(id, method, payload, timeout_sec);
+      },
+      [this](const std::string & method, RpcHandler handler) {
+        return rpcRegisterMethod(method, std::move(handler));
+      },
+      [this](const std::string & method) {
+        return rpcUnregisterMethod(method);
+      },
     };
-  ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
+    const auto topic_publish_allowed = [this](const std::string & topic_name) {
+        return topic_forwarder_ &&
+               topic_forwarder_->isIncomingTopicAllowed(topic_name);
+      };
+    ros2_cli_manager_ = std::make_unique<Ros2CliManager>(
       *this, reentrant_callback_group_, std::move(cli_lk_methods),
       std::move(topic_publish_allowed));
+  } catch (...) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
+    return false;
+  }
+
+  return ros2_cli_manager_ != nullptr;
 }
 
 bool Ros2LiveKitBridge::hasParticipant(

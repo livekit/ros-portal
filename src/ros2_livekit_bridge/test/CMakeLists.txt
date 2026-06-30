@@ -40,6 +40,7 @@ list(SORT UNIT_TEST_SOURCES)
 
 if(UNIT_TEST_SOURCES)
   ament_auto_add_gtest(ros2_livekit_bridge_unit_tests
+    SKIP_LINKING_MAIN_LIBRARIES
     ${UNIT_TEST_SOURCES}
   )
 endif()

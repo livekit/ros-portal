@@ -93,6 +93,11 @@ rsl()
     cd "\${WS}" && sros && ros2 service list "\$@"
 }
 
+rnl()
+{
+    cd "\${WS}" && sros && ros2 node list "\$@"
+}
+
 if [ -n "\${ZSH_VERSION:-}" ]; then
     PROMPT='(ros-livekit) %n@%m:%~ %# '
 else

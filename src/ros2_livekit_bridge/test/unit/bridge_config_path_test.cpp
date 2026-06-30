@@ -93,18 +93,6 @@ private:
 class BridgeConfigPathTest : public ::testing::Test
 {
 protected:
-  static void SetUpTestSuite()
-  {
-    int argc = 0;
-    char ** argv = nullptr;
-    rclcpp::init(argc, argv);
-  }
-
-  static void TearDownTestSuite()
-  {
-    rclcpp::shutdown();
-  }
-
   void hideLiveKitCredentials()
   {
     unsetenv("LIVEKIT_URL");

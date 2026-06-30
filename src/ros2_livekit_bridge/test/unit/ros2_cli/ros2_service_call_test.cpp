@@ -141,17 +141,7 @@ makeSetBoolOptions(
   return options;
 }
 
-class Ros2ServiceCallTest : public ::testing::Test {
-protected:
-  static void SetUpTestSuite()
-  {
-    int argc = 0;
-    char **argv = nullptr;
-    rclcpp::init(argc, argv);
-  }
-
-  static void TearDownTestSuite() {rclcpp::shutdown();}
-};
+class Ros2ServiceCallTest : public ::testing::Test {};
 
 TEST_F(Ros2ServiceCallTest, CallsServiceAndReturnsYamlAndCdrResponse) {
   auto caller_node = std::make_shared<rclcpp::Node>("service_call_caller_node");

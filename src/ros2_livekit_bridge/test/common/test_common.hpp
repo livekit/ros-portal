@@ -40,12 +40,14 @@ namespace ros2_livekit_bridge::test
 
 using namespace std::chrono_literals;
 
-inline bool setEnv(const char * name, const std::string & value)
+inline bool setEnv(const char *name, const std::string & value)
 {
   return ::setenv(name, value.c_str(), 1) == 0;
 }
 
-inline void restoreEnv(const char * name, const std::optional<std::string> & value)
+inline void restoreEnv(
+  const char *name,
+  const std::optional<std::string> & value)
 {
   if (value) {
     (void)::setenv(name, value->c_str(), 1);
@@ -56,8 +58,7 @@ inline void restoreEnv(const char * name, const std::optional<std::string> & val
 
 template<typename Predicate>
 inline bool waitFor(
-  Predicate && predicate,
-  std::chrono::milliseconds timeout,
+  Predicate && predicate, std::chrono::milliseconds timeout,
   std::chrono::milliseconds poll_interval = 50ms)
 {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -76,11 +77,13 @@ inline std::string escapedRegex(const std::string & value)
   return std::regex_replace(value, special_chars, R"(\$&)");
 }
 
-inline std::optional<std::string> expectedInboundTopicName(
+inline std::optional<std::string>
+expectedInboundTopicName(
   const std::string & participant_identity,
   const std::string & source_topic)
 {
-  const auto sanitized_identity = utils::sanitizeRosNameToken(participant_identity);
+  const auto sanitized_identity =
+    utils::sanitizeRosNameToken(participant_identity);
   if (!sanitized_identity.has_value()) {
     return std::nullopt;
   }
@@ -88,17 +91,16 @@ inline std::optional<std::string> expectedInboundTopicName(
 }
 
 inline std::optional<std::string> findParticipantPrefixedTopic(
-  const rclcpp::Node & node,
-  const std::string & source_topic,
+  const rclcpp::Node & node, const std::string & source_topic,
   const std::string & expected_topic_type = "std_msgs/msg/String")
 {
   const std::regex topic_regex("^/[^/]+" + escapedRegex(source_topic) + "$");
   const auto topics = node.get_topic_names_and_types();
-  for (const auto & [topic_name, topic_types] : topics) {
+  for (const auto &[topic_name, topic_types] : topics) {
     if (std::regex_match(topic_name, topic_regex) &&
       topic_name != source_topic &&
-      std::find(topic_types.begin(), topic_types.end(), expected_topic_type) !=
-      topic_types.end())
+      std::find(topic_types.begin(), topic_types.end(),
+                  expected_topic_type) != topic_types.end())
     {
       return topic_name;
     }
@@ -123,12 +125,10 @@ inline std::pair<std::size_t, std::size_t> testDomainIds()
 }
 
 /// RAII wrapper for an isolated ROS graph.
-class ScopedRosGraph
-{
+class ScopedRosGraph {
 public:
   explicit ScopedRosGraph(std::size_t domain_id)
-  : domain_id_(domain_id),
-    context_(std::make_shared<rclcpp::Context>())
+  : domain_id_(domain_id), context_(std::make_shared<rclcpp::Context>())
   {
     rclcpp::InitOptions init_options;
     init_options.set_domain_id(domain_id_);
@@ -150,8 +150,7 @@ private:
   rclcpp::Context::SharedPtr context_;
 };
 
-class TemporaryConfigFile
-{
+class TemporaryConfigFile {
 public:
   explicit TemporaryConfigFile(
     const std::string & contents,
@@ -182,4 +181,4 @@ private:
   std::filesystem::path path_;
 };
 
-}  // namespace ros2_livekit_bridge::test
+} // namespace ros2_livekit_bridge::test

@@ -16,45 +16,33 @@
 
 #pragma once
 
+#include <rclcpp/node_interfaces/node_graph_interface.hpp>
 #include <string>
 #include <vector>
-
-#include <rclcpp/node_interfaces/node_graph_interface.hpp>
 
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
-/**
- * @brief Check whether a service name should be treated as hidden.
- * @param service_name Fully qualified or relative ROS service name.
- * @return True when any service name token starts with an underscore.
- */
-bool isHiddenService(const std::string & service_name);
+/// @brief Check whether a service name should be treated as hidden.
+/// @param service_name Fully qualified or relative ROS service name.
+/// @return True when any service name token starts with an underscore.
+bool isHiddenService(const std::string& service_name);
 
-/**
- * @brief Render discovered service information in `ros2 service list` format.
- * @param services Service metadata to render. The caller owns filtering and
- * sort order.
- * @param options Formatting options that control count and type output.
- * @return Human-readable command output ending in a newline when non-empty.
- */
-std::string
-formatServiceList(
-  const std::vector<Ros2CliManager::ServiceInfo> & services,
-  const ServiceListOptions & options);
+/// @brief Render discovered service information in `ros2 service list` format.
+/// @param services Service metadata to render. The caller owns filtering and
+/// sort order.
+/// @param options Formatting options that control count and type output.
+/// @return Human-readable command output ending in a newline when non-empty.
+std::string formatServiceList(const std::vector<Ros2CliManager::ServiceInfo>& services,
+                              const ServiceListOptions& options);
 
-/**
- * @brief Query the ROS graph for visible service metadata.
- * @param graph Node graph interface used for discovery.
- * @param options Discovery options, including hidden-service filtering.
- * @return Service metadata sorted by service name.
- */
-std::vector<Ros2CliManager::ServiceInfo>
-collectServiceInfo(
-  const rclcpp::node_interfaces::NodeGraphInterface & graph,
-  const ServiceListOptions & options);
+/// @brief Query the ROS graph for visible service metadata.
+/// @param graph Node graph interface used for discovery.
+/// @param options Discovery options, including hidden-service filtering.
+/// @return Service metadata sorted by service name.
+std::vector<Ros2CliManager::ServiceInfo> collectServiceInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
+                                                            const ServiceListOptions& options);
 
 } // namespace ros2_livekit_bridge::ros2_cli

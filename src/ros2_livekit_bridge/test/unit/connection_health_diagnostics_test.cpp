@@ -14,25 +14,20 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include <gtest/gtest.h>
 
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
-#include <gtest/gtest.h>
-
 #include <optional>
 #include <string>
 
-namespace ros2_livekit_bridge::diagnostics
-{
-namespace
-{
+#include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 
-std::optional<std::string> valueFor(
-  const diagnostic_updater::DiagnosticStatusWrapper & status,
-  const std::string & key)
-{
-  for (const auto & value : status.values) {
+namespace ros2_livekit_bridge::diagnostics {
+namespace {
+
+std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key) {
+  for (const auto& value : status.values) {
     if (value.key == key) {
       return value.value;
     }
@@ -40,19 +35,15 @@ std::optional<std::string> valueFor(
   return std::nullopt;
 }
 
-livekit::RtcStats makeCandidatePairStats(
-  std::uint64_t bytes_sent = 1200,
-  std::uint64_t bytes_received = 1300,
-  std::int64_t timestamp_ms = 1000)
-{
+livekit::RtcStats makeCandidatePairStats(std::uint64_t bytes_sent = 1200, std::uint64_t bytes_received = 1300,
+                                         std::int64_t timestamp_ms = 1000) {
   livekit::RtcCandidatePairStats candidate_pair;
   candidate_pair.rtc.id = "candidate-pair-stat";
   candidate_pair.rtc.timestamp_ms = timestamp_ms;
   candidate_pair.candidate_pair.transport_id = "transport-1";
   candidate_pair.candidate_pair.local_candidate_id = "local-1";
   candidate_pair.candidate_pair.remote_candidate_id = "remote-1";
-  candidate_pair.candidate_pair.state =
-    livekit::IceCandidatePairState::Succeeded;
+  candidate_pair.candidate_pair.state = livekit::IceCandidatePairState::Succeeded;
   candidate_pair.candidate_pair.nominated = true;
   candidate_pair.candidate_pair.packets_sent = 10;
   candidate_pair.candidate_pair.packets_received = 11;
@@ -67,13 +58,11 @@ livekit::RtcStats makeCandidatePairStats(
   return stats;
 }
 
-livekit::RtcStats makeFallbackCandidatePairStats()
-{
+livekit::RtcStats makeFallbackCandidatePairStats() {
   livekit::RtcCandidatePairStats candidate_pair;
   candidate_pair.rtc.id = "fallback-candidate-pair-stat";
   candidate_pair.rtc.timestamp_ms = 1000;
-  candidate_pair.candidate_pair.state =
-    livekit::IceCandidatePairState::Succeeded;
+  candidate_pair.candidate_pair.state = livekit::IceCandidatePairState::Succeeded;
   candidate_pair.candidate_pair.nominated = true;
   candidate_pair.candidate_pair.bytes_sent = 5000;
   candidate_pair.candidate_pair.bytes_received = 6000;
@@ -84,8 +73,7 @@ livekit::RtcStats makeFallbackCandidatePairStats()
   return stats;
 }
 
-livekit::RtcStats makeTransportStats(std::string selected_candidate_pair_id)
-{
+livekit::RtcStats makeTransportStats(std::string selected_candidate_pair_id) {
   livekit::RtcTransportStats transport;
   transport.rtc.id = "transport-stat";
   transport.rtc.timestamp_ms = 1000;
@@ -96,8 +84,7 @@ livekit::RtcStats makeTransportStats(std::string selected_candidate_pair_id)
   transport.transport.ice_role = livekit::IceRole::Controlling;
   transport.transport.dtls_state = livekit::DtlsTransportState::Connected;
   transport.transport.ice_state = livekit::IceTransportState::Completed;
-  transport.transport.selected_candidate_pair_id =
-    std::move(selected_candidate_pair_id);
+  transport.transport.selected_candidate_pair_id = std::move(selected_candidate_pair_id);
   transport.transport.dtls_role = livekit::DtlsRole::Client;
   transport.transport.selected_candidate_pair_changes = 2;
 
@@ -106,10 +93,7 @@ livekit::RtcStats makeTransportStats(std::string selected_candidate_pair_id)
   return stats;
 }
 
-livekit::RtcStats makeInboundRtpStats(
-  std::int64_t packets_lost,
-  double jitter_seconds)
-{
+livekit::RtcStats makeInboundRtpStats(std::int64_t packets_lost, double jitter_seconds) {
   livekit::RtcInboundRtpStats inbound;
   inbound.rtc.id = "inbound-stat";
   inbound.rtc.timestamp_ms = 1000;
@@ -121,9 +105,7 @@ livekit::RtcStats makeInboundRtpStats(
   return stats;
 }
 
-livekit::RtcStats makeDataChannelStats(
-  std::optional<livekit::DataChannelState> state)
-{
+livekit::RtcStats makeDataChannelStats(std::optional<livekit::DataChannelState> state) {
   livekit::RtcDataChannelStats data_channel;
   data_channel.rtc.id = "data-channel-stat";
   data_channel.rtc.timestamp_ms = 1000;
@@ -141,21 +123,14 @@ livekit::RtcStats makeDataChannelStats(
   return stats;
 }
 
-livekit::SessionStats makeSessionStats(
-  std::uint64_t bytes_sent = 1200,
-  std::uint64_t bytes_received = 1300,
-  std::int64_t timestamp_ms = 1000)
-{
+livekit::SessionStats makeSessionStats(std::uint64_t bytes_sent = 1200, std::uint64_t bytes_received = 1300,
+                                       std::int64_t timestamp_ms = 1000) {
   livekit::SessionStats stats;
-  stats.publisher_stats = {
-    makeCandidatePairStats(bytes_sent, bytes_received, timestamp_ms),
-    makeFallbackCandidatePairStats(),
-    makeTransportStats("candidate-pair-stat"),
-    makeDataChannelStats(livekit::DataChannelState::Open),
-    makeDataChannelStats(livekit::DataChannelState::Closed)};
-  stats.subscriber_stats = {
-    makeInboundRtpStats(2, 0.007),
-    makeInboundRtpStats(3, 0.011)};
+  stats.publisher_stats = {makeCandidatePairStats(bytes_sent, bytes_received, timestamp_ms),
+                           makeFallbackCandidatePairStats(), makeTransportStats("candidate-pair-stat"),
+                           makeDataChannelStats(livekit::DataChannelState::Open),
+                           makeDataChannelStats(livekit::DataChannelState::Closed)};
+  stats.subscriber_stats = {makeInboundRtpStats(2, 0.007), makeInboundRtpStats(3, 0.011)};
   return stats;
 }
 
@@ -232,16 +207,10 @@ TEST(ConnectionHealthDiagnosticsTest, EmitsCompactRtcSummary) {
   EXPECT_EQ(valueFor(status, "rtc.stats_available"), "true");
   EXPECT_EQ(valueFor(status, "rtc.transport.ice_state"), "completed");
   EXPECT_EQ(valueFor(status, "rtc.transport.dtls_state"), "connected");
-  EXPECT_EQ(valueFor(status, "rtc.transport.candidate_pair_state"),
-            "succeeded");
-  EXPECT_EQ(valueFor(status, "rtc.transport.current_round_trip_time_ms"),
-            "12");
-  EXPECT_EQ(valueFor(status,
-                     "rtc.transport.available_outgoing_bitrate_bps"),
-            "45000");
-  EXPECT_EQ(valueFor(status,
-                     "rtc.transport.available_incoming_bitrate_bps"),
-            "55000");
+  EXPECT_EQ(valueFor(status, "rtc.transport.candidate_pair_state"), "succeeded");
+  EXPECT_EQ(valueFor(status, "rtc.transport.current_round_trip_time_ms"), "12");
+  EXPECT_EQ(valueFor(status, "rtc.transport.available_outgoing_bitrate_bps"), "45000");
+  EXPECT_EQ(valueFor(status, "rtc.transport.available_incoming_bitrate_bps"), "55000");
   EXPECT_EQ(valueFor(status, "rtc.traffic.bytes_sent"), "1200");
   EXPECT_EQ(valueFor(status, "rtc.traffic.bytes_received"), "1300");
   EXPECT_EQ(valueFor(status, "rtc.traffic.packets_lost"), "5");
@@ -250,8 +219,7 @@ TEST(ConnectionHealthDiagnosticsTest, EmitsCompactRtcSummary) {
   EXPECT_EQ(valueFor(status, "rtc.data_channels.total"), "2");
 
   EXPECT_EQ(valueFor(status, "rtc.publisher.0.type"), std::nullopt);
-  EXPECT_EQ(valueFor(status, "rtc.publisher.0.certificate.base64_certificate"),
-            std::nullopt);
+  EXPECT_EQ(valueFor(status, "rtc.publisher.0.certificate.base64_certificate"), std::nullopt);
 }
 
 TEST(ConnectionHealthDiagnosticsTest, ComputesBitratesFromSuccessiveSnapshots) {
@@ -273,10 +241,7 @@ TEST(ConnectionHealthDiagnosticsTest, UsesFallbackNominatedCandidatePair) {
   state.kind = ConnectionHealthStateKind::Connected;
   state.room_name = "diagnostics_room";
   livekit::SessionStats stats;
-  stats.publisher_stats = {
-    makeCandidatePairStats(),
-    makeFallbackCandidatePairStats(),
-    makeTransportStats("")};
+  stats.publisher_stats = {makeCandidatePairStats(), makeFallbackCandidatePairStats(), makeTransportStats("")};
   updateConnectionHealthStatsSnapshot(state, stats);
   diagnostic_updater::DiagnosticStatusWrapper status;
 
@@ -302,8 +267,7 @@ TEST(ConnectionHealthDiagnosticsTest, UnavailableRtcValuesSerializeAsUnset) {
   EXPECT_EQ(valueFor(status, "rtc.transport.ice_state"), "unset");
   EXPECT_EQ(valueFor(status, "rtc.transport.dtls_state"), "unset");
   EXPECT_EQ(valueFor(status, "rtc.transport.candidate_pair_state"), "unset");
-  EXPECT_EQ(valueFor(status, "rtc.transport.current_round_trip_time_ms"),
-            "unset");
+  EXPECT_EQ(valueFor(status, "rtc.transport.current_round_trip_time_ms"), "unset");
   EXPECT_EQ(valueFor(status, "rtc.traffic.bytes_sent"), "unset");
   EXPECT_EQ(valueFor(status, "rtc.traffic.send_bitrate_bps"), "unset");
   EXPECT_EQ(valueFor(status, "rtc.data_channels.open"), "0");

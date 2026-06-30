@@ -28,51 +28,38 @@
 // human-readable location when the document does not match expectations. They
 // are intentionally free of any BridgeConfig schema knowledge so they can be
 // unit tested and reused independently of the config layout.
-namespace ros2_livekit_bridge_config::utils
-{
+namespace ros2_livekit_bridge_config::utils {
 
 // Joins a parent path and a field name into a dotted path (e.g. "$.topics").
-std::string fieldPath(const std::string & path, std::string_view field);
+std::string fieldPath(const std::string& path, std::string_view field);
 
 // Annotates a path with the node's source line and column when available.
-std::string nodeContext(const std::string & path, const YAML::Node & node);
+std::string nodeContext(const std::string& path, const YAML::Node& node);
 
 // Throws ConfigError describing a node that failed validation.
-void fail(
-  const std::string & path,
-  const YAML::Node & node,
-  const std::string & expected,
-  const std::string & detail);
+void fail(const std::string& path, const YAML::Node& node, const std::string& expected, const std::string& detail);
 
 // Throws ConfigError describing a required field that is absent.
-void failMissing(
-  const std::string & path,
-  const std::string & expected);
+void failMissing(const std::string& path, const std::string& expected);
 
 // Validates that the node is a map / sequence, failing otherwise.
-void requireMap(const YAML::Node & node, const std::string & path);
-void requireSequence(const YAML::Node & node, const std::string & path);
+void requireMap(const YAML::Node& node, const std::string& path);
+void requireSequence(const YAML::Node& node, const std::string& path);
 
 // Returns the node as a string, failing if it is not a scalar.
-std::string scalarString(const YAML::Node & node, const std::string & path);
+std::string scalarString(const YAML::Node& node, const std::string& path);
 
 // Returns a required, nonempty string field from a map node.
-std::string requiredString(
-  const YAML::Node & node,
-  const std::string & key,
-  const std::string & path);
+std::string requiredString(const YAML::Node& node, const std::string& key, const std::string& path);
 
 // Returns a scalar parsed as an integer that must be greater than zero.
-int optionalPositiveInt(const YAML::Node & node, const std::string & path);
+int optionalPositiveInt(const YAML::Node& node, const std::string& path);
 
 // Returns a scalar map key as a string, failing on non-scalar keys.
-std::string mapKeyToString(const YAML::Node & key, const std::string & path);
+std::string mapKeyToString(const YAML::Node& key, const std::string& path);
 
 // Fails if the map node contains any key outside the allowed set.
-void rejectUnknownFields(
-  const YAML::Node & node,
-  const std::set<std::string> & allowed,
-  const std::string & path);
+void rejectUnknownFields(const YAML::Node& node, const std::set<std::string>& allowed, const std::string& path);
 
 } // namespace ros2_livekit_bridge_config::utils
 

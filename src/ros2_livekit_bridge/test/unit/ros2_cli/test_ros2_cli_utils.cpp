@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
-
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <nlohmann/json.hpp>
+#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli
-{
-namespace
-{
+namespace ros2_livekit_bridge::ros2_cli {
+namespace {
 
 using json = nlohmann::json;
 
@@ -47,8 +44,7 @@ TEST(Ros2CliUtilsTest, DetectsHiddenNameTokens) {
 TEST(Ros2CliUtilsTest, JoinsTypesWithCommaSeparators) {
   EXPECT_EQ(joinTypes({}), "");
   EXPECT_EQ(joinTypes({"std_msgs/msg/String"}), "std_msgs/msg/String");
-  EXPECT_EQ(joinTypes({"std_msgs/msg/String", "std_msgs/msg/Header"}),
-            "std_msgs/msg/String, std_msgs/msg/Header");
+  EXPECT_EQ(joinTypes({"std_msgs/msg/String", "std_msgs/msg/Header"}), "std_msgs/msg/String, std_msgs/msg/Header");
 }
 
 TEST(Ros2CliUtilsTest, TrimsLeadingAndTrailingWhitespace) {
@@ -68,55 +64,37 @@ TEST(Ros2CliUtilsTest, TrimsLeadingAndTrailingWhitespace) {
 TEST(Ros2CliUtilsTest, ReadsRequiredStringField) {
   const json body{{"topic", " /cmd_vel "}};
 
-  EXPECT_EQ(
-    requiredStringField(
-      body, "topic", "topic must be a string", "topic must be non-empty"),
-    "/cmd_vel");
+  EXPECT_EQ(requiredStringField(body, "topic", "topic must be a string", "topic must be non-empty"), "/cmd_vel");
 }
 
 TEST(Ros2CliUtilsTest, RejectsMissingRequiredStringField) {
   const json body = json::object();
 
-  EXPECT_THROW(
-    requiredStringField(
-      body, "topic", "topic must be a string", "topic must be non-empty"),
-    std::invalid_argument);
+  EXPECT_THROW(requiredStringField(body, "topic", "topic must be a string", "topic must be non-empty"),
+               std::invalid_argument);
 }
 
 TEST(Ros2CliUtilsTest, RejectsNonStringRequiredStringField) {
   const json body{{"topic", 42}};
 
-  EXPECT_THROW(
-    requiredStringField(
-      body, "topic", "topic must be a string", "topic must be non-empty"),
-    std::invalid_argument);
+  EXPECT_THROW(requiredStringField(body, "topic", "topic must be a string", "topic must be non-empty"),
+               std::invalid_argument);
 }
 
 TEST(Ros2CliUtilsTest, RejectsEmptyRequiredStringField) {
   const json body{{"topic", " \t\n "}};
 
-  EXPECT_THROW(
-    requiredStringField(
-      body, "topic", "topic must be a string", "topic must be non-empty"),
-    std::invalid_argument);
+  EXPECT_THROW(requiredStringField(body, "topic", "topic must be a string", "topic must be non-empty"),
+               std::invalid_argument);
 }
 
 TEST(Ros2CliUtilsTest, MatchesTopicTypeFromGraphTypes) {
-  EXPECT_TRUE(
-    topicTypeMatches(
-      {"std_msgs/msg/String", "std_msgs/msg/Header"},
-      "std_msgs/msg/String"));
-  EXPECT_TRUE(
-    topicTypeMatches(
-      {"std_msgs/msg/String", "std_msgs/msg/Header"},
-      "std_msgs/msg/Header"));
+  EXPECT_TRUE(topicTypeMatches({"std_msgs/msg/String", "std_msgs/msg/Header"}, "std_msgs/msg/String"));
+  EXPECT_TRUE(topicTypeMatches({"std_msgs/msg/String", "std_msgs/msg/Header"}, "std_msgs/msg/Header"));
 }
 
 TEST(Ros2CliUtilsTest, RejectsMissingTopicTypeFromGraphTypes) {
-  EXPECT_FALSE(
-    topicTypeMatches(
-      {"std_msgs/msg/String", "std_msgs/msg/Header"},
-      "geometry_msgs/msg/Twist"));
+  EXPECT_FALSE(topicTypeMatches({"std_msgs/msg/String", "std_msgs/msg/Header"}, "geometry_msgs/msg/Twist"));
   EXPECT_FALSE(topicTypeMatches({}, "std_msgs/msg/String"));
 }
 

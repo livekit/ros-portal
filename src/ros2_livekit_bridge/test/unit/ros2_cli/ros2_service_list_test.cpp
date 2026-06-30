@@ -20,16 +20,11 @@
 
 #include <vector>
 
-namespace ros2_livekit_bridge
-{
-namespace
-{
+namespace ros2_livekit_bridge {
+namespace {
 
-ServiceListOptions makeServiceOptions(
-  bool show_types = false,
-  bool count_services = false,
-  bool include_hidden_services = false)
-{
+ServiceListOptions makeServiceOptions(bool show_types = false, bool count_services = false,
+                                      bool include_hidden_services = false) {
   ServiceListOptions options;
   options.show_types = show_types;
   options.count_services = count_services;
@@ -39,18 +34,17 @@ ServiceListOptions makeServiceOptions(
 
 TEST(Ros2ServiceListTest, ListsServiceNamesOnePerLine) {
   const std::vector<Ros2CliManager::ServiceInfo> services{
-    {"/alpha", {"example_interfaces/srv/Trigger"}},
-    {"/beta", {"std_srvs/srv/Empty"}},
+      {"/alpha", {"example_interfaces/srv/Trigger"}},
+      {"/beta", {"std_srvs/srv/Empty"}},
   };
 
-  EXPECT_EQ(ros2_cli::formatServiceList(services, makeServiceOptions()),
-            "/alpha\n/beta\n");
+  EXPECT_EQ(ros2_cli::formatServiceList(services, makeServiceOptions()), "/alpha\n/beta\n");
 }
 
 TEST(Ros2ServiceListTest, ShowTypesListsServiceTypes) {
   const std::vector<Ros2CliManager::ServiceInfo> services{
-    {"/alpha", {"example_interfaces/srv/Trigger"}},
-    {"/beta", {"std_srvs/srv/Empty", "custom_msgs/srv/Thing"}},
+      {"/alpha", {"example_interfaces/srv/Trigger"}},
+      {"/beta", {"std_srvs/srv/Empty", "custom_msgs/srv/Thing"}},
   };
 
   EXPECT_EQ(ros2_cli::formatServiceList(services, makeServiceOptions(true)),
@@ -60,13 +54,11 @@ TEST(Ros2ServiceListTest, ShowTypesListsServiceTypes) {
 
 TEST(Ros2ServiceListTest, CountServicesOnlyPrintsServiceCount) {
   const std::vector<Ros2CliManager::ServiceInfo> services{
-    {"/alpha", {"example_interfaces/srv/Trigger"}},
-    {"/beta", {"std_srvs/srv/Empty"}},
+      {"/alpha", {"example_interfaces/srv/Trigger"}},
+      {"/beta", {"std_srvs/srv/Empty"}},
   };
 
-  EXPECT_EQ(
-      ros2_cli::formatServiceList(services, makeServiceOptions(true, true)),
-      "2\n");
+  EXPECT_EQ(ros2_cli::formatServiceList(services, makeServiceOptions(true, true)), "2\n");
 }
 
 TEST(Ros2ServiceListTest, EmptyServiceListProducesEmptyOutput) {

@@ -17,24 +17,19 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_call.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_pub.hpp>
+#include <string>
 
-namespace ros2_livekit_bridge
-{
+namespace ros2_livekit_bridge {
 
-/**
- * @brief Formatting and graph filtering options for `ros2 topic list`.
- * @details fields map 1:1 to the fields shown from running `ros2 topic list
- * --help`
- */
-struct TopicListOptions
-{
+/// @brief Formatting and graph filtering options for `ros2 topic list`.
+/// @details fields map 1:1 to the fields shown from running `ros2 topic list
+/// --help`
+struct TopicListOptions {
   //! @brief Render topic types next to each topic name.
   bool show_types{false};
   //! @brief Render only the number of discovered topics.
@@ -45,11 +40,8 @@ struct TopicListOptions
   bool verbose{false};
 };
 
-/**
- * @brief Arguments for a one-shot `ros2 topic pub`.
- */
-struct TopicPubOptions
-{
+/// @brief Arguments for a one-shot `ros2 topic pub`.
+struct TopicPubOptions {
   //! @brief ROS topic name to publish to; may be relative before resolution.
   std::string topic;
   //! @brief ROS interface type identifier, such as `std_msgs/msg/String`.
@@ -58,13 +50,10 @@ struct TopicPubOptions
   std::string payload;
 };
 
-/**
- * @brief Formatting and graph filtering options for `ros2 service list`.
- * @details fields map 1:1 to the fields shown from running `ros2 service list
- * --help`
- */
-struct ServiceListOptions
-{
+/// @brief Formatting and graph filtering options for `ros2 service list`.
+/// @details fields map 1:1 to the fields shown from running `ros2 service list
+/// --help`
+struct ServiceListOptions {
   //! @brief Render service types next to each service name.
   bool show_types{false};
   //! @brief Render only the number of discovered services.
@@ -74,8 +63,7 @@ struct ServiceListOptions
 };
 
 /// @brief Arguments for a one-shot `ros2 service call`.
-struct ServiceCallOptions
-{
+struct ServiceCallOptions {
   /// @brief ROS service name to call; may be relative before resolution.
   std::string service;
   /// @brief Required service type identifier, such as `std_srvs/srv/SetBool`.
@@ -86,13 +74,10 @@ struct ServiceCallOptions
   std::uint8_t timeout_sec{0};
 };
 
-/**
- * @brief Arguments and formatting options for `ros2 interface show`.
- * @details fields map 1:1 to the fields shown from running `ros2 interface show
- * --help`
- */
-struct InterfaceShowOptions
-{
+/// @brief Arguments and formatting options for `ros2 interface show`.
+/// @details fields map 1:1 to the fields shown from running `ros2 interface show
+/// --help`
+struct InterfaceShowOptions {
   //! @brief Interface type identifier to show, such as `std_msgs/msg/String`.
   std::string type;
   //! @brief Show all comments, including nested interface comments.
@@ -101,23 +86,17 @@ struct InterfaceShowOptions
   bool no_comments{false};
 };
 
-/**
- * @brief Construct a ROS CLI service response.
- *
- * Every `ros2 ...` RPC response type shares the {success, err_msg, output}
- * fields, so one builder covers all command response types.
- * @tparam ResponseT Generated ROS service Response type.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return ROS service response.
- */
-template<typename ResponseT>
-ResponseT makeCliResponse(
-  bool success,
-  const std::string & err_msg,
-  const std::string & output = {})
-{
+/// @brief Construct a ROS CLI service response.
+///
+/// Every `ros2 ...` RPC response type shares the {success, err_msg, output}
+/// fields, so one builder covers all command response types.
+/// @tparam ResponseT Generated ROS service Response type.
+/// @param success Whether the operation succeeded.
+/// @param err_msg Human-readable error message.
+/// @param output Human-readable command output.
+/// @return ROS service response.
+template <typename ResponseT>
+ResponseT makeCliResponse(bool success, const std::string& err_msg, const std::string& output = {}) {
   ResponseT response;
   response.success = success;
   response.err_msg = err_msg;
@@ -125,10 +104,9 @@ ResponseT makeCliResponse(
   return response;
 }
 
-}  // namespace ros2_livekit_bridge
+} // namespace ros2_livekit_bridge
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
 //! @brief Generated ROS service type for remote `ros2 interface show`.
 using Ros2InterfaceShow = ros2_livekit_bridge_msgs::srv::Ros2InterfaceShow;

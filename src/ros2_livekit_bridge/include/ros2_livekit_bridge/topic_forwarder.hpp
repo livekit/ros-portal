@@ -16,12 +16,22 @@
 
 #pragma once
 
+#include <livekit/data_track_frame.h>
+#include <livekit/result.h>
+#include <livekit/video_frame.h>
+
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <rclcpp/callback_group.hpp>
+#include <rclcpp/clock.hpp>
+#include <rclcpp/generic_publisher.hpp>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/node.hpp>
+#include <rclcpp/qos.hpp>
 #include <regex>
 #include <string>
 #include <thread>
@@ -29,28 +39,15 @@
 #include <unordered_set>
 #include <vector>
 
-#include <livekit/data_track_frame.h>
-#include <livekit/video_frame.h>
-#include <rclcpp/callback_group.hpp>
-#include <rclcpp/clock.hpp>
-#include <rclcpp/generic_publisher.hpp>
-#include <rclcpp/logger.hpp>
-#include <rclcpp/node.hpp>
-#include <rclcpp/qos.hpp>
-
-#include <livekit/result.h>
-
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
 
-namespace livekit
-{
+namespace livekit {
 class RemoteDataTrack;
 } // namespace livekit
 
-namespace ros2_livekit_bridge
-{
+namespace ros2_livekit_bridge {
 
 /// @brief ROS type string for sensor image topics forwarded as video tracks.
 inline constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
@@ -71,28 +68,23 @@ public:
   using SubscriptionHandle = std::shared_ptr<void>;
 
   /// @brief Outbound LiveKit data-track writer.
-  struct DataTrackWriter
-  {
+  struct DataTrackWriter {
     /// @brief Push a serialized ROS payload onto the LiveKit data track.
-    std::function<livekit::Result<void, std::string>(std::vector<std::uint8_t>)>
-    try_push;
+    std::function<livekit::Result<void, std::string>(std::vector<std::uint8_t>)> try_push;
   };
 
   /// @brief Outbound LiveKit video-track sink.
-  struct VideoTrackSink
-  {
+  struct VideoTrackSink {
     /// @brief Track/source width fixed at publication time.
     int width{0};
     /// @brief Track/source height fixed at publication time.
     int height{0};
     /// @brief Capture one video frame with the ROS message timestamp.
-    std::function<void(const livekit::VideoFrame &, std::int64_t)>
-    capture_frame;
+    std::function<void(const livekit::VideoFrame &, std::int64_t)> capture_frame;
   };
 
   /// @brief Topic forwarding options derived from bridge configuration.
-  struct TopicForwarderOptions
-  {
+  struct TopicForwarderOptions {
     /// @brief Regex patterns for ROS topics forwarded to LiveKit.
     std::vector<std::regex> outgoing_topic_patterns;
     /// @brief Regex patterns for LiveKit data tracks republished on ROS.
@@ -106,17 +98,14 @@ public:
   };
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
-  struct LiveKitMethods
-  {
+  struct LiveKitMethods {
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
-    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(
-        const std::string &)>
-    publish_data_track;
+    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string &)>
+        publish_data_track;
     /// @brief Create or reuse an outbound LiveKit video track for a ROS image
     /// topic.
-    std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(
-        const std::string &, int, int)>
-    publish_video_track;
+    std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(const std::string &, int, int)>
+        publish_video_track;
   };
 
   /// @brief Construct a topic forwarder.
@@ -125,9 +114,7 @@ public:
   /// ROS operation; operations become no-ops once the node is destroyed.
   /// @throws std::invalid_argument when the node has already expired or any
   /// required LiveKit callback is unset.
-  TopicForwarder(
-    TopicForwarderOptions options, rclcpp::Node::WeakPtr node,
-    LiveKitMethods livekit_methods);
+  TopicForwarder(TopicForwarderOptions options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods);
 
   /// @brief Stop inbound streams before destruction.
   ~TopicForwarder();
@@ -140,41 +127,34 @@ public:
   void onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTrack> track);
 
   /// @brief Stop forwarding a remote LiveKit data track by SID.
-  void onDataTrackUnpublished(const std::string & sid);
+  void onDataTrackUnpublished(const std::string &sid);
 
   /// @brief Check whether a normalized ROS topic is allowed inbound.
-  bool isIncomingTopicAllowed(const std::string & topic_name) const;
+  bool isIncomingTopicAllowed(const std::string &topic_name) const;
 
 private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile);
-  FRIEND_TEST(TopicForwarderTest,
-              QoSUsesReliableTransientLocalWhenAllPublishersMatch);
+  FRIEND_TEST(TopicForwarderTest, QoSUsesReliableTransientLocalWhenAllPublishersMatch);
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
-  std::optional<std::string>
-  liveKitToRosTopicType(const std::string & track_name) const;
+  std::optional<std::string> liveKitToRosTopicType(const std::string &track_name) const;
 
   /// @brief Determine subscription QoS for a ROS topic.
-  rclcpp::QoS determineQoS(const std::string & topic_name) const;
+  rclcpp::QoS determineQoS(const std::string &topic_name) const;
 
   /// @brief Create the appropriate ROS subscriber for @p topic_type.
-  void createSubscriber(
-    const std::string & topic_name,
-    const std::string & topic_type);
+  void createSubscriber(const std::string &topic_name, const std::string &topic_type);
   /// @brief Subscribe to a serialized ROS topic and forward CDR to LiveKit.
-  void createDataSubscriber(
-    const std::string & topic_name,
-    const std::string & topic_type);
+  void createDataSubscriber(const std::string &topic_name, const std::string &topic_type);
   /// @brief Subscribe to a ROS image topic and forward frames to LiveKit.
-  void createImageSubscriber(const std::string & topic_name);
+  void createImageSubscriber(const std::string &topic_name);
 
   /// @brief Stream returned after subscribing to an inbound LiveKit data track.
-  struct RemoteDataTrackStream
-  {
+  struct RemoteDataTrackStream {
     /// @brief Read the next frame. Returns false when the stream ends.
     std::function<bool(livekit::DataTrackFrame &)> read;
     /// @brief Close the stream and unblock any pending read.
@@ -184,8 +164,7 @@ private:
   };
 
   /// @brief Metadata and subscribe hook for an inbound LiveKit data track.
-  struct RemoteDataTrackDescriptor
-  {
+  struct RemoteDataTrackDescriptor {
     /// @brief LiveKit track SID used to correlate publish/unpublish events.
     std::string sid;
     /// @brief LiveKit track name, typically encoding the ROS topic suffix.
@@ -193,17 +172,14 @@ private:
     /// @brief LiveKit participant identity of the remote publisher.
     std::string publisher_identity;
     /// @brief Subscribe to the remote track and return a readable stream.
-    std::function<livekit::Result<std::shared_ptr<RemoteDataTrackStream>, std::string>()>
-    subscribe;
+    std::function<livekit::Result<std::shared_ptr<RemoteDataTrackStream>, std::string>()> subscribe;
   };
 
   /// @brief Build a descriptor from a remote LiveKit data track.
-  static RemoteDataTrackDescriptor createRemoteDataTrackDescriptor(
-    std::shared_ptr<livekit::RemoteDataTrack> track);
+  static RemoteDataTrackDescriptor createRemoteDataTrackDescriptor(std::shared_ptr<livekit::RemoteDataTrack> track);
 
   /// @brief Per-topic state for outbound ROS image forwarding.
-  struct ImageTopicState
-  {
+  struct ImageTopicState {
     /// @brief LiveKit video sink lazily created on the first frame.
     std::shared_ptr<VideoTrackSink> sink;
     /// @brief Reusable RGBA buffer for non-rgba8 encodings.
@@ -211,15 +187,13 @@ private:
   };
 
   /// @brief Per-topic state for outbound serialized ROS forwarding.
-  struct DataTopicState
-  {
+  struct DataTopicState {
     /// @brief LiveKit data writer lazily created on the first message.
     std::shared_ptr<DataTrackWriter> writer;
   };
 
   /// @brief Per-track state for inbound LiveKit-to-ROS data forwarding.
-  struct InboundDataTrackState
-  {
+  struct InboundDataTrackState {
     /// @brief LiveKit track SID used for teardown and logging.
     std::string sid;
     /// @brief LiveKit track name from the publish event.
@@ -271,8 +245,7 @@ private:
   /// @brief Protects inbound data track state during setup and teardown.
   std::mutex inbound_data_track_states_mutex_;
   /// @brief Active inbound LiveKit data tracks keyed by track SID.
-  std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>>
-  inbound_data_track_states_;
+  std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>> inbound_data_track_states_;
   /// @brief ROS topic names reserved by inbound LiveKit data tracks.
   std::unordered_set<std::string> inbound_ros_topic_names_;
 };

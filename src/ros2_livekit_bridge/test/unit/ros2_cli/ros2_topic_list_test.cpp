@@ -20,16 +20,11 @@
 
 #include <vector>
 
-namespace ros2_livekit_bridge
-{
-namespace
-{
+namespace ros2_livekit_bridge {
+namespace {
 
-TopicListOptions makeOptions(
-  bool show_types = false, bool count_topics = false,
-  bool include_hidden_topics = false,
-  bool verbose = false)
-{
+TopicListOptions makeOptions(bool show_types = false, bool count_topics = false, bool include_hidden_topics = false,
+                             bool verbose = false) {
   TopicListOptions options;
   options.show_types = show_types;
   options.count_topics = count_topics;
@@ -40,18 +35,17 @@ TopicListOptions makeOptions(
 
 TEST(Ros2TopicListTest, NonVerboseListsTopicNamesOnePerLine) {
   const std::vector<Ros2CliManager::TopicInfo> topics{
-    {"/alpha", {"std_msgs/msg/String"}, 0, 0},
-    {"/beta", {"std_msgs/msg/Bool"}, 0, 0},
+      {"/alpha", {"std_msgs/msg/String"}, 0, 0},
+      {"/beta", {"std_msgs/msg/Bool"}, 0, 0},
   };
 
-  EXPECT_EQ(ros2_cli::formatTopicList(topics, makeOptions()),
-            "/alpha\n/beta\n");
+  EXPECT_EQ(ros2_cli::formatTopicList(topics, makeOptions()), "/alpha\n/beta\n");
 }
 
 TEST(Ros2TopicListTest, ShowTypesListsTopicTypes) {
   const std::vector<Ros2CliManager::TopicInfo> topics{
-    {"/alpha", {"std_msgs/msg/String"}, 0, 0},
-    {"/beta", {"std_msgs/msg/Bool", "custom_msgs/msg/Thing"}, 0, 0},
+      {"/alpha", {"std_msgs/msg/String"}, 0, 0},
+      {"/beta", {"std_msgs/msg/Bool", "custom_msgs/msg/Thing"}, 0, 0},
   };
 
   EXPECT_EQ(ros2_cli::formatTopicList(topics, makeOptions(true)),
@@ -61,31 +55,28 @@ TEST(Ros2TopicListTest, ShowTypesListsTopicTypes) {
 
 TEST(Ros2TopicListTest, CountTopicsOnlyPrintsTopicCount) {
   const std::vector<Ros2CliManager::TopicInfo> topics{
-    {"/alpha", {"std_msgs/msg/String"}, 1, 2},
-    {"/beta", {"std_msgs/msg/Bool"}, 3, 1},
+      {"/alpha", {"std_msgs/msg/String"}, 1, 2},
+      {"/beta", {"std_msgs/msg/Bool"}, 3, 1},
   };
 
-  EXPECT_EQ(
-      ros2_cli::formatTopicList(topics, makeOptions(true, true, false, true)),
-      "2\n");
+  EXPECT_EQ(ros2_cli::formatTopicList(topics, makeOptions(true, true, false, true)), "2\n");
 }
 
 TEST(Ros2TopicListTest, VerboseListsPublishedAndSubscribedTopics) {
   const std::vector<Ros2CliManager::TopicInfo> topics{
-    {"/alpha", {"std_msgs/msg/String"}, 1, 2},
-    {"/beta", {"std_msgs/msg/String", "custom_msgs/msg/Thing"}, 3, 1},
-    {"/quiet", {"std_msgs/msg/Bool"}, 0, 0},
+      {"/alpha", {"std_msgs/msg/String"}, 1, 2},
+      {"/beta", {"std_msgs/msg/String", "custom_msgs/msg/Thing"}, 3, 1},
+      {"/quiet", {"std_msgs/msg/Bool"}, 0, 0},
   };
 
-  EXPECT_EQ(
-      ros2_cli::formatTopicList(topics, makeOptions(false, false, false, true)),
-      "Published topics:\n"
-      " * /alpha [std_msgs/msg/String] 1 publisher\n"
-      " * /beta [std_msgs/msg/String, custom_msgs/msg/Thing] 3 publishers\n"
-      "\n"
-      "Subscribed topics:\n"
-      " * /alpha [std_msgs/msg/String] 2 subscribers\n"
-      " * /beta [std_msgs/msg/String, custom_msgs/msg/Thing] 1 subscriber\n");
+  EXPECT_EQ(ros2_cli::formatTopicList(topics, makeOptions(false, false, false, true)),
+            "Published topics:\n"
+            " * /alpha [std_msgs/msg/String] 1 publisher\n"
+            " * /beta [std_msgs/msg/String, custom_msgs/msg/Thing] 3 publishers\n"
+            "\n"
+            "Subscribed topics:\n"
+            " * /alpha [std_msgs/msg/String] 2 subscribers\n"
+            " * /beta [std_msgs/msg/String, custom_msgs/msg/Thing] 1 subscriber\n");
 }
 
 TEST(Ros2TopicListTest, DetectsHiddenTopicTokens) {

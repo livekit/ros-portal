@@ -122,10 +122,13 @@ If you build the SDK locally for use with this workspace, build the SDK itself
 with `-DLIVEKIT_USE_SYSTEM_SPDLOG=ON`.
 
 ### Formatting
-ROS2 uses the ament_uncrustify tool to format code. It can be run with:
+ROS2 uses the ament_clang_format tool to format code. Style is defined in
+`.clang-format` at the workspace root. It can be run with:
 ```bash
-ament_uncrustify --reformat src/ros2_livekit_bridge/
+ament_clang_format --config .clang-format --reformat src/ros2_livekit_bridge src/ros2_livekit_bridge_config
 ```
+
+Or use the devcontainer helper: `ament_clang`
 
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.

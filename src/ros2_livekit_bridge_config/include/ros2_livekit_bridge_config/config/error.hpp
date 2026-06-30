@@ -21,38 +21,27 @@
 #include <string>
 #include <utility>
 
-namespace ros2_livekit_bridge_config
-{
+namespace ros2_livekit_bridge_config {
 
 // Raised when a config document does not match the expected schema. Essentially
 // a wrapper around yaml-cpp exception content and schema validation failures:
 // carries the structured location (context), what was expected, and an
 // optional detail (often YAML::Exception::what()) in addition to the formatted
 // what() message.
-class ConfigError : public std::runtime_error
-{
+class ConfigError : public std::runtime_error {
 public:
-  ConfigError(
-    std::string context,
-    std::string expected,
-    std::string detail)
-  : std::runtime_error(formatMessage(context, expected, detail)),
-    context_(std::move(context)),
-    expected_(std::move(expected)),
-    detail_(std::move(detail))
-  {
-  }
+  ConfigError(std::string context, std::string expected, std::string detail)
+      : std::runtime_error(formatMessage(context, expected, detail)),
+        context_(std::move(context)),
+        expected_(std::move(expected)),
+        detail_(std::move(detail)) {}
 
-  const std::string & context() const {return context_;}
-  const std::string & expected() const {return expected_;}
-  const std::string & detail() const {return detail_;}
+  const std::string& context() const { return context_; }
+  const std::string& expected() const { return expected_; }
+  const std::string& detail() const { return detail_; }
 
 private:
-  static std::string formatMessage(
-    const std::string & context,
-    const std::string & expected,
-    const std::string & detail)
-  {
+  static std::string formatMessage(const std::string& context, const std::string& expected, const std::string& detail) {
     std::string message = context + ": expected " + expected;
     if (!detail.empty()) {
       message += " (" + detail + ")";

@@ -18,16 +18,12 @@
 #define ROS2_LIVEKIT_BRIDGE__UTILS__IMAGE_CONVERSION_HPP_
 
 #include <cstdint>
+#include <sensor_msgs/msg/image.hpp>
 #include <vector>
 
-#include <sensor_msgs/msg/image.hpp>
+namespace ros2_livekit_bridge::utils {
 
-namespace ros2_livekit_bridge::utils
-{
-
-bool convertToRgba(
-  const sensor_msgs::msg::Image & image,
-  std::vector<std::uint8_t> & out);
+bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_t>& out);
 
 } // namespace ros2_livekit_bridge::utils
 

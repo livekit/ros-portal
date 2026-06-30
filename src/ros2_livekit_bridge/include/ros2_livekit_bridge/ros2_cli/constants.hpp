@@ -19,38 +19,32 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
 /// @brief LiveKit RPC method for remote `ros2 topic list`.
-inline constexpr const char *kTopicListRpcMethod = "ros2_topic_list";
+inline constexpr const char* kTopicListRpcMethod = "ros2_topic_list";
 /// @brief ROS service that forwards `ros2 topic list` over LiveKit RPC.
-inline constexpr const char *kTopicListServiceName =
-  "ros2_livekit_bridge/ros2_topic_list";
+inline constexpr const char* kTopicListServiceName = "ros2_livekit_bridge/ros2_topic_list";
 
 /// @brief LiveKit RPC method for remote `ros2 topic pub`.
-inline constexpr const char *kTopicPubRpcMethod = "ros2_topic_pub";
+inline constexpr const char* kTopicPubRpcMethod = "ros2_topic_pub";
 /// @brief ROS service that forwards `ros2 topic pub` over LiveKit RPC.
-inline constexpr const char *kTopicPubServiceName =
-  "ros2_livekit_bridge/ros2_topic_pub";
+inline constexpr const char* kTopicPubServiceName = "ros2_livekit_bridge/ros2_topic_pub";
 
 /// @brief LiveKit RPC method for remote `ros2 service list`.
-inline constexpr const char *kServiceListRpcMethod = "ros2_service_list";
+inline constexpr const char* kServiceListRpcMethod = "ros2_service_list";
 /// @brief ROS service that forwards `ros2 service list` over LiveKit RPC.
-inline constexpr const char *kServiceListServiceName =
-  "ros2_livekit_bridge/ros2_service_list";
+inline constexpr const char* kServiceListServiceName = "ros2_livekit_bridge/ros2_service_list";
 
 /// @brief LiveKit RPC method for remote `ros2 service call`.
-inline constexpr const char *kServiceCallRpcMethod = "ros2_service_call";
+inline constexpr const char* kServiceCallRpcMethod = "ros2_service_call";
 /// @brief ROS service that forwards `ros2 service call` over LiveKit RPC.
-inline constexpr const char *kServiceCallServiceName =
-  "ros2_livekit_bridge/ros2_service_call";
+inline constexpr const char* kServiceCallServiceName = "ros2_livekit_bridge/ros2_service_call";
 
 /// @brief LiveKit RPC method for remote `ros2 interface show`.
-inline constexpr const char *kInterfaceShowRpcMethod = "ros2_interface_show";
+inline constexpr const char* kInterfaceShowRpcMethod = "ros2_interface_show";
 /// @brief ROS service that forwards `ros2 interface show` over LiveKit RPC.
-inline constexpr const char *kInterfaceShowServiceName =
-  "ros2_livekit_bridge/ros2_interface_show";
+inline constexpr const char* kInterfaceShowServiceName = "ros2_livekit_bridge/ros2_interface_show";
 
 /// @brief Default LiveKit RPC timeout when a request leaves timeout_sec at
 /// zero.

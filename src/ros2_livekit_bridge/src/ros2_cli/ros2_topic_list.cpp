@@ -15,25 +15,18 @@
  */
 
 #include "ros2_livekit_bridge/ros2_cli/ros2_topic_list.hpp"
-#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
 #include <algorithm>
 #include <sstream>
 #include <utility>
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
-bool isHiddenTopic(const std::string & topic_name)
-{
-  return hasHiddenNameToken(topic_name);
-}
+namespace ros2_livekit_bridge::ros2_cli {
 
-std::string
-formatTopicList(
-  const std::vector<Ros2CliManager::TopicInfo> & topics,
-  const TopicListOptions & options)
-{
+bool isHiddenTopic(const std::string& topic_name) { return hasHiddenNameToken(topic_name); }
+
+std::string formatTopicList(const std::vector<Ros2CliManager::TopicInfo>& topics, const TopicListOptions& options) {
   std::ostringstream stream;
 
   if (options.count_topics) {
@@ -42,7 +35,7 @@ formatTopicList(
   }
 
   if (!options.verbose) {
-    for (const auto & topic : topics) {
+    for (const auto& topic : topics) {
       stream << topic.name;
       if (options.show_types) {
         stream << " [" << joinTypes(topic.types) << "]";
@@ -53,12 +46,11 @@ formatTopicList(
   }
 
   stream << "Published topics:\n";
-  for (const auto & topic : topics) {
+  for (const auto& topic : topics) {
     if (topic.publisher_count == 0) {
       continue;
     }
-    stream << " * " << topic.name << " [" << joinTypes(topic.types) << "] "
-           << topic.publisher_count << " publisher";
+    stream << " * " << topic.name << " [" << joinTypes(topic.types) << "] " << topic.publisher_count << " publisher";
     if (topic.publisher_count != 1) {
       stream << 's';
     }
@@ -66,12 +58,11 @@ formatTopicList(
   }
 
   stream << "\nSubscribed topics:\n";
-  for (const auto & topic : topics) {
+  for (const auto& topic : topics) {
     if (topic.subscriber_count == 0) {
       continue;
     }
-    stream << " * " << topic.name << " [" << joinTypes(topic.types) << "] "
-           << topic.subscriber_count << " subscriber";
+    stream << " * " << topic.name << " [" << joinTypes(topic.types) << "] " << topic.subscriber_count << " subscriber";
     if (topic.subscriber_count != 1) {
       stream << 's';
     }
@@ -81,16 +72,13 @@ formatTopicList(
   return stream.str();
 }
 
-std::vector<Ros2CliManager::TopicInfo>
-collectTopicInfo(
-  const rclcpp::node_interfaces::NodeGraphInterface & graph,
-  const TopicListOptions & options)
-{
+std::vector<Ros2CliManager::TopicInfo> collectTopicInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
+                                                        const TopicListOptions& options) {
   std::vector<Ros2CliManager::TopicInfo> topics;
   const auto topic_names_and_types = graph.get_topic_names_and_types();
   topics.reserve(topic_names_and_types.size());
 
-  for (const auto &[topic_name, topic_types] : topic_names_and_types) {
+  for (const auto& [topic_name, topic_types] : topic_names_and_types) {
     if (!options.include_hidden_topics && isHiddenTopic(topic_name)) {
       continue;
     }
@@ -107,8 +95,7 @@ collectTopicInfo(
 
   std::sort(
       topics.begin(), topics.end(),
-    [](const Ros2CliManager::TopicInfo & lhs,
-    const Ros2CliManager::TopicInfo & rhs) {return lhs.name < rhs.name;});
+      [](const Ros2CliManager::TopicInfo& lhs, const Ros2CliManager::TopicInfo& rhs) { return lhs.name < rhs.name; });
   return topics;
 }
 

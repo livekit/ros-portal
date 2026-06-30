@@ -14,38 +14,31 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
-
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <rclcpp/rclcpp.hpp>
 #include <string>
 
-#include <rclcpp/rclcpp.hpp>
+#include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 
-namespace ros2_livekit_bridge
-{
-namespace
-{
+namespace ros2_livekit_bridge {
+namespace {
 
-class ScopedEnvVar
-{
+class ScopedEnvVar {
 public:
-  explicit ScopedEnvVar(const char * name)
-  : name_(name)
-  {
-    const char * value = std::getenv(name);
+  explicit ScopedEnvVar(const char* name) : name_(name) {
+    const char* value = std::getenv(name);
     if (value) {
       had_value_ = true;
       original_value_ = value;
     }
   }
 
-  ~ScopedEnvVar()
-  {
+  ~ScopedEnvVar() {
     if (had_value_) {
       setenv(name_.c_str(), original_value_.c_str(), 1);
     } else {
@@ -59,49 +52,40 @@ private:
   std::string original_value_;
 };
 
-class TemporaryConfigFile
-{
+class TemporaryConfigFile {
 public:
-  explicit TemporaryConfigFile(const std::string & contents)
-  : path_(makePath())
-  {
+  explicit TemporaryConfigFile(const std::string& contents) : path_(makePath()) {
     std::ofstream out(path_);
     out << contents;
   }
 
-  ~TemporaryConfigFile()
-  {
+  ~TemporaryConfigFile() {
     std::error_code error;
     std::filesystem::remove(path_, error);
   }
 
-  const std::filesystem::path & path() const {return path_;}
+  const std::filesystem::path& path() const { return path_; }
 
 private:
-  static std::filesystem::path makePath()
-  {
-    const auto unique =
-      std::chrono::steady_clock::now().time_since_epoch().count();
+  static std::filesystem::path makePath() {
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
     return std::filesystem::temp_directory_path() /
-           ("ros2_livekit_bridge_config_path_test_" +
-           std::to_string(unique) + ".yaml");
+           ("ros2_livekit_bridge_config_path_test_" + std::to_string(unique) + ".yaml");
   }
 
   std::filesystem::path path_;
 };
 
-class BridgeConfigPathTest : public ::testing::Test
-{
+class BridgeConfigPathTest : public ::testing::Test {
 protected:
-  void hideLiveKitCredentials()
-  {
+  void hideLiveKitCredentials() {
     unsetenv("LIVEKIT_URL");
     unsetenv("LIVEKIT_TOKEN");
   }
 };
 
-constexpr const char * kGoodConfig =
-  R"(ros2_livekit_bridge:
+constexpr const char* kGoodConfig =
+    R"(ros2_livekit_bridge:
   version: "0.0.1"
   room_name: "param_flow_room"
   topic_polling_period_ms: 250
@@ -111,8 +95,7 @@ constexpr const char * kGoodConfig =
       direction: "out"
 )";
 
-TEST_F(BridgeConfigPathTest, InitializeReadsConfigPathParameter)
-{
+TEST_F(BridgeConfigPathTest, InitializeReadsConfigPathParameter) {
   ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
@@ -120,7 +103,7 @@ TEST_F(BridgeConfigPathTest, InitializeReadsConfigPathParameter)
 
   rclcpp::NodeOptions options;
   options.parameter_overrides({
-        rclcpp::Parameter("config_path", config.path().string()),
+      rclcpp::Parameter("config_path", config.path().string()),
   });
 
   auto bridge = std::make_shared<Ros2LiveKitBridge>(options);
@@ -129,20 +112,18 @@ TEST_F(BridgeConfigPathTest, InitializeReadsConfigPathParameter)
   EXPECT_EQ(bridge->ros_threads(), 3);
 }
 
-TEST_F(BridgeConfigPathTest, InitializeRejectsMissingConfigPathParameter)
-{
+TEST_F(BridgeConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
   ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
   const auto missing_path =
-    std::filesystem::temp_directory_path() /
-    "ros2_livekit_bridge_config_path_test_missing.yaml";
+      std::filesystem::temp_directory_path() / "ros2_livekit_bridge_config_path_test_missing.yaml";
   std::error_code error;
   std::filesystem::remove(missing_path, error);
 
   rclcpp::NodeOptions options;
   options.parameter_overrides({
-        rclcpp::Parameter("config_path", missing_path.string()),
+      rclcpp::Parameter("config_path", missing_path.string()),
   });
 
   auto bridge = std::make_shared<Ros2LiveKitBridge>(options);

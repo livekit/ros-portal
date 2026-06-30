@@ -14,31 +14,23 @@
  * limitations under the License.
  */
 
-#include "config/utils.hpp"
-
-#include "ros2_livekit_bridge_config/config/error.hpp"
-
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
 
 #include <set>
 #include <string>
 
-namespace ros2_livekit_bridge_config::utils
-{
-namespace
-{
+#include "config/utils.hpp"
+#include "ros2_livekit_bridge_config/config/error.hpp"
 
-YAML::Node node(const std::string & yaml)
-{
-  return YAML::Load(yaml);
-}
+namespace ros2_livekit_bridge_config::utils {
+namespace {
+
+YAML::Node node(const std::string& yaml) { return YAML::Load(yaml); }
 
 TEST(ConfigUtilsTest, FieldPathJoinsWithDot) {
   EXPECT_EQ(fieldPath("$", "version"), "$.version");
-  EXPECT_EQ(
-    fieldPath("$.ros2_livekit_bridge", "topics"),
-    "$.ros2_livekit_bridge.topics");
+  EXPECT_EQ(fieldPath("$.ros2_livekit_bridge", "topics"), "$.ros2_livekit_bridge.topics");
   EXPECT_EQ(fieldPath("", "x"), ".x");
 }
 
@@ -55,7 +47,7 @@ TEST(ConfigUtilsTest, FailThrowsConfigErrorWithLocation) {
   try {
     fail("$.version", node("0.0.2"), "'0.0.1'", "found '0.0.2'");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "$.version at line 1, column 1");
     EXPECT_EQ(e.expected(), "'0.0.1'");
     EXPECT_EQ(e.detail(), "found '0.0.2'");
@@ -66,7 +58,7 @@ TEST(ConfigUtilsTest, FailMissingMarksFieldMissing) {
   try {
     failMissing("$.version", "string");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "$.version");
     EXPECT_EQ(e.detail(), "missing required field");
   }
@@ -84,13 +76,9 @@ TEST(ConfigUtilsTest, RequireSequenceAcceptsSequencesAndRejectsOthers) {
   EXPECT_THROW(requireSequence(node("key: value"), "$"), ConfigError);
 }
 
-TEST(ConfigUtilsTest, ScalarStringReturnsValue) {
-  EXPECT_EQ(scalarString(node("hello"), "$"), "hello");
-}
+TEST(ConfigUtilsTest, ScalarStringReturnsValue) { EXPECT_EQ(scalarString(node("hello"), "$"), "hello"); }
 
-TEST(ConfigUtilsTest, ScalarStringRejectsNonScalar) {
-  EXPECT_THROW(scalarString(node("[a]"), "$"), ConfigError);
-}
+TEST(ConfigUtilsTest, ScalarStringRejectsNonScalar) { EXPECT_THROW(scalarString(node("[a]"), "$"), ConfigError); }
 
 TEST(ConfigUtilsTest, RequiredStringReturnsValue) {
   EXPECT_EQ(requiredString(node("name: robot-a"), "name", "$"), "robot-a");
@@ -100,7 +88,7 @@ TEST(ConfigUtilsTest, RequiredStringRejectsMissing) {
   try {
     requiredString(node("other: 1"), "name", "$");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "$.name");
     EXPECT_EQ(e.detail(), "missing required field");
   }
@@ -110,14 +98,12 @@ TEST(ConfigUtilsTest, RequiredStringRejectsEmpty) {
   try {
     requiredString(node("name: \"\""), "name", "$");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.expected(), "nonempty string");
   }
 }
 
-TEST(ConfigUtilsTest, OptionalPositiveIntReturnsValue) {
-  EXPECT_EQ(optionalPositiveInt(node("3"), "$"), 3);
-}
+TEST(ConfigUtilsTest, OptionalPositiveIntReturnsValue) { EXPECT_EQ(optionalPositiveInt(node("3"), "$"), 3); }
 
 TEST(ConfigUtilsTest, OptionalPositiveIntRejectsNonPositive) {
   EXPECT_THROW(optionalPositiveInt(node("0"), "$"), ConfigError);
@@ -141,7 +127,7 @@ TEST(ConfigUtilsTest, MapKeyToStringRejectsNonScalarKey) {
   try {
     mapKeyToString(key, "$");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.expected(), "string key");
   }
 }
@@ -156,7 +142,7 @@ TEST(ConfigUtilsTest, RejectUnknownFieldsRejectsUnknownKey) {
   try {
     rejectUnknownFields(node("version: \"0.0.1\"\nextra: true"), allowed, "$");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.detail(), "unknown field 'extra'");
   }
 }

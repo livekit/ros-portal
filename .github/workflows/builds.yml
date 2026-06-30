@@ -86,7 +86,7 @@ jobs:
               set -eo pipefail
               source /opt/ros/jazzy/setup.bash
               set -u
-              ament_uncrustify src/ros2_livekit_bridge
+              ament_clang_format --config .clang-format src/ros2_livekit_bridge src/ros2_livekit_bridge_config
             '
 
       - name: Run unit tests

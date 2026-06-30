@@ -16,80 +16,59 @@
 
 #include "config/utils.hpp"
 
-#include "ros2_livekit_bridge_config/config/error.hpp"
-
 #include <sstream>
 #include <string>
 
-namespace ros2_livekit_bridge_config::utils
-{
+#include "ros2_livekit_bridge_config/config/error.hpp"
 
-std::string fieldPath(const std::string & path, std::string_view field)
-{
-  return path + "." + std::string(field);
-}
+namespace ros2_livekit_bridge_config::utils {
 
-std::string nodeContext(const std::string & path, const YAML::Node & node)
-{
+std::string fieldPath(const std::string& path, std::string_view field) { return path + "." + std::string(field); }
+
+std::string nodeContext(const std::string& path, const YAML::Node& node) {
   const auto mark = node.Mark();
   if (mark.line < 0 || mark.column < 0) {
     return path;
   }
 
   std::ostringstream context;
-  context << path << " at line " << mark.line + 1 << ", column " <<
-    mark.column + 1;
+  context << path << " at line " << mark.line + 1 << ", column " << mark.column + 1;
   return context.str();
 }
 
-void fail(
-  const std::string & path,
-  const YAML::Node & node,
-  const std::string & expected,
-  const std::string & detail)
-{
+void fail(const std::string& path, const YAML::Node& node, const std::string& expected, const std::string& detail) {
   throw ConfigError(nodeContext(path, node), expected, detail);
 }
 
-void failMissing(
-  const std::string & path,
-  const std::string & expected)
-{
+void failMissing(const std::string& path, const std::string& expected) {
   throw ConfigError(path, expected, "missing required field");
 }
 
-void requireMap(const YAML::Node & node, const std::string & path)
-{
+void requireMap(const YAML::Node& node, const std::string& path) {
   if (!node || !node.IsMap()) {
     fail(path, node, "map", "found non-map value");
   }
 }
 
-void requireSequence(const YAML::Node & node, const std::string & path)
-{
+void requireSequence(const YAML::Node& node, const std::string& path) {
   if (!node || !node.IsSequence()) {
     fail(path, node, "sequence", "found non-sequence value");
   }
 }
 
-std::string scalarString(const YAML::Node & node, const std::string & path)
-{
+std::string scalarString(const YAML::Node& node, const std::string& path) {
   if (!node || !node.IsScalar()) {
     fail(path, node, "string", "found non-scalar value");
   }
 
   try {
     return node.as<std::string>();
-  } catch (const YAML::Exception & e) {
+  } catch (const YAML::Exception& e) {
     fail(path, node, "string", e.what());
   }
 }
 
-std::string requiredString(
-  const YAML::Node & node,
-  const std::string & key,
-  const std::string & path)
-{
+std::string requiredString(const YAML::Node& node, const std::string& key, const std::string& path) {
   const auto value = node[key];
   const auto value_path = path + "." + key;
   if (!value) {
@@ -103,8 +82,7 @@ std::string requiredString(
   return result;
 }
 
-int optionalPositiveInt(const YAML::Node & node, const std::string & path)
-{
+int optionalPositiveInt(const YAML::Node& node, const std::string& path) {
   if (!node || !node.IsScalar()) {
     fail(path, node, "positive integer", "found non-scalar value");
   }
@@ -112,7 +90,7 @@ int optionalPositiveInt(const YAML::Node & node, const std::string & path)
   int result = 0;
   try {
     result = node.as<int>();
-  } catch (const YAML::Exception & e) {
+  } catch (const YAML::Exception& e) {
     fail(path, node, "positive integer", e.what());
   }
 
@@ -122,26 +100,19 @@ int optionalPositiveInt(const YAML::Node & node, const std::string & path)
   return result;
 }
 
-std::string mapKeyToString(const YAML::Node & key, const std::string & path)
-{
+std::string mapKeyToString(const YAML::Node& key, const std::string& path) {
   if (!key || !key.IsScalar()) {
     fail(path, key, "string key", "found non-scalar map key");
   }
   return key.as<std::string>();
 }
 
-void rejectUnknownFields(
-  const YAML::Node & node,
-  const std::set<std::string> & allowed,
-  const std::string & path)
-{
+void rejectUnknownFields(const YAML::Node& node, const std::set<std::string>& allowed, const std::string& path) {
   requireMap(node, path);
-  for (const auto & item : node) {
+  for (const auto& item : node) {
     const auto key = mapKeyToString(item.first, path);
     if (allowed.count(key) == 0) {
-      fail(
-        path + "." + key, item.first, "known field",
-        "unknown field '" + key + "'");
+      fail(path + "." + key, item.first, "known field", "unknown field '" + key + "'");
     }
   }
 }

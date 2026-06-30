@@ -21,37 +21,31 @@
 #include <optional>
 #include <string>
 
-namespace ros2_livekit_bridge
-{
+namespace ros2_livekit_bridge {
 
-/**
- * @brief Handler for inbound LiveKit RPC payloads.
- *
- * The input and return value are JSON strings. Bridge transport code wraps
- * this callback in the LiveKit SDK-specific RPC handler signature.
- */
+/// @brief Handler for inbound LiveKit RPC payloads.
+///
+/// The input and return value are JSON strings. Bridge transport code wraps
+/// this callback in the LiveKit SDK-specific RPC handler signature.
 using RpcHandler = std::function<std::string(const std::string &)>;
 
 //! @brief Return true when a remote participant identity is present.
-using HasParticipantFn =
-  std::function<bool(const std::string & participant_id)>;
+using HasParticipantFn = std::function<bool(const std::string &participant_id)>;
 
 //! @brief Invoke an RPC method on a remote participant and return its JSON
 //! response. Returns std::nullopt when the RPC call fails.
-using PerformRpcFn = std::function<std::optional<std::string>(
-      const std::string & participant_id, const std::string & method,
-      const std::string & payload, std::uint8_t timeout_sec)>;
+using PerformRpcFn =
+    std::function<std::optional<std::string>(const std::string &participant_id, const std::string &method,
+                                             const std::string &payload, std::uint8_t timeout_sec)>;
 
 //! @brief Register a local handler for an RPC method. Returns false when the
 //! method could not be registered (for example, the local participant is
 //! unavailable).
-using RegisterRpcMethodFn =
-  std::function<bool(const std::string & method, RpcHandler handler)>;
+using RegisterRpcMethodFn = std::function<bool(const std::string &method, RpcHandler handler)>;
 
 //! @brief Remove a previously registered local RPC method. Returns false when
 //! the method could not be unregistered (for example, the local participant is
 //! unavailable).
-using UnregisterRpcMethodFn =
-  std::function<bool(const std::string & method)>;
+using UnregisterRpcMethodFn = std::function<bool(const std::string &method)>;
 
-}  // namespace ros2_livekit_bridge
+} // namespace ros2_livekit_bridge

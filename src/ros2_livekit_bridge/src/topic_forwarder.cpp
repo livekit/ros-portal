@@ -136,8 +136,11 @@ void TopicForwarder::pollTopics()
       continue;
     }
 
-    if (inbound_ros_topic_names_.count(topic_name) > 0) {
-      continue;
+    {
+      std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+      if (inbound_ros_topic_names_.count(topic_name) > 0) {
+        continue;
+      }
     }
 
     if (!utils::matchesAnyPattern(topic_name,

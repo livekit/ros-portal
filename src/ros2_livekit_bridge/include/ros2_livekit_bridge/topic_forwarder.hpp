@@ -38,7 +38,7 @@
 #include <rclcpp/node.hpp>
 #include <rclcpp/qos.hpp>
 
-#include "ros2_livekit_bridge/result.hpp"
+#include <livekit/result.h>
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -74,7 +74,7 @@ public:
   struct DataTrackWriter
   {
     /// @brief Push a serialized ROS payload onto the LiveKit data track.
-    std::function<Result<void, std::string>(std::vector<std::uint8_t>)>
+    std::function<livekit::Result<void, std::string>(std::vector<std::uint8_t>)>
     try_push;
   };
 
@@ -109,12 +109,12 @@ public:
   struct LiveKitMethods
   {
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
-    std::function<Result<std::shared_ptr<DataTrackWriter>, std::string>(
+    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(
         const std::string &)>
     publish_data_track;
     /// @brief Create or reuse an outbound LiveKit video track for a ROS image
     /// topic.
-    std::function<Result<std::shared_ptr<VideoTrackSink>, std::string>(
+    std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(
         const std::string &, int, int)>
     publish_video_track;
   };
@@ -193,7 +193,7 @@ private:
     /// @brief LiveKit participant identity of the remote publisher.
     std::string publisher_identity;
     /// @brief Subscribe to the remote track and return a readable stream.
-    std::function<Result<std::shared_ptr<RemoteDataTrackStream>, std::string>()>
+    std::function<livekit::Result<std::shared_ptr<RemoteDataTrackStream>, std::string>()>
     subscribe;
   };
 

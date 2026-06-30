@@ -64,14 +64,14 @@ TopicForwarder::LiveKitMethods makeLiveKitMethods()
 {
   TopicForwarder::LiveKitMethods livekit_methods;
   livekit_methods.publish_data_track = [](const std::string &)
-    -> Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
-      return Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
-               std::string>::err("unused");
+    -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+      return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>,
+               std::string>::failure("unused");
     };
   livekit_methods.publish_video_track = [](const std::string &, int, int)
-    -> Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
-      return Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
-               std::string>::err("unused");
+    -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
+      return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>,
+               std::string>::failure("unused");
     };
   return livekit_methods;
 }

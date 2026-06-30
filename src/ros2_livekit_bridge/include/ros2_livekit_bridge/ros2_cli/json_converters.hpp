@@ -23,7 +23,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "ros2_livekit_bridge/result.hpp"
+#include <livekit/result.h>
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
 namespace ros2_livekit_bridge
@@ -123,7 +123,7 @@ std::string interfaceShowRequestToJson(
  * @param payload JSON request payload.
  * @return Parsed options, or an error description when @p payload is malformed.
  */
-Result<TopicListOptions, std::string> topicListOptionsFromJson(
+livekit::Result<TopicListOptions, std::string> topicListOptionsFromJson(
   const std::string & payload);
 
 /**
@@ -131,7 +131,7 @@ Result<TopicListOptions, std::string> topicListOptionsFromJson(
  * @param payload JSON request payload.
  * @return Parsed options, or an error description when @p payload is invalid.
  */
-Result<TopicPubOptions, std::string> topicPubOptionsFromJson(
+livekit::Result<TopicPubOptions, std::string> topicPubOptionsFromJson(
   const std::string & payload);
 
 /**
@@ -139,7 +139,7 @@ Result<TopicPubOptions, std::string> topicPubOptionsFromJson(
  * @param payload JSON request payload.
  * @return Parsed options, or an error description when @p payload is malformed.
  */
-Result<ServiceListOptions, std::string> serviceListOptionsFromJson(
+livekit::Result<ServiceListOptions, std::string> serviceListOptionsFromJson(
   const std::string & payload);
 
 /// @brief Parse service-call options from a LiveKit RPC JSON request payload.
@@ -155,7 +155,7 @@ std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
  * @param payload JSON request payload.
  * @return Parsed options, or an error description when @p payload is malformed.
  */
-Result<InterfaceShowOptions, std::string> interfaceShowOptionsFromJson(
+livekit::Result<InterfaceShowOptions, std::string> interfaceShowOptionsFromJson(
   const std::string & payload);
 
 /**

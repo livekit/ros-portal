@@ -48,13 +48,13 @@ TopicForwarder::createRemoteDataTrackDescriptor(
     info.name,
     track->publisherIdentity(),
     [track = std::move(track)]()
-    -> Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>,
+    -> livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>,
       std::string> {
       const auto subscribe_result = track->subscribe();
       if (!subscribe_result) {
         const auto & error = subscribe_result.error();
-        return Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>,
-                 std::string>::err("code=" +
+        return livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>,
+                 std::string>::failure("code=" +
                                           std::to_string(
                                               static_cast<std::uint32_t>(
                      error.code)) +
@@ -82,8 +82,8 @@ TopicForwarder::createRemoteDataTrackDescriptor(
                      static_cast<std::uint32_t>(terminal_error->code)) +
                  " message=" + terminal_error->message;
         };
-      return Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>,
-               std::string>::ok(std::move(stream));
+      return livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>,
+               std::string>::success(std::move(stream));
     },
   };
 }

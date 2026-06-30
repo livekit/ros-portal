@@ -155,7 +155,7 @@ interfaceShowRequestToJson(
   }.dump();
 }
 
-Result<TopicListOptions, std::string>
+livekit::Result<TopicListOptions, std::string>
 topicListOptionsFromJson(const std::string & payload)
 {
   try {
@@ -167,19 +167,19 @@ topicListOptionsFromJson(const std::string & payload)
     options.include_hidden_topics =
       request.value("include_hidden_topics", false);
     options.verbose = request.value("verbose", false);
-    return Result<TopicListOptions, std::string>::ok(std::move(options));
+    return livekit::Result<TopicListOptions, std::string>::success(std::move(options));
   } catch (const std::exception & parse_error) {
-    return Result<TopicListOptions, std::string>::err(parse_error.what());
+    return livekit::Result<TopicListOptions, std::string>::failure(parse_error.what());
   }
 }
 
-Result<TopicPubOptions, std::string>
+livekit::Result<TopicPubOptions, std::string>
 topicPubOptionsFromJson(const std::string & payload)
 {
   try {
     const auto request = json::parse(payload);
     if (!request.is_object()) {
-      return Result<TopicPubOptions, std::string>::err(
+      return livekit::Result<TopicPubOptions, std::string>::failure(
           "Topic pub request must be a JSON object");
     }
 
@@ -192,13 +192,13 @@ topicPubOptionsFromJson(const std::string & payload)
     options.payload = requiredStringField(
         request, "payload", "payload must be a string",
         "payload must be non-empty");
-    return Result<TopicPubOptions, std::string>::ok(std::move(options));
+    return livekit::Result<TopicPubOptions, std::string>::success(std::move(options));
   } catch (const std::exception & parse_error) {
-    return Result<TopicPubOptions, std::string>::err(parse_error.what());
+    return livekit::Result<TopicPubOptions, std::string>::failure(parse_error.what());
   }
 }
 
-Result<ServiceListOptions, std::string>
+livekit::Result<ServiceListOptions, std::string>
 serviceListOptionsFromJson(const std::string & payload)
 {
   try {
@@ -209,9 +209,9 @@ serviceListOptionsFromJson(const std::string & payload)
     options.count_services = request.value("count_services", false);
     options.include_hidden_services =
       request.value("include_hidden_services", false);
-    return Result<ServiceListOptions, std::string>::ok(std::move(options));
+    return livekit::Result<ServiceListOptions, std::string>::success(std::move(options));
   } catch (const std::exception & parse_error) {
-    return Result<ServiceListOptions, std::string>::err(parse_error.what());
+    return livekit::Result<ServiceListOptions, std::string>::failure(parse_error.what());
   }
 }
 
@@ -248,7 +248,7 @@ std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
   }
 }
 
-Result<InterfaceShowOptions, std::string>
+livekit::Result<InterfaceShowOptions, std::string>
 interfaceShowOptionsFromJson(const std::string & payload)
 {
   try {
@@ -258,9 +258,9 @@ interfaceShowOptionsFromJson(const std::string & payload)
     options.type = request.value("type", "");
     options.all_comments = request.value("all_comments", false);
     options.no_comments = request.value("no_comments", false);
-    return Result<InterfaceShowOptions, std::string>::ok(std::move(options));
+    return livekit::Result<InterfaceShowOptions, std::string>::success(std::move(options));
   } catch (const std::exception & parse_error) {
-    return Result<InterfaceShowOptions, std::string>::err(parse_error.what());
+    return livekit::Result<InterfaceShowOptions, std::string>::failure(parse_error.what());
   }
 }
 

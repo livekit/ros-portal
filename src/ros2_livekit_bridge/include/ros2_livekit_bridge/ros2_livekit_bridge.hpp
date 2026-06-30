@@ -39,56 +39,40 @@ class ConnectionHealthDiagnostics;
 class Ros2CliManager;
 class TopicForwarder;
 
-/**
- * @brief The main bridge node for the ROS2 LiveKit bridge.
- *
- * This node is responsible for polling the ROS2 topic graph, matching topics
- * against user-defined patterns, and creating subscribers for the allowed
- * topics. The bridge treats video and audio as LK video/audio tracks and other
- * topics as data tracks.
- */
+/// @brief The main bridge node for the ROS2 LiveKit bridge.
+///
+/// This node is responsible for polling the ROS2 topic graph, matching topics
+/// against user-defined patterns, and creating subscribers for the allowed
+/// topics. The bridge treats video and audio as LK video/audio tracks and other
+/// topics as data tracks.
 class Ros2LiveKitBridge : public rclcpp::Node, public livekit::RoomDelegate {
 public:
-  /**
-   * @brief Constructor for the ROS2 LiveKit bridge.
-   * @param options The options for the node
-   */
+  /// @brief Constructor for the ROS2 LiveKit bridge.
+  /// @param options The options for the node
   explicit Ros2LiveKitBridge(
     const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~Ros2LiveKitBridge() override;
 
-  /**
-   * @brief Initialize bridge configuration, LiveKit connection, and polling.
-   * @return True if initialization completed, false for expected startup
-   * failures that have already been logged.
-   */
+  /// @brief Initialize bridge configuration, LiveKit connection, and polling.
+  /// @return True if initialization completed, false for expected startup
+  /// failures that have already been logged.
   bool initialize();
 
   int ros_threads() const {return ros_threads_;}
 
 private:
-  /**
-   * @brief Poll the topics and create subscribers for the allowed topics
-   */
+  /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
 
-  /**
-   * @brief Poll LiveKit stats used by connection-health diagnostics.
-   */
+  /// @brief Poll LiveKit stats used by connection-health diagnostics.
   void pollConnectionStats();
 
-  /**
-   * @brief Check if the topic matches the allowed topics
-   * @param topic_name The name of the topic
-   * @return True if the topic matches the allowed topics, false otherwise
-   */
+  /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(
     livekit::Room & room,
     const livekit::DataTrackPublishedEvent & event) override;
 
-  /**
-   * @brief Stop republishing a remote LiveKit data track when it is removed.
-   */
+  /// @brief Stop republishing a remote LiveKit data track when it is removed.
   void onDataTrackUnpublished(
     livekit::Room & room,
     const livekit::DataTrackUnpublishedEvent & event) override;
@@ -136,42 +120,34 @@ private:
     livekit::Room & room,
     const livekit::ParticipantsUpdatedEvent & event) override;
 
-  /**
-   * @brief Check whether a remote participant identity is present in the room.
-   * @param participant_id LiveKit participant identity to look up.
-   * @return True when the participant exists in the connected room.
-   */
+  /// @brief Check whether a remote participant identity is present in the room.
+  /// @param participant_id LiveKit participant identity to look up.
+  /// @return True when the participant exists in the connected room.
   bool hasParticipant(const std::string & participant_id) const;
 
-  /**
-   * @brief Invoke a LiveKit RPC method through the room's local participant.
-   * @param participant_id LiveKit participant identity to call.
-   * @param method LiveKit RPC method name.
-   * @param payload JSON request payload.
-   * @param timeout_sec Response timeout in seconds.
-   * @return JSON response payload returned by the remote participant, or
-   * std::nullopt when the RPC call fails.
-   */
+  /// @brief Invoke a LiveKit RPC method through the room's local participant.
+  /// @param participant_id LiveKit participant identity to call.
+  /// @param method LiveKit RPC method name.
+  /// @param payload JSON request payload.
+  /// @param timeout_sec Response timeout in seconds.
+  /// @return JSON response payload returned by the remote participant, or
+  /// std::nullopt when the RPC call fails.
   std::optional<std::string> rpcPerform(
     const std::string & participant_id, const std::string & method,
     const std::string & payload, std::uint8_t timeout_sec);
 
-  /**
-   * @brief Register a local LiveKit RPC handler on the room's local
-   * participant, adapting the JSON-string handler to the SDK signature.
-   * @param method LiveKit RPC method name.
-   * @param handler Callback that receives and returns JSON strings.
-   * @return True on success, false when the local participant is unavailable.
-   */
+  /// @brief Register a local LiveKit RPC handler on the room's local
+  /// participant, adapting the JSON-string handler to the SDK signature.
+  /// @param method LiveKit RPC method name.
+  /// @param handler Callback that receives and returns JSON strings.
+  /// @return True on success, false when the local participant is unavailable.
   bool rpcRegisterMethod(
     const std::string & method, RpcHandler handler);
 
-  /**
-   * @brief Unregister a local LiveKit RPC handler from the room's local
-   * participant.
-   * @param method LiveKit RPC method name.
-   * @return True on success, false when the local participant is unavailable.
-   */
+  /// @brief Unregister a local LiveKit RPC handler from the room's local
+  /// participant.
+  /// @param method LiveKit RPC method name.
+  /// @return True on success, false when the local participant is unavailable.
   bool rpcUnregisterMethod(const std::string & method);
 
   /// @brief Create TopicForwarder after LiveKit room connection succeeds.

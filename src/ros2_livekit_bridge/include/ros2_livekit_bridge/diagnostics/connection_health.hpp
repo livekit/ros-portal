@@ -130,53 +130,49 @@ struct ConnectionHealthState
 };
 
 /// Update cached RTC diagnostics from a LiveKit stats snapshot.
-/**
- * This function summarizes the raw WebRTC stats tree into a small fixed
- * diagnostic surface and updates previous counters for bitrate calculation.
- *
- * @param state Mutable connection health state to update.
- * @param stats LiveKit stats snapshot to summarize.
- */
+///
+/// This function summarizes the raw WebRTC stats tree into a small fixed
+/// diagnostic surface and updates previous counters for bitrate calculation.
+///
+/// @param state Mutable connection health state to update.
+/// @param stats LiveKit stats snapshot to summarize.
 void updateConnectionHealthStatsSnapshot(
   ConnectionHealthState & state,
   const livekit::SessionStats & stats);
 
 /// Populate a ROS diagnostic status from a connection health state snapshot.
-/**
- * This pure mapping function is shared by the runtime helper and unit tests. It
- * sets the diagnostic level/message and emits stable key/value fields for the
- * base connection state and compact RTC stats summary.
- *
- * @param state Connection health state to render.
- * @param status Diagnostic status wrapper to populate.
- */
+///
+/// This pure mapping function is shared by the runtime helper and unit tests. It
+/// sets the diagnostic level/message and emits stable key/value fields for the
+/// base connection state and compact RTC stats summary.
+///
+/// @param state Connection health state to render.
+/// @param status Diagnostic status wrapper to populate.
 void populateConnectionHealthStatus(
   const ConnectionHealthState & state,
   diagnostic_updater::DiagnosticStatusWrapper & status);
 
 /// Maintains and publishes the LiveKit `connection_health` diagnostic task.
-/**
- * The bridge forwards LiveKit room events into this helper so the cached
- * connection state stays current. Publishing remains owned by
- * `diagnostic_updater`; event handlers only mutate cached state and never
- * publish diagnostics directly from SDK threads.
- */
+///
+/// The bridge forwards LiveKit room events into this helper so the cached
+/// connection state stays current. Publishing remains owned by
+/// `diagnostic_updater`; event handlers only mutate cached state and never
+/// publish diagnostics directly from SDK threads.
 class ConnectionHealthDiagnostics final
 {
 public:
   /// Create the diagnostic updater task from the ROS interfaces it requires.
-  /**
-   * Only the node interfaces needed by `diagnostic_updater::Updater` are taken
-   * so the helper stays decoupled from any concrete node type.
-   *
-   * @param base_interface Node base interface for the diagnostic updater.
-   * @param clock_interface Node clock interface for the diagnostic updater.
-   * @param logging_interface Node logging interface for the diagnostic updater.
-   * @param parameters_interface Node parameters interface for the updater.
-   * @param timers_interface Node timers interface for the diagnostic updater.
-   * @param topics_interface Node topics interface for the diagnostic updater.
-   * @param room_name LiveKit room name reported in diagnostic key/value fields.
-   */
+  ///
+  /// Only the node interfaces needed by `diagnostic_updater::Updater` are taken
+  /// so the helper stays decoupled from any concrete node type.
+  ///
+  /// @param base_interface Node base interface for the diagnostic updater.
+  /// @param clock_interface Node clock interface for the diagnostic updater.
+  /// @param logging_interface Node logging interface for the diagnostic updater.
+  /// @param parameters_interface Node parameters interface for the updater.
+  /// @param timers_interface Node timers interface for the diagnostic updater.
+  /// @param topics_interface Node topics interface for the diagnostic updater.
+  /// @param room_name LiveKit room name reported in diagnostic key/value fields.
   ConnectionHealthDiagnostics(
     rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base_interface,
     rclcpp::node_interfaces::NodeClockInterface::SharedPtr clock_interface,
@@ -188,16 +184,15 @@ public:
     std::string room_name);
 
   /// Convenience constructor that extracts the required interfaces from a node.
-  /**
-   * The node is used only to obtain the interfaces the diagnostic updater needs;
-   * no reference to the node is retained. This keeps instantiation clean while
-   * the implementation stays decoupled from any concrete node type.
-   *
-   * @tparam NodeT Node-like type exposing the standard `get_node_*_interface`
-   *   accessors (e.g. `rclcpp::Node *` or an `rclcpp::Node::SharedPtr`).
-   * @param node Node to source the diagnostic updater interfaces from.
-   * @param room_name LiveKit room name reported in diagnostic key/value fields.
-   */
+  ///
+  /// The node is used only to obtain the interfaces the diagnostic updater needs;
+  /// no reference to the node is retained. This keeps instantiation clean while
+  /// the implementation stays decoupled from any concrete node type.
+  ///
+  /// @tparam NodeT Node-like type exposing the standard `get_node_*_interface`
+  ///   accessors (e.g. `rclcpp::Node *` or an `rclcpp::Node::SharedPtr`).
+  /// @param node Node to source the diagnostic updater interfaces from.
+  /// @param room_name LiveKit room name reported in diagnostic key/value fields.
   template<typename NodeT>
   ConnectionHealthDiagnostics(NodeT && node, std::string room_name)
   : ConnectionHealthDiagnostics(
@@ -217,11 +212,10 @@ public:
   void markDisconnected();
 
   /// Update the diagnostic updater and poll LiveKit stats when appropriate.
-  /**
-   * This method is intended to be called periodically from the ROS executor. It
-   * publishes through `diagnostic_updater` and starts or harvests asynchronous
-   * LiveKit stats requests without blocking the caller.
-   */
+  ///
+  /// This method is intended to be called periodically from the ROS executor. It
+  /// publishes through `diagnostic_updater` and starts or harvests asynchronous
+  /// LiveKit stats requests without blocking the caller.
   void pollStats(livekit::Room & room);
 
   /// Return a thread-safe copy of the current diagnostic state.

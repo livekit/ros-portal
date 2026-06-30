@@ -28,11 +28,9 @@
 namespace ros2_livekit_bridge::ros2_cli
 {
 
-/**
- * @brief Remove leading whitespace from a string.
- * @param value Input string.
- * @return Copy of @p value without leading whitespace.
- */
+/// @brief Remove leading whitespace from a string.
+/// @param value Input string.
+/// @return Copy of @p value without leading whitespace.
 inline std::string leftTrim(const std::string & value)
 {
   const auto first =
@@ -42,11 +40,9 @@ inline std::string leftTrim(const std::string & value)
   return std::string(first, value.end());
 }
 
-/**
- * @brief Remove trailing whitespace from a string.
- * @param value Input string.
- * @return Copy of @p value without trailing whitespace.
- */
+/// @brief Remove trailing whitespace from a string.
+/// @param value Input string.
+/// @return Copy of @p value without trailing whitespace.
 inline std::string rightTrim(std::string value)
 {
   while (!value.empty() &&
@@ -57,49 +53,41 @@ inline std::string rightTrim(std::string value)
   return value;
 }
 
-/**
- * @brief Read a required, non-empty string field from a JSON object.
- * @param body JSON object to read.
- * @param field_name Required field name.
- * @param missing_message Error message for a missing or non-string field.
- * @param empty_message Error message for an empty or whitespace-only field.
- * @return Trimmed string field value.
- * @throws std::invalid_argument when the field is missing, not a string, or
- * empty after trimming.
- */
+/// @brief Read a required, non-empty string field from a JSON object.
+/// @param body JSON object to read.
+/// @param field_name Required field name.
+/// @param missing_message Error message for a missing or non-string field.
+/// @param empty_message Error message for an empty or whitespace-only field.
+/// @return Trimmed string field value.
+/// @throws std::invalid_argument when the field is missing, not a string, or
+/// empty after trimming.
 std::string requiredStringField(
   const nlohmann::json & body,
   const char *field_name,
   const char *missing_message,
   const char *empty_message);
 
-/**
- * @brief Check whether a graph-discovered type list contains an interface type.
- * @param graph_types Interface type names returned by the ROS graph.
- * @param msg_type Interface type to find.
- * @return True when @p msg_type appears in @p graph_types.
- */
+/// @brief Check whether a graph-discovered type list contains an interface type.
+/// @param graph_types Interface type names returned by the ROS graph.
+/// @param msg_type Interface type to find.
+/// @return True when @p msg_type appears in @p graph_types.
 bool topicTypeMatches(
   const std::vector<std::string> & graph_types,
   const std::string & msg_type);
 
-/**
- * @brief Detect ROS hidden-name tokens in a slash-delimited graph name.
- * @param name Topic or service name to inspect.
- * @return True when any non-empty token starts with `_`.
- */
+/// @brief Detect ROS hidden-name tokens in a slash-delimited graph name.
+/// @param name Topic or service name to inspect.
+/// @return True when any non-empty token starts with `_`.
 bool hasHiddenNameToken(const std::string & name);
 
-/**
- * @brief Join ROS interface type names for CLI display.
- * @param types Interface type names associated with one graph entity.
- * @return Comma-and-space separated type list.
- *
- * Example:
- *   Type 1: std_msgs/msg/String
- *   Type 2: std_msgs/msg/Header
- *   Joined: std_msgs/msg/String, std_msgs/msg/Header
- */
+/// @brief Join ROS interface type names for CLI display.
+/// @param types Interface type names associated with one graph entity.
+/// @return Comma-and-space separated type list.
+///
+/// Example:
+///   Type 1: std_msgs/msg/String
+///   Type 2: std_msgs/msg/Header
+///   Joined: std_msgs/msg/String, std_msgs/msg/Header
 std::string joinTypes(const std::vector<std::string> & types);
 
 }  // namespace ros2_livekit_bridge::ros2_cli

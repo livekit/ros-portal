@@ -321,7 +321,7 @@ void Ros2LiveKitBridge::onParticipantsUpdated(
   }
 }
 
-/** Helpers **/
+/// Helpers
 
 bool Ros2LiveKitBridge::initializeTopicForwarder(
   std::vector<std::regex> outgoing_topic_compiled_patterns,

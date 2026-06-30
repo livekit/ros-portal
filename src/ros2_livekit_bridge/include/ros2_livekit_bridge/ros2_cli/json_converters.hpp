@@ -29,27 +29,21 @@
 namespace ros2_livekit_bridge
 {
 
-/**
- * @brief Convert a ROS service request to local topic-list options.
- * @param request ROS service request.
- * @return Topic-list options from the request flags.
- */
+/// @brief Convert a ROS service request to local topic-list options.
+/// @param request ROS service request.
+/// @return Topic-list options from the request flags.
 TopicListOptions topicListOptionsFromRequest(
   const ros2_cli::Ros2TopicList::Request & request);
 
-/**
- * @brief Convert a ROS service request to local topic-pub options.
- * @param request ROS service request.
- * @return Topic-pub options from the request fields.
- */
+/// @brief Convert a ROS service request to local topic-pub options.
+/// @param request ROS service request.
+/// @return Topic-pub options from the request fields.
 TopicPubOptions topicPubOptionsFromRequest(
   const ros2_cli::Ros2TopicPubSrv::Request & request);
 
-/**
- * @brief Convert a ROS service request to local service-list options.
- * @param request ROS service request.
- * @return Service-list options from the request flags.
- */
+/// @brief Convert a ROS service request to local service-list options.
+/// @param request ROS service request.
+/// @return Service-list options from the request flags.
 ServiceListOptions serviceListOptionsFromRequest(
   const ros2_cli::Ros2ServiceList::Request & request);
 
@@ -59,40 +53,32 @@ ServiceListOptions serviceListOptionsFromRequest(
 ServiceCallOptions serviceCallOptionsFromRequest(
   const ros2_cli::Ros2ServiceCallSrv::Request & request);
 
-/**
- * @brief Convert a ROS service request to local interface-show options.
- * @param request ROS service request.
- * @return Interface-show options from the request fields.
- */
+/// @brief Convert a ROS service request to local interface-show options.
+/// @param request ROS service request.
+/// @return Interface-show options from the request fields.
 InterfaceShowOptions interfaceShowOptionsFromRequest(
   const ros2_cli::Ros2InterfaceShow::Request & request);
 
-/**
- * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
- * @param request ROS service request.
- * @param timeout_sec Effective timeout to include in the payload.
- * @return JSON request payload.
- */
+/// @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+/// @param request ROS service request.
+/// @param timeout_sec Effective timeout to include in the payload.
+/// @return JSON request payload.
 std::string topicListRequestToJson(
   const ros2_cli::Ros2TopicList::Request & request,
   std::uint8_t timeout_sec);
 
-/**
- * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
- * @param request ROS service request.
- * @param timeout_sec Effective timeout to include in the payload.
- * @return JSON request payload.
- */
+/// @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+/// @param request ROS service request.
+/// @param timeout_sec Effective timeout to include in the payload.
+/// @return JSON request payload.
 std::string topicPubRequestToJson(
   const ros2_cli::Ros2TopicPubSrv::Request & request,
   std::uint8_t timeout_sec);
 
-/**
- * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
- * @param request ROS service request.
- * @param timeout_sec Effective timeout to include in the payload.
- * @return JSON request payload.
- */
+/// @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+/// @param request ROS service request.
+/// @param timeout_sec Effective timeout to include in the payload.
+/// @return JSON request payload.
 std::string serviceListRequestToJson(
   const ros2_cli::Ros2ServiceList::Request & request,
   std::uint8_t timeout_sec);
@@ -108,37 +94,29 @@ std::string serviceCallRequestToJson(
   const ros2_cli::Ros2ServiceCallSrv::Request & request,
   std::uint8_t timeout_sec);
 
-/**
- * @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
- * @param request ROS service request.
- * @param timeout_sec Effective timeout to include in the payload.
- * @return JSON request payload.
- */
+/// @brief Serialize a ROS service request as a LiveKit RPC JSON payload.
+/// @param request ROS service request.
+/// @param timeout_sec Effective timeout to include in the payload.
+/// @return JSON request payload.
 std::string interfaceShowRequestToJson(
   const ros2_cli::Ros2InterfaceShow::Request & request,
   std::uint8_t timeout_sec);
 
-/**
- * @brief Parse topic-list options from a LiveKit RPC JSON request payload.
- * @param payload JSON request payload.
- * @return Parsed options, or an error description when @p payload is malformed.
- */
+/// @brief Parse topic-list options from a LiveKit RPC JSON request payload.
+/// @param payload JSON request payload.
+/// @return Parsed options, or an error description when @p payload is malformed.
 livekit::Result<TopicListOptions, std::string> topicListOptionsFromJson(
   const std::string & payload);
 
-/**
- * @brief Parse topic-pub options from a LiveKit RPC JSON request payload.
- * @param payload JSON request payload.
- * @return Parsed options, or an error description when @p payload is invalid.
- */
+/// @brief Parse topic-pub options from a LiveKit RPC JSON request payload.
+/// @param payload JSON request payload.
+/// @return Parsed options, or an error description when @p payload is invalid.
 livekit::Result<TopicPubOptions, std::string> topicPubOptionsFromJson(
   const std::string & payload);
 
-/**
- * @brief Parse service-list options from a LiveKit RPC JSON request payload.
- * @param payload JSON request payload.
- * @return Parsed options, or an error description when @p payload is malformed.
- */
+/// @brief Parse service-list options from a LiveKit RPC JSON request payload.
+/// @param payload JSON request payload.
+/// @return Parsed options, or an error description when @p payload is malformed.
 livekit::Result<ServiceListOptions, std::string> serviceListOptionsFromJson(
   const std::string & payload);
 
@@ -150,38 +128,32 @@ std::optional<ServiceCallOptions> serviceCallOptionsFromJson(
   const std::string & payload,
   std::string & error);
 
-/**
- * @brief Parse interface-show options from a LiveKit RPC JSON request payload.
- * @param payload JSON request payload.
- * @return Parsed options, or an error description when @p payload is malformed.
- */
+/// @brief Parse interface-show options from a LiveKit RPC JSON request payload.
+/// @param payload JSON request payload.
+/// @return Parsed options, or an error description when @p payload is malformed.
 livekit::Result<InterfaceShowOptions, std::string> interfaceShowOptionsFromJson(
   const std::string & payload);
 
-/**
- * @brief Serialize a CLI command result as a LiveKit RPC JSON response.
- *
- * Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
- * so a single serializer covers all commands.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return JSON response payload.
- */
+/// @brief Serialize a CLI command result as a LiveKit RPC JSON response.
+///
+/// Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
+/// so a single serializer covers all commands.
+/// @param success Whether the operation succeeded.
+/// @param err_msg Human-readable error message.
+/// @param output Human-readable command output.
+/// @return JSON response payload.
 std::string cliResponseToJson(
   bool success,
   const std::string & err_msg,
   const std::string & output);
 
-/**
- * @brief Parse a LiveKit RPC JSON response into a ROS service response.
- *
- * Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
- * so a single parser covers all command response types.
- * @tparam ResponseT Generated ROS service Response type.
- * @param payload JSON response payload.
- * @return Parsed response, or an error description when @p payload is invalid.
- */
+/// @brief Parse a LiveKit RPC JSON response into a ROS service response.
+///
+/// Every `ros2 ...` RPC response shares the {success, err_msg, output} envelope,
+/// so a single parser covers all command response types.
+/// @tparam ResponseT Generated ROS service Response type.
+/// @param payload JSON response payload.
+/// @return Parsed response, or an error description when @p payload is invalid.
 template<typename ResponseT>
 std::optional<ResponseT> cliResponseFromJson(
   const std::string & payload,

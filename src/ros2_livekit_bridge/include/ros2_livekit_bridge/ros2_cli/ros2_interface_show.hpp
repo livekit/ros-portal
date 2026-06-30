@@ -31,18 +31,14 @@
 namespace ros2_livekit_bridge::ros2_cli::interface_show
 {
 
-/**
- * @brief Parsing and rendering helpers for `ros2 interface show`.
- */
+/// @brief Parsing and rendering helpers for `ros2 interface show`.
 namespace utils
 {
 
-/**
- * @brief Split an interface type identifier on `/` separators.
- * @param type Interface type identifier, such as `std_msgs/msg/String`.
- * @return Slash-delimited tokens, including a trailing empty token when @p type
- * ends with `/`.
- */
+/// @brief Split an interface type identifier on `/` separators.
+/// @param type Interface type identifier, such as `std_msgs/msg/String`.
+/// @return Slash-delimited tokens, including a trailing empty token when @p type
+/// ends with `/`.
 inline std::vector<std::string> splitInterfaceType(const std::string & type)
 {
   std::vector<std::string> parts;
@@ -58,12 +54,10 @@ inline std::vector<std::string> splitInterfaceType(const std::string & type)
   return parts;
 }
 
-/**
- * @brief Resolve `package/msg/Name` (or srv/action) to its installed definition path.
- * @param type Fully qualified interface type identifier.
- * @return Installed definition file path, or std::nullopt when @p type is malformed
- * or not present in the ament index.
- */
+/// @brief Resolve `package/msg/Name` (or srv/action) to its installed definition path.
+/// @param type Fully qualified interface type identifier.
+/// @return Installed definition file path, or std::nullopt when @p type is malformed
+/// or not present in the ament index.
 inline std::optional<std::string> interfacePath(const std::string & type)
 {
   const auto parts = splitInterfaceType(type);
@@ -93,11 +87,9 @@ inline std::optional<std::string> interfacePath(const std::string & type)
   }
 }
 
-/**
- * @brief Remove array and bounded-string suffixes from a field type token.
- * @param type Field type token from an interface definition line.
- * @return Base type token without `[...]` or `<...>` suffixes.
- */
+/// @brief Remove array and bounded-string suffixes from a field type token.
+/// @param type Field type token from an interface definition line.
+/// @return Base type token without `[...]` or `<...>` suffixes.
 inline std::string removeArraySuffix(std::string type)
 {
   const auto array_start = type.find('[');
@@ -112,10 +104,8 @@ inline std::string removeArraySuffix(std::string type)
   return type;
 }
 
-/**
- * @brief Return true when the field type token is a ROS primitive scalar/string.
- * @param type Base field type token.
- */
+/// @brief Return true when the field type token is a ROS primitive scalar/string.
+/// @param type Base field type token.
 inline bool isPrimitiveInterfaceType(const std::string & type)
 {
   static const std::set<std::string> kPrimitives{
@@ -126,11 +116,9 @@ inline bool isPrimitiveInterfaceType(const std::string & type)
   return kPrimitives.count(type) > 0;
 }
 
-/**
- * @brief Remove a trailing ROS interface comment from one definition line.
- * @param line One line from an interface definition file.
- * @return Line content with trailing comments and whitespace removed.
- */
+/// @brief Remove a trailing ROS interface comment from one definition line.
+/// @param line One line from an interface definition file.
+/// @return Line content with trailing comments and whitespace removed.
 inline std::string stripTrailingComment(const std::string & line)
 {
   const auto comment_start = line.find('#');
@@ -140,13 +128,11 @@ inline std::string stripTrailingComment(const std::string & line)
   return ros2_cli::rightTrim(line.substr(0, comment_start));
 }
 
-/**
- * @brief Infer a nested message interface referenced by one definition line.
- * @param package_name Package name of the enclosing interface definition.
- * @param line One line from an interface definition file.
- * @return Nested message type identifier, or std::nullopt when the line does not
- * reference a nested message.
- */
+/// @brief Infer a nested message interface referenced by one definition line.
+/// @param package_name Package name of the enclosing interface definition.
+/// @param line One line from an interface definition file.
+/// @return Nested message type identifier, or std::nullopt when the line does not
+/// reference a nested message.
 inline std::optional<std::string>
 nestedInterfaceTypeFromLine(const std::string & package_name, const std::string & line)
 {
@@ -189,13 +175,11 @@ nestedInterfaceTypeFromLine(const std::string & package_name, const std::string 
   return std::nullopt;
 }
 
-/**
- * @brief Append one rendered definition line using the requested comment mode.
- * @param output Rendered definition accumulator.
- * @param line One line from an interface definition file.
- * @param show_comments When true, preserve comments and blank lines.
- * @param indent_level Number of tab characters to prefix.
- */
+/// @brief Append one rendered definition line using the requested comment mode.
+/// @param output Rendered definition accumulator.
+/// @param line One line from an interface definition file.
+/// @param show_comments When true, preserve comments and blank lines.
+/// @param indent_level Number of tab characters to prefix.
 inline void appendRenderedInterfaceLine(
   std::ostringstream & output, const std::string & line, bool show_comments,
   int indent_level)
@@ -228,13 +212,11 @@ inline void appendRenderedInterfaceLine(
 namespace ros2_livekit_bridge::ros2_cli
 {
 
-/**
- * @brief Render the definition for a ROS interface type.
- * @param options Interface type and comment filtering options.
- * @return Text equivalent to `ros2 interface show`, including nested message
- * definitions when referenced by the root interface, or std::nullopt when the
- * type is empty, unsupported, malformed, or cannot be found in the ament index.
- */
+/// @brief Render the definition for a ROS interface type.
+/// @param options Interface type and comment filtering options.
+/// @return Text equivalent to `ros2 interface show`, including nested message
+/// definitions when referenced by the root interface, or std::nullopt when the
+/// type is empty, unsupported, malformed, or cannot be found in the ament index.
 std::optional<std::string>
 renderInterfaceDefinition(const InterfaceShowOptions & options);
 

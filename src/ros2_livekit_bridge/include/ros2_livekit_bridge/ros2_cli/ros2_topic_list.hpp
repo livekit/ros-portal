@@ -27,33 +27,27 @@
 namespace ros2_livekit_bridge::ros2_cli
 {
 
-/**
- * @brief Check whether a topic name should be treated as hidden.
- * @param topic_name Fully qualified or relative ROS topic name.
- * @return True when any topic name token starts with an underscore.
- */
+/// @brief Check whether a topic name should be treated as hidden.
+/// @param topic_name Fully qualified or relative ROS topic name.
+/// @return True when any topic name token starts with an underscore.
 bool isHiddenTopic(const std::string & topic_name);
 
-/**
- * @brief Render discovered topic information in `ros2 topic list` format.
- * @param topics Topic metadata to render. The caller owns filtering and sort
- * order.
- * @param options Formatting options that control count, type, and verbose
- * output.
- * @return Human-readable command output ending in a newline when non-empty.
- */
+/// @brief Render discovered topic information in `ros2 topic list` format.
+/// @param topics Topic metadata to render. The caller owns filtering and sort
+/// order.
+/// @param options Formatting options that control count, type, and verbose
+/// output.
+/// @return Human-readable command output ending in a newline when non-empty.
 std::string
 formatTopicList(
   const std::vector<Ros2CliManager::TopicInfo> & topics,
   const TopicListOptions & options);
 
-/**
- * @brief Query the ROS graph for visible topic metadata.
- * @param graph Node graph interface used for discovery.
- * @param options Discovery options, including hidden-topic filtering and
- * verbose publisher/subscriber counts.
- * @return Topic metadata sorted by topic name.
- */
+/// @brief Query the ROS graph for visible topic metadata.
+/// @param graph Node graph interface used for discovery.
+/// @param options Discovery options, including hidden-topic filtering and
+/// verbose publisher/subscriber counts.
+/// @return Topic metadata sorted by topic name.
 std::vector<Ros2CliManager::TopicInfo>
 collectTopicInfo(
   const rclcpp::node_interfaces::NodeGraphInterface & graph,

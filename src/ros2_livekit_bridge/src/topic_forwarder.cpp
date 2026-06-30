@@ -115,6 +115,8 @@ TopicForwarder::TopicForwarder(
 TopicForwarder::~TopicForwarder()
 {
   stopAllInboundDataTracks();
+  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  subscriptions_.clear();
   data_topic_states_.clear();
   image_topic_states_.clear();
 }
@@ -132,8 +134,11 @@ void TopicForwarder::pollTopics()
   }
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
-    if (subscriptions_.count(topic_name) > 0) {
-      continue;
+    {
+      std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+      if (subscriptions_.count(topic_name) > 0) {
+        continue;
+      }
     }
 
     {
@@ -176,39 +181,52 @@ void TopicForwarder::createDataSubscriber(
   const std::string & topic_type)
 {
   const auto qos = determineQoS(topic_name);
-  data_topic_states_[topic_name] = DataTopicState{};
+  const auto node = node_.lock();
+  if (!node) {
+    RCLCPP_DEBUG(
+        logger_,
+        "Skipping data subscription for '%s'; ROS node has been destroyed",
+        topic_name.c_str());
+    return;
+  }
 
   auto callback = [this,
       topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-      const auto state_it = data_topic_states_.find(topic_name);
-      if (state_it == data_topic_states_.end()) {
-        return;
-      }
-      auto & state = state_it->second;
-
-      if (!state.writer) {
-        const auto writer_result =
-          livekit_methods_.publish_data_track(topic_name);
-        if (!writer_result) {
-          RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s",
-                     topic_name.c_str(), writer_result.error().c_str());
+      std::shared_ptr<DataTrackWriter> writer;
+      {
+        std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+        const auto state_it = data_topic_states_.find(topic_name);
+        if (state_it == data_topic_states_.end()) {
           return;
         }
+        auto & state = state_it->second;
 
-        state.writer = writer_result.value();
-        if (!state.writer || !state.writer->try_push) {
-          RCLCPP_ERROR(logger_,
-                     "publish_data_track('%s') returned an invalid writer",
-                     topic_name.c_str());
-          state.writer.reset();
-          return;
+        if (!state.writer) {
+          const auto writer_result =
+            livekit_methods_.publish_data_track(topic_name);
+          if (!writer_result) {
+            RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s",
+                       topic_name.c_str(), writer_result.error().c_str());
+            return;
+          }
+
+          state.writer = writer_result.value();
+          if (!state.writer || !state.writer->try_push) {
+            RCLCPP_ERROR(logger_,
+                       "publish_data_track('%s') returned an invalid writer",
+                       topic_name.c_str());
+            state.writer.reset();
+            return;
+          }
+
+          RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
         }
 
-        RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
+        writer = state.writer;
       }
 
       auto & rcl_msg = msg->get_rcl_serialized_message();
-      auto push_result = state.writer->try_push(std::vector<std::uint8_t>(
+      auto push_result = writer->try_push(std::vector<std::uint8_t>(
         rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length));
       if (!push_result) {
         RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
@@ -217,15 +235,12 @@ void TopicForwarder::createDataSubscriber(
       }
     };
 
-  const auto node = node_.lock();
-  if (!node) {
-    data_topic_states_.erase(topic_name);
-    RCLCPP_DEBUG(
-        logger_,
-        "Skipping data subscription for '%s'; ROS node has been destroyed",
-        topic_name.c_str());
+  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  if (subscriptions_.count(topic_name) > 0) {
     return;
   }
+
+  data_topic_states_[topic_name] = DataTopicState{};
 
   try {
     rclcpp::SubscriptionOptions sub_options;
@@ -256,10 +271,18 @@ void TopicForwarder::createDataSubscriber(
 void TopicForwarder::createImageSubscriber(const std::string & topic_name)
 {
   const auto qos = determineQoS(topic_name);
-  image_topic_states_[topic_name] = ImageTopicState{};
+  const auto node = node_.lock();
+  if (!node) {
+    RCLCPP_DEBUG(
+        logger_,
+        "Skipping image subscription for '%s'; ROS node has been destroyed",
+        topic_name.c_str());
+    return;
+  }
 
   auto callback = [this,
       topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+      std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
       const auto state_it = image_topic_states_.find(topic_name);
       if (state_it == image_topic_states_.end()) {
         return;
@@ -344,15 +367,12 @@ void TopicForwarder::createImageSubscriber(const std::string & topic_name)
       }
     };
 
-  const auto node = node_.lock();
-  if (!node) {
-    image_topic_states_.erase(topic_name);
-    RCLCPP_DEBUG(
-        logger_,
-        "Skipping image subscription for '%s'; ROS node has been destroyed",
-        topic_name.c_str());
+  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  if (subscriptions_.count(topic_name) > 0) {
     return;
   }
+
+  image_topic_states_[topic_name] = ImageTopicState{};
 
   try {
     rclcpp::SubscriptionOptions sub_options;

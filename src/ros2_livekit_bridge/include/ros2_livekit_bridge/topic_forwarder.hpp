@@ -247,6 +247,9 @@ private:
   rclcpp::Logger logger_;
   /// @brief Clock used for throttled logging in subscription callbacks.
   rclcpp::Clock::SharedPtr clock_;
+  /// @brief Protects outbound subscriptions and topic state during setup,
+  /// teardown, and subscription callbacks.
+  std::mutex outbound_topics_mutex_;
   /// @brief Outbound ROS subscriptions keyed by topic name.
   std::unordered_map<std::string, SubscriptionHandle> subscriptions_;
   /// @brief Outbound image-topic state keyed by ROS topic name.

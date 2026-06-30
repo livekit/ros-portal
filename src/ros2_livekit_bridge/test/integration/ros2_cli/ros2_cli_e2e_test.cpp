@@ -93,10 +93,8 @@ TEST_F(BridgeTestE2E, ListsRemoteRosTopicsOverRpc) {
   EXPECT_TRUE(contains(verbose_response->output,
                        " * /parameter_events "
                        "[rcl_interfaces/msg/ParameterEvent] 2 publishers\n"));
-  std::cerr << "\n\n" << verbose_response->output << "\n\n" << std::endl;
   EXPECT_TRUE(contains(verbose_response->output,
                        " * /rosout [rcl_interfaces/msg/Log] 2 publishers\n"));
-  std::cerr << "\n\n" << verbose_response->output << "\n\n" << std::endl;
   EXPECT_TRUE(contains(verbose_response->output,
                        " * " + std::string(kBidirectionalTopic) +
                        " [std_msgs/msg/String] 1 subscriber\n"));

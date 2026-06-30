@@ -414,8 +414,8 @@ void Ros2LiveKitBridge::initializeTopicForwarder(
 
   topic_forwarder_ = std::make_unique<TopicForwarder>(
       std::move(forwarder_options),
-      this->shared_from_this(), // shared_from_this() MUST be called after
-                                // constructor
+      this->weak_from_this(), // weak_from_this() MUST be called after
+                              // constructor
       std::move(forwarder_lk_methods));
 }
 

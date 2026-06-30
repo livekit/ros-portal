@@ -131,9 +131,11 @@ protected:
   std::shared_ptr<rclcpp::Node> node_;
 };
 
-TEST_F(TopicForwarderTest, ConstructorRejectsNullNode) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), nullptr, makeLiveKitMethods()),
-               std::invalid_argument);
+TEST_F(TopicForwarderTest, ConstructorRejectsExpiredNode) {
+  EXPECT_THROW(
+      TopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{},
+                     makeLiveKitMethods()),
+      std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, ConstructorRejectsMissingLiveKitMethods) {

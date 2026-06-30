@@ -116,12 +116,13 @@ public:
   };
 
   /// @brief Construct a topic forwarder.
-  /// @param node ROS node the forwarder creates its subscriptions and
-  /// publishers on. Must outlive the forwarder.
-  /// @throws std::invalid_argument when the node is null or any required
-  /// LiveKit callback is unset.
+  /// @param node Non-owning handle to the ROS node the forwarder creates its
+  /// subscriptions and publishers on. The forwarder locks the handle for each
+  /// ROS operation; operations become no-ops once the node is destroyed.
+  /// @throws std::invalid_argument when the node has already expired or any
+  /// required LiveKit callback is unset.
   TopicForwarder(
-    TopicForwarderOptions options, rclcpp::Node::SharedPtr node,
+    TopicForwarderOptions options, rclcpp::Node::WeakPtr node,
     LiveKitMethods livekit_methods);
 
   /// @brief Stop inbound streams before destruction.
@@ -235,8 +236,9 @@ private:
 
   /// @brief Forwarding configuration supplied at construction.
   TopicForwarderOptions options_;
-  /// @brief ROS node used to create subscriptions and publishers.
-  rclcpp::Node::SharedPtr node_;
+  /// @brief Non-owning handle to the ROS node used to create subscriptions and
+  /// publishers. Locked per operation so the node lifecycle stays at the edge.
+  rclcpp::Node::WeakPtr node_;
   /// @brief LiveKit publish callbacks supplied by the bridge.
   LiveKitMethods livekit_methods_;
   /// @brief Reentrant callback group for outbound ROS subscriptions.

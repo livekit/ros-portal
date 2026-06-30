@@ -23,8 +23,11 @@
 #include <algorithm>
 #include <cstring>
 #include <exception>
+#include <map>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <livekit/data_track_stream.h>
 #include <livekit/remote_data_track.h>
@@ -84,15 +87,16 @@ TopicForwarder::createRemoteDataTrackDescriptor(
 
 TopicForwarder::TopicForwarder(
   TopicForwarderOptions options,
-  rclcpp::Node::SharedPtr node,
+  rclcpp::Node::WeakPtr node,
   LiveKitMethods livekit_methods)
 : options_(std::move(options)), node_(std::move(node)),
   livekit_methods_(std::move(livekit_methods)),
-  logger_(node_ ? node_->get_logger().get_child("topic_forwarder") :
-    rclcpp::get_logger("topic_forwarder"))
+  logger_(rclcpp::get_logger("topic_forwarder"))
 {
-  if (!node_) {
-    throw std::invalid_argument("TopicForwarder requires a non-null ROS node");
+  const auto locked_node = node_.lock();
+  if (!locked_node) {
+    throw std::invalid_argument(
+        "TopicForwarder requires a non-expired ROS node");
   }
 
   if (!livekit_methods_.publish_data_track ||
@@ -102,9 +106,10 @@ TopicForwarder::TopicForwarder(
         "TopicForwarder requires fully populated LiveKitMethods");
   }
 
-  clock_ = node_->get_clock();
+  logger_ = locked_node->get_logger().get_child("topic_forwarder");
+  clock_ = locked_node->get_clock();
   callback_group_ =
-    node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 }
 
 TopicForwarder::~TopicForwarder()
@@ -116,7 +121,15 @@ TopicForwarder::~TopicForwarder()
 
 void TopicForwarder::pollTopics()
 {
-  const auto topic_names_and_types = node_->get_topic_names_and_types();
+  std::map<std::string, std::vector<std::string>> topic_names_and_types;
+  {
+    const auto node = node_.lock();
+    if (!node) {
+      RCLCPP_DEBUG(logger_, "Skipping topic poll; ROS node has been destroyed");
+      return;
+    }
+    topic_names_and_types = node->get_topic_names_and_types();
+  }
 
   for (const auto &[topic_name, topic_types] : topic_names_and_types) {
     if (subscriptions_.count(topic_name) > 0) {
@@ -201,10 +214,20 @@ void TopicForwarder::createDataSubscriber(
       }
     };
 
+  const auto node = node_.lock();
+  if (!node) {
+    data_topic_states_.erase(topic_name);
+    RCLCPP_DEBUG(
+        logger_,
+        "Skipping data subscription for '%s'; ROS node has been destroyed",
+        topic_name.c_str());
+    return;
+  }
+
   try {
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
-    auto subscription = node_->create_generic_subscription(
+    auto subscription = node->create_generic_subscription(
         topic_name, topic_type, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] =
       std::static_pointer_cast<void>(std::move(subscription));
@@ -318,10 +341,20 @@ void TopicForwarder::createImageSubscriber(const std::string & topic_name)
       }
     };
 
+  const auto node = node_.lock();
+  if (!node) {
+    image_topic_states_.erase(topic_name);
+    RCLCPP_DEBUG(
+        logger_,
+        "Skipping image subscription for '%s'; ROS node has been destroyed",
+        topic_name.c_str());
+    return;
+  }
+
   try {
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
-    auto subscription = node_->create_subscription<sensor_msgs::msg::Image>(
+    auto subscription = node->create_subscription<sensor_msgs::msg::Image>(
         topic_name, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] =
       std::static_pointer_cast<void>(std::move(subscription));
@@ -422,8 +455,18 @@ void TopicForwarder::onDataTrackPublished(
     state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
 
+    const auto node = node_.lock();
+    if (!node) {
+      RCLCPP_WARN(
+          logger_,
+          "Cannot create ROS publisher for LiveKit data track '%s' from '%s'; "
+          "ROS node has been destroyed",
+          descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+      return;
+    }
+
     try {
-      state->publisher = node_->create_generic_publisher(
+      state->publisher = node->create_generic_publisher(
           *ros_topic_name, *topic_type, rclcpp::QoS(10));
     } catch (const std::exception & e) {
       RCLCPP_ERROR(
@@ -522,7 +565,15 @@ TopicForwarder::liveKitToRosTopicType(const std::string & track_name) const
     return std::nullopt;
   }
 
-  const auto topics = node_->get_topic_names_and_types();
+  std::map<std::string, std::vector<std::string>> topics;
+  {
+    const auto node = node_.lock();
+    if (!node) {
+      return std::nullopt;
+    }
+    topics = node->get_topic_names_and_types();
+  }
+
   const auto topic_it = topics.find(*normalized_track_name);
   if (topic_it == topics.end() || topic_it->second.empty()) {
     return std::nullopt;
@@ -545,7 +596,19 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string & topic_name) const
   size_t reliable_count = 0;
   size_t transient_local_count = 0;
 
-  const auto publisher_info = node_->get_publishers_info_by_topic(topic_name);
+  std::vector<rclcpp::TopicEndpointInfo> publisher_info;
+  {
+    const auto node = node_.lock();
+    if (!node) {
+      RCLCPP_WARN(
+          logger_,
+          "Cannot inspect publishers for '%s' because the ROS node has been "
+          "destroyed; using minimum-depth best-effort QoS",
+          topic_name.c_str());
+      return rclcpp::QoS(rclcpp::KeepLast(options_.min_qos_depth)).best_effort();
+    }
+    publisher_info = node->get_publishers_info_by_topic(topic_name);
+  }
 
   for (const auto & publisher : publisher_info) {
     const auto & qos = publisher.qos_profile();

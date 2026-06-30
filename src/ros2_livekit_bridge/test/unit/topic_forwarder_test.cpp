@@ -44,8 +44,6 @@ namespace ros2_livekit_bridge
 namespace
 {
 
-using namespace std::chrono_literals;
-
 TopicForwarder::TopicForwarderOptions makeOptions()
 {
   TopicForwarder::TopicForwarderOptions options;
@@ -77,6 +75,10 @@ TopicForwarder::LiveKitMethods makeLiveKitMethods()
     };
   return livekit_methods;
 }
+
+} // namespace
+
+using namespace std::chrono_literals;
 
 class TopicForwarderTest : public ::testing::Test {
 protected:
@@ -205,5 +207,4 @@ TEST_F(TopicForwarderTest, QoSBestEffortOverrideWins) {
   EXPECT_EQ(qos.reliability(), rclcpp::ReliabilityPolicy::BestEffort);
 }
 
-} // namespace
 } // namespace ros2_livekit_bridge

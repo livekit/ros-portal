@@ -64,7 +64,8 @@ Ros2CliManager::Ros2CliManager(
     node_interfaces_.node_topics, node_interfaces_.node_graph,
     topic_publish_allowed_);
   service_caller_ = std::make_unique<ros2_cli::Ros2ServiceCall>(
-    node_interfaces_.node_base, node_interfaces_.node_graph);
+    node_interfaces_.node_base, node_interfaces_.node_graph,
+    node_interfaces_.node_logging->get_logger());
 
   topic_list_service_ = rclcpp::create_service<Ros2TopicList>(
       node_interfaces_.node_base, node_interfaces_.node_services,

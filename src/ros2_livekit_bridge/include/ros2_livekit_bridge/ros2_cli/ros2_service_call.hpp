@@ -28,6 +28,7 @@
 #include <rcl/client.h>
 #include <rcl/error_handling.h>
 #include <rclcpp/client.hpp>
+#include <rclcpp/logger.hpp>
 #include <rclcpp/exceptions.hpp>
 #include <rclcpp/expand_topic_or_service_name.hpp>
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
@@ -47,7 +48,8 @@
 #include <gtest/gtest_prod.h>
 #endif
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::ros2_cli
+{
 
 /// @brief Implements the ROS-side behavior for one-shot `ros2 service call`.
 ///
@@ -60,15 +62,18 @@ public:
   /// @brief Construct a runtime-typed service caller helper.
   /// @param base Node base interface used for RCL client construction.
   /// @param graph Node graph interface used by rclcpp client base.
+  /// @param logger Logger used for service-call diagnostics.
   /// @throws std::invalid_argument if either required node interface is null.
-  Ros2ServiceCall(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
-                  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph);
+  Ros2ServiceCall(
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
+    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
+    rclcpp::Logger logger);
 
   /// @brief Release cached runtime service clients.
   ~Ros2ServiceCall();
 
   Ros2ServiceCall(const Ros2ServiceCall &) = delete;
-  Ros2ServiceCall &operator=(const Ros2ServiceCall &) = delete;
+  Ros2ServiceCall & operator=(const Ros2ServiceCall &) = delete;
 
   /// @brief Call one ROS service using runtime service type support.
   ///
@@ -86,7 +91,7 @@ public:
 
 #ifdef BUILD_TESTING
   /// @brief Return the service type-support creation error for @p type.
-  static std::string serviceTypeSupportCreationError(const std::string &type);
+  static std::string serviceTypeSupportCreationError(const std::string & type);
 #endif
 
 private:
@@ -102,8 +107,9 @@ private:
   /// @param typesupport_identifier Type-support identifier to build the symbol.
   /// @return Symbol name to resolve in the type-support shared library.
   static std::string
-  serviceTypeSupportSymbol(const std::string &type,
-                           const std::string &typesupport_identifier);
+  serviceTypeSupportSymbol(
+    const std::string & type,
+    const std::string & typesupport_identifier);
 
   /// @brief Load service type support by symbol from the typesupport library.
   ///
@@ -117,28 +123,30 @@ private:
   /// @return Service type-support handle for @p type, or nullptr when the
   ///   type-support symbol is not found.
   static const rosidl_service_type_support_t *
-  serviceTypeSupportHandle(const std::string &type,
-                           const std::string &typesupport_identifier,
-                           rcpputils::SharedLibrary &library);
+  serviceTypeSupportHandle(
+    const std::string & type,
+    const std::string & typesupport_identifier,
+    rcpputils::SharedLibrary & library);
 
   /// @brief Runtime type-support data for one ROS message type.
-  struct MessageTypeSupport {
+  struct MessageTypeSupport
+  {
     /// @brief Load serialization and introspection type support for @p type.
-    explicit MessageTypeSupport(const std::string &type)
-        : serialization_library(rclcpp::get_typesupport_library(
-              type, rosidl_typesupport_cpp::typesupport_identifier)),
-          introspection_library(rclcpp::get_typesupport_library(
-              type,
-              rosidl_typesupport_introspection_cpp::typesupport_identifier)),
-          serialization_handle(rclcpp::get_message_typesupport_handle(
-              type, rosidl_typesupport_cpp::typesupport_identifier,
-              *serialization_library)),
-          introspection_handle(rclcpp::get_message_typesupport_handle(
-              type,
-              rosidl_typesupport_introspection_cpp::typesupport_identifier,
-              *introspection_library)),
-          members(requireMembers(introspection_handle)),
-          serializer(serialization_handle) {}
+    explicit MessageTypeSupport(const std::string & type)
+    : serialization_library(rclcpp::get_typesupport_library(
+          type, rosidl_typesupport_cpp::typesupport_identifier)),
+      introspection_library(rclcpp::get_typesupport_library(
+          type,
+          rosidl_typesupport_introspection_cpp::typesupport_identifier)),
+      serialization_handle(rclcpp::get_message_typesupport_handle(
+          type, rosidl_typesupport_cpp::typesupport_identifier,
+          *serialization_library)),
+      introspection_handle(rclcpp::get_message_typesupport_handle(
+          type,
+          rosidl_typesupport_introspection_cpp::typesupport_identifier,
+          *introspection_library)),
+      members(requireMembers(introspection_handle)),
+      serializer(serialization_handle) {}
 
     /// @brief Shared library that owns the serialization handle.
     std::shared_ptr<rcpputils::SharedLibrary> serialization_library;
@@ -149,14 +157,15 @@ private:
     /// @brief C++ introspection type-support handle.
     const rosidl_message_type_support_t *introspection_handle;
     /// @brief Message member metadata from introspection type support.
-    const MessageMembers &members;
+    const MessageMembers & members;
     /// @brief Runtime serializer for this message type.
     rclcpp::SerializationBase serializer;
 
-  private:
+private:
     /// @brief Require message introspection data.
     static const MessageMembers &
-    requireMembers(const rosidl_message_type_support_t *handle) {
+    requireMembers(const rosidl_message_type_support_t *handle)
+    {
       if (handle == nullptr || handle->data == nullptr) {
         throw std::runtime_error("Introspection type support handle is null");
       }
@@ -185,9 +194,10 @@ private:
   /// @param error Populated with a failure reason when client creation fails.
   /// @return Cached or newly created runtime service client, or std::nullopt
   ///   when type support or client construction fails.
-  std::optional<ClientPtr> getClient(const std::string &service,
-                                     const std::string &msg_type,
-                                     std::string &error);
+  std::optional<ClientPtr> getClient(
+    const std::string & service,
+    const std::string & msg_type,
+    std::string & error);
 
   /// @brief Take and convert a matching service response when available.
   /// @param client Runtime service client to poll for a response.
@@ -195,12 +205,14 @@ private:
   /// @return Service-call response when a matching response is taken, or
   ///   std::nullopt when no matching response is currently available.
   std::optional<Ros2ServiceCallSrv::Response>
-  takeResponse(ServiceClient &client, std::int64_t sequence_number);
+  takeResponse(ServiceClient & client, std::int64_t sequence_number);
 
   /// @brief Node base interface used for RCL client construction.
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base_;
   /// @brief Node graph interface used by rclcpp client base.
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph_;
+  /// @brief Logger used for service-call diagnostics.
+  rclcpp::Logger logger_;
   /// @brief Guards the runtime service client cache.
   std::mutex mutex_;
   /// @brief Bounded service client cache keyed by resolved service and type.

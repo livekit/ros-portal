@@ -41,7 +41,7 @@ namespace introspection = rosidl_typesupport_introspection_cpp;
 /// @param stream Destination stream for the rendered value.
 /// @param data Pointer to the scalar field memory.
 template<typename T>
-void renderScalar(std::ostringstream & stream, const void * data)
+void renderScalar(std::ostringstream & stream, const void *data)
 {
   stream << *static_cast<const T *>(data);
 }
@@ -59,23 +59,19 @@ bool canRenderPlainString(const std::string & value);
 /// @brief Render a double-quoted YAML string scalar with escapes.
 /// @param stream Destination stream for the rendered value.
 /// @param value String value to quote.
-void renderQuotedString(
-  std::ostringstream & stream,
-  const std::string & value);
+void renderQuotedString(std::ostringstream & stream, const std::string & value);
 
 /// @brief Render a string as plain YAML when safe, otherwise quoted.
 /// @param stream Destination stream for the rendered value.
 /// @param value String value to render.
-void renderString(
-  std::ostringstream & stream,
-  const std::string & value);
+void renderString(std::ostringstream & stream, const std::string & value);
 
 /// @brief Return a pointer to a member inside a message buffer.
 /// @param message Pointer to the start of the message memory.
 /// @param member Introspection metadata describing the member offset.
 /// @return Pointer to @p member inside @p message.
 const void * memberMemory(
-  const void * message,
+  const void *message,
   const introspection::MessageMember & member);
 
 /// @brief Return whether a member renders as a nested message block.
@@ -91,8 +87,7 @@ bool isNestedMessageBlock(const introspection::MessageMember & member);
 void renderMessage(
   std::ostringstream & stream,
   const introspection::MessageMembers & members,
-  const void * message,
-  std::size_t indent = 0U);
+  const void *message, std::size_t indent = 0U);
 
 /// @brief Render a nested message-typed field.
 /// @param stream Destination stream for the rendered value.
@@ -102,8 +97,7 @@ void renderMessage(
 void renderNestedMessage(
   std::ostringstream & stream,
   const introspection::MessageMember & member,
-  const void * field_memory,
-  std::size_t indent);
+  const void *field_memory, std::size_t indent);
 
 /// @brief Render one element of an array-of-messages YAML block sequence.
 /// @param stream Destination stream for the rendered item.
@@ -113,8 +107,7 @@ void renderNestedMessage(
 void renderMessageArrayItem(
   std::ostringstream & stream,
   const introspection::MessageMembers & members,
-  const void * message,
-  std::size_t indent);
+  const void *message, std::size_t indent);
 
 /// @brief Render one non-array scalar or nested field.
 /// @param stream Destination stream for the rendered value.
@@ -124,8 +117,7 @@ void renderMessageArrayItem(
 void renderSingleField(
   std::ostringstream & stream,
   const introspection::MessageMember & member,
-  const void * field_memory,
-  std::size_t indent);
+  const void *field_memory, std::size_t indent);
 
 /// @brief Render one array field as a YAML sequence.
 /// @param stream Destination stream for the rendered value.
@@ -135,8 +127,7 @@ void renderSingleField(
 void renderArrayField(
   std::ostringstream & stream,
   const introspection::MessageMember & member,
-  const void * field_memory,
-  std::size_t indent);
+  const void *field_memory, std::size_t indent);
 
 /// @brief Render one introspection field value, scalar or array.
 /// @param stream Destination stream for the rendered value.
@@ -146,8 +137,7 @@ void renderArrayField(
 void renderField(
   std::ostringstream & stream,
   const introspection::MessageMember & member,
-  const void * field_memory,
-  std::size_t indent);
+  const void *field_memory, std::size_t indent);
 
 /// @brief Format a runtime message as CLI-style YAML.
 /// @param members Introspection metadata for the message type.
@@ -155,6 +145,6 @@ void renderField(
 /// @return CLI-style YAML rendering of @p message.
 std::string toYaml(
   const introspection::MessageMembers & members,
-  const void * message);
+  const void *message);
 
-}  // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::message_render

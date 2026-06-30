@@ -483,7 +483,7 @@ serializedMessageFromYaml(
     }
 
     DynamicMessage message(*members);
-    if (!assignMessage(root, message.get(), *members, msg_type, error)) {
+    if (!assignMessage(root, message.data(), *members, msg_type, error)) {
       return std::nullopt;
     }
 
@@ -496,7 +496,7 @@ serializedMessageFromYaml(
 
     rclcpp::SerializationBase serialization(serialization_type_support);
     rclcpp::SerializedMessage serialized;
-    serialization.serialize_message(message.get(), &serialized);
+    serialization.serialize_message(message.data(), &serialized);
     return serialized;
   } catch (const std::exception & resolve_error) {
     error = resolve_error.what();

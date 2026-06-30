@@ -33,16 +33,33 @@ namespace ros2_livekit_bridge::message_render
 using introspection::MessageMember;
 using introspection::MessageMembers;
 
+namespace
+{
+
+// The ROS 2 introspection C API exposes nested-message metadata as a
+// type-erased `void *` on the type-support handle, so this cast is unavoidable.
+// Keeping it in a single checked helper means the rest of the renderer never
+// touches the raw pointer and there is exactly one place to audit.
+const MessageMembers * nestedMembers(const MessageMember & member)
+{
+  if (member.members_ == nullptr || member.members_->data == nullptr) {
+    return nullptr;
+  }
+  return static_cast<const MessageMembers *>(member.members_->data);
+}
+
+}  // namespace
+
 bool isYamlKeyword(const std::string & value)
 {
   std::string lower;
   lower.reserve(value.size());
   std::transform(
-    value.begin(), value.end(), std::back_inserter(lower),
+      value.begin(), value.end(), std::back_inserter(lower),
     [](unsigned char ch) {return static_cast<char>(std::tolower(ch));});
   return lower == "true" || lower == "false" || lower == "null" ||
-         lower == "~" || lower == "yes" || lower == "no" ||
-         lower == "on" || lower == "off";
+         lower == "~" || lower == "yes" || lower == "no" || lower == "on" ||
+         lower == "off";
 }
 
 bool canRenderPlainString(const std::string & value)
@@ -50,12 +67,9 @@ bool canRenderPlainString(const std::string & value)
   if (value.empty() || isYamlKeyword(value)) {
     return false;
   }
-  return std::all_of(
-    value.begin(), value.end(),
-    [](unsigned char ch) {
-      return std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' ||
-             ch == '/';
-    });
+  return std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+             return std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' || ch == '/';
+  });
 }
 
 void renderQuotedString(std::ostringstream & stream, const std::string & value)
@@ -83,8 +97,8 @@ void renderQuotedString(std::ostringstream & stream, const std::string & value)
           stream << static_cast<char>(ch);
         } else {
           stream << "\\x" << std::uppercase << std::hex << std::setw(2)
-                 << std::setfill('0') << static_cast<int>(ch)
-                 << std::nouppercase << std::dec << std::setfill(' ');
+                 << std::setfill('0') << static_cast<int>(ch) << std::nouppercase
+                 << std::dec << std::setfill(' ');
         }
         break;
     }
@@ -105,14 +119,12 @@ bool isNestedMessageBlock(const MessageMember & member)
 {
   return !member.is_array_ &&
          member.type_id_ == introspection::ROS_TYPE_MESSAGE &&
-         member.members_ != nullptr &&
-         member.members_->data != nullptr;
+         nestedMembers(member) != nullptr;
 }
 
 void renderMessageArrayItem(
   std::ostringstream & stream,
-  const MessageMembers & members,
-  const void * message,
+  const MessageMembers & members, const void *message,
   std::size_t indent)
 {
   const std::string item_padding(indent + 2U, ' ');
@@ -133,17 +145,15 @@ void renderMessageArrayItem(
   }
 }
 
-const void * memberMemory(const void * message, const MessageMember & member)
+const void * memberMemory(const void *message, const MessageMember & member)
 {
-  return static_cast<const void *>(
-    static_cast<const std::uint8_t *>(message) + member.offset_);
+  return static_cast<const void *>(static_cast<const std::uint8_t *>(message) +
+         member.offset_);
 }
 
 void renderMessage(
-  std::ostringstream & stream,
-  const MessageMembers & members,
-  const void * message,
-  std::size_t indent)
+  std::ostringstream & stream, const MessageMembers & members,
+  const void *message, std::size_t indent)
 {
   const std::string padding(indent, ' ');
   for (std::uint32_t index = 0; index < members.member_count_; ++index) {
@@ -158,25 +168,21 @@ void renderMessage(
 
 void renderNestedMessage(
   std::ostringstream & stream,
-  const MessageMember & member,
-  const void * field_memory,
+  const MessageMember & member, const void *field_memory,
   std::size_t indent)
 {
-  if (member.members_ == nullptr || member.members_->data == nullptr) {
+  const MessageMembers * members = nestedMembers(member);
+  if (members == nullptr) {
     stream << "{}";
     return;
   }
   stream << '\n';
-  renderMessage(
-    stream, *static_cast<const MessageMembers *>(member.members_->data),
-    field_memory, indent + 2U);
+  renderMessage(stream, *members, field_memory, indent + 2U);
 }
 
 void renderSingleField(
-  std::ostringstream & stream,
-  const MessageMember & member,
-  const void * field_memory,
-  std::size_t indent)
+  std::ostringstream & stream, const MessageMember & member,
+  const void *field_memory, std::size_t indent)
 {
   switch (member.type_id_) {
     case introspection::ROS_TYPE_FLOAT:
@@ -205,8 +211,7 @@ void renderSingleField(
         *static_cast<const std::uint8_t *>(field_memory));
       break;
     case introspection::ROS_TYPE_INT8:
-      stream << static_cast<int>(
-        *static_cast<const std::int8_t *>(field_memory));
+      stream << static_cast<int>(*static_cast<const std::int8_t *>(field_memory));
       break;
     case introspection::ROS_TYPE_UINT16:
       renderScalar<std::uint16_t>(stream, field_memory);
@@ -231,15 +236,13 @@ void renderSingleField(
       break;
     case introspection::ROS_TYPE_WSTRING: {
         std::string value;
-        const auto & wide_value =
-          *static_cast<const std::u16string *>(field_memory);
+        const auto & wide_value = *static_cast<const std::u16string *>(field_memory);
         value.reserve(wide_value.size());
         for (const auto code_unit : wide_value) {
           value.push_back(static_cast<char>(code_unit));
         }
         renderString(stream, value);
-      }
-      break;
+      } break;
     case introspection::ROS_TYPE_MESSAGE:
       renderNestedMessage(stream, member, field_memory, indent);
       break;
@@ -250,29 +253,26 @@ void renderSingleField(
 }
 
 void renderArrayField(
-  std::ostringstream & stream,
-  const MessageMember & member,
-  const void * field_memory,
-  std::size_t indent)
+  std::ostringstream & stream, const MessageMember & member,
+  const void *field_memory, std::size_t indent)
 {
   const auto size = member.size_function == nullptr ?
-    member.array_size_ : member.size_function(field_memory);
+    member.array_size_ :
+    member.size_function(field_memory);
   if (member.type_id_ == introspection::ROS_TYPE_MESSAGE) {
-    if (size == 0U ||
-      member.members_ == nullptr || member.members_->data == nullptr)
-    {
+    const MessageMembers * nested = nestedMembers(member);
+    if (size == 0U || nested == nullptr) {
       stream << "[]";
       return;
     }
     stream << '\n';
-    const auto & members =
-      *static_cast<const MessageMembers *>(member.members_->data);
+    const auto & members = *nested;
     for (std::size_t index = 0; index < size; ++index) {
       if (index > 0U) {
         stream << '\n';
       }
-      const auto * item = member.get_function(
-        const_cast<void *>(field_memory), index);
+      const auto *item =
+        member.get_function(const_cast<void *>(field_memory), index);
       renderMessageArrayItem(stream, members, item, indent);
     }
     return;
@@ -283,18 +283,16 @@ void renderArrayField(
     if (index > 0U) {
       stream << ", ";
     }
-    const auto * item = member.get_function(
-      const_cast<void *>(field_memory), index);
+    const auto *item =
+      member.get_function(const_cast<void *>(field_memory), index);
     renderSingleField(stream, member, item, indent);
   }
   stream << ']';
 }
 
 void renderField(
-  std::ostringstream & stream,
-  const MessageMember & member,
-  const void * field_memory,
-  std::size_t indent)
+  std::ostringstream & stream, const MessageMember & member,
+  const void *field_memory, std::size_t indent)
 {
   if (member.is_array_) {
     renderArrayField(stream, member, field_memory, indent);
@@ -303,13 +301,11 @@ void renderField(
   renderSingleField(stream, member, field_memory, indent);
 }
 
-std::string toYaml(
-  const MessageMembers & members,
-  const void * message)
+std::string toYaml(const MessageMembers & members, const void *message)
 {
   std::ostringstream stream;
   renderMessage(stream, members, message);
   return stream.str();
 }
 
-}  // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::message_render

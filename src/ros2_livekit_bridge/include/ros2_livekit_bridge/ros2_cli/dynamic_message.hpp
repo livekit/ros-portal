@@ -55,11 +55,12 @@ public:
   DynamicMessage(DynamicMessage &&) noexcept = default;
   DynamicMessage & operator=(DynamicMessage &&) = delete;
 
-  /// @brief Access mutable message storage.
+  /// @brief Access the type-erased message storage.
+  ///
+  /// The buffer is intentionally untyped: a dynamic message only knows its
+  /// concrete type at runtime via introspection metadata, and every consumer
+  /// (de/serialization, rcl send/take, YAML rendering) operates on `void *`.
   void * data() {return data_.get();}
-
-  /// @brief Access mutable message storage.
-  void * get() {return data_.get();}
 
 private:
   /// @brief Deleter that runs ROS fini before freeing untyped message storage.

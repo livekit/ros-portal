@@ -184,7 +184,7 @@ private:
     std::vector<std::regex> outgoing_topic_compiled_patterns,
     std::vector<std::regex> incoming_topic_compiled_patterns);
 
-  /// @brief Create Ros2CliManager after TopicForwarder is initialized.
+  /// @brief Create Ros2CliManager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
   bool initializeRos2CliManager();
 

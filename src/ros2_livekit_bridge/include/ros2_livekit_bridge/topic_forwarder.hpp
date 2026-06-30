@@ -40,6 +40,10 @@
 
 #include "ros2_livekit_bridge/result.hpp"
 
+#ifdef BUILD_TESTING
+#include <gtest/gtest_prod.h>
+#endif
+
 namespace livekit
 {
 class RemoteDataTrack;
@@ -141,6 +145,15 @@ public:
   /// @brief Check whether a normalized ROS topic is allowed inbound.
   bool isIncomingTopicAllowed(const std::string & topic_name) const;
 
+private:
+#ifdef BUILD_TESTING
+  FRIEND_TEST(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile);
+  FRIEND_TEST(TopicForwarderTest,
+              QoSUsesReliableTransientLocalWhenAllPublishersMatch);
+  FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
+  FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
+#endif
+
   /// @brief Resolve the ROS type for an inbound LiveKit track.
   std::optional<std::string>
   liveKitToRosTopicType(const std::string & track_name) const;
@@ -148,7 +161,6 @@ public:
   /// @brief Determine subscription QoS for a ROS topic.
   rclcpp::QoS determineQoS(const std::string & topic_name) const;
 
-private:
   /// @brief Create the appropriate ROS subscriber for @p topic_type.
   void createSubscriber(
     const std::string & topic_name,

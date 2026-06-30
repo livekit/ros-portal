@@ -22,10 +22,8 @@
 #include <string>
 #include <utility>
 
-namespace ros2_livekit_bridge
-{
-namespace
-{
+namespace ros2_livekit_bridge {
+namespace {
 
 using ros2_cli::interface_show::utils::appendRenderedInterfaceLine;
 using ros2_cli::interface_show::utils::interfacePath;
@@ -35,11 +33,8 @@ using ros2_cli::interface_show::utils::removeArraySuffix;
 using ros2_cli::interface_show::utils::splitInterfaceType;
 using ros2_cli::interface_show::utils::stripTrailingComment;
 
-InterfaceShowOptions
-makeInterfaceOptions(
-  std::string type = "std_msgs/msg/Header",
-  bool all_comments = false, bool no_comments = false)
-{
+InterfaceShowOptions makeInterfaceOptions(std::string type = "std_msgs/msg/Header", bool all_comments = false,
+                                          bool no_comments = false) {
   InterfaceShowOptions options;
   options.type = std::move(type);
   options.all_comments = all_comments;
@@ -48,10 +43,8 @@ makeInterfaceOptions(
 }
 
 TEST(Ros2InterfaceShowUtilsTest, SplitsInterfaceTypeOnSlashes) {
-  EXPECT_EQ(splitInterfaceType("std_msgs/msg/String"),
-    (std::vector<std::string>{"std_msgs", "msg", "String"}));
-  EXPECT_EQ(splitInterfaceType("pkg/"),
-    (std::vector<std::string>{"pkg", ""}));
+  EXPECT_EQ(splitInterfaceType("std_msgs/msg/String"), (std::vector<std::string>{"std_msgs", "msg", "String"}));
+  EXPECT_EQ(splitInterfaceType("pkg/"), (std::vector<std::string>{"pkg", ""}));
 }
 
 TEST(Ros2InterfaceShowUtilsTest, RemovesArrayAndBoundedSuffixes) {
@@ -74,21 +67,11 @@ TEST(Ros2InterfaceShowUtilsTest, StripsTrailingComments) {
 }
 
 TEST(Ros2InterfaceShowUtilsTest, InfersNestedInterfaceTypesFromLines) {
-  EXPECT_EQ(
-    nestedInterfaceTypeFromLine("std_msgs", "builtin_interfaces/Time stamp"),
-    "builtin_interfaces/msg/Time");
-  EXPECT_EQ(
-    nestedInterfaceTypeFromLine("std_msgs", "Header header"),
-    "std_msgs/msg/Header");
-  EXPECT_EQ(
-    nestedInterfaceTypeFromLine("std_msgs", "int32 value"),
-    std::nullopt);
-  EXPECT_EQ(
-    nestedInterfaceTypeFromLine("std_msgs", "string frame_id"),
-    std::nullopt);
-  EXPECT_EQ(
-    nestedInterfaceTypeFromLine("std_msgs", "---"),
-    std::nullopt);
+  EXPECT_EQ(nestedInterfaceTypeFromLine("std_msgs", "builtin_interfaces/Time stamp"), "builtin_interfaces/msg/Time");
+  EXPECT_EQ(nestedInterfaceTypeFromLine("std_msgs", "Header header"), "std_msgs/msg/Header");
+  EXPECT_EQ(nestedInterfaceTypeFromLine("std_msgs", "int32 value"), std::nullopt);
+  EXPECT_EQ(nestedInterfaceTypeFromLine("std_msgs", "string frame_id"), std::nullopt);
+  EXPECT_EQ(nestedInterfaceTypeFromLine("std_msgs", "---"), std::nullopt);
 }
 
 TEST(Ros2InterfaceShowUtilsTest, ResolvesInstalledInterfacePaths) {
@@ -114,47 +97,38 @@ TEST(Ros2InterfaceShowUtilsTest, AppendsRenderedInterfaceLines) {
 }
 
 TEST(Ros2InterfaceShowTest, RendersInterfaceWithTopLevelComments) {
-  const auto output =
-    ros2_cli::renderInterfaceDefinition(makeInterfaceOptions());
+  const auto output = ros2_cli::renderInterfaceDefinition(makeInterfaceOptions());
   ASSERT_TRUE(output.has_value());
 
-  EXPECT_NE(
-      output->find("# Standard metadata for higher-level stamped data types."),
-      std::string::npos);
+  EXPECT_NE(output->find("# Standard metadata for higher-level stamped data types."), std::string::npos);
   EXPECT_NE(output->find("builtin_interfaces/Time stamp"), std::string::npos);
   EXPECT_NE(output->find("\tint32 sec"), std::string::npos);
-  EXPECT_EQ(output->find("# This message communicates ROS Time defined here:"),
-            std::string::npos);
+  EXPECT_EQ(output->find("# This message communicates ROS Time defined here:"), std::string::npos);
 }
 
 TEST(Ros2InterfaceShowTest, RendersInterfaceWithAllComments) {
-  const auto output = ros2_cli::renderInterfaceDefinition(
-      makeInterfaceOptions("std_msgs/msg/Header", true));
+  const auto output = ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("std_msgs/msg/Header", true));
   ASSERT_TRUE(output.has_value());
 
-  EXPECT_NE(output->find("# This message communicates ROS Time defined here:"),
-            std::string::npos);
+  EXPECT_NE(output->find("# This message communicates ROS Time defined here:"), std::string::npos);
 }
 
 TEST(Ros2InterfaceShowTest, RendersInterfaceWithoutCommentsOrWhitespace) {
-  const auto output = ros2_cli::renderInterfaceDefinition(
-      makeInterfaceOptions("std_msgs/msg/Header", false, true));
+  const auto output = ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("std_msgs/msg/Header", false, true));
   ASSERT_TRUE(output.has_value());
 
-  EXPECT_EQ(*output, "builtin_interfaces/Time stamp\n"
-                     "\tint32 sec\n"
-                     "\tuint32 nanosec\n"
-                     "string frame_id\n");
+  EXPECT_EQ(*output,
+            "builtin_interfaces/Time stamp\n"
+            "\tint32 sec\n"
+            "\tuint32 nanosec\n"
+            "string frame_id\n");
 }
 
 TEST(Ros2InterfaceShowTest, InterfaceShowRejectsInvalidArguments) {
-  EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(makeInterfaceOptions(""))
-    .has_value());
-  EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("-"))
-    .has_value());
-  EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(
-                   makeInterfaceOptions("std_msgs/msg/Header", true, true))
-    .has_value());
+  EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("")).has_value());
+  EXPECT_FALSE(ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("-")).has_value());
+  EXPECT_FALSE(
+      ros2_cli::renderInterfaceDefinition(makeInterfaceOptions("std_msgs/msg/Header", true, true)).has_value());
 }
 
 } // namespace

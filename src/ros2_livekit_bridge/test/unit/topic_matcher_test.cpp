@@ -21,14 +21,11 @@
 #include <string>
 #include <vector>
 
-namespace ros2_livekit_bridge::utils
-{
-namespace
-{
+namespace ros2_livekit_bridge::utils {
+namespace {
 
 TEST(TopicMatcherTest, MatchesAnyCompiledPattern) {
-  const auto patterns =
-    compileRegexPatterns(std::vector<std::string>{"/camera/.*", "/tf"});
+  const auto patterns = compileRegexPatterns(std::vector<std::string>{"/camera/.*", "/tf"});
 
   EXPECT_TRUE(matchesAnyPattern("/camera/image_raw", patterns));
   EXPECT_TRUE(matchesAnyPattern("/tf", patterns));
@@ -40,14 +37,11 @@ TEST(TopicMatcherTest, RejectsValuesThatDoNotFullyMatch) {
   EXPECT_FALSE(matchesAnyPattern("/tf_static", patterns));
 }
 
-TEST(TopicMatcherTest, EmptyPatternListDoesNotMatch) {
-  EXPECT_FALSE(matchesAnyPattern("/camera/image_raw", {}));
-}
+TEST(TopicMatcherTest, EmptyPatternListDoesNotMatch) { EXPECT_FALSE(matchesAnyPattern("/camera/image_raw", {})); }
 
 TEST(TopicMatcherTest, ReportsInvalidPatternsAndKeepsValidPatterns) {
   std::vector<PatternCompileError> errors;
-  const auto patterns =
-    compileRegexPatterns(std::vector<std::string>{"/tf", "["}, &errors);
+  const auto patterns = compileRegexPatterns(std::vector<std::string>{"/tf", "["}, &errors);
 
   ASSERT_EQ(errors.size(), 1u);
   EXPECT_EQ(errors.front().pattern, "[");

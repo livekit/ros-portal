@@ -19,23 +19,21 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <string>
-#include <unordered_map>
-
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/node_interfaces/node_graph_interface.hpp>
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
+#include <string>
+#include <unordered_map>
 
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
 /// @brief Predicate used to authorize remote publishes to resolved ROS topics.
 ///
 /// The input topic name has already been resolved in the remote node context.
 /// Returning false rejects the publish before a generic publisher is created.
-using TopicPublishAllowed = std::function<bool(const std::string & topic_name)>;
+using TopicPublishAllowed = std::function<bool(const std::string& topic_name)>;
 
 /// @brief Implements the ROS-side behavior for one-shot `ros2 topic pub`.
 ///
@@ -54,10 +52,9 @@ public:
   /// @param topic_publish_allowed Optional predicate for enforcing bridge topic
   ///   direction/allow rules. When omitted, all resolved topics are allowed.
   /// @throws std::invalid_argument if either node interface is null.
-  Ros2TopicPub(
-    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
-    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
-    TopicPublishAllowed topic_publish_allowed = {});
+  Ros2TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
+               rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
+               TopicPublishAllowed topic_publish_allowed = {});
 
   /// @brief Publish one native YAML payload to a ROS topic.
   ///
@@ -73,8 +70,7 @@ public:
 
 private:
   /// @brief Cached publisher and the interface type it was created with.
-  struct Entry
-  {
+  struct Entry {
     /// @brief Interface type pinned to this resolved topic cache entry.
     std::string msg_type;
     /// @brief Generic publisher reused for later publishes to the same topic.

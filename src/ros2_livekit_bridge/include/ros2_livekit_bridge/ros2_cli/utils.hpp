@@ -19,35 +19,27 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <nlohmann/json_fwd.hpp>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <nlohmann/json_fwd.hpp>
-
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
 /// @brief Remove leading whitespace from a string.
 /// @param value Input string.
 /// @return Copy of @p value without leading whitespace.
-inline std::string leftTrim(const std::string & value)
-{
+inline std::string leftTrim(const std::string& value) {
   const auto first =
-    std::find_if(value.begin(), value.end(), [](unsigned char character) {
-        return !std::isspace(character);
-      });
+      std::find_if(value.begin(), value.end(), [](unsigned char character) { return !std::isspace(character); });
   return std::string(first, value.end());
 }
 
 /// @brief Remove trailing whitespace from a string.
 /// @param value Input string.
 /// @return Copy of @p value without trailing whitespace.
-inline std::string rightTrim(std::string value)
-{
-  while (!value.empty() &&
-    std::isspace(static_cast<unsigned char>(value.back())))
-  {
+inline std::string rightTrim(std::string value) {
+  while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
     value.pop_back();
   }
   return value;
@@ -61,24 +53,19 @@ inline std::string rightTrim(std::string value)
 /// @return Trimmed string field value.
 /// @throws std::invalid_argument when the field is missing, not a string, or
 /// empty after trimming.
-std::string requiredStringField(
-  const nlohmann::json & body,
-  const char *field_name,
-  const char *missing_message,
-  const char *empty_message);
+std::string requiredStringField(const nlohmann::json& body, const char* field_name, const char* missing_message,
+                                const char* empty_message);
 
 /// @brief Check whether a graph-discovered type list contains an interface type.
 /// @param graph_types Interface type names returned by the ROS graph.
 /// @param msg_type Interface type to find.
 /// @return True when @p msg_type appears in @p graph_types.
-bool topicTypeMatches(
-  const std::vector<std::string> & graph_types,
-  const std::string & msg_type);
+bool topicTypeMatches(const std::vector<std::string>& graph_types, const std::string& msg_type);
 
 /// @brief Detect ROS hidden-name tokens in a slash-delimited graph name.
 /// @param name Topic or service name to inspect.
 /// @return True when any non-empty token starts with `_`.
-bool hasHiddenNameToken(const std::string & name);
+bool hasHiddenNameToken(const std::string& name);
 
 /// @brief Join ROS interface type names for CLI display.
 /// @param types Interface type names associated with one graph entity.
@@ -88,6 +75,6 @@ bool hasHiddenNameToken(const std::string & name);
 ///   Type 1: std_msgs/msg/String
 ///   Type 2: std_msgs/msg/Header
 ///   Joined: std_msgs/msg/String, std_msgs/msg/Header
-std::string joinTypes(const std::vector<std::string> & types);
+std::string joinTypes(const std::vector<std::string>& types);
 
-}  // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::ros2_cli

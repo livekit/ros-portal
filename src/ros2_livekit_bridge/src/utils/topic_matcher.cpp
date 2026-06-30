@@ -16,20 +16,17 @@
 
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
-namespace ros2_livekit_bridge::utils
-{
+namespace ros2_livekit_bridge::utils {
 
-std::vector<std::regex> compileRegexPatterns(
-  const std::vector<std::string> & patterns,
-  std::vector<PatternCompileError> *errors)
-{
+std::vector<std::regex> compileRegexPatterns(const std::vector<std::string>& patterns,
+                                             std::vector<PatternCompileError>* errors) {
   std::vector<std::regex> compiled_patterns;
   compiled_patterns.reserve(patterns.size());
 
-  for (const auto & pattern : patterns) {
+  for (const auto& pattern : patterns) {
     try {
       compiled_patterns.emplace_back(pattern, std::regex::ECMAScript);
-    } catch (const std::regex_error & e) {
+    } catch (const std::regex_error& e) {
       if (errors) {
         errors->push_back(PatternCompileError{pattern, e.what()});
       }
@@ -39,11 +36,8 @@ std::vector<std::regex> compileRegexPatterns(
   return compiled_patterns;
 }
 
-bool matchesAnyPattern(
-  const std::string & value,
-  const std::vector<std::regex> & patterns)
-{
-  for (const auto & pattern : patterns) {
+bool matchesAnyPattern(const std::string& value, const std::vector<std::regex>& patterns) {
+  for (const auto& pattern : patterns) {
     if (std::regex_match(value, pattern)) {
       return true;
     }

@@ -23,18 +23,17 @@
 
 #pragma once
 
+#include <yaml-cpp/yaml.h>
+
 #include <cstddef>
 #include <exception>
 #include <limits>
 #include <optional>
+#include <rclcpp/serialized_message.hpp>
 #include <string>
 #include <type_traits>
 
-#include <rclcpp/serialized_message.hpp>
-#include <yaml-cpp/yaml.h>
-
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
 /// @brief Convert a native `ros2 topic pub` YAML payload to serialized ROS CDR.
 /// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
@@ -42,18 +41,15 @@ namespace ros2_livekit_bridge::ros2_cli
 /// @param error Set to a human-readable description when conversion fails.
 /// @return Serialized ROS message bytes, or `std::nullopt` when the type cannot
 ///   be resolved or the payload is invalid.
-std::optional<rclcpp::SerializedMessage>
-serializedMessageFromYaml(
-  const std::string & msg_type,
-  const std::string & payload, std::string & error);
+std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string &msg_type,
+                                                                   const std::string &payload, std::string &error);
 
 /// @brief Leaf YAML-to-scalar converters used while populating a ROS message.
 ///
 /// These helpers contain the value-level parsing and range-checking logic that
 /// is independent of ROS introspection. They are exposed here so they can be
 /// unit tested directly against YAML nodes.
-namespace detail
-{
+namespace detail {
 
 /// @brief Convert a YAML node to an integral type, enforcing its value range.
 /// @tparam T Target integral type.
@@ -62,35 +58,27 @@ namespace detail
 /// @param error Set to a description when @p node is not an integer or is out
 /// of range.
 /// @return The parsed value as @p T, or `std::nullopt` on failure.
-template<typename T>
-std::optional<T> checkedInteger(
-  const YAML::Node & node, const std::string & path,
-  std::string & error)
-{
+template <typename T>
+std::optional<T> checkedInteger(const YAML::Node &node, const std::string &path, std::string &error) {
   static_assert(std::is_integral_v<T>, "T must be integral");
   try {
     if constexpr (std::is_signed_v<T>) {
       const auto value = node.as<long long>();
       if (value < static_cast<long long>(std::numeric_limits<T>::min()) ||
-        value > static_cast<long long>(std::numeric_limits<T>::max()))
-      {
-        error =
-          "field '" + path + "' must be an integer: integer is out of range";
+          value > static_cast<long long>(std::numeric_limits<T>::max())) {
+        error = "field '" + path + "' must be an integer: integer is out of range";
         return std::nullopt;
       }
       return static_cast<T>(value);
     } else {
       const auto value = node.as<unsigned long long>();
-      if (value >
-        static_cast<unsigned long long>(std::numeric_limits<T>::max()))
-      {
-        error =
-          "field '" + path + "' must be an integer: integer is out of range";
+      if (value > static_cast<unsigned long long>(std::numeric_limits<T>::max())) {
+        error = "field '" + path + "' must be an integer: integer is out of range";
         return std::nullopt;
       }
       return static_cast<T>(value);
     }
-  } catch (const std::exception & parse_error) {
+  } catch (const std::exception &parse_error) {
     error = "field '" + path + "' must be an integer: " + parse_error.what();
     return std::nullopt;
   }
@@ -104,22 +92,17 @@ std::optional<T> checkedInteger(
 /// @param error Set to a description when @p node is not numeric or is out of
 /// range.
 /// @return The parsed value as @p T, or `std::nullopt` on failure.
-template<typename T>
-std::optional<T> checkedFloat(
-  const YAML::Node & node, const std::string & path,
-  std::string & error)
-{
+template <typename T>
+std::optional<T> checkedFloat(const YAML::Node &node, const std::string &path, std::string &error) {
   try {
     const auto value = node.as<double>();
     if (value < -static_cast<double>(std::numeric_limits<T>::max()) ||
-      value > static_cast<double>(std::numeric_limits<T>::max()))
-    {
-      error = "field '" + path +
-        "' must be numeric: floating point value is out of range";
+        value > static_cast<double>(std::numeric_limits<T>::max())) {
+      error = "field '" + path + "' must be numeric: floating point value is out of range";
       return std::nullopt;
     }
     return static_cast<T>(value);
-  } catch (const std::exception & parse_error) {
+  } catch (const std::exception &parse_error) {
     error = "field '" + path + "' must be numeric: " + parse_error.what();
     return std::nullopt;
   }
@@ -132,21 +115,16 @@ std::optional<T> checkedFloat(
 /// @param error Set to a description when @p node is not a string or exceeds @p
 /// upper_bound.
 /// @return The parsed string, or `std::nullopt` on failure.
-inline std::optional<std::string> checkedString(
-  const YAML::Node & node,
-  std::size_t upper_bound,
-  const std::string & path,
-  std::string & error)
-{
+inline std::optional<std::string> checkedString(const YAML::Node &node, std::size_t upper_bound,
+                                                const std::string &path, std::string &error) {
   try {
     const auto value = node.as<std::string>();
     if (upper_bound > 0 && value.size() > upper_bound) {
-      error =
-        "field '" + path + "' must be a string: string exceeds upper bound";
+      error = "field '" + path + "' must be a string: string exceeds upper bound";
       return std::nullopt;
     }
     return value;
-  } catch (const std::exception & parse_error) {
+  } catch (const std::exception &parse_error) {
     error = "field '" + path + "' must be a string: " + parse_error.what();
     return std::nullopt;
   }
@@ -161,12 +139,8 @@ inline std::optional<std::string> checkedString(
 /// upper_bound.
 /// @return The parsed string widened code unit by code unit, or `std::nullopt`
 /// on failure.
-inline std::optional<std::u16string> checkedU16String(
-  const YAML::Node & node,
-  std::size_t upper_bound,
-  const std::string & path,
-  std::string & error)
-{
+inline std::optional<std::u16string> checkedU16String(const YAML::Node &node, std::size_t upper_bound,
+                                                      const std::string &path, std::string &error) {
   const auto value = checkedString(node, upper_bound, path, error);
   if (!value) {
     return std::nullopt;
@@ -188,11 +162,7 @@ inline std::optional<std::u16string> checkedU16String(
 /// @param error Set to a description when @p node is neither a character nor
 /// integer.
 /// @return The resolved character, or `std::nullopt` on failure.
-inline std::optional<char> checkedChar(
-  const YAML::Node & node,
-  const std::string & path,
-  std::string & error)
-{
+inline std::optional<char> checkedChar(const YAML::Node &node, const std::string &path, std::string &error) {
   try {
     const auto value = node.as<std::string>();
     if (value.size() == 1U) {
@@ -212,11 +182,7 @@ inline std::optional<char> checkedChar(
 /// @param error Set to a description when @p node is neither a character nor
 /// integer.
 /// @return The resolved wide character, or `std::nullopt` on failure.
-inline std::optional<char16_t> checkedWChar(
-  const YAML::Node & node,
-  const std::string & path,
-  std::string & error)
-{
+inline std::optional<char16_t> checkedWChar(const YAML::Node &node, const std::string &path, std::string &error) {
   try {
     const auto value = node.as<std::string>();
     if (value.size() == 1U) {

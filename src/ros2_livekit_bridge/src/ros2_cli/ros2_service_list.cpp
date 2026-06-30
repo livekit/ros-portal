@@ -15,25 +15,19 @@
  */
 
 #include "ros2_livekit_bridge/ros2_cli/ros2_service_list.hpp"
-#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
 #include <algorithm>
 #include <sstream>
 #include <utility>
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+#include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
-bool isHiddenService(const std::string & service_name)
-{
-  return hasHiddenNameToken(service_name);
-}
+namespace ros2_livekit_bridge::ros2_cli {
 
-std::string
-formatServiceList(
-  const std::vector<Ros2CliManager::ServiceInfo> & services,
-  const ServiceListOptions & options)
-{
+bool isHiddenService(const std::string& service_name) { return hasHiddenNameToken(service_name); }
+
+std::string formatServiceList(const std::vector<Ros2CliManager::ServiceInfo>& services,
+                              const ServiceListOptions& options) {
   std::ostringstream stream;
 
   if (options.count_services) {
@@ -41,7 +35,7 @@ formatServiceList(
     return stream.str();
   }
 
-  for (const auto & service : services) {
+  for (const auto& service : services) {
     stream << service.name;
     if (options.show_types) {
       stream << " [" << joinTypes(service.types) << "]";
@@ -52,16 +46,13 @@ formatServiceList(
   return stream.str();
 }
 
-std::vector<Ros2CliManager::ServiceInfo>
-collectServiceInfo(
-  const rclcpp::node_interfaces::NodeGraphInterface & graph,
-  const ServiceListOptions & options)
-{
+std::vector<Ros2CliManager::ServiceInfo> collectServiceInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
+                                                            const ServiceListOptions& options) {
   std::vector<Ros2CliManager::ServiceInfo> services;
   const auto service_names_and_types = graph.get_service_names_and_types();
   services.reserve(service_names_and_types.size());
 
-  for (const auto &[service_name, service_types] : service_names_and_types) {
+  for (const auto& [service_name, service_types] : service_names_and_types) {
     if (!options.include_hidden_services && isHiddenService(service_name)) {
       continue;
     }
@@ -73,9 +64,8 @@ collectServiceInfo(
   }
 
   std::sort(services.begin(), services.end(),
-    [](const Ros2CliManager::ServiceInfo & lhs,
-    const Ros2CliManager::ServiceInfo & rhs) {
-      return lhs.name < rhs.name;
+            [](const Ros2CliManager::ServiceInfo& lhs, const Ros2CliManager::ServiceInfo& rhs) {
+              return lhs.name < rhs.name;
             });
   return services;
 }

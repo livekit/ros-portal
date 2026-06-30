@@ -51,9 +51,10 @@ ament_clang()
 {
     cd "\${WS}" && sros
     if [ "\$#" -eq 0 ]; then
-        ament_clang_format --reformat src/ros2_livekit_bridge src/ros2_livekit_bridge_config
+        ament_clang_format --config "\${WS}/.clang-format" --reformat \
+            src/ros2_livekit_bridge src/ros2_livekit_bridge_config
     else
-        ament_clang_format --reformat "\$@"
+        ament_clang_format --config "\${WS}/.clang-format" --reformat "\$@"
     fi
 }
 

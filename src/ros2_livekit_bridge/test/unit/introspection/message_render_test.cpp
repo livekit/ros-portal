@@ -20,56 +20,47 @@
 
 #include <cstdint>
 #include <memory>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-
 #include <rclcpp/typesupport_helpers.hpp>
 #include <rcpputils/shared_library.hpp>
 #include <rosidl_typesupport_introspection_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
+#include <sstream>
 #include <std_msgs/msg/int32_multi_array.hpp>
 #include <std_msgs/msg/multi_array_dimension.hpp>
+#include <stdexcept>
+#include <string>
 #include <test_msgs/msg/basic_types.hpp>
 #include <test_msgs/msg/builtins.hpp>
 #include <test_msgs/msg/nested.hpp>
 #include <test_msgs/msg/strings.hpp>
 
-namespace ros2_livekit_bridge::message_render
-{
-namespace
-{
+namespace ros2_livekit_bridge::message_render {
+namespace {
 
 /// @brief Loaded introspection type support kept alive for the test scope.
 ///
 /// The MessageMembers metadata points into @ref library, so the library must
 /// outlive any rendering call that consumes @ref members.
-struct LoadedIntrospection
-{
+struct LoadedIntrospection {
   /// @brief Library owning the introspection type-support handle.
   std::shared_ptr<rcpputils::SharedLibrary> library;
   /// @brief Message member metadata for the loaded type.
-  const introspection::MessageMembers * members{nullptr};
+  const introspection::MessageMembers *members{nullptr};
 };
 
 /// @brief Load introspection members for a message type identifier.
-LoadedIntrospection loadIntrospection(const std::string & type)
-{
+LoadedIntrospection loadIntrospection(const std::string &type) {
   LoadedIntrospection loaded;
-  loaded.library = rclcpp::get_typesupport_library(
-    type, introspection::typesupport_identifier);
-  const auto * handle = rclcpp::get_message_typesupport_handle(
-    type, introspection::typesupport_identifier, *loaded.library);
-  loaded.members =
-    static_cast<const introspection::MessageMembers *>(handle->data);
+  loaded.library = rclcpp::get_typesupport_library(type, introspection::typesupport_identifier);
+  const auto *handle =
+      rclcpp::get_message_typesupport_handle(type, introspection::typesupport_identifier, *loaded.library);
+  loaded.members = static_cast<const introspection::MessageMembers *>(handle->data);
   return loaded;
 }
 
 /// @brief Find a member by name within introspection metadata.
-const introspection::MessageMember * memberByName(
-  const introspection::MessageMembers & members,
-  const std::string & name)
-{
+const introspection::MessageMember *memberByName(const introspection::MessageMembers &members,
+                                                 const std::string &name) {
   for (std::uint32_t index = 0; index < members.member_count_; ++index) {
     if (name == members.members_[index].name_) {
       return &members.members_[index];
@@ -79,15 +70,13 @@ const introspection::MessageMember * memberByName(
 }
 
 /// @brief Render a UTF-16 string through @ref renderWideString into a string.
-std::string renderWide(const std::u16string & value)
-{
+std::string renderWide(const std::u16string &value) {
   std::ostringstream stream;
   renderWideString(stream, value);
   return stream.str();
 }
 
-TEST(MessageRenderTest, DetectsYamlKeywords)
-{
+TEST(MessageRenderTest, DetectsYamlKeywords) {
   EXPECT_TRUE(isYamlKeyword("true"));
   EXPECT_TRUE(isYamlKeyword("False"));
   EXPECT_TRUE(isYamlKeyword("NULL"));
@@ -97,8 +86,7 @@ TEST(MessageRenderTest, DetectsYamlKeywords)
   EXPECT_FALSE(isYamlKeyword("plain-text"));
 }
 
-TEST(MessageRenderTest, DetectsPlainStringSafety)
-{
+TEST(MessageRenderTest, DetectsPlainStringSafety) {
   EXPECT_TRUE(canRenderPlainString("plain-text_1/path"));
   EXPECT_FALSE(canRenderPlainString(""));
   EXPECT_FALSE(canRenderPlainString("true"));
@@ -106,8 +94,7 @@ TEST(MessageRenderTest, DetectsPlainStringSafety)
   EXPECT_FALSE(canRenderPlainString("two words"));
 }
 
-TEST(MessageRenderTest, RenderQuotedStringEscapesSpecialCharacters)
-{
+TEST(MessageRenderTest, RenderQuotedStringEscapesSpecialCharacters) {
   std::ostringstream stream;
 
   renderQuotedString(stream, "reason: timeout\nretry \"soon\"\\ok");
@@ -115,8 +102,7 @@ TEST(MessageRenderTest, RenderQuotedStringEscapesSpecialCharacters)
   EXPECT_EQ(stream.str(), "\"reason: timeout\\nretry \\\"soon\\\"\\\\ok\"");
 }
 
-TEST(MessageRenderTest, RenderStringUsesPlainOrQuotedYamlScalar)
-{
+TEST(MessageRenderTest, RenderStringUsesPlainOrQuotedYamlScalar) {
   std::ostringstream plain_stream;
   std::ostringstream quoted_stream;
 
@@ -127,57 +113,48 @@ TEST(MessageRenderTest, RenderStringUsesPlainOrQuotedYamlScalar)
   EXPECT_EQ(quoted_stream.str(), "\"true\"");
 }
 
-TEST(MessageRenderTest, RenderWideStringRendersAsciiAsPlainOrQuotedYaml)
-{
+TEST(MessageRenderTest, RenderWideStringRendersAsciiAsPlainOrQuotedYaml) {
   EXPECT_EQ(renderWide(u"hello"), "hello");
   EXPECT_EQ(renderWide(u"true"), "\"true\"");
   EXPECT_EQ(renderWide(u"hello world"), "\"hello world\"");
 }
 
-TEST(MessageRenderTest, RenderWideStringEscapesBmpCodePoints)
-{
+TEST(MessageRenderTest, RenderWideStringEscapesBmpCodePoints) {
   // U+65E5 (Japanese "day") previously truncated to a single byte.
   EXPECT_EQ(renderWide(u"\u65e5"), "\"\\u65E5\"");
 }
 
-TEST(MessageRenderTest, RenderWideStringDecodesSurrogatePairs)
-{
+TEST(MessageRenderTest, RenderWideStringDecodesSurrogatePairs) {
   // U+1F600 grinning face encoded as the surrogate pair D83D DE00.
   const std::u16string value{u'\xD83D', u'\xDE00'};
   EXPECT_EQ(renderWide(value), "\"\\U0001F600\"");
 }
 
-TEST(MessageRenderTest, RenderWideStringEscapesOnlyNonAsciiInMixedString)
-{
+TEST(MessageRenderTest, RenderWideStringEscapesOnlyNonAsciiInMixedString) {
   EXPECT_EQ(renderWide(u"a\u65e5b"), "\"a\\u65E5b\"");
 }
 
-TEST(MessageRenderTest, MemberMemoryPointsAtField)
-{
+TEST(MessageRenderTest, MemberMemoryPointsAtField) {
   const auto loaded = loadIntrospection("test_msgs/msg/BasicTypes");
   test_msgs::msg::BasicTypes message;
   message.int32_value = 123;
 
-  const auto * member = memberByName(*loaded.members, "int32_value");
-  const void * field = memberMemory(&message, *member);
+  const auto *member = memberByName(*loaded.members, "int32_value");
+  const void *field = memberMemory(&message, *member);
 
   EXPECT_EQ(field, static_cast<const void *>(&message.int32_value));
   EXPECT_EQ(*static_cast<const std::int32_t *>(field), 123);
 }
 
-TEST(MessageRenderTest, DetectsNestedMessageBlocks)
-{
+TEST(MessageRenderTest, DetectsNestedMessageBlocks) {
   const auto nested_loaded = loadIntrospection("test_msgs/msg/Nested");
   const auto basic_loaded = loadIntrospection("test_msgs/msg/BasicTypes");
 
-  EXPECT_TRUE(isNestedMessageBlock(
-      *memberByName(*nested_loaded.members, "basic_types_value")));
-  EXPECT_FALSE(isNestedMessageBlock(
-      *memberByName(*basic_loaded.members, "int32_value")));
+  EXPECT_TRUE(isNestedMessageBlock(*memberByName(*nested_loaded.members, "basic_types_value")));
+  EXPECT_FALSE(isNestedMessageBlock(*memberByName(*basic_loaded.members, "int32_value")));
 }
 
-TEST(MessageRenderTest, RendersScalarFieldsAsYaml)
-{
+TEST(MessageRenderTest, RendersScalarFieldsAsYaml) {
   const auto loaded = loadIntrospection("test_msgs/msg/BasicTypes");
   test_msgs::msg::BasicTypes message;
   message.bool_value = true;
@@ -207,40 +184,31 @@ TEST(MessageRenderTest, RendersScalarFieldsAsYaml)
   EXPECT_NE(output.find("uint16_value: 1600"), std::string::npos) << output;
   EXPECT_NE(output.find("int32_value: -42"), std::string::npos) << output;
   EXPECT_NE(output.find("uint32_value: 42"), std::string::npos) << output;
-  EXPECT_NE(output.find("int64_value: -1234567890"), std::string::npos)
-    << output;
-  EXPECT_NE(output.find("uint64_value: 1234567890"), std::string::npos)
-    << output;
+  EXPECT_NE(output.find("int64_value: -1234567890"), std::string::npos) << output;
+  EXPECT_NE(output.find("uint64_value: 1234567890"), std::string::npos) << output;
 }
 
-TEST(MessageRenderTest, QuotesStringsThatAreNotPlainYamlScalars)
-{
+TEST(MessageRenderTest, QuotesStringsThatAreNotPlainYamlScalars) {
   const auto loaded = loadIntrospection("test_msgs/msg/Strings");
   test_msgs::msg::Strings message;
   message.string_value = "reason: timeout\nretry \"soon\"";
 
   const std::string output = toYaml(*loaded.members, &message);
 
-  EXPECT_NE(
-    output.find("string_value: \"reason: timeout\\nretry \\\"soon\\\"\""),
-    std::string::npos)
-    << output;
+  EXPECT_NE(output.find("string_value: \"reason: timeout\\nretry \\\"soon\\\"\""), std::string::npos) << output;
 }
 
-TEST(MessageRenderTest, RendersPlainStringsWithoutQuotes)
-{
+TEST(MessageRenderTest, RendersPlainStringsWithoutQuotes) {
   const auto loaded = loadIntrospection("test_msgs/msg/Strings");
   test_msgs::msg::Strings message;
   message.string_value = "plain-text";
 
   const std::string output = toYaml(*loaded.members, &message);
 
-  EXPECT_NE(output.find("string_value: plain-text"), std::string::npos)
-    << output;
+  EXPECT_NE(output.find("string_value: plain-text"), std::string::npos) << output;
 }
 
-TEST(MessageRenderTest, RendersNestedMessageWithAccumulatingIndent)
-{
+TEST(MessageRenderTest, RendersNestedMessageWithAccumulatingIndent) {
   const auto loaded = loadIntrospection("test_msgs/msg/Nested");
   test_msgs::msg::Nested message;
   message.basic_types_value.int32_value = 99;
@@ -253,8 +221,7 @@ TEST(MessageRenderTest, RendersNestedMessageWithAccumulatingIndent)
   EXPECT_NE(output.find("\n  int32_value: 99\n"), std::string::npos) << output;
 }
 
-TEST(MessageRenderTest, RendersMessageArrayItemWithListMarker)
-{
+TEST(MessageRenderTest, RendersMessageArrayItemWithListMarker) {
   const auto loaded = loadIntrospection("std_msgs/msg/MultiArrayDimension");
   std_msgs::msg::MultiArrayDimension message;
   message.label = "width";
@@ -267,8 +234,7 @@ TEST(MessageRenderTest, RendersMessageArrayItemWithListMarker)
   EXPECT_EQ(stream.str(), "  - label: width\n    size: 2\n    stride: 3");
 }
 
-TEST(MessageRenderTest, DoesNotInsertBlankLineAfterNestedMessageFields)
-{
+TEST(MessageRenderTest, DoesNotInsertBlankLineAfterNestedMessageFields) {
   const auto loaded = loadIntrospection("test_msgs/msg/Builtins");
   test_msgs::msg::Builtins message;
   message.duration_value.sec = 1;
@@ -279,14 +245,11 @@ TEST(MessageRenderTest, DoesNotInsertBlankLineAfterNestedMessageFields)
   const std::string output = toYaml(*loaded.members, &message);
 
   EXPECT_EQ(output.find("\n\n"), std::string::npos) << output;
-  EXPECT_NE(
-    output.find("\n  sec: 1\n  nanosec: 2\ntime_value: \n  sec: 3\n  nanosec: 4\n"),
-    std::string::npos)
-    << output;
+  EXPECT_NE(output.find("\n  sec: 1\n  nanosec: 2\ntime_value: \n  sec: 3\n  nanosec: 4\n"), std::string::npos)
+      << output;
 }
 
-TEST(MessageRenderTest, RendersSequenceFieldAsCompactList)
-{
+TEST(MessageRenderTest, RendersSequenceFieldAsCompactList) {
   const auto loaded = loadIntrospection("std_msgs/msg/Int32MultiArray");
   std_msgs::msg::Int32MultiArray message;
   message.data = {1, 2, 3};
@@ -298,8 +261,7 @@ TEST(MessageRenderTest, RendersSequenceFieldAsCompactList)
   EXPECT_NE(output.find("dim: []"), std::string::npos) << output;
 }
 
-TEST(MessageRenderTest, RendersNestedMessageSequenceAsBlockList)
-{
+TEST(MessageRenderTest, RendersNestedMessageSequenceAsBlockList) {
   const auto loaded = loadIntrospection("std_msgs/msg/Int32MultiArray");
   std_msgs::msg::Int32MultiArray message;
   message.layout.dim.resize(1U);
@@ -310,12 +272,11 @@ TEST(MessageRenderTest, RendersNestedMessageSequenceAsBlockList)
 
   const std::string output = toYaml(*loaded.members, &message);
 
-  EXPECT_NE(output.find("  dim: \n    - label: width\n"), std::string::npos)
-    << output;
+  EXPECT_NE(output.find("  dim: \n    - label: width\n"), std::string::npos) << output;
   EXPECT_NE(output.find("\n      size: 2\n"), std::string::npos) << output;
   EXPECT_NE(output.find("\n      stride: 3\n"), std::string::npos) << output;
   EXPECT_EQ(output.find("dim: ["), std::string::npos) << output;
 }
 
-}  // namespace
-}  // namespace ros2_livekit_bridge::message_render
+} // namespace
+} // namespace ros2_livekit_bridge::message_render

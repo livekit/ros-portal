@@ -16,51 +16,44 @@
 
 #include "ros2_livekit_bridge/ros2_cli/ros2_topic_pub.hpp"
 
+#include <rclcpp/create_generic_publisher.hpp>
+#include <rclcpp/qos.hpp>
+#include <stdexcept>
+#include <utility>
+
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 #include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
-#include <stdexcept>
-#include <utility>
+namespace ros2_livekit_bridge::ros2_cli {
 
-#include <rclcpp/create_generic_publisher.hpp>
-#include <rclcpp/qos.hpp>
-
-namespace ros2_livekit_bridge::ros2_cli
-{
-
-Ros2TopicPub::Ros2TopicPub(
-  rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
-  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
-  TopicPublishAllowed topic_publish_allowed)
-: topics_(std::move(topics)), graph_(std::move(graph)),
-  topic_publish_allowed_(std::move(topic_publish_allowed))
-{
+Ros2TopicPub::Ros2TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
+                           rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
+                           TopicPublishAllowed topic_publish_allowed)
+    : topics_(std::move(topics)), graph_(std::move(graph)), topic_publish_allowed_(std::move(topic_publish_allowed)) {
   if (!topics_ || !graph_) {
-    throw std::invalid_argument(
-        "Ros2TopicPub requires node topics and graph interfaces");
+    throw std::invalid_argument("Ros2TopicPub requires node topics and graph interfaces");
   }
 
   if (!topic_publish_allowed_) {
-    topic_publish_allowed_ = [](const std::string &) {return true;};
+    topic_publish_allowed_ = [](const std::string &) { return true; };
   }
 }
 
-Ros2TopicPubSrv::Response Ros2TopicPub::publish(TopicPubOptions options)
-{
+Ros2TopicPubSrv::Response Ros2TopicPub::publish(TopicPubOptions options) {
   // Error: unresolvable topic name.
   std::string resolved_topic;
   try {
     resolved_topic = topics_->resolve_topic_name(options.topic);
-  } catch (const std::exception & error) {
+  } catch (const std::exception &error) {
     return makeCliResponse<Ros2TopicPubSrv::Response>(false, error.what());
   }
 
   // Error: topic blocked by bridge publish policy.
   if (!topic_publish_allowed_(resolved_topic)) {
-    return makeCliResponse<Ros2TopicPubSrv::Response>(false, "topic '" + resolved_topic +
-                                         "' is not allowed for publishing");
+    return makeCliResponse<Ros2TopicPubSrv::Response>(false,
+                                                      "topic '" + resolved_topic + "' is not allowed for publishing");
   }
 
   rclcpp::GenericPublisher::SharedPtr publisher;
@@ -71,16 +64,14 @@ Ros2TopicPubSrv::Response Ros2TopicPub::publish(TopicPubOptions options)
     if (cached != publishers_.end()) {
       if (cached->second.msg_type != options.msg_type) {
         return makeCliResponse<Ros2TopicPubSrv::Response>(
-          false, "topic '" + resolved_topic + "' is cached with type '" +
-                   cached->second.msg_type + "', not '" +
-                   options.msg_type + "'");
+            false, "topic '" + resolved_topic + "' is cached with type '" + cached->second.msg_type + "', not '" +
+                       options.msg_type + "'");
       }
       // Case: reuse cached publisher.
       publisher = cached->second.publisher;
       was_cached = true;
     } else if (publishers_.size() >= kMaxCachedTopicPublishers) {
-      return makeCliResponse<Ros2TopicPubSrv::Response>(false,
-          "topic publisher cache limit reached");
+      return makeCliResponse<Ros2TopicPubSrv::Response>(false, "topic publisher cache limit reached");
     }
   }
 
@@ -88,50 +79,40 @@ Ros2TopicPubSrv::Response Ros2TopicPub::publish(TopicPubOptions options)
   if (!publisher) {
     const auto topic_names_and_types = graph_->get_topic_names_and_types();
     const auto graph_entry = topic_names_and_types.find(resolved_topic);
-    if (graph_entry != topic_names_and_types.end() &&
-      !graph_entry->second.empty() &&
-      !topicTypeMatches(graph_entry->second, options.msg_type))
-    {
-      return makeCliResponse<Ros2TopicPubSrv::Response>(
-        false, "topic '" + resolved_topic + "' has type(s) '" +
-                 joinTypes(graph_entry->second) + "', not '" +
-                 options.msg_type + "'");
+    if (graph_entry != topic_names_and_types.end() && !graph_entry->second.empty() &&
+        !topicTypeMatches(graph_entry->second, options.msg_type)) {
+      return makeCliResponse<Ros2TopicPubSrv::Response>(false, "topic '" + resolved_topic + "' has type(s) '" +
+                                                                   joinTypes(graph_entry->second) + "', not '" +
+                                                                   options.msg_type + "'");
     }
 
     try {
-      publisher = rclcpp::create_generic_publisher(
-          topics_, resolved_topic, options.msg_type,
-          rclcpp::QoS(kTopicPublisherHistoryDepth));
-    } catch (const std::exception & error) {
-      return makeCliResponse<Ros2TopicPubSrv::Response>(
-        false, std::string("failed to create publisher: ") + error.what());
+      publisher = rclcpp::create_generic_publisher(topics_, resolved_topic, options.msg_type,
+                                                   rclcpp::QoS(kTopicPublisherHistoryDepth));
+    } catch (const std::exception &error) {
+      return makeCliResponse<Ros2TopicPubSrv::Response>(false,
+                                                        std::string("failed to create publisher: ") + error.what());
     }
   }
 
   // Error: YAML payload could not be converted to ROS CDR.
   std::string yaml_error;
-  auto serialized =
-    serializedMessageFromYaml(options.msg_type, options.payload, yaml_error);
+  auto serialized = serializedMessageFromYaml(options.msg_type, options.payload, yaml_error);
   if (!serialized) {
-    return makeCliResponse<Ros2TopicPubSrv::Response>(
-      false, "failed to publish message: " + yaml_error);
+    return makeCliResponse<Ros2TopicPubSrv::Response>(false, "failed to publish message: " + yaml_error);
   }
 
   try {
     publisher->publish(*serialized);
-  } catch (const std::exception & error) {
-    return makeCliResponse<Ros2TopicPubSrv::Response>(
-      false, std::string("failed to publish message: ") + error.what());
+  } catch (const std::exception &error) {
+    return makeCliResponse<Ros2TopicPubSrv::Response>(false, std::string("failed to publish message: ") + error.what());
   }
 
   // Case: cache publisher after first successful publish.
   if (!was_cached) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (publishers_.find(resolved_topic) == publishers_.end() &&
-      publishers_.size() < kMaxCachedTopicPublishers)
-    {
-      publishers_.emplace(resolved_topic,
-                          Entry{options.msg_type, std::move(publisher)});
+    if (publishers_.find(resolved_topic) == publishers_.end() && publishers_.size() < kMaxCachedTopicPublishers) {
+      publishers_.emplace(resolved_topic, Entry{options.msg_type, std::move(publisher)});
     }
   }
 

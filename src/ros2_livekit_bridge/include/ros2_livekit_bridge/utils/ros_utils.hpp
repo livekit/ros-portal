@@ -17,28 +17,23 @@
 #ifndef ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_
 #define ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_
 
-#include "ros2_livekit_bridge/utils/topic_matcher.hpp"
-#include "ros2_livekit_bridge_config/config/config_parser.hpp"
+#include <livekit/video_frame.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
-
-#include <livekit/video_frame.h>
 #include <rclcpp/logger.hpp>
 
-namespace ros2_livekit_bridge::utils
-{
+#include "ros2_livekit_bridge/utils/topic_matcher.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(
-  int width, int height,
-  const std::uint8_t *rgba,
-  std::size_t rgba_size);
+namespace ros2_livekit_bridge::utils {
 
-std::string resolveEnvironmentCredential(
-  const std::string & env_var_name,
-  std::string & source);
+std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
+                                                      std::size_t rgba_size);
+
+std::string resolveEnvironmentCredential(const std::string& env_var_name, std::string& source);
 
 /// @brief Normalize a LiveKit track name into an absolute ROS topic path.
 ///
@@ -53,7 +48,7 @@ std::string resolveEnvironmentCredential(
 /// @param track_name LiveKit track name to normalize.
 /// @return Normalized ROS topic path, or std::nullopt when @p track_name is
 /// empty.
-std::optional<std::string> normalizeTrackTopicName(const std::string & track_name);
+std::optional<std::string> normalizeTrackTopicName(const std::string& track_name);
 
 /// @brief Convert an arbitrary identity token into a ROS-safe name token.
 ///
@@ -68,26 +63,19 @@ std::optional<std::string> normalizeTrackTopicName(const std::string & track_nam
 ///
 /// @param token Participant identity or arbitrary token.
 /// @return Sanitized token, or std::nullopt when @p token is empty.
-std::optional<std::string> sanitizeRosNameToken(const std::string & token);
+std::optional<std::string> sanitizeRosNameToken(const std::string& token);
 
-std::optional<std::string> liveKitToRosTopicName(
-  const std::string & participant_identity,
-  const std::string & track_name);
+std::optional<std::string> liveKitToRosTopicName(const std::string& participant_identity,
+                                                 const std::string& track_name);
 
-void logPatternCompileErrors(
-  const std::vector<PatternCompileError> & errors,
-  rclcpp::Logger logger);
+void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger);
 
-std::optional<ros2_livekit_bridge_config::BridgeConfig>
-parseBridgeConfig(const std::filesystem::path & path, rclcpp::Logger logger);
+std::optional<ros2_livekit_bridge_config::BridgeConfig> parseBridgeConfig(const std::filesystem::path& path,
+                                                                          rclcpp::Logger logger);
 
-std::vector<std::string>
-outgoingTopicPatterns(
-  const ros2_livekit_bridge_config::BridgeConfig & config);
+std::vector<std::string> outgoingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
 
-std::vector<std::string>
-incomingTopicPatterns(
-  const ros2_livekit_bridge_config::BridgeConfig & config);
+std::vector<std::string> incomingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

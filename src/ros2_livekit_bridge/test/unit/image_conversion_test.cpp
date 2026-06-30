@@ -23,17 +23,11 @@
 #include <utility>
 #include <vector>
 
-namespace ros2_livekit_bridge::utils
-{
-namespace
-{
+namespace ros2_livekit_bridge::utils {
+namespace {
 
-sensor_msgs::msg::Image makeImage(
-  std::uint32_t width, std::uint32_t height,
-  std::uint32_t step,
-  const std::string & encoding,
-  std::vector<std::uint8_t> data)
-{
+sensor_msgs::msg::Image makeImage(std::uint32_t width, std::uint32_t height, std::uint32_t step,
+                                  const std::string& encoding, std::vector<std::uint8_t> data) {
   sensor_msgs::msg::Image image;
   image.width = width;
   image.height = height;
@@ -44,28 +38,22 @@ sensor_msgs::msg::Image makeImage(
 }
 
 TEST(ImageConversionTest, CopiesPackedRgba8) {
-  const auto image =
-    makeImage(2, 1, 8, "rgba8", {10, 20, 30, 40, 50, 60, 70, 80});
+  const auto image = makeImage(2, 1, 8, "rgba8", {10, 20, 30, 40, 50, 60, 70, 80});
   std::vector<std::uint8_t> rgba;
 
   EXPECT_TRUE(convertToRgba(image, rgba));
 
-  EXPECT_EQ(rgba,
-    (std::vector<std::uint8_t>{10, 20, 30, 40, 50, 60, 70, 80}));
+  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{10, 20, 30, 40, 50, 60, 70, 80}));
 }
 
 TEST(ImageConversionTest, CopiesPaddedRgba8Rows) {
-  const auto image = makeImage(
-      2, 2, 10, "rgba8",
-    {1, 2, 3, 4, 5, 6, 7, 8, 99, 99,
-      9, 10, 11, 12, 13, 14, 15, 16, 88, 88});
+  const auto image =
+      makeImage(2, 2, 10, "rgba8", {1, 2, 3, 4, 5, 6, 7, 8, 99, 99, 9, 10, 11, 12, 13, 14, 15, 16, 88, 88});
   std::vector<std::uint8_t> rgba;
 
   EXPECT_TRUE(convertToRgba(image, rgba));
 
-  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{
-        1, 2, 3, 4, 5, 6, 7, 8,
-        9, 10, 11, 12, 13, 14, 15, 16}));
+  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}));
 }
 
 TEST(ImageConversionTest, ConvertsRgb8ToRgba8) {
@@ -74,8 +62,7 @@ TEST(ImageConversionTest, ConvertsRgb8ToRgba8) {
 
   EXPECT_TRUE(convertToRgba(image, rgba));
 
-  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{
-        10, 20, 30, 255, 40, 50, 60, 255}));
+  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{10, 20, 30, 255, 40, 50, 60, 255}));
 }
 
 TEST(ImageConversionTest, ConvertsBgr8ToRgba8) {
@@ -84,19 +71,16 @@ TEST(ImageConversionTest, ConvertsBgr8ToRgba8) {
 
   EXPECT_TRUE(convertToRgba(image, rgba));
 
-  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{
-        30, 20, 10, 255, 60, 50, 40, 255}));
+  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{30, 20, 10, 255, 60, 50, 40, 255}));
 }
 
 TEST(ImageConversionTest, ConvertsBgra8ToRgba8) {
-  const auto image =
-    makeImage(2, 1, 8, "bgra8", {10, 20, 30, 40, 50, 60, 70, 80});
+  const auto image = makeImage(2, 1, 8, "bgra8", {10, 20, 30, 40, 50, 60, 70, 80});
   std::vector<std::uint8_t> rgba;
 
   EXPECT_TRUE(convertToRgba(image, rgba));
 
-  EXPECT_EQ(rgba,
-    (std::vector<std::uint8_t>{30, 20, 10, 40, 70, 60, 50, 80}));
+  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{30, 20, 10, 40, 70, 60, 50, 80}));
 }
 
 TEST(ImageConversionTest, ConvertsMono8ToRgba8) {
@@ -105,8 +89,7 @@ TEST(ImageConversionTest, ConvertsMono8ToRgba8) {
 
   EXPECT_TRUE(convertToRgba(image, rgba));
 
-  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{
-        10, 10, 10, 255, 20, 20, 20, 255}));
+  EXPECT_EQ(rgba, (std::vector<std::uint8_t>{10, 10, 10, 255, 20, 20, 20, 255}));
 }
 
 TEST(ImageConversionTest, ReturnsFalseForUnsupportedEncoding) {

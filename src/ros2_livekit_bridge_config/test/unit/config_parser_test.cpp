@@ -23,24 +23,17 @@
 #include <fstream>
 #include <string>
 
-namespace ros2_livekit_bridge_config
-{
-namespace
-{
+namespace ros2_livekit_bridge_config {
+namespace {
 
-BridgeConfig parse(const std::string & yaml)
-{
-  return ConfigParser{}.parseString(yaml);
-}
+BridgeConfig parse(const std::string& yaml) { return ConfigParser{}.parseString(yaml); }
 
-void expectInvalid(const std::string & yaml, const std::string & expected_text)
-{
+void expectInvalid(const std::string& yaml, const std::string& expected_text) {
   try {
     (void)parse(yaml);
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
-    EXPECT_NE(std::string(e.what()).find(expected_text), std::string::npos)
-      << e.what();
+  } catch (const ConfigError& e) {
+    EXPECT_NE(std::string(e.what()).find(expected_text), std::string::npos) << e.what();
   }
 }
 
@@ -61,9 +54,8 @@ ros2_livekit_bridge:
 }
 
 TEST(ConfigParserTest, ParsesFullConfig) {
-  const auto config =
-    parse(
-        R"(
+  const auto config = parse(
+      R"(
 ros2_livekit_bridge:
   version: "0.0.1"
   room_name: "robo_room"
@@ -116,17 +108,19 @@ ros2_livekit_bridge:
 }
 
 TEST(ConfigParserTest, RejectsUnknownRootField) {
-  expectInvalid(R"(
+  expectInvalid(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
 extra: true
-)", "unknown field 'extra'");
+)",
+      "unknown field 'extra'");
 }
 
 TEST(ConfigParserTest, RejectsMisspelledParticipantField) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -135,29 +129,33 @@ ros2_livekit_bridge:
       direction: "out"
       particpant: "robot-a"
 )",
-        "unknown field 'particpant'");
+      "unknown field 'particpant'");
 }
 
 TEST(ConfigParserTest, RejectsUnsupportedVersion) {
-  expectInvalid(R"(
+  expectInvalid(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.2"
-)", "expected '0.0.1'");
+)",
+      "expected '0.0.1'");
 }
 
 TEST(ConfigParserTest, RejectsWrongScalarType) {
-  expectInvalid(R"(
+  expectInvalid(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version:
     major: 0
-)", "expected string");
+)",
+      "expected string");
 }
 
 TEST(ConfigParserTest, RejectsWrongSequenceType) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -165,24 +163,24 @@ ros2_livekit_bridge:
     topic: "/odom"
     direction: "out"
 )",
-        "expected sequence");
+      "expected sequence");
 }
 
 TEST(ConfigParserTest, RejectsWrongMapType) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   room_options:
     - join_retries
 )",
-        "expected map");
+      "expected map");
 }
 
 TEST(ConfigParserTest, RejectsInvalidServiceDirection) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -191,12 +189,12 @@ ros2_livekit_bridge:
       direction: "bidirectional"
       participant: "robot-a"
 )",
-        "expected 'in' or 'out'");
+      "expected 'in' or 'out'");
 }
 
 TEST(ConfigParserTest, RejectsInvalidTopicDirection) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -204,12 +202,12 @@ ros2_livekit_bridge:
     - topic: "/teleop_cmd"
       direction: "sideways"
 )",
-        "expected 'in', 'out', or 'bidirectional'");
+      "expected 'in', 'out', or 'bidirectional'");
 }
 
 TEST(ConfigParserTest, RejectsMissingServiceParticipant) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -217,24 +215,24 @@ ros2_livekit_bridge:
     - service: "/go_to_pose"
       direction: "in"
 )",
-        "missing required field");
+      "missing required field");
 }
 
 TEST(ConfigParserTest, RejectsMissingTopicName) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   topics:
     - direction: "out"
 )",
-        "missing required field");
+      "missing required field");
 }
 
 TEST(ConfigParserTest, RejectsEmptyTopicName) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -242,24 +240,24 @@ ros2_livekit_bridge:
     - topic: ""
       direction: "out"
 )",
-        "expected nonempty string");
+      "expected nonempty string");
 }
 
 TEST(ConfigParserTest, RejectsInvalidJoinRetries) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   room_options:
     join_retries: 0
 )",
-        "expected positive integer");
+      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsInvalidVideoBitrate) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -269,12 +267,12 @@ ros2_livekit_bridge:
       video_options:
         bitrate_kbps: -1
 )",
-        "expected positive integer");
+      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsEmptyCodec) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -284,12 +282,12 @@ ros2_livekit_bridge:
       video_options:
         codec: ""
 )",
-        "expected nonempty string");
+      "expected nonempty string");
 }
 
 TEST(ConfigParserTest, RejectsAudioOptions) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -299,13 +297,11 @@ ros2_livekit_bridge:
       audio_options:
         bitrate_kbps: 500
 )",
-        "unknown field 'audio_options'");
+      "unknown field 'audio_options'");
 }
 
 TEST(ConfigParserTest, ParsesFile) {
-  const auto path =
-    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR) /
-    "config" / "test_config.yaml";
+  const auto path = std::filesystem::path(ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR) / "config" / "test_config.yaml";
 
   const auto config = ConfigParser{}.parseFile(path);
 
@@ -319,9 +315,8 @@ TEST(ConfigParserTest, ParsesFile) {
 }
 
 TEST(ConfigParserTest, ParsesEmptySequences) {
-  const auto config =
-    parse(
-        R"(
+  const auto config = parse(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -341,7 +336,7 @@ ros2_livekit_bridge:
   version: "0.0.2"
 )");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.version at line 4, column 12");
     EXPECT_EQ(e.expected(), "'0.0.1'");
     EXPECT_EQ(e.detail(), "found '0.0.2'");
@@ -350,7 +345,7 @@ ros2_livekit_bridge:
 
 TEST(ConfigParserTest, ErrorContextIncludesLineAndColumn) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -358,13 +353,13 @@ ros2_livekit_bridge:
     - topic: "/teleop_cmd"
       direction: "sideways"
 )",
-        "at line 7, column 18");
+      "at line 7, column 18");
 }
 
 TEST(ConfigParserTest, MissingFieldErrorHasNoLineColumn) {
   try {
     (void)parse(
-          R"(
+        R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -372,11 +367,10 @@ ros2_livekit_bridge:
     - direction: "out"
 )");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.topics[0].topic");
     EXPECT_EQ(e.detail(), "missing required field");
-    EXPECT_EQ(std::string(e.what()).find("at line"), std::string::npos)
-      << e.what();
+    EXPECT_EQ(std::string(e.what()).find("at line"), std::string::npos) << e.what();
   }
 }
 
@@ -384,34 +378,33 @@ TEST(ConfigParserTest, RejectsMalformedYamlString) {
   try {
     (void)parse("ros2_livekit_bridge: \"unterminated");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "<string>");
     EXPECT_EQ(e.expected(), "valid YAML config");
   }
 }
 
-TEST(ConfigParserTest, RejectsEmptyDocument) {
-  expectInvalid("", "expected map");
-}
+TEST(ConfigParserTest, RejectsEmptyDocument) { expectInvalid("", "expected map"); }
 
-TEST(ConfigParserTest, RejectsNonMapRoot) {
-  expectInvalid("- just a sequence", "expected map");
-}
+TEST(ConfigParserTest, RejectsNonMapRoot) { expectInvalid("- just a sequence", "expected map"); }
 
 TEST(ConfigParserTest, RejectsMissingBridgeKey) {
-  expectInvalid(R"(
+  expectInvalid(
+      R"(
 unrelated: true
-)", "unknown field 'unrelated'");
+)",
+      "unknown field 'unrelated'");
 }
 
 TEST(ConfigParserTest, RejectsMissingVersion) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   room_options:
     join_retries: 3
-)", "missing required field");
+)",
+      "missing required field");
 }
 
 TEST(ConfigParserTest, RejectsMissingRequiredFields) {
@@ -421,7 +414,7 @@ ros2_livekit_bridge:
   version: "0.0.1"
 )");
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.room_name");
     EXPECT_EQ(e.detail(), "missing required field");
   }
@@ -429,7 +422,7 @@ ros2_livekit_bridge:
 
 TEST(ConfigParserTest, RejectsMissingServiceDirection) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -437,24 +430,24 @@ ros2_livekit_bridge:
     - service: "/go_to_pose"
       participant: "robot-a"
 )",
-        "missing required field");
+      "missing required field");
 }
 
 TEST(ConfigParserTest, RejectsMissingTopicDirection) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/odom"
 )",
-        "missing required field");
+      "missing required field");
 }
 
 TEST(ConfigParserTest, RejectsEmptyServiceName) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -463,12 +456,12 @@ ros2_livekit_bridge:
       direction: "in"
       participant: "robot-a"
 )",
-        "expected nonempty string");
+      "expected nonempty string");
 }
 
 TEST(ConfigParserTest, RejectsEmptyParticipant) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
@@ -477,81 +470,81 @@ ros2_livekit_bridge:
       direction: "in"
       participant: ""
 )",
-        "expected nonempty string");
+      "expected nonempty string");
 }
 
 TEST(ConfigParserTest, RejectsNonIntegerJoinRetries) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   room_options:
     join_retries: "three"
 )",
-        "expected positive integer");
+      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsEmptyRoomName) {
-  expectInvalid(R"(
+  expectInvalid(
+      R"(
 ros2_livekit_bridge:
   version: "0.0.1"
   room_name: ""
-)", "expected nonempty string");
+)",
+      "expected nonempty string");
 }
 
 TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   topic_polling_period_ms: 0
 )",
-        "expected positive integer");
+      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsInvalidRosThreads) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   ros_threads: -1
-)", "expected integer >= 0");
+)",
+      "expected integer >= 0");
 }
 
 TEST(ConfigParserTest, RejectsNonScalarMapKey) {
   expectInvalid(
-        R"(
+      R"(
 ros2_livekit_bridge:
   room_name: "robo_room"
   version: "0.0.1"
   ? [complex, key]
   : true
 )",
-        "expected string key");
+      "expected string key");
 }
 
 TEST(ConfigParserTest, ParsesFromMissingFileThrowsConfigError) {
-  const auto path =
-    std::filesystem::path(ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR) /
-    "config" / "does_not_exist.yaml";
+  const auto path = std::filesystem::path(ROS2_LIVEKIT_BRIDGE_CONFIG_TEST_DIR) / "config" / "does_not_exist.yaml";
 
   try {
     (void)ConfigParser{}.parseFile(path);
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), path.string());
     EXPECT_EQ(e.expected(), "valid YAML config");
   }
 }
 
 TEST(ConfigParserTest, ParsesMalformedFileThrowsConfigError) {
-  const auto unique = std::filesystem::file_time_type::clock::now()
-    .time_since_epoch().count();
+  const auto unique = std::filesystem::file_time_type::clock::now().time_since_epoch().count();
   const auto path = std::filesystem::temp_directory_path() /
-    ("ros2_livekit_bridge_malformed_config_" + std::to_string(unique) + ".yaml");
+                    ("ros2_livekit_bridge_malformed_config_" + std::to_string(unique) + ".yaml");
   std::ofstream out(path);
   out << "ros2_livekit_bridge: \"unterminated";
   out.close();
@@ -559,7 +552,7 @@ TEST(ConfigParserTest, ParsesMalformedFileThrowsConfigError) {
   try {
     (void)ConfigParser{}.parseFile(path);
     FAIL() << "Expected ConfigError";
-  } catch (const ConfigError & e) {
+  } catch (const ConfigError& e) {
     EXPECT_EQ(e.context(), path.string());
     EXPECT_EQ(e.expected(), "valid YAML config");
   }

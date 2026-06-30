@@ -17,20 +17,14 @@
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
 
 #include <algorithm>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <stdexcept>
 
-#include <nlohmann/json.hpp>
+namespace ros2_livekit_bridge::ros2_cli {
 
-namespace ros2_livekit_bridge::ros2_cli
-{
-
-std::string requiredStringField(
-  const nlohmann::json & body,
-  const char *field_name,
-  const char *missing_message,
-  const char *empty_message)
-{
+std::string requiredStringField(const nlohmann::json& body, const char* field_name, const char* missing_message,
+                                const char* empty_message) {
   const auto field = body.find(field_name);
   if (field == body.end() || !field->is_string()) {
     throw std::invalid_argument(missing_message);
@@ -43,16 +37,11 @@ std::string requiredStringField(
   return value;
 }
 
-bool topicTypeMatches(
-  const std::vector<std::string> & graph_types,
-  const std::string & msg_type)
-{
-  return std::find(graph_types.begin(), graph_types.end(), msg_type) !=
-         graph_types.end();
+bool topicTypeMatches(const std::vector<std::string>& graph_types, const std::string& msg_type) {
+  return std::find(graph_types.begin(), graph_types.end(), msg_type) != graph_types.end();
 }
 
-bool hasHiddenNameToken(const std::string & name)
-{
+bool hasHiddenNameToken(const std::string& name) {
   size_t token_start = 0;
   while (token_start < name.size()) {
     while (token_start < name.size() && name[token_start] == '/') {
@@ -74,8 +63,7 @@ bool hasHiddenNameToken(const std::string & name)
   return false;
 }
 
-std::string joinTypes(const std::vector<std::string> & types)
-{
+std::string joinTypes(const std::vector<std::string>& types) {
   std::ostringstream stream;
   for (size_t i = 0; i < types.size(); ++i) {
     if (i > 0) {

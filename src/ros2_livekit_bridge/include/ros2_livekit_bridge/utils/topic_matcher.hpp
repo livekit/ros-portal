@@ -21,22 +21,17 @@
 #include <string>
 #include <vector>
 
-namespace ros2_livekit_bridge::utils
-{
+namespace ros2_livekit_bridge::utils {
 
-struct PatternCompileError
-{
+struct PatternCompileError {
   std::string pattern;
   std::string message;
 };
 
-std::vector<std::regex> compileRegexPatterns(
-  const std::vector<std::string> & patterns,
-  std::vector<PatternCompileError> *errors = nullptr);
+std::vector<std::regex> compileRegexPatterns(const std::vector<std::string>& patterns,
+                                             std::vector<PatternCompileError>* errors = nullptr);
 
-bool matchesAnyPattern(
-  const std::string & value,
-  const std::vector<std::regex> & patterns);
+bool matchesAnyPattern(const std::string& value, const std::vector<std::regex>& patterns);
 
 } // namespace ros2_livekit_bridge::utils
 

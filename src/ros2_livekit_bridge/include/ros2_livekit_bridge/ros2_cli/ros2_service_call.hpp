@@ -16,25 +16,25 @@
 
 #pragma once
 
+#include <rcl/client.h>
+#include <rcl/error_handling.h>
+#include <rosidl_runtime_c/service_type_support_struct.h>
+
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <rclcpp/client.hpp>
+#include <rclcpp/exceptions.hpp>
+#include <rclcpp/expand_topic_or_service_name.hpp>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/node_interfaces/node_base_interface.hpp>
+#include <rclcpp/node_interfaces/node_graph_interface.hpp>
+#include <rcpputils/shared_library.hpp>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
-
-#include <rcl/client.h>
-#include <rcl/error_handling.h>
-#include <rclcpp/client.hpp>
-#include <rclcpp/logger.hpp>
-#include <rclcpp/exceptions.hpp>
-#include <rclcpp/expand_topic_or_service_name.hpp>
-#include <rclcpp/node_interfaces/node_base_interface.hpp>
-#include <rclcpp/node_interfaces/node_graph_interface.hpp>
-#include <rcpputils/shared_library.hpp>
-#include <rosidl_runtime_c/service_type_support_struct.h>
 
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 
@@ -42,8 +42,7 @@
 #include <gtest/gtest_prod.h>
 #endif
 
-namespace ros2_livekit_bridge::ros2_cli
-{
+namespace ros2_livekit_bridge::ros2_cli {
 
 /// @brief Implements the ROS-side behavior for one-shot `ros2 service call`.
 ///
@@ -58,16 +57,14 @@ public:
   /// @param graph Node graph interface used by rclcpp client base.
   /// @param logger Logger used for service-call diagnostics.
   /// @throws std::invalid_argument if either required node interface is null.
-  Ros2ServiceCall(
-    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
-    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
-    rclcpp::Logger logger);
+  Ros2ServiceCall(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
+                  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph, rclcpp::Logger logger);
 
   /// @brief Release cached runtime service clients.
   ~Ros2ServiceCall();
 
   Ros2ServiceCall(const Ros2ServiceCall &) = delete;
-  Ros2ServiceCall & operator=(const Ros2ServiceCall &) = delete;
+  Ros2ServiceCall &operator=(const Ros2ServiceCall &) = delete;
 
   /// @brief Call one ROS service using runtime service type support.
   ///
@@ -85,7 +82,7 @@ public:
 
 #ifdef BUILD_TESTING
   /// @brief Return the service type-support creation error for @p type.
-  static std::string serviceTypeSupportCreationError(const std::string & type);
+  static std::string serviceTypeSupportCreationError(const std::string &type);
 #endif
 
 private:
@@ -97,10 +94,7 @@ private:
   /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
   /// @param typesupport_identifier Type-support identifier to build the symbol.
   /// @return Symbol name to resolve in the type-support shared library.
-  static std::string
-  serviceTypeSupportSymbol(
-    const std::string & type,
-    const std::string & typesupport_identifier);
+  static std::string serviceTypeSupportSymbol(const std::string &type, const std::string &typesupport_identifier);
 
   /// @brief Load service type support by symbol from the typesupport library.
   ///
@@ -113,11 +107,9 @@ private:
   /// in.
   /// @return Service type-support handle for @p type, or nullptr when the
   ///   type-support symbol is not found.
-  static const rosidl_service_type_support_t *
-  serviceTypeSupportHandle(
-    const std::string & type,
-    const std::string & typesupport_identifier,
-    rcpputils::SharedLibrary & library);
+  static const rosidl_service_type_support_t *serviceTypeSupportHandle(const std::string &type,
+                                                                       const std::string &typesupport_identifier,
+                                                                       rcpputils::SharedLibrary &library);
 
   /// @brief Runtime type-support data for one ROS message type.
   ///
@@ -146,18 +138,14 @@ private:
   /// @param error Populated with a failure reason when client creation fails.
   /// @return Cached or newly created runtime service client, or std::nullopt
   ///   when type support or client construction fails.
-  std::optional<ClientPtr> getClient(
-    const std::string & service,
-    const std::string & msg_type,
-    std::string & error);
+  std::optional<ClientPtr> getClient(const std::string &service, const std::string &msg_type, std::string &error);
 
   /// @brief Take and convert a matching service response when available.
   /// @param client Runtime service client to poll for a response.
   /// @param sequence_number Sequence number of the dispatched request.
   /// @return Service-call response when a matching response is taken, or
   ///   std::nullopt when no matching response is currently available.
-  std::optional<Ros2ServiceCallSrv::Response>
-  takeResponse(ServiceClient & client, std::int64_t sequence_number);
+  std::optional<Ros2ServiceCallSrv::Response> takeResponse(ServiceClient &client, std::int64_t sequence_number);
 
   /// @brief Node base interface used for RCL client construction.
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base_;
@@ -173,8 +161,7 @@ private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes);
   FRIEND_TEST(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService);
-  FRIEND_TEST(Ros2ServiceCallPrivateTest,
-              ServiceTypeSupportHandleReturnsNullForMissingSymbol);
+  FRIEND_TEST(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol);
 #endif
 };
 

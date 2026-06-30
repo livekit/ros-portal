@@ -32,12 +32,6 @@
  *     --ros-args -p livekit_url:=ws://... -p livekit_token:=<token>
  */
 
-#include "livekit/audio_frame.h"
-#include "livekit/livekit.h"
-#include "livekit/video_frame.h"
-
-#include <rclcpp/rclcpp.hpp>
-
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -45,16 +39,20 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <rclcpp/rclcpp.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "livekit/audio_frame.h"
+#include "livekit/livekit.h"
+#include "livekit/video_frame.h"
+
 // ---------------------------------------------------------------------------
 // Minimal 5x7 bitmap font (ASCII 0x20–0x7E) — ported from robot.cpp
 // ---------------------------------------------------------------------------
-namespace bitmap_font
-{
+namespace bitmap_font {
 
 constexpr int kGlyphW = 5;
 constexpr int kGlyphH = 7;
@@ -159,17 +157,12 @@ static const std::uint8_t kGlyphs[][kGlyphH] = {
 };
 // clang-format on
 
-static void drawString(
-  std::uint8_t *buf, int buf_w, int buf_h, int x0, int y0,
-  const std::string & text, int scale, std::uint8_t r,
-  std::uint8_t g, std::uint8_t b)
-{
+static void drawString(std::uint8_t* buf, int buf_w, int buf_h, int x0, int y0, const std::string& text, int scale,
+                       std::uint8_t r, std::uint8_t g, std::uint8_t b) {
   int cx = x0;
   for (char ch : text) {
     int idx = static_cast<unsigned char>(ch) - 0x20;
-    if (idx < 0 ||
-      idx >= static_cast<int>(sizeof(kGlyphs) / sizeof(kGlyphs[0])))
-    {
+    if (idx < 0 || idx >= static_cast<int>(sizeof(kGlyphs) / sizeof(kGlyphs[0]))) {
       idx = 0;
     }
     for (int row = 0; row < kGlyphH; ++row) {
@@ -198,27 +191,20 @@ static void drawString(
 
 } // namespace bitmap_font
 
-namespace
-{
+namespace {
 
-std::optional<livekit::VideoFrame>
-makeRgbaVideoFrame(
-  int width, int height,
-  const std::vector<std::uint8_t> & rgba)
-{
+std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::vector<std::uint8_t>& rgba) {
   if (width <= 0 || height <= 0) {
     return std::nullopt;
   }
 
-  const std::size_t expected_size =
-    static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
+  const std::size_t expected_size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
   if (rgba.size() != expected_size) {
     return std::nullopt;
   }
 
   try {
-    auto frame = livekit::VideoFrame::create(width, height,
-                                             livekit::VideoBufferType::RGBA);
+    auto frame = livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
     std::memcpy(frame.data(), rgba.data(), rgba.size());
     return frame;
   } catch (...) {
@@ -228,15 +214,12 @@ makeRgbaVideoFrame(
 
 } // namespace
 
-namespace ros2_livekit_bridge
-{
+namespace ros2_livekit_bridge {
 
 class LiveKitConnectNode : public rclcpp::Node {
 public:
-  explicit LiveKitConnectNode(
-    const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
-  : rclcpp::Node("livekit_connect_node", options)
-  {
+  explicit LiveKitConnectNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
+      : rclcpp::Node("livekit_connect_node", options) {
     declare_parameter<std::string>("livekit_url", "");
     declare_parameter<std::string>("livekit_token", "");
 
@@ -244,11 +227,10 @@ public:
     const std::string token = get_parameter("livekit_token").as_string();
 
     if (url.empty() || token.empty()) {
-      RCLCPP_FATAL(
-          get_logger(),
-          "Both 'livekit_url' and 'livekit_token' parameters must be set. "
-          "Pass them with: --ros-args -p livekit_url:=ws://... -p "
-          "livekit_token:=<token>");
+      RCLCPP_FATAL(get_logger(),
+                   "Both 'livekit_url' and 'livekit_token' parameters must be set. "
+                   "Pass them with: --ros-args -p livekit_url:=ws://... -p "
+                   "livekit_token:=<token>");
       throw std::runtime_error("missing required parameters");
     }
 
@@ -271,15 +253,13 @@ public:
         throw std::runtime_error("missing local participant after connect");
       }
 
-      audio_source_ =
-        std::make_shared<livekit::AudioSource>(kSampleRate, kChannels, 0);
-      audio_track_ = local_participant->publishAudioTrack(
-          "ros-sim-audio", audio_source_,
-          livekit::TrackSource::SOURCE_MICROPHONE);
+      audio_source_ = std::make_shared<livekit::AudioSource>(kSampleRate, kChannels, 0);
+      audio_track_ =
+          local_participant->publishAudioTrack("ros-sim-audio", audio_source_, livekit::TrackSource::SOURCE_MICROPHONE);
 
       video_source_ = std::make_shared<livekit::VideoSource>(kWidth, kHeight);
-      video_track_ = local_participant->publishVideoTrack(
-          "ros-sim-video", video_source_, livekit::TrackSource::SOURCE_CAMERA);
+      video_track_ =
+          local_participant->publishVideoTrack("ros-sim-video", video_source_, livekit::TrackSource::SOURCE_CAMERA);
     } catch (...) {
       shutdownLiveKit();
       throw;
@@ -287,26 +267,22 @@ public:
 
     RCLCPP_INFO(get_logger(), "Connected.");
 
-    RCLCPP_INFO(get_logger(),
-                "Publishing audio (%d Hz, %d ch) and video (%dx%d).",
-                kSampleRate, kChannels, kWidth, kHeight);
+    RCLCPP_INFO(get_logger(), "Publishing audio (%d Hz, %d ch) and video (%dx%d).", kSampleRate, kChannels, kWidth,
+                kHeight);
 
     video_buf_.resize(kWidth * kHeight * 4);
     stream_start_ = std::chrono::steady_clock::now();
 
     // 10ms audio timer
-    audio_timer_ = create_wall_timer(std::chrono::milliseconds(10),
-        [this]() {pushAudioFrame();});
+    audio_timer_ = create_wall_timer(std::chrono::milliseconds(10), [this]() { pushAudioFrame(); });
 
     // ~30 fps video timer
-    video_timer_ = create_wall_timer(std::chrono::milliseconds(33),
-        [this]() {pushVideoFrame();});
+    video_timer_ = create_wall_timer(std::chrono::milliseconds(33), [this]() { pushVideoFrame(); });
 
     RCLCPP_INFO(get_logger(), "Streaming... Ctrl-C to stop.");
   }
 
-  ~LiveKitConnectNode() override
-  {
+  ~LiveKitConnectNode() override {
     audio_timer_.reset();
     video_timer_.reset();
     shutdownLiveKit();
@@ -314,32 +290,25 @@ public:
   }
 
 private:
-  void shutdownLiveKit()
-  {
+  void shutdownLiveKit() {
     if (room_) {
       auto local_participant = room_->localParticipant().lock();
 
       if (local_participant) {
         try {
           if (audio_track_ && audio_track_->publication()) {
-            local_participant->unpublishTrack(
-                audio_track_->publication()->sid());
+            local_participant->unpublishTrack(audio_track_->publication()->sid());
           }
-        } catch (const std::exception & e) {
-          RCLCPP_WARN(get_logger(),
-                      "Failed to unpublish audio track during teardown: %s",
-                      e.what());
+        } catch (const std::exception& e) {
+          RCLCPP_WARN(get_logger(), "Failed to unpublish audio track during teardown: %s", e.what());
         }
 
         try {
           if (video_track_ && video_track_->publication()) {
-            local_participant->unpublishTrack(
-                video_track_->publication()->sid());
+            local_participant->unpublishTrack(video_track_->publication()->sid());
           }
-        } catch (const std::exception & e) {
-          RCLCPP_WARN(get_logger(),
-                      "Failed to unpublish video track during teardown: %s",
-                      e.what());
+        } catch (const std::exception& e) {
+          RCLCPP_WARN(get_logger(), "Failed to unpublish video track during teardown: %s", e.what());
         }
       }
 
@@ -356,8 +325,7 @@ private:
     }
   }
 
-  void pushAudioFrame()
-  {
+  void pushAudioFrame() {
     constexpr int kSamplesPerFrame = kSampleRate / 100; // 480 samples = 10 ms
     constexpr double kToneHz = 440.0;
     constexpr double kAmplitude = 3000.0;
@@ -365,24 +333,21 @@ private:
     std::vector<std::int16_t> buf(kSamplesPerFrame * kChannels);
     for (int i = 0; i < kSamplesPerFrame; ++i) {
       const double t = static_cast<double>(audio_sample_idx_++) / kSampleRate;
-      buf[i] = static_cast<std::int16_t>(kAmplitude *
-        std::sin(2.0 * M_PI * kToneHz * t));
+      buf[i] = static_cast<std::int16_t>(kAmplitude * std::sin(2.0 * M_PI * kToneHz * t));
     }
     try {
       if (!audio_source_) {
         return;
       }
 
-      livekit::AudioFrame frame(std::move(buf), kSampleRate, kChannels,
-        kSamplesPerFrame);
+      livekit::AudioFrame frame(std::move(buf), kSampleRate, kChannels, kSamplesPerFrame);
       audio_source_->captureFrame(frame, 0);
-    } catch (const std::exception & e) {
+    } catch (const std::exception& e) {
       RCLCPP_WARN(get_logger(), "Audio push error: %s", e.what());
     }
   }
 
-  void pushVideoFrame()
-  {
+  void pushVideoFrame() {
     // Dark-blue background
     for (int i = 0; i < kWidth * kHeight; ++i) {
       video_buf_[i * 4 + 0] = 20;  // R
@@ -393,9 +358,7 @@ private:
 
     // Elapsed time
     const auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - stream_start_)
-      .count();
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - stream_start_).count();
     const int secs = static_cast<int>(elapsed_ms / 1000);
     const int ms = static_cast<int>(elapsed_ms % 1000);
 
@@ -412,24 +375,21 @@ private:
     const int header_w = static_cast<int>(kHeader.size()) * kCharWHeader;
     const int x_header = (kWidth - header_w) / 2;
     const int y_header = kHeight / 6;
-    bitmap_font::drawString(video_buf_.data(), kWidth, kHeight, x_header,
-                            y_header, std::string(kHeader), kScaleHeader, 80,
-                            220, 80);
+    bitmap_font::drawString(video_buf_.data(), kWidth, kHeight, x_header, y_header, std::string(kHeader), kScaleHeader,
+                            80, 220, 80);
 
     // Frame counter + elapsed time centred in the lower half, white, scale=4
     constexpr int kScale = 4;
     constexpr int kCharW = (bitmap_font::kGlyphW + 1) * kScale;
     const int line1_w = static_cast<int>(line1.size()) * kCharW;
     const int line2_w = static_cast<int>(line2.size()) * kCharW;
-    const int y1 = (kHeight / 2) - (bitmap_font::kGlyphH * kScale) -4;
+    const int y1 = (kHeight / 2) - (bitmap_font::kGlyphH * kScale) - 4;
     const int y2 = (kHeight / 2) + 4;
     const int x1 = (kWidth - line1_w) / 2;
     const int x2 = (kWidth - line2_w) / 2;
 
-    bitmap_font::drawString(video_buf_.data(), kWidth, kHeight, x1, y1, line1,
-                            kScale, 255, 255, 255);
-    bitmap_font::drawString(video_buf_.data(), kWidth, kHeight, x2, y2, line2,
-                            kScale, 255, 255, 255);
+    bitmap_font::drawString(video_buf_.data(), kWidth, kHeight, x1, y1, line1, kScale, 255, 255, 255);
+    bitmap_font::drawString(video_buf_.data(), kWidth, kHeight, x2, y2, line2, kScale, 255, 255, 255);
 
     try {
       if (!video_source_) {
@@ -445,7 +405,7 @@ private:
       video_source_->captureFrame(*frame, video_ts_us_);
       video_ts_us_ += 33333; // ~30 fps in microseconds
       ++video_frame_count_;
-    } catch (const std::exception & e) {
+    } catch (const std::exception& e) {
       RCLCPP_WARN(get_logger(), "Video push error: %s", e.what());
     }
   }
@@ -478,8 +438,7 @@ private:
 
 #include <gtest/gtest.h>
 
-namespace
-{
+namespace {
 
 TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer) {
   const std::vector<std::uint8_t> rgba = {10, 20, 30, 40, 50, 60, 70, 80};
@@ -492,9 +451,8 @@ TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer) {
 
 TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize) {
   EXPECT_NO_THROW({
-      const auto frame =
-      makeRgbaVideoFrame(2, 1, std::vector<std::uint8_t>{10, 20, 30, 40});
-      EXPECT_FALSE(frame.has_value());
+    const auto frame = makeRgbaVideoFrame(2, 1, std::vector<std::uint8_t>{10, 20, 30, 40});
+    EXPECT_FALSE(frame.has_value());
   });
 }
 
@@ -502,14 +460,12 @@ TEST(LiveKitConnectNodeTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize) {
 
 #else
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   try {
     rclcpp::spin(std::make_shared<ros2_livekit_bridge::LiveKitConnectNode>());
-  } catch (const std::exception & e) {
-    RCLCPP_ERROR(rclcpp::get_logger("livekit_connect_node"), "Fatal: %s",
-                 e.what());
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("livekit_connect_node"), "Fatal: %s", e.what());
     rclcpp::shutdown();
     return 1;
   }

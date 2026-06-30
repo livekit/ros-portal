@@ -50,6 +50,7 @@ namespace ros2_livekit_bridge::test
 
 using namespace std::chrono_literals;
 using ros2_cli::Ros2InterfaceShow;
+using ros2_cli::Ros2ServiceCallSrv;
 using ros2_cli::Ros2ServiceList;
 using ros2_cli::Ros2TopicList;
 using ros2_cli::Ros2TopicPubSrv;
@@ -74,6 +75,11 @@ struct ServiceListServiceOptions
   bool show_types{false};
   bool count_services{false};
   bool include_hidden_services{false};
+};
+
+struct ServiceCallServiceOptions
+{
+  std::uint8_t timeout_sec{5};
 };
 
 struct InterfaceShowServiceOptions
@@ -508,8 +514,44 @@ protected:
     return future.get();
   }
 
-  Ros2InterfaceShow::Response::SharedPtr
-  callInterfaceShowService(
+  Ros2ServiceCallSrv::Response::SharedPtr callServiceCallService(
+    const std::shared_ptr<rclcpp::Node> & node,
+    const std::string & participant_id,
+    const std::string & service,
+    const std::string & msg_type,
+    const std::string & payload,
+    const ServiceCallServiceOptions & options = {})
+  {
+    auto client = node->create_client<Ros2ServiceCallSrv>(
+      bridgeServiceName(node, ros2_cli::kServiceCallServiceName));
+
+    if (!waitFor(
+        [&]() {
+          return client->wait_for_service(100ms);
+        },
+        kGraphTimeout))
+    {
+      ADD_FAILURE() << "ros2_service_call service was not available";
+      return nullptr;
+    }
+
+    auto request = std::make_shared<Ros2ServiceCallSrv::Request>();
+    request->participant_id = participant_id;
+    request->service = service;
+    request->msg_type = msg_type;
+    request->payload = payload;
+    request->timeout_sec = options.timeout_sec;
+
+    auto future = client->async_send_request(request);
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << "ros2_service_call service timed out";
+      return nullptr;
+    }
+
+    return future.get();
+  }
+
+  Ros2InterfaceShow::Response::SharedPtr callInterfaceShowService(
     const std::shared_ptr<rclcpp::Node> & node,
     const std::string & participant_id,
     const std::string & msg_type,

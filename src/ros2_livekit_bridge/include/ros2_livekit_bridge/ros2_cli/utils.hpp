@@ -18,6 +18,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -100,4 +102,4 @@ bool hasHiddenNameToken(const std::string & name);
  */
 std::string joinTypes(const std::vector<std::string> & types);
 
-} // namespace ros2_livekit_bridge::ros2_cli
+}  // namespace ros2_livekit_bridge::ros2_cli

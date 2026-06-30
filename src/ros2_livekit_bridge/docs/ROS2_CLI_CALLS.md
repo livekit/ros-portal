@@ -35,6 +35,11 @@ default", which is **10 seconds**. If the participant is unknown or
 `participant_id` is empty, the call fails fast with an error message before any
 RPC is attempted.
 
+For `ros2 service call` only, the LiveKit RPC timeout is the requested
+service-call timeout plus a **1 second** margin. That lets the remote bridge
+return service-level errors such as `Service call timed out.` before the RPC
+layer aborts the round-trip.
+
 The remaining request fields mirror the flags of the corresponding native
 `ros2` CLI command 1:1, so output matches what you'd see running the command
 directly on the robot.
@@ -120,7 +125,6 @@ ros2 service call /ros2_livekit_bridge/ros2_topic_pub \
 
 ---
 ## `ros2 service`
-- currently only supports service list
 ### `ros2 service list`
 
 **ROS service:** `/ros2_livekit_bridge/ros2_service_list`
@@ -153,6 +157,31 @@ ros2 service call /ros2_livekit_bridge/ros2_service_list \
   ros2_livekit_bridge_msgs/srv/Ros2ServiceList \
   "{participant_id: 'robot-01', count_services: true, include_hidden_services: true}"
 ```
+
+### `ros2 service call`
+
+**ROS service:** `/ros2_livekit_bridge/ros2_service_call`
+(type `ros2_livekit_bridge_msgs/srv/Ros2ServiceCall`)
+**LiveKit RPC method:** `ros2_service_call`
+
+Request fields (beyond `participant_id` / `timeout_sec`):
+
+| Field | Maps to `ros2 service call` argument |
+| --- | --- |
+| `service` | service name, such as `/set_bool`; relative names resolve in the remote bridge node context |
+| `msg_type` | required service type, such as `std_srvs/srv/SetBool` |
+| `payload` | native YAML request payload, such as `{data: true}` |
+
+The local bridge forwards the service name, type, and native YAML payload over
+LiveKit RPC; the remote participant serializes the YAML into the request type
+and dispatches the ROS service call (the same way `ros2 topic pub` is handled).
+The JSON payload carries the requested `timeout_sec` for the remote ROS service
+wait; the LiveKit RPC itself waits one second longer so timeout responses can
+propagate back to the caller.
+
+Unlike `ros2 topic pub`, a remote service call requires a matching ROS service
+server to already exist in the target bridge's graph. For local two-bridge
+testing, see the [test_utilities service stub README](../../../test/test_utilities/README.md).
 
 ---
 
@@ -211,5 +240,7 @@ Common failure cases reported through `err_msg`:
 - `participant_id must be non-empty`
 - `LiveKit participant '<id>' was not found`
 - `all_comments and no_comments are mutually exclusive` (interface show only)
+- `msg_type must be non-empty` (service call and topic pub)
+- `Service call timed out.` (service call only)
 - LiveKit RPC errors (e.g. timeout, remote handler failure)
 - malformed JSON returned by the remote bridge

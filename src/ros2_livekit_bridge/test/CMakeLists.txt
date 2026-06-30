@@ -21,6 +21,7 @@ find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
 find_package(ament_lint_auto REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
 
 ament_add_pytest_test(livekit_bridge_local_launch_test
@@ -32,6 +33,7 @@ ament_add_pytest_test(livekit_bridge_local_launch_test
 # ---------------------------------------------------------------------------
 file(GLOB UNIT_TEST_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/unit/introspection/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/ros2_cli/*.cpp"
 )
 list(SORT UNIT_TEST_SOURCES)
@@ -43,10 +45,11 @@ if(UNIT_TEST_SOURCES)
 endif()
 
 if(TARGET ros2_livekit_bridge_unit_tests)
+  target_compile_definitions(ros2_livekit_bridge_unit_tests PRIVATE BUILD_TESTING=1)
   target_link_libraries(ros2_livekit_bridge_unit_tests
     ros2_livekit_bridge_lib
   )
-  ament_target_dependencies(ros2_livekit_bridge_unit_tests nav_msgs test_msgs)
+  ament_target_dependencies(ros2_livekit_bridge_unit_tests nav_msgs std_srvs test_msgs)
   livekit_set_runtime_rpath(ros2_livekit_bridge_unit_tests)
 endif()
 
@@ -71,6 +74,7 @@ if(TARGET ros2_livekit_bridge_integration_tests)
   target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
   )
+  ament_target_dependencies(ros2_livekit_bridge_integration_tests std_srvs)
   target_link_libraries(ros2_livekit_bridge_integration_tests
     ros2_livekit_bridge_lib
   )

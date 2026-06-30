@@ -16,9 +16,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include <ros2_livekit_bridge_msgs/srv/ros2_interface_show.hpp>
+#include <ros2_livekit_bridge_msgs/srv/ros2_service_call.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_service_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_list.hpp>
 #include <ros2_livekit_bridge_msgs/srv/ros2_topic_pub.hpp>
@@ -71,6 +73,19 @@ struct ServiceListOptions
   bool include_hidden_services{false};
 };
 
+/// @brief Arguments for a one-shot `ros2 service call`.
+struct ServiceCallOptions
+{
+  /// @brief ROS service name to call; may be relative before resolution.
+  std::string service;
+  /// @brief Required service type identifier, such as `std_srvs/srv/SetBool`.
+  std::string msg_type;
+  /// @brief Native YAML request payload accepted by `ros2 service call`.
+  std::string payload;
+  /// @brief Effective timeout in seconds for the remote ROS service call.
+  std::uint8_t timeout_sec{0};
+};
+
 /**
  * @brief Arguments and formatting options for `ros2 interface show`.
  * @details fields map 1:1 to the fields shown from running `ros2 interface show
@@ -86,7 +101,31 @@ struct InterfaceShowOptions
   bool no_comments{false};
 };
 
-} // namespace ros2_livekit_bridge
+/**
+ * @brief Construct a ROS CLI service response.
+ *
+ * Every `ros2 ...` RPC response type shares the {success, err_msg, output}
+ * fields, so one builder covers all command response types.
+ * @tparam ResponseT Generated ROS service Response type.
+ * @param success Whether the operation succeeded.
+ * @param err_msg Human-readable error message.
+ * @param output Human-readable command output.
+ * @return ROS service response.
+ */
+template<typename ResponseT>
+ResponseT makeCliResponse(
+  bool success,
+  const std::string & err_msg,
+  const std::string & output = {})
+{
+  ResponseT response;
+  response.success = success;
+  response.err_msg = err_msg;
+  response.output = output;
+  return response;
+}
+
+}  // namespace ros2_livekit_bridge
 
 namespace ros2_livekit_bridge::ros2_cli
 {
@@ -99,5 +138,7 @@ using Ros2TopicList = ros2_livekit_bridge_msgs::srv::Ros2TopicList;
 using Ros2TopicPubSrv = ros2_livekit_bridge_msgs::srv::Ros2TopicPub;
 //! @brief Generated ROS service type for remote `ros2 service list` requests.
 using Ros2ServiceList = ros2_livekit_bridge_msgs::srv::Ros2ServiceList;
+/// @brief Generated ROS service type for remote `ros2 service call` requests.
+using Ros2ServiceCallSrv = ros2_livekit_bridge_msgs::srv::Ros2ServiceCall;
 
 } // namespace ros2_livekit_bridge::ros2_cli

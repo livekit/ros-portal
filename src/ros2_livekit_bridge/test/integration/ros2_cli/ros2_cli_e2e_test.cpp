@@ -24,6 +24,7 @@
 #include <string>
 
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 namespace ros2_livekit_bridge::test
 {
@@ -197,6 +198,59 @@ TEST_F(BridgeTestE2E, ListsRemoteRosServicesOverRpc) {
   EXPECT_FALSE(missing_response->success);
   EXPECT_TRUE(
       contains(missing_response->err_msg, "missing-livekit-participant"));
+}
+
+TEST_F(BridgeTestE2E, CallsRemoteRosServiceOverRpc) {
+  initializeRuntime(kBidirectionalTopic);
+
+  constexpr const char *kSetBoolService = "/bridge/set_bool";
+  auto set_bool_service = robotBNode()->create_service<std_srvs::srv::SetBool>(
+      kSetBoolService,
+    [](const std_srvs::srv::SetBool::Request::SharedPtr request,
+    std_srvs::srv::SetBool::Response::SharedPtr response) {
+      response->success = request->data;
+      response->message = request->data ? "enabled" : "disabled";
+      });
+  ASSERT_NE(set_bool_service, nullptr);
+  ASSERT_TRUE(
+      waitFor([&]() {return serviceExists(*robotBNode(), kSetBoolService);},
+              kGraphTimeout))
+      << "SetBool service did not appear in bridge B graph";
+
+  const auto response = callServiceCallService(
+      robotANode(), identityB(), kSetBoolService, "std_srvs/srv/SetBool",
+      "{data: true}");
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->success) << response->err_msg;
+  EXPECT_TRUE(contains(response->output, "success: true"));
+  EXPECT_TRUE(contains(response->output, "message: enabled"));
+
+  const auto missing_type_response = callServiceCallService(
+      robotANode(), identityB(), kSetBoolService, "", "{data: false}");
+  ASSERT_NE(missing_type_response, nullptr);
+  EXPECT_FALSE(missing_type_response->success);
+  EXPECT_TRUE(
+      contains(missing_type_response->err_msg,
+               "msg_type must be non-empty"));
+
+  ServiceCallServiceOptions timeout_options;
+  timeout_options.timeout_sec = 1;
+  const auto missing_service_response = callServiceCallService(
+      robotANode(), identityB(), "/bridge/missing_set_bool",
+      "std_srvs/srv/SetBool", "{data: true}", timeout_options);
+  ASSERT_NE(missing_service_response, nullptr);
+  EXPECT_FALSE(missing_service_response->success);
+  EXPECT_TRUE(
+      contains(missing_service_response->err_msg, "Service call timed out"));
+
+  const auto missing_participant_response = callServiceCallService(
+      robotANode(), "missing-livekit-participant", kSetBoolService,
+      "std_srvs/srv/SetBool", "{data: true}");
+  ASSERT_NE(missing_participant_response, nullptr);
+  EXPECT_FALSE(missing_participant_response->success);
+  EXPECT_TRUE(
+      contains(missing_participant_response->err_msg,
+               "missing-livekit-participant"));
 }
 
 TEST_F(BridgeTestE2E, ShowsRemoteRosInterfacesOverRpc) {

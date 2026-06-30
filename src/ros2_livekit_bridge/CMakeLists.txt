@@ -193,8 +193,10 @@ endif()
 # ROS2 CLI library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_cli_lib SHARED
+  src/introspection/message_render.cpp  # if introspection ever grows, break out to separate library
   src/ros2_cli/ros2_interface_show.cpp
   src/ros2_cli/json_converters.cpp
+  src/ros2_cli/ros2_service_call.cpp
   src/ros2_cli/ros2_service_list.cpp
   src/ros2_cli/ros2_topic_list.cpp
   src/ros2_cli/ros2_topic_pub.cpp
@@ -239,6 +241,7 @@ target_link_libraries(ros2_livekit_bridge_node
 livekit_set_runtime_rpath(ros2_livekit_bridge_node)
 
 if(BUILD_TESTING)
+  target_compile_definitions(ros2_cli_lib PRIVATE BUILD_TESTING=1)
   add_subdirectory(test)
 endif()
 

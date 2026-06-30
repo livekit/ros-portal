@@ -30,6 +30,7 @@
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "ros2_livekit_bridge/ros2_cli/ros2_service_call.hpp"
 #include "ros2_livekit_bridge/ros2_cli/ros2_topic_pub.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
 #include "ros2_livekit_bridge/types.hpp"
@@ -52,6 +53,7 @@ public:
   using Ros2TopicPubSrv = ros2_cli::Ros2TopicPubSrv;
   using Ros2ServiceList = ros2_cli::Ros2ServiceList;
   using TopicPublishAllowed = ros2_cli::TopicPublishAllowed;
+  using Ros2ServiceCallSrv = ros2_cli::Ros2ServiceCallSrv;
 
   /**
    * @brief LiveKit methods the bridge supplies to the manager.
@@ -181,6 +183,12 @@ public:
   Ros2ServiceList::Response
   callRemoteServiceList(const Ros2ServiceList::Request & request) const;
 
+  /// @brief Execute a ROS service request by calling a remote LiveKit RPC.
+  /// @param request ROS service request from the local developer.
+  /// @return ROS service response with success, err_msg, and output.
+  Ros2ServiceCallSrv::Response
+  callRemoteServiceCall(const Ros2ServiceCallSrv::Request & request) const;
+
   /**
    * @brief Execute a ROS service request by calling a remote LiveKit RPC.
    * @param request ROS service request from the local developer.
@@ -210,6 +218,11 @@ public:
    */
   std::string handleServiceListRpc(const std::string & payload) const;
 
+  /// @brief Fulfill an inbound LiveKit `ros2_service_call` RPC.
+  /// @param payload JSON request payload from the remote participant.
+  /// @return JSON response payload containing success, err_msg, and output.
+  std::string handleServiceCallRpc(const std::string & payload) const;
+
   /**
    * @brief Fulfill an inbound LiveKit `ros2_interface_show` RPC.
    * @param payload JSON request payload from the remote participant.
@@ -235,9 +248,16 @@ public:
   /**
    * @brief Resolve the user-provided timeout field to an actual timeout.
    * @param timeout_sec Request timeout field; zero means use the default.
-   * @return Timeout in seconds to pass to LiveKit RPC.
+   * @return Effective timeout in seconds for the remote operation.
    */
   static std::uint8_t effectiveTimeout(std::uint8_t timeout_sec);
+
+  /**
+   * @brief Resolve the LiveKit RPC timeout for remote `ros2 service call`.
+   * @param service_timeout_sec Effective remote ROS service-call timeout.
+   * @return LiveKit RPC timeout in seconds.
+   */
+  static std::uint8_t serviceCallRpcTimeout(std::uint8_t service_timeout_sec);
 
 private:
   /**
@@ -267,6 +287,13 @@ private:
     const std::shared_ptr<Ros2ServiceList::Request> request,
     std::shared_ptr<Ros2ServiceList::Response> response) const;
 
+  /// @brief Service callback that maps a ROS request into a service response.
+  /// @param request Shared ROS service request.
+  /// @param response Shared ROS service response to populate.
+  void handleServiceCallRosService(
+    const std::shared_ptr<Ros2ServiceCallSrv::Request> request,
+    std::shared_ptr<Ros2ServiceCallSrv::Response> response) const;
+
   /**
    * @brief Service callback that maps a ROS request into a service response.
    * @param request Shared ROS service request.
@@ -276,15 +303,37 @@ private:
     const std::shared_ptr<Ros2InterfaceShow::Request> request,
     std::shared_ptr<Ros2InterfaceShow::Response> response) const;
 
+  /**
+   * @brief Perform one LiveKit RPC and parse its JSON response.
+   *
+   * Shared tail for every callRemote* method: dispatches @p request_payload to
+   * the remote participant, logs and returns an error response on transport
+   * failure or malformed JSON, and otherwise returns the parsed response.
+   * @tparam ResponseT Generated ROS service Response type for the command.
+   * @param participant_id Target LiveKit participant.
+   * @param rpc_method RPC method name to invoke.
+   * @param request_payload JSON request payload.
+   * @param timeout_sec Effective timeout in seconds.
+   * @return Parsed remote response, or an error response on failure.
+   */
+  template<typename ResponseT>
+  ResponseT performRemoteRpc(
+    const std::string & participant_id,
+    const char * rpc_method,
+    const std::string & request_payload,
+    std::uint8_t timeout_sec) const;
+
   NodeInterfaces node_interfaces_;
   LivekitMethods livekit_methods_;
   /// Use a function rather than a static list to account for a dynamic set of
   /// allowed topics.
   TopicPublishAllowed topic_publish_allowed_;
   std::unique_ptr<ros2_cli::Ros2TopicPub> topic_publisher_;
+  std::unique_ptr<ros2_cli::Ros2ServiceCall> service_caller_;
   rclcpp::Service<Ros2TopicList>::SharedPtr topic_list_service_;
   rclcpp::Service<Ros2TopicPubSrv>::SharedPtr topic_pub_service_;
   rclcpp::Service<Ros2ServiceList>::SharedPtr service_list_service_;
+  rclcpp::Service<Ros2ServiceCallSrv>::SharedPtr service_call_service_;
   rclcpp::Service<Ros2InterfaceShow>::SharedPtr interface_show_service_;
 };
 

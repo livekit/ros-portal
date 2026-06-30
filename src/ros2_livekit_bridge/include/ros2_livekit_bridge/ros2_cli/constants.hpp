@@ -40,6 +40,12 @@ inline constexpr const char *kServiceListRpcMethod = "ros2_service_list";
 inline constexpr const char *kServiceListServiceName =
   "ros2_livekit_bridge/ros2_service_list";
 
+/// @brief LiveKit RPC method for remote `ros2 service call`.
+inline constexpr const char *kServiceCallRpcMethod = "ros2_service_call";
+/// @brief ROS service that forwards `ros2 service call` over LiveKit RPC.
+inline constexpr const char *kServiceCallServiceName =
+  "ros2_livekit_bridge/ros2_service_call";
+
 /// @brief LiveKit RPC method for remote `ros2 interface show`.
 inline constexpr const char *kInterfaceShowRpcMethod = "ros2_interface_show";
 /// @brief ROS service that forwards `ros2 interface show` over LiveKit RPC.
@@ -50,8 +56,14 @@ inline constexpr const char *kInterfaceShowServiceName =
 /// zero.
 inline constexpr std::uint8_t kDefaultTimeoutSec = 10;
 
+/// @brief Extra LiveKit RPC timeout margin for remote `ros2 service call`.
+/// The RPC round-trip must outlive the remote ROS service-call wait.
+inline constexpr std::uint8_t kServiceCallRpcTimeoutMarginSec = 1;
+
 /// @brief Maximum number of reusable generic topic publishers cached by topic.
 inline constexpr std::size_t kMaxCachedTopicPublishers = 20U;
+/// @brief Maximum number of reusable generic service clients cached by service.
+inline constexpr std::size_t kMaxCachedServiceClients = 20U;
 /// @brief QoS depth used for one-shot generic topic publishers.
 inline constexpr std::size_t kTopicPublisherHistoryDepth = 10U;
 

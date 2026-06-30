@@ -18,7 +18,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 

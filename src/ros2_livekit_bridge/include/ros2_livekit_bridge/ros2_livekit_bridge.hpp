@@ -52,89 +52,79 @@ namespace diagnostics
 class ConnectionHealthDiagnostics;
 } // namespace diagnostics
 
-/**
- * @brief The main bridge node for the ROS2 LiveKit bridge.
- *
- * This node is responsible for polling the ROS2 topic graph, matching topics
- * against user-defined patterns, and creating subscribers for the allowed
- * topics. The bridge treats video and audio as LK video/audio tracks and other
- * topics as data tracks.
- */
+///
+/// @brief The main bridge node for the ROS2 LiveKit bridge.
+///
+/// This node is responsible for polling the ROS2 topic graph, matching topics
+/// against user-defined patterns, and creating subscribers for the allowed
+/// topics. The bridge treats video and audio as LK video/audio tracks and other
+/// topics as data tracks.
 class Ros2LiveKitBridge : public rclcpp::Node, public livekit::RoomDelegate {
 public:
-  /**
-   * @brief Constructor for the ROS2 LiveKit bridge.
-   * @param options The options for the node
-   */
+  ///
+  /// @brief Constructor for the ROS2 LiveKit bridge.
+  /// @param options The options for the node
   explicit Ros2LiveKitBridge(
     const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~Ros2LiveKitBridge() override;
 
-  /**
-   * @brief Initialize bridge configuration, LiveKit connection, and polling.
-   * @return True if initialization completed, false for expected startup
-   * failures that have already been logged.
-   */
+  ///
+  /// @brief Initialize bridge configuration, LiveKit connection, and polling.
+  /// @return True if initialization completed, false for expected startup
+  /// failures that have already been logged.
   bool initialize();
 
   int ros_threads() const {return ros_threads_;}
 
 private:
-  /**
-   * @brief Poll the topics and create subscribers for the allowed topics
-   */
+  ///
+  /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
 
-  /**
-   * @brief Poll LiveKit stats used by connection-health diagnostics.
-   */
+  ///
+  /// @brief Poll LiveKit stats used by connection-health diagnostics.
   void pollConnectionStats();
 
-  /**
-   * @brief Create a subscriber for the topic
-   * @param topic_name The name of the topic
-   * @param topic_type The type of the topic
-   */
+  ///
+  /// @brief Create a subscriber for the topic
+  /// @param topic_name The name of the topic
+  /// @param topic_type The type of the topic
   void createSubscriber(
     const std::string & topic_name,
     const std::string & topic_type);
 
-  /**
-   * @brief Create a typed subscriber for sensor_msgs/msg/Image topics.
-   *
-   * Uses a restricted (typed) subscription rather than a generic one so that
-   * the Image fields (width, height, encoding, data) are directly accessible. A
-   * local LiveKit video track is created lazily on the first received frame and
-   * pushFrame() is called directly inside the subscription callback.
-   */
+  ///
+  /// @brief Create a typed subscriber for sensor_msgs/msg/Image topics.
+  ///
+  /// Uses a restricted (typed) subscription rather than a generic one so that
+  /// the Image fields (width, height, encoding, data) are directly accessible. A
+  /// local LiveKit video track is created lazily on the first received frame and
+  /// pushFrame() is called directly inside the subscription callback.
   void createImageSubscriber(const std::string & topic_name);
 
-  /**
-   * @brief Create a generic subscriber that forwards raw CDR-serialized bytes
-   * over a LiveKit data track.
-   *
-   * Uses rclcpp::GenericSubscription so no compile-time message type
-   * knowledge is required; the @p topic_type string (resolved from the ROS
-   * graph by pollTopics()) is passed through to rosidl's runtime typesupport
-   * loader. A local LiveKit data track is created lazily on the first
-   * received message.
-   */
+  ///
+  /// @brief Create a generic subscriber that forwards raw CDR-serialized bytes
+  /// over a LiveKit data track.
+  ///
+  /// Uses rclcpp::GenericSubscription so no compile-time message type
+  /// knowledge is required; the @p topic_type string (resolved from the ROS
+  /// graph by pollTopics()) is passed through to rosidl's runtime typesupport
+  /// loader. A local LiveKit data track is created lazily on the first
+  /// received message.
   void createDataSubscriber(
     const std::string & topic_name,
     const std::string & topic_type);
 
-  /**
-   * @brief Check if the topic matches the allowed topics
-   * @param topic_name The name of the topic
-   * @return True if the topic matches the allowed topics, false otherwise
-   */
+  ///
+  /// @brief Check if the topic matches the allowed topics
+  /// @param topic_name The name of the topic
+  /// @return True if the topic matches the allowed topics, false otherwise
   void onDataTrackPublished(
     livekit::Room & room,
     const livekit::DataTrackPublishedEvent & event) override;
 
-  /**
-   * @brief Stop republishing a remote LiveKit data track when it is removed.
-   */
+  ///
+  /// @brief Stop republishing a remote LiveKit data track when it is removed.
   void onDataTrackUnpublished(
     livekit::Room & room,
     const livekit::DataTrackUnpublishedEvent & event) override;
@@ -182,60 +172,54 @@ private:
     livekit::Room & room,
     const livekit::ParticipantsUpdatedEvent & event) override;
 
-  /**
-   * @brief Resolve the ROS message type for an inbound LiveKit data track.
-   */
+  ///
+  /// @brief Resolve the ROS message type for an inbound LiveKit data track.
   std::optional<std::string> liveKitToRosTopicType(
     const std::string & track_name) const;
 
-  /**
-   * @brief Determine QoS for subscribing to a topic by aggregating all
-   * publisher endpoints.
-   *
-   * Depth is the sum of per-publisher history depths (min 1 each), clamped to
-   * [min_qos_depth, max_qos_depth]. Reliability is RELIABLE only when every
-   * publisher offers RELIABLE (unless overridden by best_effort_qos_topics).
-   * Durability is TRANSIENT_LOCAL only when every publisher offers
-   * TRANSIENT_LOCAL.
-   */
+  ///
+  /// @brief Determine QoS for subscribing to a topic by aggregating all
+  /// publisher endpoints.
+  ///
+  /// Depth is the sum of per-publisher history depths (min 1 each), clamped to
+  /// [min_qos_depth, max_qos_depth]. Reliability is RELIABLE only when every
+  /// publisher offers RELIABLE (unless overridden by best_effort_qos_topics).
+  /// Durability is TRANSIENT_LOCAL only when every publisher offers
+  /// TRANSIENT_LOCAL.
   rclcpp::QoS determineQoS(const std::string & topic_name) const;
 
-  /**
-   * @brief Check whether a remote participant identity is present in the room.
-   * @param participant_id LiveKit participant identity to look up.
-   * @return True when the participant exists in the connected room.
-   */
+  ///
+  /// @brief Check whether a remote participant identity is present in the room.
+  /// @param participant_id LiveKit participant identity to look up.
+  /// @return True when the participant exists in the connected room.
   bool hasParticipant(const std::string & participant_id) const;
 
-  /**
-   * @brief Invoke a LiveKit RPC method through the room's local participant.
-   * @param participant_id LiveKit participant identity to call.
-   * @param method LiveKit RPC method name.
-   * @param payload JSON request payload.
-   * @param timeout_sec Response timeout in seconds.
-   * @return JSON response payload returned by the remote participant, or
-   * std::nullopt when the RPC call fails.
-   */
+  ///
+  /// @brief Invoke a LiveKit RPC method through the room's local participant.
+  /// @param participant_id LiveKit participant identity to call.
+  /// @param method LiveKit RPC method name.
+  /// @param payload JSON request payload.
+  /// @param timeout_sec Response timeout in seconds.
+  /// @return JSON response payload returned by the remote participant, or
+  /// std::nullopt when the RPC call fails.
   std::optional<std::string> rpcPerform(
     const std::string & participant_id, const std::string & method,
     const std::string & payload, std::uint8_t timeout_sec);
 
-  /**
-   * @brief Register a local LiveKit RPC handler on the room's local
-   * participant, adapting the JSON-string handler to the SDK signature.
-   * @param method LiveKit RPC method name.
-   * @param handler Callback that receives and returns JSON strings.
-   * @return True on success, false when the local participant is unavailable.
-   */
+  ///
+  /// @brief Register a local LiveKit RPC handler on the room's local
+  /// participant, adapting the JSON-string handler to the SDK signature.
+  /// @param method LiveKit RPC method name.
+  /// @param handler Callback that receives and returns JSON strings.
+  /// @return True on success, false when the local participant is unavailable.
   bool rpcRegisterMethod(
     const std::string & method, RpcHandler handler);
 
-  /**
-   * @brief Unregister a local LiveKit RPC handler from the room's local
-   * participant.
-   * @param method LiveKit RPC method name.
-   * @return True on success, false when the local participant is unavailable.
-   */
+  ///
+  /// @brief Unregister a local LiveKit RPC handler from the room's local
+  /// participant.
+  /// @param method LiveKit RPC method name.
+  /// @return True on success, false when the local participant is unavailable.
   bool rpcUnregisterMethod(const std::string & method);
 
   //! @brief The name of the room

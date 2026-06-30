@@ -24,12 +24,11 @@
 namespace ros2_livekit_bridge
 {
 
-/**
- * @brief Handler for inbound LiveKit RPC payloads.
- *
- * The input and return value are JSON strings. Bridge transport code wraps
- * this callback in the LiveKit SDK-specific RPC handler signature.
- */
+///
+/// @brief Handler for inbound LiveKit RPC payloads.
+///
+/// The input and return value are JSON strings. Bridge transport code wraps
+/// this callback in the LiveKit SDK-specific RPC handler signature.
 using RpcHandler = std::function<std::string(const std::string &)>;
 
 //! @brief Return true when a remote participant identity is present.

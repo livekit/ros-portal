@@ -22,11 +22,10 @@
 namespace ros2_livekit_bridge
 {
 
-/**
- * @brief Success-or-error return value for fallible operations.
- * @tparam T Success payload type.
- * @tparam E Error payload type.
- */
+///
+/// @brief Success-or-error return value for fallible operations.
+/// @tparam T Success payload type.
+/// @tparam E Error payload type.
 template<typename T, typename E>
 class Result {
 public:

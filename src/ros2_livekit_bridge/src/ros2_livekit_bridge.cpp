@@ -750,7 +750,7 @@ void Ros2LiveKitBridge::stopInboundDataTrack(const std::string & sid)
       state->ros_topic_name.c_str());
 }
 
-/** Helpers **/
+/// Helpers
 
 std::optional<std::string>
 Ros2LiveKitBridge::liveKitToRosTopicType(const std::string & track_name) const

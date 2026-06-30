@@ -28,11 +28,10 @@
 namespace ros2_livekit_bridge
 {
 
-/**
- * @brief Formatting and graph filtering options for `ros2 topic list`.
- * @details fields map 1:1 to the fields shown from running `ros2 topic list
- * --help`
- */
+///
+/// @brief Formatting and graph filtering options for `ros2 topic list`.
+/// @details fields map 1:1 to the fields shown from running `ros2 topic list
+/// --help`
 struct TopicListOptions
 {
   //! @brief Render topic types next to each topic name.
@@ -45,9 +44,8 @@ struct TopicListOptions
   bool verbose{false};
 };
 
-/**
- * @brief Arguments for a one-shot `ros2 topic pub`.
- */
+///
+/// @brief Arguments for a one-shot `ros2 topic pub`.
 struct TopicPubOptions
 {
   //! @brief ROS topic name to publish to; may be relative before resolution.
@@ -58,11 +56,10 @@ struct TopicPubOptions
   std::string payload;
 };
 
-/**
- * @brief Formatting and graph filtering options for `ros2 service list`.
- * @details fields map 1:1 to the fields shown from running `ros2 service list
- * --help`
- */
+///
+/// @brief Formatting and graph filtering options for `ros2 service list`.
+/// @details fields map 1:1 to the fields shown from running `ros2 service list
+/// --help`
 struct ServiceListOptions
 {
   //! @brief Render service types next to each service name.
@@ -86,11 +83,10 @@ struct ServiceCallOptions
   std::uint8_t timeout_sec{0};
 };
 
-/**
- * @brief Arguments and formatting options for `ros2 interface show`.
- * @details fields map 1:1 to the fields shown from running `ros2 interface show
- * --help`
- */
+///
+/// @brief Arguments and formatting options for `ros2 interface show`.
+/// @details fields map 1:1 to the fields shown from running `ros2 interface show
+/// --help`
 struct InterfaceShowOptions
 {
   //! @brief Interface type identifier to show, such as `std_msgs/msg/String`.
@@ -101,17 +97,16 @@ struct InterfaceShowOptions
   bool no_comments{false};
 };
 
-/**
- * @brief Construct a ROS CLI service response.
- *
- * Every `ros2 ...` RPC response type shares the {success, err_msg, output}
- * fields, so one builder covers all command response types.
- * @tparam ResponseT Generated ROS service Response type.
- * @param success Whether the operation succeeded.
- * @param err_msg Human-readable error message.
- * @param output Human-readable command output.
- * @return ROS service response.
- */
+///
+/// @brief Construct a ROS CLI service response.
+///
+/// Every `ros2 ...` RPC response type shares the {success, err_msg, output}
+/// fields, so one builder covers all command response types.
+/// @tparam ResponseT Generated ROS service Response type.
+/// @param success Whether the operation succeeded.
+/// @param err_msg Human-readable error message.
+/// @param output Human-readable command output.
+/// @return ROS service response.
 template<typename ResponseT>
 ResponseT makeCliResponse(
   bool success,

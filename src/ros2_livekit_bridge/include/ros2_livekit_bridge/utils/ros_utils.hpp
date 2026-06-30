@@ -40,38 +40,36 @@ std::string resolveEnvironmentCredential(
   const std::string & env_var_name,
   std::string & source);
 
-/**
- * @brief Normalize a LiveKit track name into an absolute ROS topic path.
- *
- * Returns std::nullopt for empty input, preserves names that already start
- * with '/', and prefixes '/' for all other names.
- *
- * Examples:
- * - "camera/image" -> "/camera/image"
- * - "/camera/image" -> "/camera/image"
- * - "" -> std::nullopt
- *
- * @param track_name LiveKit track name to normalize.
- * @return Normalized ROS topic path, or std::nullopt when @p track_name is
- * empty.
- */
+///
+/// @brief Normalize a LiveKit track name into an absolute ROS topic path.
+///
+/// Returns std::nullopt for empty input, preserves names that already start
+/// with '/', and prefixes '/' for all other names.
+///
+/// Examples:
+/// - "camera/image" -> "/camera/image"
+/// - "/camera/image" -> "/camera/image"
+/// - "" -> std::nullopt
+///
+/// @param track_name LiveKit track name to normalize.
+/// @return Normalized ROS topic path, or std::nullopt when @p track_name is
+/// empty.
 std::optional<std::string> normalizeTrackTopicName(const std::string & track_name);
 
-/**
- * @brief Convert an arbitrary identity token into a ROS-safe name token.
- *
- * Keeps ASCII alphanumeric and '_' characters, replaces all other characters
- * with '_', and prefixes '_' when the first character is a digit.
- *
- * Examples:
- * - "bridge_test_a" -> "bridge_test_a"
- * - "bridge-test.a" -> "bridge_test_a"
- * - "1robot" -> "_1robot"
- * - "" -> std::nullopt
- *
- * @param token Participant identity or arbitrary token.
- * @return Sanitized token, or std::nullopt when @p token is empty.
- */
+///
+/// @brief Convert an arbitrary identity token into a ROS-safe name token.
+///
+/// Keeps ASCII alphanumeric and '_' characters, replaces all other characters
+/// with '_', and prefixes '_' when the first character is a digit.
+///
+/// Examples:
+/// - "bridge_test_a" -> "bridge_test_a"
+/// - "bridge-test.a" -> "bridge_test_a"
+/// - "1robot" -> "_1robot"
+/// - "" -> std::nullopt
+///
+/// @param token Participant identity or arbitrary token.
+/// @return Sanitized token, or std::nullopt when @p token is empty.
 std::optional<std::string> sanitizeRosNameToken(const std::string & token);
 
 std::optional<std::string> liveKitToRosTopicName(

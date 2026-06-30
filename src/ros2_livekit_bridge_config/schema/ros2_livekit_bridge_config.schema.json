@@ -48,7 +48,7 @@
       "enum": ["in", "out", "bidirectional"]
     },
     "serviceDirection": {
-      "enum": ["in", "out"]
+      "enum": ["in", "out", "bidirectional"]
     },
     "nonemptyString": {
       "type": "string",
@@ -86,9 +86,12 @@
     "serviceConfig": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["service", "direction", "participant"],
+      "required": ["service", "msg_type", "direction", "participant"],
       "properties": {
         "service": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "msg_type": {
           "$ref": "#/$defs/nonemptyString"
         },
         "direction": {

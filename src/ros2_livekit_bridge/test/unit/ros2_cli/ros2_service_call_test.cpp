@@ -39,25 +39,24 @@ namespace ros2_livekit_bridge::ros2_cli {
 class Ros2ServiceCallPrivateTest : public ::testing::Test {};
 
 TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes) {
-  EXPECT_EQ(
-      Ros2ServiceCall::serviceTypeSupportSymbol("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier),
-      "rosidl_typesupport_cpp__get_service_type_support_handle__"
-      "std_srvs__srv__SetBool");
+  EXPECT_EQ(serviceTypeSupportSymbol("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier),
+            "rosidl_typesupport_cpp__get_service_type_support_handle__"
+            "std_srvs__srv__SetBool");
 }
 
 TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService) {
   auto library =
       rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = Ros2ServiceCall::serviceTypeSupportHandle(
-      "std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier, *library);
+  const auto *handle =
+      serviceTypeSupportHandle("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier, *library);
   EXPECT_NE(handle, nullptr);
 }
 
 TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol) {
   auto library =
       rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = Ros2ServiceCall::serviceTypeSupportHandle(
-      "std_srvs/srv/DoesNotExist", rosidl_typesupport_cpp::typesupport_identifier, *library);
+  const auto *handle =
+      serviceTypeSupportHandle("std_srvs/srv/DoesNotExist", rosidl_typesupport_cpp::typesupport_identifier, *library);
   EXPECT_EQ(handle, nullptr);
 }
 

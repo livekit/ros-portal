@@ -194,12 +194,15 @@ endif()
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_cli_lib SHARED
   src/introspection/message_render.cpp  # if introspection ever grows, break out to separate library
+  src/ros2_cli/generic_service.cpp
+  src/ros2_cli/generic_service_client.cpp
   src/ros2_cli/ros2_interface_show.cpp
   src/ros2_cli/json_converters.cpp
   src/ros2_cli/ros2_service_call.cpp
   src/ros2_cli/ros2_service_list.cpp
   src/ros2_cli/ros2_topic_list.cpp
   src/ros2_cli/ros2_topic_pub.cpp
+  src/ros2_cli/service_type_support.cpp
   src/ros2_cli/utils.cpp
   src/ros2_cli/yaml_message_converter.cpp
   src/ros2_cli_manager.cpp
@@ -218,7 +221,10 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/ros2_livekit_bridge.cpp
+  src/service_forwarder.cpp
+  src/service_rpc_codec.cpp
   src/topic_forwarder.cpp
+  src/utils/base64.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
@@ -226,6 +232,7 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
 target_link_libraries(ros2_livekit_bridge_lib
   ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
+  nlohmann_json::nlohmann_json
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros2_livekit_bridge_lib)

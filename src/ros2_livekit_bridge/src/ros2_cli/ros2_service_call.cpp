@@ -18,7 +18,6 @@
 
 #include <rcl/client.h>
 #include <rcl/error_handling.h>
-#include <rosidl_runtime_c/service_type_support_struct.h>
 
 #include <chrono>
 #include <cstdint>
@@ -30,12 +29,7 @@
 #include <rclcpp/exceptions.hpp>
 #include <rclcpp/expand_topic_or_service_name.hpp>
 #include <rclcpp/serialization.hpp>
-#include <rclcpp/typesupport_helpers.hpp>
-#include <rcpputils/shared_library.hpp>
 #include <rosidl_runtime_cpp/message_initialization.hpp>
-#include <rosidl_typesupport_cpp/identifier.hpp>
-#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
-#include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -43,6 +37,7 @@
 #include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
+#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
@@ -55,100 +50,6 @@ constexpr auto kPollPeriod = std::chrono::milliseconds(2);
 // the reader holds at most ~10 samples; this comfortably exceeds that and only
 // trips if the queue is being refilled faster than it drains.
 constexpr std::uint8_t kMaxStaleResponseDrains = 25;
-constexpr char kServiceTypeSupportSymbolPrefix[] = "__get_service_type_support_handle__";
-
-std::string Ros2ServiceCall::serviceTypeSupportSymbol(const std::string &type,
-                                                      const std::string &typesupport_identifier) {
-  std::string symbol = typesupport_identifier + kServiceTypeSupportSymbolPrefix;
-  for (const char ch : type) {
-    if (ch == '/') {
-      symbol += "__";
-    } else {
-      symbol += ch;
-    }
-  }
-  return symbol;
-}
-
-const rosidl_service_type_support_t *Ros2ServiceCall::serviceTypeSupportHandle(
-    const std::string &type, const std::string &typesupport_identifier, rcpputils::SharedLibrary &library) {
-  const std::string symbol = serviceTypeSupportSymbol(type, typesupport_identifier);
-  if (!library.has_symbol(symbol)) {
-    return nullptr;
-  }
-  using GetServiceTypeSupportHandleFn = const rosidl_service_type_support_t *(*)();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  auto get_handle = reinterpret_cast<GetServiceTypeSupportHandleFn>(library.get_symbol(symbol));
-  return get_handle();
-}
-
-/// @brief Runtime type-support data for one ROS message type.
-struct Ros2ServiceCall::MessageTypeSupport {
-  /// @brief Introspection type-support namespace alias.
-  using MessageMembers = rosidl_typesupport_introspection_cpp::MessageMembers;
-
-  /// @brief Load serialization and introspection type support for @p type.
-  explicit MessageTypeSupport(const std::string &type)
-      : serialization_library(rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier)),
-        introspection_library(
-            rclcpp::get_typesupport_library(type, rosidl_typesupport_introspection_cpp::typesupport_identifier)),
-        serialization_handle(rclcpp::get_message_typesupport_handle(
-            type, rosidl_typesupport_cpp::typesupport_identifier, *serialization_library)),
-        introspection_handle(rclcpp::get_message_typesupport_handle(
-            type, rosidl_typesupport_introspection_cpp::typesupport_identifier, *introspection_library)),
-        members(requireMembers(introspection_handle)),
-        serializer(serialization_handle) {}
-
-  /// @brief Shared library that owns the serialization handle.
-  std::shared_ptr<rcpputils::SharedLibrary> serialization_library;
-  /// @brief Shared library that owns the introspection handle.
-  std::shared_ptr<rcpputils::SharedLibrary> introspection_library;
-  /// @brief C++ serialization type-support handle.
-  const rosidl_message_type_support_t *serialization_handle;
-  /// @brief C++ introspection type-support handle.
-  const rosidl_message_type_support_t *introspection_handle;
-  /// @brief Message member metadata from introspection type support.
-  const MessageMembers &members;
-  /// @brief Runtime serializer for this message type.
-  rclcpp::SerializationBase serializer;
-
-private:
-  /// @brief Require message introspection data.
-  static const MessageMembers &requireMembers(const rosidl_message_type_support_t *handle) {
-    if (handle == nullptr || handle->data == nullptr) {
-      throw std::runtime_error("Introspection type support handle is null");
-    }
-    return *static_cast<const MessageMembers *>(handle->data);
-  }
-};
-
-/// @brief Runtime type-support data for one ROS service type.
-struct Ros2ServiceCall::ServiceTypeSupport {
-  /// @brief Load service, request, and response type support for @p type.
-  /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
-  /// @param error Populated with a failure reason when creation fails.
-  /// @return Loaded type support, or nullptr when service type support
-  ///   cannot be resolved.
-  static std::shared_ptr<ServiceTypeSupport> create(const std::string &type, std::string &error);
-
-  /// @brief Shared library that owns the service handle.
-  std::shared_ptr<rcpputils::SharedLibrary> library;
-  /// @brief C++ service type-support handle.
-  const rosidl_service_type_support_t *handle;
-  /// @brief Request message type support.
-  MessageTypeSupport request;
-  /// @brief Response message type support.
-  MessageTypeSupport response;
-
-private:
-  ServiceTypeSupport(const std::string &type, std::shared_ptr<rcpputils::SharedLibrary> library,
-                     const rosidl_service_type_support_t *handle);
-
-  /// @brief Request message type-name suffix.
-  static constexpr char kRequestMessageTypeSuffix[] = "_Request";
-  /// @brief Response message type-name suffix.
-  static constexpr char kResponseMessageTypeSuffix[] = "_Response";
-};
 
 /// @brief Runtime service client for an arbitrary service type.
 struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
@@ -205,31 +106,6 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Serializes send+take on this client across concurrent callers.
   std::mutex call_mutex;
 };
-
-Ros2ServiceCall::ServiceTypeSupport::ServiceTypeSupport(const std::string &type,
-                                                        std::shared_ptr<rcpputils::SharedLibrary> library,
-                                                        const rosidl_service_type_support_t *handle)
-    : library(std::move(library)),
-      handle(handle),
-      request(type + kRequestMessageTypeSuffix),
-      response(type + kResponseMessageTypeSuffix) {}
-
-std::shared_ptr<Ros2ServiceCall::ServiceTypeSupport> Ros2ServiceCall::ServiceTypeSupport::create(
-    const std::string &type, std::string &error) {
-  try {
-    auto library = rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier);
-    const auto *handle = serviceTypeSupportHandle(type, rosidl_typesupport_cpp::typesupport_identifier, *library);
-    if (handle == nullptr) {
-      error = "Service typesupport symbol not found: " +
-              serviceTypeSupportSymbol(type, rosidl_typesupport_cpp::typesupport_identifier);
-      return nullptr;
-    }
-    return std::shared_ptr<ServiceTypeSupport>(new ServiceTypeSupport(type, std::move(library), handle));
-  } catch (const std::exception &exception) {
-    error = exception.what();
-    return nullptr;
-  }
-}
 
 #ifdef BUILD_TESTING
 std::string Ros2ServiceCall::serviceTypeSupportCreationError(const std::string &type) {

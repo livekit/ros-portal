@@ -24,10 +24,12 @@ ros2_livekit_bridge:
 
   services:
     - service: "/go_to_pose"
+      msg_type: "nav2_msgs/srv/NavigateToPose"
       direction: "in"
       participant: "robot-a"
 
     - service: "/provide_status"
+      msg_type: "std_srvs/srv/Trigger"
       direction: "out"
       participant: "robot-a"
 

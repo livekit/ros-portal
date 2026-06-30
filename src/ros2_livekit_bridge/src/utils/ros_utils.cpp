@@ -150,4 +150,31 @@ std::vector<std::string> incomingTopicPatterns(const bridge_config::BridgeConfig
 
   return patterns;
 }
+
+std::vector<ServiceForwarder::ServiceForwarderEntry> serviceForwarderEntries(
+    const bridge_config::BridgeConfig& config) {
+  std::vector<ServiceForwarder::ServiceForwarderEntry> entries;
+  entries.reserve(config.services.size());
+
+  for (const auto& service_config : config.services) {
+    ServiceForwarder::ServiceForwarderEntry entry;
+    entry.service = service_config.service;
+    entry.msg_type = service_config.msg_type;
+    entry.participant = service_config.participant;
+    switch (service_config.direction) {
+      case bridge_config::ServiceDirection::In:
+        entry.direction = ServiceForwarder::Direction::In;
+        break;
+      case bridge_config::ServiceDirection::Out:
+        entry.direction = ServiceForwarder::Direction::Out;
+        break;
+      case bridge_config::ServiceDirection::Bidirectional:
+        entry.direction = ServiceForwarder::Direction::Bidirectional;
+        break;
+    }
+    entries.push_back(std::move(entry));
+  }
+
+  return entries;
+}
 } // namespace ros2_livekit_bridge::utils

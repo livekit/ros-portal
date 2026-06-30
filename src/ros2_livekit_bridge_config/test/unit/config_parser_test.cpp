@@ -65,10 +65,16 @@ ros2_livekit_bridge:
     join_retries: 3
   services:
     - service: "/go_to_pose"
+      msg_type: "nav2_msgs/srv/NavigateToPose"
       direction: "in"
       participant: "robot-a"
     - service: "/provide_status"
+      msg_type: "std_srvs/srv/Trigger"
       direction: "out"
+      participant: "robot-a"
+    - service: "/sync_clock"
+      msg_type: "std_srvs/srv/Trigger"
+      direction: "bidirectional"
       participant: "robot-a"
   topics:
     - topic: "/camera/image_raw"
@@ -89,11 +95,14 @@ ros2_livekit_bridge:
   ASSERT_TRUE(config.room_options.join_retries.has_value());
   EXPECT_EQ(*config.room_options.join_retries, 3);
 
-  ASSERT_EQ(config.services.size(), 2u);
+  ASSERT_EQ(config.services.size(), 3u);
   EXPECT_EQ(config.services[0].service, "/go_to_pose");
-  EXPECT_EQ(config.services[0].direction, Direction::In);
+  EXPECT_EQ(config.services[0].msg_type, "nav2_msgs/srv/NavigateToPose");
+  EXPECT_EQ(config.services[0].direction, ServiceDirection::In);
   EXPECT_EQ(config.services[0].participant, "robot-a");
-  EXPECT_EQ(config.services[1].direction, Direction::Out);
+  EXPECT_EQ(config.services[1].direction, ServiceDirection::Out);
+  EXPECT_EQ(config.services[1].msg_type, "std_srvs/srv/Trigger");
+  EXPECT_EQ(config.services[2].direction, ServiceDirection::Bidirectional);
 
   ASSERT_EQ(config.topics.size(), 3u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");
@@ -186,10 +195,41 @@ ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
-      direction: "bidirectional"
+      msg_type: "std_srvs/srv/Trigger"
+      direction: "sideways"
       participant: "robot-a"
 )",
-      "expected 'in' or 'out'");
+      "expected 'in', 'out', or 'bidirectional'");
+}
+
+TEST(ConfigParserTest, AcceptsBidirectionalServiceDirection) {
+  const auto config = parse(
+      R"(
+ros2_livekit_bridge:
+  room_name: "robo_room"
+  version: "0.0.1"
+  services:
+    - service: "/go_to_pose"
+      msg_type: "std_srvs/srv/Trigger"
+      direction: "bidirectional"
+      participant: "robot-a"
+)");
+  ASSERT_EQ(config.services.size(), 1u);
+  EXPECT_EQ(config.services[0].direction, ServiceDirection::Bidirectional);
+}
+
+TEST(ConfigParserTest, RejectsMissingServiceMsgType) {
+  expectInvalid(
+      R"(
+ros2_livekit_bridge:
+  room_name: "robo_room"
+  version: "0.0.1"
+  services:
+    - service: "/go_to_pose"
+      direction: "in"
+      participant: "robot-a"
+)",
+      "missing required field");
 }
 
 TEST(ConfigParserTest, RejectsInvalidTopicDirection) {
@@ -213,6 +253,7 @@ ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
+      msg_type: "std_srvs/srv/Trigger"
       direction: "in"
 )",
       "missing required field");
@@ -428,6 +469,7 @@ ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
+      msg_type: "std_srvs/srv/Trigger"
       participant: "robot-a"
 )",
       "missing required field");
@@ -453,6 +495,7 @@ ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: ""
+      msg_type: "std_srvs/srv/Trigger"
       direction: "in"
       participant: "robot-a"
 )",
@@ -467,6 +510,7 @@ ros2_livekit_bridge:
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
+      msg_type: "std_srvs/srv/Trigger"
       direction: "in"
       participant: ""
 )",

@@ -16,31 +16,18 @@
 
 #pragma once
 
-#include <rcl/client.h>
-#include <rcl/error_handling.h>
-#include <rosidl_runtime_c/service_type_support_struct.h>
-
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <rclcpp/client.hpp>
-#include <rclcpp/exceptions.hpp>
-#include <rclcpp/expand_topic_or_service_name.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
 #include <rclcpp/node_interfaces/node_graph_interface.hpp>
-#include <rcpputils/shared_library.hpp>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
-#include <utility>
 
+#include "ros2_livekit_bridge/ros2_cli/service_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
-
-#ifdef BUILD_TESTING
-#include <gtest/gtest_prod.h>
-#endif
 
 namespace ros2_livekit_bridge::ros2_cli {
 
@@ -86,47 +73,11 @@ public:
 #endif
 
 private:
-  /// @brief Build the service type-support symbol name for @p type.
-  ///
-  /// Replaces `/` characters in @p type with `__` when appending to the
-  /// type-support prefix.
-  ///
-  /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
-  /// @param typesupport_identifier Type-support identifier to build the symbol.
-  /// @return Symbol name to resolve in the type-support shared library.
-  static std::string serviceTypeSupportSymbol(const std::string &type, const std::string &typesupport_identifier);
-
-  /// @brief Load service type support by symbol from the typesupport library.
-  ///
-  /// Implementation detail of the service-call command, used by the runtime
-  /// type-support loader. Static so it can be exercised without an instance.
-  ///
-  /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
-  /// @param typesupport_identifier Type-support identifier to build the symbol.
-  /// @param library Loaded type-support shared library to resolve the symbol
-  /// in.
-  /// @return Service type-support handle for @p type, or nullptr when the
-  ///   type-support symbol is not found.
-  static const rosidl_service_type_support_t *serviceTypeSupportHandle(const std::string &type,
-                                                                       const std::string &typesupport_identifier,
-                                                                       rcpputils::SharedLibrary &library);
-
-  /// @brief Runtime type-support data for one ROS message type.
-  ///
-  /// Defined in the translation unit; forward-declared here because it is an
-  /// implementation detail of the service-call command.
-  struct MessageTypeSupport;
-
-  /// @brief Runtime type-support data for one ROS service type.
-  ///
-  /// Defined in the translation unit; forward-declared here because it is an
-  /// implementation detail of the service-call command.
-  struct ServiceTypeSupport;
-
   /// @brief Runtime service client for an arbitrary service type.
   ///
   /// Defined in the translation unit; forward-declared here because it is an
-  /// implementation detail of the service-call command.
+  /// implementation detail of the service-call command. Uses the shared
+  /// @ref ServiceTypeSupport from service_type_support.hpp.
   struct ServiceClient;
 
   /// @brief Service client shared pointer type.
@@ -157,12 +108,6 @@ private:
   std::mutex mutex_;
   /// @brief Bounded service client cache keyed by resolved service and type.
   std::unordered_map<std::string, ClientPtr> clients_;
-
-#ifdef BUILD_TESTING
-  FRIEND_TEST(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes);
-  FRIEND_TEST(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService);
-  FRIEND_TEST(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol);
-#endif
 };
 
 } // namespace ros2_livekit_bridge::ros2_cli

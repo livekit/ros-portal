@@ -331,6 +331,13 @@ void TopicForwarder::createImageSubscriber(const std::string & topic_name)
                  "Failed to create image subscription for '%s' [%s]: %s",
                  topic_name.c_str(), kImageMsgType, e.what());
     return;
+  } catch (...) {
+    image_topic_states_.erase(topic_name);
+    RCLCPP_ERROR(
+      logger_,
+      "Unknown exception creating image subscription for '%s' [%s]",
+      topic_name.c_str(), kImageMsgType);
+    return;
   }
 
   RCLCPP_INFO(logger_, "Subscribed to image topic '%s' [%s]",

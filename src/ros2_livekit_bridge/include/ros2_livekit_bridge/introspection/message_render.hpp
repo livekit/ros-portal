@@ -66,6 +66,16 @@ void renderQuotedString(std::ostringstream & stream, const std::string & value);
 /// @param value String value to render.
 void renderString(std::ostringstream & stream, const std::string & value);
 
+/// @brief Render a UTF-16 wide string as CLI-style YAML.
+/// @param stream Destination stream for the rendered value.
+/// @param value UTF-16 string value to render.
+///
+/// ASCII-only values reuse @ref renderString. Any non-ASCII code point is
+/// emitted as a \uXXXX (BMP) or \U00XXXXXX (astral) escape so the output is
+/// lossless and locale-independent. Surrogate pairs are decoded to a single
+/// code point.
+void renderWideString(std::ostringstream & stream, const std::u16string & value);
+
 /// @brief Return a pointer to a member inside a message buffer.
 /// @param message Pointer to the start of the message memory.
 /// @param member Introspection metadata describing the member offset.

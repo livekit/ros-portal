@@ -78,6 +78,14 @@ const introspection::MessageMember * memberByName(
   throw std::runtime_error("member not found: " + name);
 }
 
+/// @brief Render a UTF-16 string through @ref renderWideString into a string.
+std::string renderWide(const std::u16string & value)
+{
+  std::ostringstream stream;
+  renderWideString(stream, value);
+  return stream.str();
+}
+
 TEST(MessageRenderTest, DetectsYamlKeywords)
 {
   EXPECT_TRUE(isYamlKeyword("true"));
@@ -117,6 +125,31 @@ TEST(MessageRenderTest, RenderStringUsesPlainOrQuotedYamlScalar)
 
   EXPECT_EQ(plain_stream.str(), "plain-text");
   EXPECT_EQ(quoted_stream.str(), "\"true\"");
+}
+
+TEST(MessageRenderTest, RenderWideStringRendersAsciiAsPlainOrQuotedYaml)
+{
+  EXPECT_EQ(renderWide(u"hello"), "hello");
+  EXPECT_EQ(renderWide(u"true"), "\"true\"");
+  EXPECT_EQ(renderWide(u"hello world"), "\"hello world\"");
+}
+
+TEST(MessageRenderTest, RenderWideStringEscapesBmpCodePoints)
+{
+  // U+65E5 (Japanese "day") previously truncated to a single byte.
+  EXPECT_EQ(renderWide(u"\u65e5"), "\"\\u65E5\"");
+}
+
+TEST(MessageRenderTest, RenderWideStringDecodesSurrogatePairs)
+{
+  // U+1F600 grinning face encoded as the surrogate pair D83D DE00.
+  const std::u16string value{u'\xD83D', u'\xDE00'};
+  EXPECT_EQ(renderWide(value), "\"\\U0001F600\"");
+}
+
+TEST(MessageRenderTest, RenderWideStringEscapesOnlyNonAsciiInMixedString)
+{
+  EXPECT_EQ(renderWide(u"a\u65e5b"), "\"a\\u65E5b\"");
 }
 
 TEST(MessageRenderTest, MemberMemoryPointsAtField)

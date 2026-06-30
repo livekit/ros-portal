@@ -48,6 +48,60 @@ const MessageMembers * nestedMembers(const MessageMember & member)
   return static_cast<const MessageMembers *>(member.members_->data);
 }
 
+// Decode UTF-16 (including surrogate pairs) into Unicode code points. A lone or
+// invalid surrogate is passed through unchanged so rendering stays lossless.
+std::u32string decodeUtf16(const std::u16string & value)
+{
+  std::u32string code_points;
+  code_points.reserve(value.size());
+  for (std::size_t index = 0U; index < value.size(); ++index) {
+    const char32_t unit = value[index];
+    if (unit >= 0xD800U && unit <= 0xDBFFU && index + 1U < value.size()) {
+      const char32_t low = value[index + 1U];
+      if (low >= 0xDC00U && low <= 0xDFFFU) {
+        code_points.push_back(
+          0x10000U + ((unit - 0xD800U) << 10U) + (low - 0xDC00U));
+        ++index;
+        continue;
+      }
+    }
+    code_points.push_back(unit);
+  }
+  return code_points;
+}
+
+// Append a single ASCII byte to a double-quoted YAML scalar, applying the
+// standard escapes (\\, \", \n, \r, \t) and \xNN for non-printable bytes.
+void appendEscapedAsciiByte(std::ostringstream & stream, unsigned char ch)
+{
+  switch (ch) {
+    case '\\':
+      stream << "\\\\";
+      break;
+    case '"':
+      stream << "\\\"";
+      break;
+    case '\n':
+      stream << "\\n";
+      break;
+    case '\r':
+      stream << "\\r";
+      break;
+    case '\t':
+      stream << "\\t";
+      break;
+    default:
+      if (std::isprint(ch)) {
+        stream << static_cast<char>(ch);
+      } else {
+        stream << "\\x" << std::uppercase << std::hex << std::setw(2)
+               << std::setfill('0') << static_cast<int>(ch) << std::nouppercase
+               << std::dec << std::setfill(' ');
+      }
+      break;
+  }
+}
+
 }  // namespace
 
 bool isYamlKeyword(const std::string & value)
@@ -76,32 +130,7 @@ void renderQuotedString(std::ostringstream & stream, const std::string & value)
 {
   stream << '"';
   for (const unsigned char ch : value) {
-    switch (ch) {
-      case '\\':
-        stream << "\\\\";
-        break;
-      case '"':
-        stream << "\\\"";
-        break;
-      case '\n':
-        stream << "\\n";
-        break;
-      case '\r':
-        stream << "\\r";
-        break;
-      case '\t':
-        stream << "\\t";
-        break;
-      default:
-        if (std::isprint(ch)) {
-          stream << static_cast<char>(ch);
-        } else {
-          stream << "\\x" << std::uppercase << std::hex << std::setw(2)
-                 << std::setfill('0') << static_cast<int>(ch) << std::nouppercase
-                 << std::dec << std::setfill(' ');
-        }
-        break;
-    }
+    appendEscapedAsciiByte(stream, ch);
   }
   stream << '"';
 }
@@ -113,6 +142,31 @@ void renderString(std::ostringstream & stream, const std::string & value)
     return;
   }
   renderQuotedString(stream, value);
+}
+
+void renderWideString(std::ostringstream & stream, const std::u16string & value)
+{
+  const std::u32string code_points = decodeUtf16(value);
+  const bool is_ascii = std::all_of(
+      code_points.begin(), code_points.end(),
+    [](char32_t code_point) {return code_point <= 0x7FU;});
+  if (is_ascii) {
+    renderString(stream, std::string(code_points.begin(), code_points.end()));
+    return;
+  }
+  stream << '"';
+  for (const char32_t code_point : code_points) {
+    if (code_point <= 0x7FU) {
+      appendEscapedAsciiByte(stream, static_cast<unsigned char>(code_point));
+    } else {
+      const int width = code_point <= 0xFFFFU ? 4 : 8;
+      stream << (code_point <= 0xFFFFU ? "\\u" : "\\U") << std::uppercase
+             << std::hex << std::setw(width) << std::setfill('0')
+             << static_cast<std::uint32_t>(code_point) << std::nouppercase
+             << std::dec << std::setfill(' ');
+    }
+  }
+  stream << '"';
 }
 
 bool isNestedMessageBlock(const MessageMember & member)
@@ -234,15 +288,9 @@ void renderSingleField(
     case introspection::ROS_TYPE_STRING:
       renderString(stream, *static_cast<const std::string *>(field_memory));
       break;
-    case introspection::ROS_TYPE_WSTRING: {
-        std::string value;
-        const auto & wide_value = *static_cast<const std::u16string *>(field_memory);
-        value.reserve(wide_value.size());
-        for (const auto code_unit : wide_value) {
-          value.push_back(static_cast<char>(code_unit));
-        }
-        renderString(stream, value);
-      } break;
+    case introspection::ROS_TYPE_WSTRING:
+      renderWideString(stream, *static_cast<const std::u16string *>(field_memory));
+      break;
     case introspection::ROS_TYPE_MESSAGE:
       renderNestedMessage(stream, member, field_memory, indent);
       break;

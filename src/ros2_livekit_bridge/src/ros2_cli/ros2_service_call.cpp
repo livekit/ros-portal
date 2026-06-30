@@ -37,9 +37,13 @@
 #include <rclcpp/exceptions.hpp>
 #include <rclcpp/expand_topic_or_service_name.hpp>
 #include <rclcpp/serialization.hpp>
+#include <rclcpp/typesupport_helpers.hpp>
 #include <rcpputils/shared_library.hpp>
 #include <rosidl_runtime_c/service_type_support_struct.h>
 #include <rosidl_runtime_cpp/message_initialization.hpp>
+#include <rosidl_typesupport_cpp/identifier.hpp>
+#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
+#include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 
 namespace ros2_livekit_bridge::ros2_cli
 {
@@ -85,6 +89,54 @@ const rosidl_service_type_support_t * Ros2ServiceCall::serviceTypeSupportHandle(
     library.get_symbol(symbol));
   return get_handle();
 }
+
+/// @brief Runtime type-support data for one ROS message type.
+struct Ros2ServiceCall::MessageTypeSupport
+{
+  /// @brief Introspection type-support namespace alias.
+  using MessageMembers = rosidl_typesupport_introspection_cpp::MessageMembers;
+
+  /// @brief Load serialization and introspection type support for @p type.
+  explicit MessageTypeSupport(const std::string & type)
+  : serialization_library(rclcpp::get_typesupport_library(
+        type, rosidl_typesupport_cpp::typesupport_identifier)),
+    introspection_library(rclcpp::get_typesupport_library(
+        type,
+        rosidl_typesupport_introspection_cpp::typesupport_identifier)),
+    serialization_handle(rclcpp::get_message_typesupport_handle(
+        type, rosidl_typesupport_cpp::typesupport_identifier,
+        *serialization_library)),
+    introspection_handle(rclcpp::get_message_typesupport_handle(
+        type,
+        rosidl_typesupport_introspection_cpp::typesupport_identifier,
+        *introspection_library)),
+    members(requireMembers(introspection_handle)),
+    serializer(serialization_handle) {}
+
+  /// @brief Shared library that owns the serialization handle.
+  std::shared_ptr<rcpputils::SharedLibrary> serialization_library;
+  /// @brief Shared library that owns the introspection handle.
+  std::shared_ptr<rcpputils::SharedLibrary> introspection_library;
+  /// @brief C++ serialization type-support handle.
+  const rosidl_message_type_support_t *serialization_handle;
+  /// @brief C++ introspection type-support handle.
+  const rosidl_message_type_support_t *introspection_handle;
+  /// @brief Message member metadata from introspection type support.
+  const MessageMembers & members;
+  /// @brief Runtime serializer for this message type.
+  rclcpp::SerializationBase serializer;
+
+private:
+  /// @brief Require message introspection data.
+  static const MessageMembers &
+  requireMembers(const rosidl_message_type_support_t *handle)
+  {
+    if (handle == nullptr || handle->data == nullptr) {
+      throw std::runtime_error("Introspection type support handle is null");
+    }
+    return *static_cast<const MessageMembers *>(handle->data);
+  }
+};
 
 /// @brief Runtime type-support data for one ROS service type.
 struct Ros2ServiceCall::ServiceTypeSupport

@@ -34,6 +34,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/types.hpp"
@@ -129,6 +130,32 @@ inline std::string bridgeConfigYaml(const std::string& room_name, const std::str
   return stream.str();
 }
 
+/// @brief One `services:` entry for a service-forwarding bridge config.
+struct ServiceConfigEntry {
+  std::string service;
+  std::string msg_type;
+  std::string direction; // "in" | "out" | "bidirectional"
+  std::string participant;
+};
+
+inline std::string bridgeServiceConfigYaml(const std::string& room_name,
+                                           const std::vector<ServiceConfigEntry>& services) {
+  std::ostringstream stream;
+  stream << "ros2_livekit_bridge:\n"
+         << "  version: \"0.0.1\"\n"
+         << "  room_name: \"" << room_name << "\"\n"
+         << "  topic_polling_period_ms: 50\n"
+         << "  ros_threads: 4\n"
+         << "  services:\n";
+  for (const auto& service : services) {
+    stream << "    - service: \"" << service.service << "\"\n"
+           << "      msg_type: \"" << service.msg_type << "\"\n"
+           << "      direction: \"" << service.direction << "\"\n"
+           << "      participant: \"" << service.participant << "\"\n";
+  }
+  return stream.str();
+}
+
 inline std::string testLiveKitRoom() {
   std::string source;
   const auto room = utils::resolveEnvironmentCredential("LIVEKIT_ROOM", source);
@@ -184,6 +211,21 @@ protected:
 
   void initializeRuntime(const std::string& topic_pattern_a, const std::string& topic_pattern_b,
                          const std::string& publish_topic_a, const std::string& publish_topic_b) {
+    initializeBridges(bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a),
+                      bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b));
+
+    publisher_a_ = robot_a_node_->create_publisher<std_msgs::msg::String>(publish_topic_a, 10);
+    publisher_b_ = robot_b_node_->create_publisher<std_msgs::msg::String>(publish_topic_b, 10);
+
+    ASSERT_TRUE(waitFor(
+        [&]() { return topicExists(*robot_a_node_, publish_topic_a) && topicExists(*robot_b_node_, publish_topic_b); },
+        kGraphTimeout));
+  }
+
+  // Bring up the two-graph / two-bridge runtime from caller-provided bridge
+  // config YAML, without creating any topic publishers. Shared by the topic and
+  // service forwarding suites.
+  void initializeBridges(const std::string& config_yaml_a, const std::string& config_yaml_b) {
     ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
     const auto [domain_id_a, domain_id_b] = testDomainIds();
@@ -193,10 +235,8 @@ protected:
     SCOPED_TRACE("ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()) +
                  ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
-    config_file_a_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a),
-                                                           "ros2_livekit_bridge_bridge_test_e2e_a_");
-    config_file_b_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b),
-                                                           "ros2_livekit_bridge_bridge_test_e2e_b_");
+    config_file_a_ = std::make_unique<TemporaryConfigFile>(config_yaml_a, "ros2_livekit_bridge_bridge_test_e2e_a_");
+    config_file_b_ = std::make_unique<TemporaryConfigFile>(config_yaml_b, "ros2_livekit_bridge_bridge_test_e2e_b_");
 
     bridge_a_ = createBridge(*graph_a_, "/bridge_a_node", token_a_, config_file_a_->path().string());
     bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());
@@ -228,13 +268,6 @@ protected:
       graph_b_executor_->spin();
       graph_b_spinning_.store(false);
     });
-
-    publisher_a_ = robot_a_node_->create_publisher<std_msgs::msg::String>(publish_topic_a, 10);
-    publisher_b_ = robot_b_node_->create_publisher<std_msgs::msg::String>(publish_topic_b, 10);
-
-    ASSERT_TRUE(waitFor(
-        [&]() { return topicExists(*robot_a_node_, publish_topic_a) && topicExists(*robot_b_node_, publish_topic_b); },
-        kGraphTimeout));
   }
 
   bool verifyDirection(const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>& publisher,

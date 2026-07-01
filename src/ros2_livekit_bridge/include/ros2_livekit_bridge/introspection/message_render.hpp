@@ -73,12 +73,6 @@ void renderString(std::ostringstream &stream, const std::string &value);
 /// code point.
 void renderWideString(std::ostringstream &stream, const std::u16string &value);
 
-/// @brief Return a pointer to a member inside a message buffer.
-/// @param message Pointer to the start of the message memory.
-/// @param member Introspection metadata describing the member offset.
-/// @return Pointer to @p member inside @p message.
-const void *memberMemory(const void *message, const introspection::MessageMember &member);
-
 /// @brief Return whether a member renders as a nested message block.
 /// @param member Introspection metadata for the field.
 /// @return True when @p member is a non-array message with metadata.

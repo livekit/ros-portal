@@ -26,23 +26,14 @@
 #include <sstream>
 #include <string>
 
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+
 namespace ros2_livekit_bridge::introspection {
 
 using introspection::MessageMember;
 using introspection::MessageMembers;
 
 namespace {
-
-// The ROS 2 introspection C API exposes nested-message metadata as a
-// type-erased `void *` on the type-support handle, so this cast is unavoidable.
-// Keeping it in a single checked helper means the rest of the renderer never
-// touches the raw pointer and there is exactly one place to audit.
-const MessageMembers *nestedMembers(const MessageMember &member) {
-  if (member.members_ == nullptr || member.members_->data == nullptr) {
-    return nullptr;
-  }
-  return static_cast<const MessageMembers *>(member.members_->data);
-}
 
 // Decode UTF-16 (including surrogate pairs) into Unicode code points. A lone or
 // invalid surrogate is passed through unchanged so rendering stays lossless.
@@ -173,10 +164,6 @@ void renderMessageArrayItem(std::ostringstream &stream, const MessageMembers &me
       stream << '\n';
     }
   }
-}
-
-const void *memberMemory(const void *message, const MessageMember &member) {
-  return static_cast<const void *>(static_cast<const std::uint8_t *>(message) + member.offset_);
 }
 
 void renderMessage(std::ostringstream &stream, const MessageMembers &members, const void *message, std::size_t indent) {

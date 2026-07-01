@@ -24,6 +24,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+
 namespace ros2_livekit_bridge::introspection {
 
 namespace {
@@ -70,10 +72,11 @@ RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string &type)
 
 const rosidl_typesupport_introspection_cpp::MessageMembers &RuntimeMessageTypeSupport::requireMembers(
     const rosidl_message_type_support_t *handle) {
-  if (handle == nullptr || handle->data == nullptr) {
+  const auto *members = membersFromHandle(handle);
+  if (members == nullptr) {
     throw std::runtime_error("Introspection type support handle is null");
   }
-  return *static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers *>(handle->data);
+  return *members;
 }
 
 RuntimeServiceTypeSupport::RuntimeServiceTypeSupport(const std::string &type,

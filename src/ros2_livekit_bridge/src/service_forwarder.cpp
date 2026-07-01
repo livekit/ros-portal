@@ -29,12 +29,12 @@
 #include <stdexcept>
 #include <utility>
 
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
-#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
+#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 namespace ros2_livekit_bridge {
 
@@ -200,8 +200,9 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   }
 }
 
-void ServiceForwarder::forwardRequest(const ServiceRoute &route, const introspection::RuntimeServiceTypeSupport &support,
-                                      const void *request_data, void *response_data) const {
+void ServiceForwarder::forwardRequest(const ServiceRoute &route,
+                                      const introspection::RuntimeServiceTypeSupport &support, const void *request_data,
+                                      void *response_data) const {
   if (!livekit_methods_.has_participant(route.participant)) {
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
                  route.participant.c_str());

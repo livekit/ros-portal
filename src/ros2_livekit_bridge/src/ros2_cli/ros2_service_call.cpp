@@ -30,18 +30,16 @@
 #include <rclcpp/exceptions.hpp>
 #include <rclcpp/expand_topic_or_service_name.hpp>
 #include <rclcpp/serialization.hpp>
-#include <rcpputils/shared_library.hpp>
 #include <rosidl_runtime_cpp/message_initialization.hpp>
-#include <rosidl_typesupport_cpp/identifier.hpp>
 #include <stdexcept>
 #include <thread>
 #include <utility>
 
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
+#include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
 
@@ -53,16 +51,6 @@ constexpr auto kPollPeriod = std::chrono::milliseconds(2);
 // the reader holds at most ~10 samples; this comfortably exceeds that and only
 // trips if the queue is being refilled faster than it drains.
 constexpr std::uint8_t kMaxStaleResponseDrains = 25;
-
-std::string Ros2ServiceCall::serviceTypeSupportSymbol(const std::string &type,
-                                                      const std::string &typesupport_identifier) {
-  return introspection::serviceTypeSupportSymbol(type, typesupport_identifier);
-}
-
-const rosidl_service_type_support_t *Ros2ServiceCall::serviceTypeSupportHandle(
-    const std::string &type, const std::string &typesupport_identifier, rcpputils::SharedLibrary &library) {
-  return introspection::serviceTypeSupportHandle(type, typesupport_identifier, library);
-}
 
 /// @brief Runtime service client for an arbitrary service type.
 struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
@@ -155,7 +143,8 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
   // The request arrives as native YAML; serialize it into the request type on
   // this side, mirroring how `ros2 topic pub` is handled.
   std::string yaml_error;
-  auto serialized_request = introspection::serializedMessageFromYaml(options.msg_type + "_Request", options.payload, yaml_error);
+  auto serialized_request =
+      introspection::serializedMessageFromYaml(options.msg_type + "_Request", options.payload, yaml_error);
   if (!serialized_request) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "failed to build service request: " + yaml_error);
   }

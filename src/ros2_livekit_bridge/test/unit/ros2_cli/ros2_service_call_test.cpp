@@ -25,6 +25,7 @@
 #include <nav_msgs/srv/get_plan.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/typesupport_helpers.hpp>
 #include <rosidl_typesupport_cpp/identifier.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
@@ -32,6 +33,7 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
@@ -40,7 +42,7 @@ class Ros2ServiceCallPrivateTest : public ::testing::Test {};
 
 TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes) {
   EXPECT_EQ(
-      Ros2ServiceCall::serviceTypeSupportSymbol("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier),
+      introspection::serviceTypeSupportSymbol("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier),
       "rosidl_typesupport_cpp__get_service_type_support_handle__"
       "std_srvs__srv__SetBool");
 }
@@ -48,7 +50,7 @@ TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes) {
 TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService) {
   auto library =
       rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = Ros2ServiceCall::serviceTypeSupportHandle(
+  const auto *handle = introspection::serviceTypeSupportHandle(
       "std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier, *library);
   EXPECT_NE(handle, nullptr);
 }
@@ -56,7 +58,7 @@ TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService) {
 TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol) {
   auto library =
       rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = Ros2ServiceCall::serviceTypeSupportHandle(
+  const auto *handle = introspection::serviceTypeSupportHandle(
       "std_srvs/srv/DoesNotExist", rosidl_typesupport_cpp::typesupport_identifier, *library);
   EXPECT_EQ(handle, nullptr);
 }

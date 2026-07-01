@@ -49,8 +49,9 @@ TEST(RuntimeTypeSupportTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol
 TEST(RuntimeTypeSupportTest, ServiceTypeSupportCreationErrorForMissingSymbol) {
   std::string error;
   EXPECT_EQ(RuntimeServiceTypeSupport::create("std_srvs/srv/DoesNotExist", error), nullptr);
-  EXPECT_EQ(error, "Service typesupport symbol not found: rosidl_typesupport_cpp"
-                   "__get_service_type_support_handle__std_srvs__srv__DoesNotExist");
+  EXPECT_EQ(error,
+            "Service typesupport symbol not found: rosidl_typesupport_cpp"
+            "__get_service_type_support_handle__std_srvs__srv__DoesNotExist");
 }
 
 TEST(RuntimeTypeSupportTest, ServiceTypeSupportCreationErrorForMissingPackage) {

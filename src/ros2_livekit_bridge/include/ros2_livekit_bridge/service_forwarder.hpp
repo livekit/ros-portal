@@ -90,16 +90,16 @@ private:
   struct DynamicService;
 
   /// @brief Create one runtime-typed service server.
+  /// @param route Service route metadata.
+  /// @param callback_group Callback group used by the created service.
   void createService(const ServiceRoute &route, rclcpp::CallbackGroup::SharedPtr callback_group);
 
   /// @brief Forward one local ROS service request to the configured remote
   /// participant.
   /// @param route Route metadata for this service.
-  /// @param support Runtime support for the forwarded service type.
   /// @param request_data Runtime-typed request message memory.
   /// @param response_data Runtime-typed response message memory to populate.
-  void forwardRequest(const ServiceRoute &route, const introspection::RuntimeServiceTypeSupport &support,
-                      const void *request_data, void *response_data) const;
+  void forwardRequest(const ServiceRoute &route, const void *request_data, void *response_data) const;
 
   NodeInterfaces node_interfaces_;
   rclcpp::Logger logger_;

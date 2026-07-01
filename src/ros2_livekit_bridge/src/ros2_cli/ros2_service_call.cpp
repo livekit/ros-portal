@@ -29,16 +29,14 @@
 #include <rclcpp/client.hpp>
 #include <rclcpp/exceptions.hpp>
 #include <rclcpp/expand_topic_or_service_name.hpp>
-#include <rclcpp/serialization.hpp>
 #include <rosidl_runtime_cpp/message_initialization.hpp>
 #include <stdexcept>
 #include <thread>
 #include <utility>
 
 #include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
-#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
@@ -132,15 +130,6 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "msg_type must be non-empty");
   }
 
-  // The request arrives as native YAML; serialize it into the request type on
-  // this side, mirroring how `ros2 topic pub` is handled.
-  std::string yaml_error;
-  auto serialized_request =
-      introspection::serializedMessageFromYaml(options.msg_type + "_Request", options.payload, yaml_error);
-  if (!serialized_request) {
-    return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "failed to build service request: " + yaml_error);
-  }
-
   const auto &msg_type = options.msg_type;
 
   ClientPtr client;
@@ -154,11 +143,10 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
 
   introspection::DynamicMessage request_message(client->support->request.members,
                                                 rosidl_runtime_cpp::MessageInitialization::ZERO);
-  try {
-    client->support->request.serializer.deserialize_message(&serialized_request.value(), request_message.data());
-  } catch (const std::exception &error) {
-    return makeCliResponse<Ros2ServiceCallSrv::Response>(
-        false, std::string("failed to build service request: ") + error.what());
+  std::string yaml_error;
+  if (!introspection::populateMessageFromYaml(options.msg_type + "_Request", options.payload, request_message.data(),
+                                              yaml_error)) {
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "failed to build service request: " + yaml_error);
   }
 
   // Serialize all send+take operations on the same client so concurrent
@@ -235,7 +223,7 @@ std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(Servic
     }
 
     try {
-      const auto output = introspection::toYaml(client.support->response.members, response_message.data());
+      const auto output = introspection::toYaml(client.msg_type + "_Response", response_message.data());
       return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", output);
     } catch (const std::exception &error) {
       return makeCliResponse<Ros2ServiceCallSrv::Response>(

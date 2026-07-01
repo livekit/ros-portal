@@ -14,21 +14,12 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
-
 #include <gtest/gtest.h>
-#include <yaml-cpp/yaml.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <optional>
 #include <rclcpp/serialization.hpp>
-#include <rclcpp/typesupport_helpers.hpp>
-#include <rcpputils/shared_library.hpp>
-#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
-#include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/byte.hpp>
@@ -40,7 +31,6 @@
 #include <std_msgs/msg/u_int64.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
 #include <string>
-#include <test_msgs/msg/basic_types.hpp>
 #include <test_msgs/msg/bounded_sequences.hpp>
 #include <test_msgs/msg/strings.hpp>
 #include <test_msgs/msg/w_strings.hpp>
@@ -86,6 +76,15 @@ TEST(YamlMessageTest, SerializesStringMessage) {
   const auto serialized = serialize("std_msgs/msg/String", "{data: hello}");
 
   const auto message = deserialize<std_msgs::msg::String>(serialized);
+  EXPECT_EQ(message.data, "hello");
+}
+
+TEST(YamlMessageTest, PopulatesExistingMessageFromYaml) {
+  std_msgs::msg::String message;
+  std::string error;
+
+  EXPECT_TRUE(introspection::populateMessageFromYaml("std_msgs/msg/String", "{data: hello}", &message, error)) << error;
+
   EXPECT_EQ(message.data, "hello");
 }
 
@@ -244,122 +243,6 @@ TEST(YamlMessageTest, RejectsOversizedResizableSequence) {
 }
 
 TEST(YamlMessageTest, RejectsUnknownInterfaceType) { expectFailure("missing_msgs/msg/Nope", "{data: hello}"); }
-
-// The mutable memberMemory overload must resolve to the same address as the
-// concrete field so the converter can write parsed values back into storage.
-TEST(YamlMessageTest, MutableMemberMemoryPointsAtField) {
-  namespace ts_introspection = rosidl_typesupport_introspection_cpp;
-  auto library = rclcpp::get_typesupport_library("test_msgs/msg/BasicTypes", ts_introspection::typesupport_identifier);
-  const auto* handle = rclcpp::get_message_typesupport_handle("test_msgs/msg/BasicTypes",
-                                                              ts_introspection::typesupport_identifier, *library);
-  const auto* members = static_cast<const ts_introspection::MessageMembers*>(handle->data);
-
-  const ts_introspection::MessageMember* target = nullptr;
-  for (std::uint32_t index = 0; index < members->member_count_; ++index) {
-    if (std::string("int32_value") == members->members_[index].name_) {
-      target = &members->members_[index];
-      break;
-    }
-  }
-  ASSERT_NE(target, nullptr);
-
-  test_msgs::msg::BasicTypes message;
-  void* field = introspection::memberMemory(static_cast<void*>(&message), *target);
-
-  EXPECT_EQ(field, static_cast<void*>(&message.int32_value));
-  *static_cast<std::int32_t*>(field) = 321;
-  EXPECT_EQ(message.int32_value, 321);
-}
-
-// ---------------------------------------------------------------------------
-// Direct coverage of the leaf scalar converters in introspection::detail. These hold
-// the value-level parsing and range-checking logic and are unit tested against
-// raw YAML nodes, independent of ROS type introspection.
-// ---------------------------------------------------------------------------
-
-using introspection::detail::checkedChar;
-using introspection::detail::checkedFloat;
-using introspection::detail::checkedInteger;
-using introspection::detail::checkedString;
-using introspection::detail::checkedU16String;
-using introspection::detail::checkedWChar;
-
-YAML::Node node(const std::string& text) { return YAML::Load(text); }
-
-TEST(YamlScalarTest, CheckedIntegerParsesInRange) {
-  std::string error;
-  EXPECT_EQ(checkedInteger<std::int32_t>(node("42"), "f", error), 42);
-  EXPECT_EQ(checkedInteger<std::int8_t>(node("-128"), "f", error), -128);
-  EXPECT_EQ(checkedInteger<std::uint8_t>(node("255"), "f", error), 255U);
-}
-
-TEST(YamlScalarTest, CheckedIntegerRejectsSignedOverflow) {
-  std::string error;
-  EXPECT_FALSE(checkedInteger<std::int8_t>(node("9999"), "f", error));
-  EXPECT_FALSE(checkedInteger<std::int8_t>(node("-9999"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedIntegerRejectsUnsignedOverflow) {
-  std::string error;
-  EXPECT_FALSE(checkedInteger<std::uint8_t>(node("256"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedIntegerRejectsNonInteger) {
-  std::string error;
-  EXPECT_FALSE(checkedInteger<std::int32_t>(node("not-an-integer"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedFloatParsesInRange) {
-  std::string error;
-  EXPECT_FLOAT_EQ(checkedFloat<float>(node("1.5"), "f", error).value(), 1.5F);
-  EXPECT_DOUBLE_EQ(checkedFloat<double>(node("-2.25"), "f", error).value(), -2.25);
-}
-
-TEST(YamlScalarTest, CheckedFloatRejectsOutOfRange) {
-  std::string error;
-  EXPECT_FALSE(checkedFloat<float>(node("1.0e40"), "f", error));
-  EXPECT_FALSE(checkedFloat<float>(node("-1.0e40"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedFloatRejectsNonNumeric) {
-  std::string error;
-  EXPECT_FALSE(checkedFloat<double>(node("abc"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedStringRespectsUpperBound) {
-  std::string error;
-  EXPECT_EQ(checkedString(node("hello"), 0U, "f", error), "hello");
-  EXPECT_EQ(checkedString(node("abc"), 3U, "f", error), "abc");
-  EXPECT_FALSE(checkedString(node("abcd"), 3U, "f", error));
-}
-
-TEST(YamlScalarTest, CheckedU16StringWidensCodeUnits) {
-  std::string error;
-  const auto value = checkedU16String(node("AB"), 0U, "f", error);
-  ASSERT_TRUE(value.has_value());
-  ASSERT_EQ(value->size(), 2U);
-  EXPECT_EQ((*value)[0], u'A');
-  EXPECT_EQ((*value)[1], u'B');
-  EXPECT_FALSE(checkedU16String(node("abcd"), 3U, "f", error));
-}
-
-TEST(YamlScalarTest, CheckedCharAcceptsCharacterOrCode) {
-  std::string error;
-  EXPECT_EQ(checkedChar(node("a"), "f", error), 'a');
-  EXPECT_EQ(checkedChar(node("65"), "f", error), 'A');
-}
-
-TEST(YamlScalarTest, CheckedCharRejectsInvalid) {
-  std::string error;
-  EXPECT_FALSE(checkedChar(node("ab"), "f", error));
-  EXPECT_FALSE(checkedChar(node("9999"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedWCharAcceptsCharacterOrCode) {
-  std::string error;
-  EXPECT_EQ(checkedWChar(node("a"), "f", error), u'a');
-  EXPECT_EQ(checkedWChar(node("300"), "f", error), static_cast<char16_t>(300));
-}
 
 } // namespace
 } // namespace ros2_livekit_bridge

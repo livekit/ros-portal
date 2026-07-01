@@ -14,54 +14,19 @@
  * limitations under the License.
  */
 
-/// @brief Shared low-level helpers for walking ROS introspection metadata.
-///
-/// These are the single source of truth for the type-erased pointer arithmetic
-/// and `void *` casts that the introspection message renderer and YAML
-/// converter both rely on. Keeping them here means there is exactly one place
-/// to audit for the unavoidable casts the ROS 2 introspection C API forces.
+/// @brief Shared helpers for ROS introspection metadata and runtime messages.
 
 #pragma once
 
 #include <rosidl_runtime_c/message_type_support_struct.h>
+#include <yaml-cpp/yaml.h>
 
-#include <cstdint>
+#include <optional>
+#include <rclcpp/serialized_message.hpp>
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
+#include <string>
 
 namespace ros2_livekit_bridge::introspection {
-
-/// @brief Return a const pointer to a member inside a message buffer.
-/// @param message Pointer to the start of the message memory.
-/// @param member Introspection metadata describing the member offset.
-/// @return Pointer to @p member inside @p message.
-inline const void *memberMemory(const void *message,
-                                const rosidl_typesupport_introspection_cpp::MessageMember &member) {
-  return static_cast<const void *>(static_cast<const std::uint8_t *>(message) + member.offset_);
-}
-
-/// @brief Return a mutable pointer to a member inside a message buffer.
-/// @param message Pointer to the start of the message memory.
-/// @param member Introspection metadata describing the member offset.
-/// @return Pointer to @p member inside @p message.
-inline void *memberMemory(void *message, const rosidl_typesupport_introspection_cpp::MessageMember &member) {
-  return static_cast<void *>(static_cast<std::uint8_t *>(message) + member.offset_);
-}
-
-/// @brief Extract nested message metadata from a message-typed member.
-///
-/// The ROS 2 introspection C API exposes nested-message metadata as a
-/// type-erased `void *` on the member handle, so this cast is unavoidable.
-/// Keeping it here means there is exactly one place to audit the raw pointer.
-///
-/// @param member Introspection metadata for a message-typed field.
-/// @return Pointer to the nested members, or nullptr when metadata is missing.
-inline const rosidl_typesupport_introspection_cpp::MessageMembers *nestedMembers(
-    const rosidl_typesupport_introspection_cpp::MessageMember &member) {
-  if (member.members_ == nullptr || member.members_->data == nullptr) {
-    return nullptr;
-  }
-  return static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers *>(member.members_->data);
-}
 
 /// @brief Extract message metadata from an introspection type-support handle.
 ///
@@ -78,5 +43,52 @@ inline const rosidl_typesupport_introspection_cpp::MessageMembers *membersFromHa
   }
   return static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers *>(handle->data);
 }
+
+/// @brief Returns true when @p node or any nested map value contains a sequence longer than
+///   ros2_cli::kMaxResizableSequenceLength.
+/// @param node Parsed YAML node to inspect.
+bool containsOversizedSequence(const YAML::Node &node);
+
+/// @brief Parse and validate a YAML payload.
+/// @param payload YAML source string.
+/// @param error Set to a human-readable description when parsing or validation fails.
+/// @return Parsed YAML root node, or `std::nullopt` on failure.
+std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &error);
+
+/// @brief Build a ROS interface type string from message introspection metadata.
+/// @param members Introspection metadata for the message type.
+/// @return ROS interface type, such as `std_msgs/msg/String`, or `std::nullopt`
+///   when namespace or name metadata is missing.
+std::optional<std::string> messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members);
+
+/// @brief Format a runtime message as YAML.
+/// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Response`.
+/// @param message Pointer to the runtime message memory.
+/// @return YAML rendering of @p message.
+std::string toYaml(const std::string &msg_type, const void *message);
+
+/// @brief Format a runtime message as YAML.
+/// @param members Introspection metadata for the message type.
+/// @param message Pointer to the runtime message memory.
+/// @return YAML rendering of @p message.
+std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers &members, const void *message);
+
+/// @brief Convert a native `ros2 topic pub` YAML payload to serialized ROS CDR.
+/// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
+/// @param payload YAML message payload.
+/// @param error Set to a human-readable description when conversion fails.
+/// @return Serialized ROS message bytes, or `std::nullopt` when the type cannot
+///   be resolved or the payload is invalid.
+std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string &msg_type,
+                                                                   const std::string &payload, std::string &error);
+
+/// @brief Populate an existing runtime message from a native YAML payload.
+/// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Request`.
+/// @param payload YAML message payload.
+/// @param message Type-erased initialized message storage to populate.
+/// @param error Set to a human-readable description when conversion fails.
+/// @return True when @p message was populated successfully.
+bool populateMessageFromYaml(const std::string &msg_type, const std::string &payload, void *message,
+                             std::string &error);
 
 } // namespace ros2_livekit_bridge::introspection

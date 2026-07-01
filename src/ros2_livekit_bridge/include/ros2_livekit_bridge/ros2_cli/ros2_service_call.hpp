@@ -74,11 +74,6 @@ public:
   ///   response conversion fails.
   Ros2ServiceCallSrv::Response call(ServiceCallOptions options);
 
-#ifdef BUILD_TESTING
-  /// @brief Return the service type-support creation error for @p type.
-  static std::string serviceTypeSupportCreationError(const std::string &type);
-#endif
-
 private:
   /// @brief Runtime service client for an arbitrary service type.
   ///

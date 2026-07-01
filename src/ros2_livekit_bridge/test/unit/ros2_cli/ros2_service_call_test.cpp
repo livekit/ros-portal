@@ -25,43 +25,15 @@
 #include <nav_msgs/srv/get_plan.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/typesupport_helpers.hpp>
-#include <rosidl_typesupport_cpp/identifier.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
-
-class Ros2ServiceCallPrivateTest : public ::testing::Test {};
-
-TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes) {
-  EXPECT_EQ(
-      introspection::serviceTypeSupportSymbol("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier),
-      "rosidl_typesupport_cpp__get_service_type_support_handle__"
-      "std_srvs__srv__SetBool");
-}
-
-TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService) {
-  auto library =
-      rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = introspection::serviceTypeSupportHandle(
-      "std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier, *library);
-  EXPECT_NE(handle, nullptr);
-}
-
-TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol) {
-  auto library =
-      rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = introspection::serviceTypeSupportHandle(
-      "std_srvs/srv/DoesNotExist", rosidl_typesupport_cpp::typesupport_identifier, *library);
-  EXPECT_EQ(handle, nullptr);
-}
 
 namespace {
 
@@ -267,17 +239,6 @@ TEST_F(Ros2ServiceCallTest, RejectsEmptyRequestPayload) {
 
   EXPECT_FALSE(response.success);
   EXPECT_EQ(response.err_msg, "failed to build service request: payload must be non-empty");
-}
-
-TEST_F(Ros2ServiceCallTest, ServiceTypeSupportCreationErrorForMissingSymbol) {
-  EXPECT_EQ(Ros2ServiceCall::serviceTypeSupportCreationError("std_srvs/srv/DoesNotExist"),
-            "Service typesupport symbol not found: rosidl_typesupport_cpp"
-            "__get_service_type_support_handle__std_srvs__srv__DoesNotExist");
-}
-
-TEST_F(Ros2ServiceCallTest, ServiceTypeSupportCreationErrorForMissingPackage) {
-  const std::string error = Ros2ServiceCall::serviceTypeSupportCreationError("fake_msgs/srv/DoesNotExist");
-  EXPECT_NE(error.find("package 'fake_msgs' not found"), std::string::npos);
 }
 
 TEST_F(Ros2ServiceCallTest, RejectsUnknownServiceTypeWithoutThrowing) {

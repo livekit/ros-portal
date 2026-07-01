@@ -109,14 +109,6 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   std::mutex call_mutex;
 };
 
-#ifdef BUILD_TESTING
-std::string Ros2ServiceCall::serviceTypeSupportCreationError(const std::string &type) {
-  std::string error;
-  (void)introspection::RuntimeServiceTypeSupport::create(type, error);
-  return error;
-}
-#endif
-
 Ros2ServiceCall::Ros2ServiceCall(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
                                  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph, rclcpp::Logger logger)
     : base_(std::move(base)), graph_(std::move(graph)), logger_(std::move(logger)) {

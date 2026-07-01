@@ -21,7 +21,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"

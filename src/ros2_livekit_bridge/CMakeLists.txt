@@ -32,6 +32,7 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
+  ros2_medkit_serialization
   ros2_livekit_bridge_config
   ros2_livekit_bridge_msgs
   rosidl_typesupport_cpp
@@ -193,12 +194,14 @@ endif()
 # Introspection library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(introspection_lib SHARED
-  src/introspection/message_render.cpp
+  src/introspection/introspection_utils.cpp
   src/introspection/runtime_type_support.cpp
-  src/introspection/yaml_message_converter.cpp
 )
 target_link_libraries(introspection_lib
   yaml-cpp::yaml-cpp
+)
+ament_target_dependencies(introspection_lib
+  ros2_medkit_serialization
 )
 
 # ---------------------------------------------------------------------------

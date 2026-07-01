@@ -33,7 +33,7 @@
 #include <string>
 #include <type_traits>
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::introspection {
 
 /// @brief Convert a native `ros2 topic pub` YAML payload to serialized ROS CDR.
 /// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
@@ -195,4 +195,4 @@ inline std::optional<char16_t> checkedWChar(const YAML::Node &node, const std::s
 
 } // namespace detail
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::introspection

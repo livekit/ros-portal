@@ -39,7 +39,7 @@
 
 #include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
+#include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 
@@ -56,19 +56,19 @@ constexpr std::uint8_t kMaxStaleResponseDrains = 25;
 
 std::string Ros2ServiceCall::serviceTypeSupportSymbol(const std::string &type,
                                                       const std::string &typesupport_identifier) {
-  return ros2_cli::serviceTypeSupportSymbol(type, typesupport_identifier);
+  return introspection::serviceTypeSupportSymbol(type, typesupport_identifier);
 }
 
 const rosidl_service_type_support_t *Ros2ServiceCall::serviceTypeSupportHandle(
     const std::string &type, const std::string &typesupport_identifier, rcpputils::SharedLibrary &library) {
-  return ros2_cli::serviceTypeSupportHandle(type, typesupport_identifier, library);
+  return introspection::serviceTypeSupportHandle(type, typesupport_identifier, library);
 }
 
 /// @brief Runtime service client for an arbitrary service type.
 struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Construct a ClientBase-backed runtime service client.
   ServiceClient(const std::string &service_name, const std::string &msg_type,
-                std::shared_ptr<RuntimeServiceTypeSupport> support,
+                std::shared_ptr<introspection::RuntimeServiceTypeSupport> support,
                 rclcpp::node_interfaces::NodeBaseInterface *node_base,
                 rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph)
       : rclcpp::ClientBase(node_base, std::move(node_graph)), msg_type(msg_type), support(std::move(support)) {
@@ -89,14 +89,14 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   std::shared_ptr<void> create_response() override {
     struct ResponseStorage {
       /// @brief Keep type support alive beside response memory.
-      explicit ResponseStorage(std::shared_ptr<RuntimeServiceTypeSupport> type_support)
+      explicit ResponseStorage(std::shared_ptr<introspection::RuntimeServiceTypeSupport> type_support)
           : support(std::move(type_support)),
             message(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO) {}
 
       /// @brief Type support used to initialize message storage.
-      std::shared_ptr<RuntimeServiceTypeSupport> support;
+      std::shared_ptr<introspection::RuntimeServiceTypeSupport> support;
       /// @brief Runtime response message storage.
-      DynamicMessage message;
+      introspection::DynamicMessage message;
     };
 
     auto storage = std::make_shared<ResponseStorage>(support);
@@ -116,7 +116,7 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Service type used by this client.
   std::string msg_type;
   /// @brief Service, request, and response type support.
-  std::shared_ptr<RuntimeServiceTypeSupport> support;
+  std::shared_ptr<introspection::RuntimeServiceTypeSupport> support;
   /// @brief Serializes send+take on this client across concurrent callers.
   std::mutex call_mutex;
 };
@@ -124,7 +124,7 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
 #ifdef BUILD_TESTING
 std::string Ros2ServiceCall::serviceTypeSupportCreationError(const std::string &type) {
   std::string error;
-  (void)RuntimeServiceTypeSupport::create(type, error);
+  (void)introspection::RuntimeServiceTypeSupport::create(type, error);
   return error;
 }
 #endif
@@ -155,7 +155,7 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
   // The request arrives as native YAML; serialize it into the request type on
   // this side, mirroring how `ros2 topic pub` is handled.
   std::string yaml_error;
-  auto serialized_request = serializedMessageFromYaml(options.msg_type + "_Request", options.payload, yaml_error);
+  auto serialized_request = introspection::serializedMessageFromYaml(options.msg_type + "_Request", options.payload, yaml_error);
   if (!serialized_request) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "failed to build service request: " + yaml_error);
   }
@@ -171,7 +171,8 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
         false, std::string("failed to create service client: ") + client_error);
   }
 
-  DynamicMessage request_message(client->support->request.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+  introspection::DynamicMessage request_message(client->support->request.members,
+                                                rosidl_runtime_cpp::MessageInitialization::ZERO);
   try {
     client->support->request.serializer.deserialize_message(&serialized_request.value(), request_message.data());
   } catch (const std::exception &error) {
@@ -220,7 +221,7 @@ std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::
     return std::nullopt;
   }
 
-  auto support = RuntimeServiceTypeSupport::create(msg_type, error);
+  auto support = introspection::RuntimeServiceTypeSupport::create(msg_type, error);
   if (!support) {
     return std::nullopt;
   }
@@ -241,7 +242,8 @@ std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(Servic
   // 1. take_type_erased_response has no more items in the rmq queue to take
   // 2. takes a response with a mismatched sequence number > kMaxStaleResponseDrains
   while (attempt_count < kMaxStaleResponseDrains) {
-    DynamicMessage response_message(client.support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+    introspection::DynamicMessage response_message(client.support->response.members,
+                                                   rosidl_runtime_cpp::MessageInitialization::ZERO);
     rmw_request_id_t header{};
     if (!client.take_type_erased_response(response_message.data(), header)) {
       return std::nullopt;
@@ -252,7 +254,7 @@ std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(Servic
     }
 
     try {
-      const auto output = message_render::toYaml(client.support->response.members, response_message.data());
+      const auto output = introspection::toYaml(client.support->response.members, response_message.data());
       return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", output);
     } catch (const std::exception &error) {
       return makeCliResponse<Ros2ServiceCallSrv::Response>(

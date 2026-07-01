@@ -57,7 +57,7 @@ MessageT deserialize(const rclcpp::SerializedMessage& serialized) {
 // error string on failure so the test name plus message pinpoints the cause.
 rclcpp::SerializedMessage serialize(const std::string& msg_type, const std::string& payload) {
   std::string error;
-  auto serialized = ros2_cli::serializedMessageFromYaml(msg_type, payload, error);
+  auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
   EXPECT_TRUE(serialized.has_value()) << error;
   return serialized.value_or(rclcpp::SerializedMessage{});
 }
@@ -65,7 +65,7 @@ rclcpp::SerializedMessage serialize(const std::string& msg_type, const std::stri
 // Asserts conversion fails and reports a non-empty diagnostic message.
 void expectFailure(const std::string& msg_type, const std::string& payload) {
   std::string error;
-  const auto serialized = ros2_cli::serializedMessageFromYaml(msg_type, payload, error);
+  const auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
   EXPECT_FALSE(serialized.has_value());
   EXPECT_FALSE(error.empty());
 }
@@ -240,17 +240,17 @@ TEST(YamlMessageTest, RejectsOversizedResizableSequence) {
 TEST(YamlMessageTest, RejectsUnknownInterfaceType) { expectFailure("missing_msgs/msg/Nope", "{data: hello}"); }
 
 // ---------------------------------------------------------------------------
-// Direct coverage of the leaf scalar converters in ros2_cli::detail. These hold
+// Direct coverage of the leaf scalar converters in introspection::detail. These hold
 // the value-level parsing and range-checking logic and are unit tested against
 // raw YAML nodes, independent of ROS type introspection.
 // ---------------------------------------------------------------------------
 
-using ros2_cli::detail::checkedChar;
-using ros2_cli::detail::checkedFloat;
-using ros2_cli::detail::checkedInteger;
-using ros2_cli::detail::checkedString;
-using ros2_cli::detail::checkedU16String;
-using ros2_cli::detail::checkedWChar;
+using introspection::detail::checkedChar;
+using introspection::detail::checkedFloat;
+using introspection::detail::checkedInteger;
+using introspection::detail::checkedString;
+using introspection::detail::checkedU16String;
+using introspection::detail::checkedWChar;
 
 YAML::Node node(const std::string& text) { return YAML::Load(text); }
 

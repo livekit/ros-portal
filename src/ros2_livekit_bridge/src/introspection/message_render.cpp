@@ -26,7 +26,7 @@
 #include <sstream>
 #include <string>
 
-namespace ros2_livekit_bridge::message_render {
+namespace ros2_livekit_bridge::introspection {
 
 using introspection::MessageMember;
 using introspection::MessageMembers;
@@ -310,4 +310,4 @@ std::string toYaml(const MessageMembers &members, const void *message) {
   return stream.str();
 }
 
-} // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::introspection

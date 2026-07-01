@@ -24,7 +24,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::introspection {
 
 namespace {
 constexpr char kServiceTypeSupportSymbolPrefix[] = "__get_service_type_support_handle__";
@@ -101,4 +101,4 @@ std::shared_ptr<RuntimeServiceTypeSupport> RuntimeServiceTypeSupport::create(con
   }
 }
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::introspection

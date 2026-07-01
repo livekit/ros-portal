@@ -32,9 +32,9 @@
 #include <utility>
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
+#include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::introspection {
 namespace {
 
 namespace introspection = rosidl_typesupport_introspection_cpp;
@@ -210,8 +210,9 @@ bool validateAndResizeArray(const MessageMember &member, const YAML::Node &node,
     error = "field '" + path + "' exceeds sequence upper bound " + std::to_string(member.array_size_);
     return false;
   }
-  if (requested_size > kMaxResizableSequenceLength) {
-    error = "field '" + path + "' exceeds maximum sequence length " + std::to_string(kMaxResizableSequenceLength);
+  if (requested_size > ros2_cli::kMaxResizableSequenceLength) {
+    error = "field '" + path + "' exceeds maximum sequence length " +
+            std::to_string(ros2_cli::kMaxResizableSequenceLength);
     return false;
   }
   member.resize_function(field_memory, requested_size);
@@ -360,8 +361,8 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
     error = "payload must be non-empty";
     return std::nullopt;
   }
-  if (payload.size() > kMaxYamlPayloadBytes) {
-    error = "payload exceeds maximum size of " + std::to_string(kMaxYamlPayloadBytes) + " bytes";
+  if (payload.size() > ros2_cli::kMaxYamlPayloadBytes) {
+    error = "payload exceeds maximum size of " + std::to_string(ros2_cli::kMaxYamlPayloadBytes) + " bytes";
     return std::nullopt;
   }
 
@@ -404,4 +405,4 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
   }
 }
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::introspection

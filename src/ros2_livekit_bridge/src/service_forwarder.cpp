@@ -31,7 +31,7 @@
 
 #include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
+#include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
@@ -52,7 +52,7 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
   using RequestHandler = std::function<void(const void *, void *)>;
 
   DynamicService(std::shared_ptr<rcl_node_t> node_handle, std::string service_name,
-                 std::shared_ptr<ros2_cli::RuntimeServiceTypeSupport> support, RequestHandler handler)
+                 std::shared_ptr<introspection::RuntimeServiceTypeSupport> support, RequestHandler handler)
       : rclcpp::ServiceBase(std::move(node_handle)),
         service_name(std::move(service_name)),
         support(std::move(support)),
@@ -88,12 +88,12 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
 
   std::shared_ptr<void> create_request() override {
     struct RequestStorage {
-      explicit RequestStorage(std::shared_ptr<ros2_cli::RuntimeServiceTypeSupport> type_support)
+      explicit RequestStorage(std::shared_ptr<introspection::RuntimeServiceTypeSupport> type_support)
           : support(std::move(type_support)),
             message(support->request.members, rosidl_runtime_cpp::MessageInitialization::ZERO) {}
 
-      std::shared_ptr<ros2_cli::RuntimeServiceTypeSupport> support;
-      ros2_cli::DynamicMessage message;
+      std::shared_ptr<introspection::RuntimeServiceTypeSupport> support;
+      introspection::DynamicMessage message;
     };
 
     auto storage = std::make_shared<RequestStorage>(support);
@@ -103,7 +103,7 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
   std::shared_ptr<rmw_request_id_t> create_request_header() override { return std::make_shared<rmw_request_id_t>(); }
 
   void handle_request(std::shared_ptr<rmw_request_id_t> request_header, std::shared_ptr<void> request) override {
-    ros2_cli::DynamicMessage response(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+    introspection::DynamicMessage response(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
 
     try {
       handler(request.get(), response.data());
@@ -125,7 +125,7 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
   }
 
   std::string service_name;
-  std::shared_ptr<ros2_cli::RuntimeServiceTypeSupport> support;
+  std::shared_ptr<introspection::RuntimeServiceTypeSupport> support;
   RequestHandler handler;
 };
 
@@ -177,7 +177,7 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   }
 
   std::string support_error;
-  auto support = ros2_cli::RuntimeServiceTypeSupport::create(route.msg_type, support_error);
+  auto support = introspection::RuntimeServiceTypeSupport::create(route.msg_type, support_error);
   if (!support) {
     RCLCPP_ERROR(logger_, "Skipping service route '%s' [%s]: %s", route.service.c_str(), route.msg_type.c_str(),
                  support_error.c_str());
@@ -200,7 +200,7 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   }
 }
 
-void ServiceForwarder::forwardRequest(const ServiceRoute &route, const ros2_cli::RuntimeServiceTypeSupport &support,
+void ServiceForwarder::forwardRequest(const ServiceRoute &route, const introspection::RuntimeServiceTypeSupport &support,
                                       const void *request_data, void *response_data) const {
   if (!livekit_methods_.has_participant(route.participant)) {
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
@@ -208,7 +208,7 @@ void ServiceForwarder::forwardRequest(const ServiceRoute &route, const ros2_cli:
     return;
   }
 
-  const auto request_yaml = message_render::toYaml(support.request.members, request_data);
+  const auto request_yaml = introspection::toYaml(support.request.members, request_data);
   const auto service_timeout_sec = ros2_cli::kDefaultTimeoutSec;
 
   ros2_cli::Ros2ServiceCallSrv::Request request;
@@ -243,7 +243,7 @@ void ServiceForwarder::forwardRequest(const ServiceRoute &route, const ros2_cli:
 
   std::string yaml_error;
   const auto serialized_response =
-      ros2_cli::serializedMessageFromYaml(route.msg_type + "_Response", response->output, yaml_error);
+      introspection::serializedMessageFromYaml(route.msg_type + "_Response", response->output, yaml_error);
   if (!serialized_response) {
     RCLCPP_ERROR(logger_, "Failed to parse remote response for service '%s' [%s]: %s", route.service.c_str(),
                  route.msg_type.c_str(), yaml_error.c_str());

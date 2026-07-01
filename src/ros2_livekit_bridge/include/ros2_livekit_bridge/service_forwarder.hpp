@@ -98,7 +98,7 @@ private:
   /// @param support Runtime support for the forwarded service type.
   /// @param request_data Runtime-typed request message memory.
   /// @param response_data Runtime-typed response message memory to populate.
-  void forwardRequest(const ServiceRoute &route, const ros2_cli::RuntimeServiceTypeSupport &support,
+  void forwardRequest(const ServiceRoute &route, const introspection::RuntimeServiceTypeSupport &support,
                       const void *request_data, void *response_data) const;
 
   NodeInterfaces node_interfaces_;

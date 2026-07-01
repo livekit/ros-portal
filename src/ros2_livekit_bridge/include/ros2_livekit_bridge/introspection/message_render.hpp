@@ -29,7 +29,7 @@
 #include <sstream>
 #include <string>
 
-namespace ros2_livekit_bridge::message_render {
+namespace ros2_livekit_bridge::introspection {
 
 /// @brief Introspection type-support namespace alias.
 namespace introspection = rosidl_typesupport_introspection_cpp;
@@ -138,4 +138,4 @@ void renderField(std::ostringstream &stream, const introspection::MessageMember 
 /// @return CLI-style YAML rendering of @p message.
 std::string toYaml(const introspection::MessageMembers &members, const void *message);
 
-} // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::introspection

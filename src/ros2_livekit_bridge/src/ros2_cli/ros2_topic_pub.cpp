@@ -97,7 +97,7 @@ Ros2TopicPubSrv::Response Ros2TopicPub::publish(TopicPubOptions options) {
 
   // Error: YAML payload could not be converted to ROS CDR.
   std::string yaml_error;
-  auto serialized = serializedMessageFromYaml(options.msg_type, options.payload, yaml_error);
+  auto serialized = introspection::serializedMessageFromYaml(options.msg_type, options.payload, yaml_error);
   if (!serialized) {
     return makeCliResponse<Ros2TopicPubSrv::Response>(false, "failed to publish message: " + yaml_error);
   }

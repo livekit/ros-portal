@@ -25,7 +25,7 @@
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <string>
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::introspection {
 
 /// @brief Build the service type-support symbol name for @p type.
 /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
@@ -90,4 +90,4 @@ private:
                             const rosidl_service_type_support_t *handle);
 };
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::introspection

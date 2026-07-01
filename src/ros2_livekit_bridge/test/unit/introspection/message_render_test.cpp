@@ -34,7 +34,7 @@
 #include <test_msgs/msg/nested.hpp>
 #include <test_msgs/msg/strings.hpp>
 
-namespace ros2_livekit_bridge::message_render {
+namespace ros2_livekit_bridge::introspection {
 namespace {
 
 /// @brief Loaded introspection type support kept alive for the test scope.
@@ -279,4 +279,4 @@ TEST(MessageRenderTest, RendersNestedMessageSequenceAsBlockList) {
 }
 
 } // namespace
-} // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::introspection

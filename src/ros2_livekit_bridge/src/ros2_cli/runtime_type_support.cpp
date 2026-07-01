@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/runtime_service_type_support.hpp"
+#include "ros2_livekit_bridge/ros2_cli/runtime_type_support.hpp"
 
 #include <exception>
 #include <rclcpp/typesupport_helpers.hpp>

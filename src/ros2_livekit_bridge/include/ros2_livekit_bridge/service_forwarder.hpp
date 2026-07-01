@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-#include "ros2_livekit_bridge/ros2_cli/runtime_service_type_support.hpp"
+#include "ros2_livekit_bridge/ros2_cli/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
 namespace ros2_livekit_bridge {

@@ -28,9 +28,23 @@
 #include <test_msgs/msg/strings.hpp>
 
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
+#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::introspection {
 namespace {
+
+using ros2_livekit_bridge::ros2_cli::kMaxResizableSequenceLength;
+using ros2_livekit_bridge::ros2_cli::kMaxYamlPayloadBytes;
+
+std::string buildIntegerSequencePayload(const std::size_t count) {
+  std::string payload = "[";
+  payload.reserve(count * 2U + 2U);
+  for (std::size_t index = 0; index < count; ++index) {
+    payload += "0,";
+  }
+  payload += "0]";
+  return payload;
+}
 
 /// @brief Load runtime type support for a message type identifier.
 ///
@@ -151,6 +165,94 @@ TEST(MessageRenderTest, RendersNestedMessageSequence) {
   EXPECT_EQ(output["layout"]["dim"][0]["label"].as<std::string>(), "width");
   EXPECT_EQ(output["layout"]["dim"][0]["size"].as<unsigned>(), 2U);
   EXPECT_EQ(output["layout"]["dim"][0]["stride"].as<unsigned>(), 3U);
+}
+
+TEST(ContainsOversizedSequenceTest, IgnoresScalarsAndSmallSequences) {
+  EXPECT_FALSE(containsOversizedSequence(YAML::Node{}));
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load("42")));
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load("[1, 2, 3]")));
+}
+
+TEST(ContainsOversizedSequenceTest, DetectsTopLevelOversizedSequence) {
+  const auto payload = buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U);
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, AcceptsSequenceAtMaximumLength) {
+  const auto payload = buildIntegerSequencePayload(kMaxResizableSequenceLength);
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, DetectsNestedOversizedSequenceInMap) {
+  const auto payload = "{data: " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}";
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, DetectsNestedOversizedSequenceInSequence) {
+  const auto payload = "[[] , " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "]";
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(LoadPayloadTest, RejectsEmptyPayload) {
+  std::string error;
+  const auto root = loadPayload("", error);
+  EXPECT_FALSE(root.has_value());
+  EXPECT_EQ(error, "payload must be non-empty");
+}
+
+TEST(LoadPayloadTest, RejectsOversizedPayload) {
+  const std::string payload(kMaxYamlPayloadBytes + 1U, 'a');
+  std::string error;
+  const auto root = loadPayload(payload, error);
+  EXPECT_FALSE(root.has_value());
+  EXPECT_EQ(error, "payload exceeds maximum size of " + std::to_string(kMaxYamlPayloadBytes) + " bytes");
+}
+
+TEST(LoadPayloadTest, RejectsMalformedYaml) {
+  std::string error;
+  const auto root = loadPayload("{data: [", error);
+  EXPECT_FALSE(root.has_value());
+  EXPECT_NE(error.find("payload is not valid YAML:"), std::string::npos);
+}
+
+TEST(LoadPayloadTest, RejectsOversizedSequence) {
+  const auto payload = "{data: " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}";
+  std::string error;
+  const auto root = loadPayload(payload, error);
+  EXPECT_FALSE(root.has_value());
+  EXPECT_EQ(error,
+            "payload contains a sequence exceeding maximum length " + std::to_string(kMaxResizableSequenceLength));
+}
+
+TEST(LoadPayloadTest, ParsesValidPayload) {
+  std::string error;
+  const auto root = loadPayload("{data: hello}", error);
+  ASSERT_TRUE(root.has_value());
+  EXPECT_TRUE(error.empty());
+  EXPECT_EQ((*root)["data"].as<std::string>(), "hello");
+}
+
+TEST(MessageTypeStringTest, ConvertsCppNamespaceSeparators) {
+  rosidl_typesupport_introspection_cpp::MessageMembers members{};
+  members.message_namespace_ = "std_msgs::msg";
+  members.message_name_ = "String";
+
+  const auto type = messageTypeString(members);
+  ASSERT_TRUE(type.has_value());
+  EXPECT_EQ(*type, "std_msgs/msg/String");
+}
+
+TEST(MessageTypeStringTest, RejectsMissingMetadata) {
+  rosidl_typesupport_introspection_cpp::MessageMembers members{};
+
+  EXPECT_FALSE(messageTypeString(members).has_value());
+
+  members.message_namespace_ = "std_msgs::msg";
+  EXPECT_FALSE(messageTypeString(members).has_value());
+
+  members.message_namespace_ = nullptr;
+  members.message_name_ = "String";
+  EXPECT_FALSE(messageTypeString(members).has_value());
 }
 
 } // namespace

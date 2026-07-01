@@ -196,6 +196,9 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   } catch (const std::exception &error) {
     RCLCPP_ERROR(logger_, "Failed to create forwarded service '%s' [%s]: %s", route.service.c_str(),
                  route.msg_type.c_str(), error.what());
+  } catch (...) {
+    RCLCPP_ERROR(logger_, "Failed to create forwarded service '%s' [%s]: %s", route.service.c_str(),
+                 route.msg_type.c_str(), "unknown exception");
   }
 }
 

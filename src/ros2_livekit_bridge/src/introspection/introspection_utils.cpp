@@ -29,7 +29,6 @@
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::introspection {
-namespace {
 
 bool containsOversizedSequence(const YAML::Node &node) {
   if (node.IsSequence()) {
@@ -78,13 +77,11 @@ std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &e
   }
 }
 
-} // namespace
-
-std::string messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members) {
+std::optional<std::string> messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members) {
   std::string message_namespace = members.message_namespace_ == nullptr ? "" : members.message_namespace_;
   const std::string message_name = members.message_name_ == nullptr ? "" : members.message_name_;
   if (message_namespace.empty() || message_name.empty()) {
-    throw std::runtime_error("message introspection metadata is missing namespace or name");
+    return std::nullopt;
   }
 
   std::size_t position = 0U;
@@ -105,7 +102,11 @@ std::string toYaml(const std::string &msg_type, const void *message) {
 }
 
 std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers &members, const void *message) {
-  return toYaml(messageTypeString(members), message);
+  const auto msg_type = messageTypeString(members);
+  if (!msg_type.has_value()) {
+    throw std::runtime_error("message introspection metadata is missing namespace or name");
+  }
+  return toYaml(*msg_type, message);
 }
 
 std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string &msg_type,

@@ -19,6 +19,7 @@
 #pragma once
 
 #include <rosidl_runtime_c/message_type_support_struct.h>
+#include <yaml-cpp/yaml.h>
 
 #include <optional>
 #include <rclcpp/serialized_message.hpp>
@@ -43,10 +44,22 @@ inline const rosidl_typesupport_introspection_cpp::MessageMembers *membersFromHa
   return static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers *>(handle->data);
 }
 
+/// @brief Returns true when @p node or any nested map value contains a sequence longer than
+///   ros2_cli::kMaxResizableSequenceLength.
+/// @param node Parsed YAML node to inspect.
+bool containsOversizedSequence(const YAML::Node &node);
+
+/// @brief Parse and validate a YAML payload.
+/// @param payload YAML source string.
+/// @param error Set to a human-readable description when parsing or validation fails.
+/// @return Parsed YAML root node, or `std::nullopt` on failure.
+std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &error);
+
 /// @brief Build a ROS interface type string from message introspection metadata.
 /// @param members Introspection metadata for the message type.
-/// @return ROS interface type, such as `std_msgs/msg/String`.
-std::string messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members);
+/// @return ROS interface type, such as `std_msgs/msg/String`, or `std::nullopt`
+///   when namespace or name metadata is missing.
+std::optional<std::string> messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members);
 
 /// @brief Format a runtime message as YAML.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Response`.

@@ -17,15 +17,15 @@
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 
 #include <rcl/service.h>
-#include <rclcpp/exceptions.hpp>
-#include <rclcpp/expand_topic_or_service_name.hpp>
-#include <rclcpp/qos.hpp>
-#include <rosidl_runtime_cpp/message_initialization.hpp>
 
 #include <algorithm>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <rclcpp/exceptions.hpp>
+#include <rclcpp/expand_topic_or_service_name.hpp>
+#include <rclcpp/qos.hpp>
+#include <rosidl_runtime_cpp/message_initialization.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -114,8 +114,8 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
 
     const rcl_ret_t ret = rcl_send_response(get_service_handle().get(), request_header.get(), response.data());
     if (ret == RCL_RET_TIMEOUT) {
-      RCLCPP_WARN(node_logger_.get_child("rclcpp"), "failed to send response to %s (timeout): %s",
-                  get_service_name(), rcl_get_error_string().str);
+      RCLCPP_WARN(node_logger_.get_child("rclcpp"), "failed to send response to %s (timeout): %s", get_service_name(),
+                  rcl_get_error_string().str);
       rcl_reset_error();
       return;
     }
@@ -218,9 +218,8 @@ void ServiceForwarder::forwardRequest(const ServiceRoute &route, const ros2_cli:
   request.timeout_sec = service_timeout_sec;
   const auto payload = serviceCallRequestToJson(request, service_timeout_sec);
 
-  const auto rpc_response =
-      livekit_methods_.perform_rpc(route.participant, ros2_cli::kServiceCallRpcMethod, payload,
-                                   serviceCallRpcTimeout(service_timeout_sec));
+  const auto rpc_response = livekit_methods_.perform_rpc(route.participant, ros2_cli::kServiceCallRpcMethod, payload,
+                                                         serviceCallRpcTimeout(service_timeout_sec));
   if (!rpc_response) {
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' to participant '%s' failed while forwarding service '%s'",
                  ros2_cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str());

@@ -47,8 +47,11 @@ All config lives under `ros2_livekit_bridge`.
 | `service` | string | yes | ROS service name. Must be non-empty. |
 | `direction` | string | yes | `in` or `out`. |
 | `participant` | string | yes | LiveKit participant identity. Must be non-empty. |
+| `msg_type` | string | yes | ROS service type, such as `std_srvs/srv/SetBool`. Must be non-empty. |
 
-Service direction does not accept `bidirectional`.
+Service direction does not accept `bidirectional`. For service forwarding,
+`direction: "out"` creates a local ROS service server that forwards calls to
+the configured LiveKit participant using `msg_type`.
 
 ## Topics
 

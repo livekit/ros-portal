@@ -102,9 +102,9 @@ private:
                       const void *request_data, void *response_data) const;
 
   NodeInterfaces node_interfaces_;
-  LiveKitMethods livekit_methods_;
   rclcpp::Logger logger_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
+  LiveKitMethods livekit_methods_;
 };
 
 } // namespace ros2_livekit_bridge

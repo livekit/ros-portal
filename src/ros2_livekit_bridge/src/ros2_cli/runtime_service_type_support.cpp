@@ -16,12 +16,11 @@
 
 #include "ros2_livekit_bridge/ros2_cli/runtime_service_type_support.hpp"
 
+#include <exception>
+#include <rclcpp/typesupport_helpers.hpp>
 #include <rosidl_typesupport_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
-
-#include <exception>
-#include <rclcpp/typesupport_helpers.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -62,8 +61,8 @@ RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string &type)
     : serialization_library(rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier)),
       introspection_library(
           rclcpp::get_typesupport_library(type, rosidl_typesupport_introspection_cpp::typesupport_identifier)),
-      serialization_handle(rclcpp::get_message_typesupport_handle(
-          type, rosidl_typesupport_cpp::typesupport_identifier, *serialization_library)),
+      serialization_handle(rclcpp::get_message_typesupport_handle(type, rosidl_typesupport_cpp::typesupport_identifier,
+                                                                  *serialization_library)),
       introspection_handle(rclcpp::get_message_typesupport_handle(
           type, rosidl_typesupport_introspection_cpp::typesupport_identifier, *introspection_library)),
       members(requireMembers(introspection_handle)),
@@ -95,8 +94,7 @@ std::shared_ptr<RuntimeServiceTypeSupport> RuntimeServiceTypeSupport::create(con
               serviceTypeSupportSymbol(type, rosidl_typesupport_cpp::typesupport_identifier);
       return nullptr;
     }
-    return std::shared_ptr<RuntimeServiceTypeSupport>(
-        new RuntimeServiceTypeSupport(type, std::move(library), handle));
+    return std::shared_ptr<RuntimeServiceTypeSupport>(new RuntimeServiceTypeSupport(type, std::move(library), handle));
   } catch (const std::exception &exception) {
     error = exception.what();
     return nullptr;

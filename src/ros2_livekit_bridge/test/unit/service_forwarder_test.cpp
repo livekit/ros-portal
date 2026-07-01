@@ -82,8 +82,8 @@ struct FakeLiveKit {
   ServiceForwarder::LiveKitMethods methods() {
     ServiceForwarder::LiveKitMethods methods;
     methods.has_participant = [this](const std::string &) { return has_participant; };
-    methods.perform_rpc = [this](const std::string &participant, const std::string &method,
-                                 const std::string &payload, std::uint8_t) -> std::optional<std::string> {
+    methods.perform_rpc = [this](const std::string &participant, const std::string &method, const std::string &payload,
+                                 std::uint8_t) -> std::optional<std::string> {
       ++rpc_calls;
       last_participant = participant;
       last_method = method;

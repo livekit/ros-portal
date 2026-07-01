@@ -196,13 +196,13 @@ ament_auto_add_library(ros2_cli_lib SHARED
   src/introspection/message_render.cpp  # if introspection ever grows, break out to separate library
   src/ros2_cli/ros2_interface_show.cpp
   src/ros2_cli/json_converters.cpp
-  src/ros2_cli/runtime_type_support.cpp
+  src/introspection/runtime_type_support.cpp
   src/ros2_cli/ros2_service_call.cpp
   src/ros2_cli/ros2_service_list.cpp
   src/ros2_cli/ros2_topic_list.cpp
   src/ros2_cli/ros2_topic_pub.cpp
   src/ros2_cli/utils.cpp
-  src/ros2_cli/yaml_message_converter.cpp
+  src/introspection/yaml_message_converter.cpp
   src/ros2_cli_manager.cpp
 )
 target_link_libraries(ros2_cli_lib

@@ -40,8 +40,8 @@
 #include "ros2_livekit_bridge/introspection/message_render.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
-#include "ros2_livekit_bridge/ros2_cli/runtime_type_support.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
+#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
 

@@ -24,7 +24,7 @@
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
 

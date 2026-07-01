@@ -30,9 +30,8 @@
 #include <utility>
 
 #include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
-#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
@@ -185,11 +184,11 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   }
 
   try {
-    auto service = std::make_shared<DynamicService>(
-        node_interfaces_.node_base->get_shared_rcl_node_handle(), route.service, support,
-        [this, route, support](const void *request_data, void *response_data) {
-          forwardRequest(route, *support, request_data, response_data);
-        });
+    auto service =
+        std::make_shared<DynamicService>(node_interfaces_.node_base->get_shared_rcl_node_handle(), route.service,
+                                         support, [this, route](const void *request_data, void *response_data) {
+                                           forwardRequest(route, request_data, response_data);
+                                         });
     node_interfaces_.node_services->add_service(service, callback_group);
     services_.push_back(std::move(service));
     RCLCPP_INFO(logger_, "Created forwarded service '%s' [%s] to LiveKit participant '%s'", route.service.c_str(),
@@ -200,16 +199,14 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   }
 }
 
-void ServiceForwarder::forwardRequest(const ServiceRoute &route,
-                                      const introspection::RuntimeServiceTypeSupport &support, const void *request_data,
-                                      void *response_data) const {
+void ServiceForwarder::forwardRequest(const ServiceRoute &route, const void *request_data, void *response_data) const {
   if (!livekit_methods_.has_participant(route.participant)) {
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
                  route.participant.c_str());
     return;
   }
 
-  const auto request_yaml = introspection::toYaml(support.request.members, request_data);
+  const auto request_yaml = introspection::toYaml(route.msg_type + "_Request", request_data);
   const auto service_timeout_sec = ros2_cli::kDefaultTimeoutSec;
 
   ros2_cli::Ros2ServiceCallSrv::Request request;
@@ -243,19 +240,11 @@ void ServiceForwarder::forwardRequest(const ServiceRoute &route,
   }
 
   std::string yaml_error;
-  const auto serialized_response =
-      introspection::serializedMessageFromYaml(route.msg_type + "_Response", response->output, yaml_error);
-  if (!serialized_response) {
+  if (!introspection::populateMessageFromYaml(route.msg_type + "_Response", response->output, response_data,
+                                              yaml_error)) {
     RCLCPP_ERROR(logger_, "Failed to parse remote response for service '%s' [%s]: %s", route.service.c_str(),
                  route.msg_type.c_str(), yaml_error.c_str());
     return;
-  }
-
-  try {
-    support.response.serializer.deserialize_message(&serialized_response.value(), response_data);
-  } catch (const std::exception &error) {
-    RCLCPP_ERROR(logger_, "Failed to deserialize remote response for service '%s' [%s]: %s", route.service.c_str(),
-                 route.msg_type.c_str(), error.what());
   }
 }
 

@@ -111,18 +111,6 @@ private:
                                                                        const std::string &typesupport_identifier,
                                                                        rcpputils::SharedLibrary &library);
 
-  /// @brief Runtime type-support data for one ROS message type.
-  ///
-  /// Defined in the translation unit; forward-declared here because it is an
-  /// implementation detail of the service-call command.
-  struct MessageTypeSupport;
-
-  /// @brief Runtime type-support data for one ROS service type.
-  ///
-  /// Defined in the translation unit; forward-declared here because it is an
-  /// implementation detail of the service-call command.
-  struct ServiceTypeSupport;
-
   /// @brief Runtime service client for an arbitrary service type.
   ///
   /// Defined in the translation unit; forward-declared here because it is an

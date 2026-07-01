@@ -196,6 +196,7 @@ ament_auto_add_library(ros2_cli_lib SHARED
   src/introspection/message_render.cpp  # if introspection ever grows, break out to separate library
   src/ros2_cli/ros2_interface_show.cpp
   src/ros2_cli/json_converters.cpp
+  src/ros2_cli/runtime_service_type_support.cpp
   src/ros2_cli/ros2_service_call.cpp
   src/ros2_cli/ros2_service_list.cpp
   src/ros2_cli/ros2_topic_list.cpp
@@ -218,6 +219,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/ros2_livekit_bridge.cpp
+  src/service_forwarder.cpp
   src/topic_forwarder.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp

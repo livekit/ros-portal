@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/generic_service_client.hpp"
+#include "ros2_livekit_bridge/service_forwarding/generic_service_client.hpp"
 
 #include <rcl/client.h>
 #include <rcl/error_handling.h>
@@ -96,8 +96,7 @@ struct GenericServiceClient::Client : public rclcpp::ClientBase {
   std::mutex call_mutex;
 };
 
-GenericServiceClient::GenericServiceClient(const std::string &service_name,
-                                           std::shared_ptr<ServiceTypeSupport> support,
+GenericServiceClient::GenericServiceClient(const std::string &service_name, std::shared_ptr<ServiceTypeSupport> support,
                                            rclcpp::node_interfaces::NodeBaseInterface *node_base,
                                            rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph,
                                            rclcpp::Logger logger)
@@ -156,7 +155,8 @@ std::optional<std::vector<std::uint8_t>> GenericServiceClient::call(const std::v
 std::optional<std::vector<std::uint8_t>> GenericServiceClient::takeResponse(std::int64_t sequence_number) {
   std::uint8_t attempt_count = 0;
   while (attempt_count < kMaxStaleResponseDrains) {
-    ros2_cli::DynamicMessage response_message(support_->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+    ros2_cli::DynamicMessage response_message(support_->response.members,
+                                              rosidl_runtime_cpp::MessageInitialization::ZERO);
     rmw_request_id_t header{};
     if (!client_->take_type_erased_response(response_message.data(), header)) {
       return std::nullopt;

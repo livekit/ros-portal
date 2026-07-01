@@ -18,32 +18,12 @@
 
 #include <cctype>
 #include <cstdlib>
-#include <cstring>
 #include <exception>
 #include <rclcpp/rclcpp.hpp>
 
 namespace ros2_livekit_bridge::utils {
 
 namespace bridge_config = ::ros2_livekit_bridge_config;
-
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
-                                                      std::size_t rgba_size) {
-  if (width <= 0 || height <= 0) {
-    return std::nullopt;
-  }
-
-  const std::size_t expected_size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
-  if (rgba_size != expected_size) {
-    return std::nullopt;
-  }
-  if (rgba == nullptr) {
-    return std::nullopt;
-  }
-
-  auto frame = livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
-  std::memcpy(frame.data(), rgba, rgba_size);
-  return frame;
-}
 
 std::string resolveEnvironmentCredential(const std::string& env_var_name, std::string& source) {
   const char* env_val = std::getenv(env_var_name.c_str());
@@ -149,32 +129,5 @@ std::vector<std::string> incomingTopicPatterns(const bridge_config::BridgeConfig
   }
 
   return patterns;
-}
-
-std::vector<ServiceForwarder::ServiceForwarderEntry> serviceForwarderEntries(
-    const bridge_config::BridgeConfig& config) {
-  std::vector<ServiceForwarder::ServiceForwarderEntry> entries;
-  entries.reserve(config.services.size());
-
-  for (const auto& service_config : config.services) {
-    ServiceForwarder::ServiceForwarderEntry entry;
-    entry.service = service_config.service;
-    entry.msg_type = service_config.msg_type;
-    entry.participant = service_config.participant;
-    switch (service_config.direction) {
-      case bridge_config::ServiceDirection::In:
-        entry.direction = ServiceForwarder::Direction::In;
-        break;
-      case bridge_config::ServiceDirection::Out:
-        entry.direction = ServiceForwarder::Direction::Out;
-        break;
-      case bridge_config::ServiceDirection::Bidirectional:
-        entry.direction = ServiceForwarder::Direction::Bidirectional;
-        break;
-    }
-    entries.push_back(std::move(entry));
-  }
-
-  return entries;
 }
 } // namespace ros2_livekit_bridge::utils

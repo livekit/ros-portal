@@ -32,7 +32,7 @@
 
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
-#include "ros2_livekit_bridge/service_forwarder.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 
@@ -157,7 +157,7 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  if (!initializeServiceForwarder(utils::serviceForwarderEntries(*config))) {
+  if (!initializeServiceForwarder(ServiceForwarder::entriesFromConfig(*config))) {
     return false;
   }
 

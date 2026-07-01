@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/generic_service_client.hpp"
+#include "ros2_livekit_bridge/service_forwarding/generic_service_client.hpp"
 
 #include <gtest/gtest.h>
 

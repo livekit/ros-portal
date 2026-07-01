@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-#include "ros2_livekit_bridge/service_forwarder.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_forwarder.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
 namespace ros2_livekit_bridge {

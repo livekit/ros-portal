@@ -20,6 +20,25 @@
 
 namespace ros2_livekit_bridge::utils {
 
+std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
+                                                      std::size_t rgba_size) {
+  if (width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+
+  const std::size_t expected_size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
+  if (rgba_size != expected_size) {
+    return std::nullopt;
+  }
+  if (rgba == nullptr) {
+    return std::nullopt;
+  }
+
+  auto frame = livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
+  std::memcpy(frame.data(), rgba, rgba_size);
+  return frame;
+}
+
 bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_t>& out) {
   const std::size_t num_pixels = static_cast<std::size_t>(image.width) * image.height;
   out.resize(num_pixels * 4);

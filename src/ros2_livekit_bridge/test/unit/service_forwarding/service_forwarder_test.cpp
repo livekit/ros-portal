@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/service_forwarder.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_forwarder.hpp"
 
 #include <gtest/gtest.h>
 
@@ -38,7 +38,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "ros2_livekit_bridge/service_rpc_codec.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_rpc_codec.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
 namespace ros2_livekit_bridge {

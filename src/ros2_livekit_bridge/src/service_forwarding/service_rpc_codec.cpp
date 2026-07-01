@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/service_rpc_codec.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_rpc_codec.hpp"
 
 #include <exception>
 #include <nlohmann/json.hpp>

@@ -31,6 +31,10 @@
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
+namespace ros2_livekit_bridge_config {
+struct BridgeConfig;
+} // namespace ros2_livekit_bridge_config
+
 namespace ros2_livekit_bridge {
 
 class GenericService;
@@ -117,6 +121,12 @@ public:
   /// @param service_timeout_sec Service-call timeout in seconds.
   /// @return LiveKit RPC timeout in seconds.
   static std::uint8_t rpcTimeout(std::uint8_t service_timeout_sec);
+
+  /// @brief Map configured services into ServiceForwarder entries.
+  /// @param config Parsed bridge configuration.
+  /// @return One entry per configured service, with the config direction mapped
+  ///   to @ref Direction.
+  static std::vector<ServiceForwarderEntry> entriesFromConfig(const ros2_livekit_bridge_config::BridgeConfig &config);
 
 private:
   /// @brief Per-service outbound state; defined in the translation unit.

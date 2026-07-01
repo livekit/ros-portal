@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/generic_service.hpp"
+#include "ros2_livekit_bridge/service_forwarding/generic_service.hpp"
 
 #include <rcl/error_handling.h>
 #include <rcl/service.h>
@@ -114,7 +114,8 @@ void GenericService::handle_request(std::shared_ptr<rmw_request_id_t> request_he
   }
 
   // 3) Deserialize the CDR response back into a typed response message.
-  ros2_cli::DynamicMessage response_message(support_->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+  ros2_cli::DynamicMessage response_message(support_->response.members,
+                                            rosidl_runtime_cpp::MessageInitialization::ZERO);
   rclcpp::SerializedMessage serialized_response(response_cdr->size());
   auto &rcl_response = serialized_response.get_rcl_serialized_message();
   if (!response_cdr->empty()) {

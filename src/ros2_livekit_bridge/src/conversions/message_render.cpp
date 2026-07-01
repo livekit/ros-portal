@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
+#include "ros2_livekit_bridge/conversions/message_render.hpp"
 
 #include <algorithm>
 #include <cctype>

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/conversions/yaml_message_converter.hpp"
 
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>

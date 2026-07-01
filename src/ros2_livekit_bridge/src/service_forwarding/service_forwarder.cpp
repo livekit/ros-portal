@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/service_forwarder.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_forwarder.hpp"
 
 #include <algorithm>
 #include <array>
@@ -32,11 +32,12 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/generic_service.hpp"
-#include "ros2_livekit_bridge/generic_service_client.hpp"
+#include "ros2_livekit_bridge/service_forwarding/generic_service.hpp"
+#include "ros2_livekit_bridge/service_forwarding/generic_service_client.hpp"
+#include "ros2_livekit_bridge/service_forwarding/service_rpc_codec.hpp"
 #include "ros2_livekit_bridge/service_type_support.hpp"
-#include "ros2_livekit_bridge/service_rpc_codec.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 namespace ros2_livekit_bridge {
 
@@ -162,6 +163,35 @@ std::string ServiceForwarder::rpcMethodName(const std::string &service) {
 std::uint8_t ServiceForwarder::rpcTimeout(std::uint8_t service_timeout_sec) {
   const unsigned total = static_cast<unsigned>(service_timeout_sec) + ros2_cli::kServiceCallRpcTimeoutMarginSec;
   return static_cast<std::uint8_t>(std::min(total, 255U));
+}
+
+std::vector<ServiceForwarder::ServiceForwarderEntry> ServiceForwarder::entriesFromConfig(
+    const ros2_livekit_bridge_config::BridgeConfig &config) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  std::vector<ServiceForwarderEntry> entries;
+  entries.reserve(config.services.size());
+
+  for (const auto &service_config : config.services) {
+    ServiceForwarderEntry entry;
+    entry.service = service_config.service;
+    entry.msg_type = service_config.msg_type;
+    entry.participant = service_config.participant;
+    switch (service_config.direction) {
+      case bridge_config::ServiceDirection::In:
+        entry.direction = Direction::In;
+        break;
+      case bridge_config::ServiceDirection::Out:
+        entry.direction = Direction::Out;
+        break;
+      case bridge_config::ServiceDirection::Bidirectional:
+        entry.direction = Direction::Bidirectional;
+        break;
+    }
+    entries.push_back(std::move(entry));
+  }
+
+  return entries;
 }
 
 void ServiceForwarder::setupOutbound(rclcpp::Node &node, const ServiceForwarderEntry &entry) {

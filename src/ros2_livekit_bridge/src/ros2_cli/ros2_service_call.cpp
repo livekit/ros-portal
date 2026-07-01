@@ -34,11 +34,11 @@
 #include <thread>
 #include <utility>
 
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
+#include "ros2_livekit_bridge/conversions/message_render.hpp"
+#include "ros2_livekit_bridge/conversions/yaml_message_converter.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
 #include "ros2_livekit_bridge/service_type_support.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
 

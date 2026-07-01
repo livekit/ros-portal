@@ -1,8 +1,8 @@
 # ServiceForwarder: ROS 2 services ↔ LiveKit RPC
 
 `ServiceForwarder`
-([include/ros2_livekit_bridge/service_forwarder.hpp](../include/ros2_livekit_bridge/service_forwarder.hpp),
-[src/service_forwarder.cpp](../src/service_forwarder.cpp))
+([include/ros2_livekit_bridge/service_forwarding/service_forwarder.hpp](../include/ros2_livekit_bridge/service_forwarding/service_forwarder.hpp),
+[src/service_forwarding/service_forwarder.cpp](../src/service_forwarding/service_forwarder.cpp))
 bridges the ROS 2 **request/response** world to LiveKit **RPC**, in both
 directions. It is the service analogue of `TopicForwarder` (which bridges
 ROS topics ↔ LiveKit data/video tracks).
@@ -29,8 +29,8 @@ services:
     participant: "robot-a"                    # remote LiveKit identity
 ```
 
-`utils::serviceForwarderEntries()`
-([src/utils/ros_utils.cpp](../src/utils/ros_utils.cpp)) maps the parsed config
+`ServiceForwarder::entriesFromConfig()`
+([src/service_forwarding/service_forwarder.cpp](../src/service_forwarding/service_forwarder.cpp)) maps the parsed config
 into `ServiceForwarder::ServiceForwarderEntry` values, and
 `Ros2LiveKitBridge::initializeServiceForwarder()`
 ([src/ros2_livekit_bridge.cpp](../src/ros2_livekit_bridge.cpp)) constructs the
@@ -92,7 +92,7 @@ ROS typed message  <--(de)serialize-->  CDR bytes  <--base64-->  ASCII string  <
   Inflation is ~4/3, so the ~15 KiB payload cap leaves ~11 KiB of raw CDR.
 - **JSON envelope** — only the **response** is wrapped in JSON, so the out-side
   can tell a real result from a remote error. `service_rpc_codec`
-  ([include/ros2_livekit_bridge/service_rpc_codec.hpp](../include/ros2_livekit_bridge/service_rpc_codec.hpp)).
+  ([include/ros2_livekit_bridge/service_rpc_codec.hpp](../include/ros2_livekit_bridge/service_forwarding/service_rpc_codec.hpp)).
 
 ### What is on the wire
 
@@ -199,11 +199,11 @@ returns the JSON envelope string → SDK sends it as the RPC response
 
 | File | Namespace / symbol | Responsibility |
 |---|---|---|
-| [service_forwarder.hpp](../include/ros2_livekit_bridge/service_forwarder.hpp) / [.cpp](../src/service_forwarder.cpp) | `ros2_livekit_bridge::ServiceForwarder` | Orchestrates both directions; owns the per-service state maps and the reentrant callback group. |
-| [generic_service.hpp](../include/ros2_livekit_bridge/generic_service.hpp) / [.cpp](../src/generic_service.cpp) | `ros2_livekit_bridge::GenericService` | Type-erased ROS service **server** (Jazzy has no generic server). Subclasses `rclcpp::ServiceBase` + `rcl_service_init`. Callback contract: `std::optional<std::vector<uint8_t>>(std::vector<uint8_t> request_cdr)` — CDR in, CDR out, `nullopt` to drop. |
-| [generic_service_client.hpp](../include/ros2_livekit_bridge/generic_service_client.hpp) / [.cpp](../src/generic_service_client.cpp) | `ros2_livekit_bridge::GenericServiceClient` | Type-erased ROS service **client**, CDR in / CDR out. Poll-based (`take_type_erased_response`), so it is safe to call from a non-executor thread. |
+| [service_forwarder.hpp](../include/ros2_livekit_bridge/service_forwarding/service_forwarder.hpp) / [.cpp](../src/service_forwarding/service_forwarder.cpp) | `ros2_livekit_bridge::ServiceForwarder` | Orchestrates both directions; owns the per-service state maps and the reentrant callback group. |
+| [generic_service.hpp](../include/ros2_livekit_bridge/service_forwarding/generic_service.hpp) / [.cpp](../src/service_forwarding/generic_service.cpp) | `ros2_livekit_bridge::GenericService` | Type-erased ROS service **server** (Jazzy has no generic server). Subclasses `rclcpp::ServiceBase` + `rcl_service_init`. Callback contract: `std::optional<std::vector<uint8_t>>(std::vector<uint8_t> request_cdr)` — CDR in, CDR out, `nullopt` to drop. |
+| [generic_service_client.hpp](../include/ros2_livekit_bridge/service_forwarding/generic_service_client.hpp) / [.cpp](../src/service_forwarding/generic_service_client.cpp) | `ros2_livekit_bridge::GenericServiceClient` | Type-erased ROS service **client**, CDR in / CDR out. Poll-based (`take_type_erased_response`), so it is safe to call from a non-executor thread. |
 | [service_type_support.hpp](../include/ros2_livekit_bridge/service_type_support.hpp) / [.cpp](../src/service_type_support.cpp) | `ros2_livekit_bridge::ServiceTypeSupport`, `MessageTypeSupport` | Loads runtime type support (serialization + introspection) for a `pkg/srv/Type`. Shared with `Ros2ServiceCall`. |
-| [service_rpc_codec.hpp](../include/ros2_livekit_bridge/service_rpc_codec.hpp) / [.cpp](../src/service_rpc_codec.cpp) | `encodeServiceRequest` / `decodeServiceRequest` / `encodeServiceResponse` / `decodeServiceResponse` | base64 + JSON-envelope framing for the RPC payloads. Defines `kMaxRpcPayloadBytes` (15 KiB). |
+| [service_rpc_codec.hpp](../include/ros2_livekit_bridge/service_forwarding/service_rpc_codec.hpp) / [.cpp](../src/service_forwarding/service_rpc_codec.cpp) | `encodeServiceRequest` / `decodeServiceRequest` / `encodeServiceResponse` / `decodeServiceResponse` | base64 + JSON-envelope framing for the RPC payloads. Defines `kMaxRpcPayloadBytes` (15 KiB). |
 | [utils/base64.hpp](../include/ros2_livekit_bridge/utils/base64.hpp) / [.cpp](../src/utils/base64.cpp) | `ros2_livekit_bridge::utils::base64Encode` / `base64Decode` | Standard base64; decode validates length, alphabet, and padding. |
 
 The LiveKit boundary is the bridge's `LiveKitMethods` callbacks, wired in

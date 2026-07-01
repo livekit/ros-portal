@@ -17,22 +17,15 @@
 #ifndef ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_
 #define ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_
 
-#include <livekit/video_frame.h>
-
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <rclcpp/logger.hpp>
 
-#include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 namespace ros2_livekit_bridge::utils {
-
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
-                                                      std::size_t rgba_size);
 
 std::string resolveEnvironmentCredential(const std::string& env_var_name, std::string& source);
 
@@ -77,13 +70,6 @@ std::optional<ros2_livekit_bridge_config::BridgeConfig> parseBridgeConfig(const 
 std::vector<std::string> outgoingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
 
 std::vector<std::string> incomingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
-
-/// @brief Map configured services into ServiceForwarder entries.
-/// @param config Parsed bridge configuration.
-/// @return One entry per configured service, with the config direction mapped
-///   to ServiceForwarder::Direction.
-std::vector<ServiceForwarder::ServiceForwarderEntry> serviceForwarderEntries(
-    const ros2_livekit_bridge_config::BridgeConfig& config);
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

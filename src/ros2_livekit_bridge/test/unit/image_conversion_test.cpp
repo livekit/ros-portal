@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -97,6 +98,34 @@ TEST(ImageConversionTest, ReturnsFalseForUnsupportedEncoding) {
   std::vector<std::uint8_t> rgba;
 
   EXPECT_FALSE(convertToRgba(image, rgba));
+}
+
+TEST(ImageConversionTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer) {
+  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40, 50, 60, 70, 80};
+
+  auto frame = makeRgbaVideoFrame(2, 1, rgba.data(), rgba.size());
+
+  ASSERT_TRUE(frame.has_value());
+  EXPECT_EQ(std::memcmp(frame->data(), rgba.data(), rgba.size()), 0);
+}
+
+TEST(ImageConversionTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize) {
+  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40};
+
+  const auto frame = makeRgbaVideoFrame(2, 1, rgba.data(), rgba.size());
+
+  EXPECT_FALSE(frame.has_value());
+}
+
+TEST(ImageConversionTest, MakeRgbaVideoFrameReturnsEmptyForNonPositiveDimensions) {
+  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40};
+
+  EXPECT_FALSE(makeRgbaVideoFrame(0, 1, rgba.data(), rgba.size()).has_value());
+  EXPECT_FALSE(makeRgbaVideoFrame(1, -1, rgba.data(), rgba.size()).has_value());
+}
+
+TEST(ImageConversionTest, MakeRgbaVideoFrameReturnsEmptyForNullBuffer) {
+  EXPECT_FALSE(makeRgbaVideoFrame(1, 1, nullptr, 4).has_value());
 }
 
 } // namespace

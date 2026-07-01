@@ -23,7 +23,7 @@
 #include <rosidl_runtime_cpp/message_initialization.hpp>
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::introspection {
 
 /// @brief Owns one introspection-backed ROS message instance.
 class DynamicMessage {
@@ -84,4 +84,4 @@ private:
   StoragePtr data_;
 };
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::introspection

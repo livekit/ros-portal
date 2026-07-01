@@ -29,7 +29,7 @@
 #include <sstream>
 #include <string>
 
-namespace ros2_livekit_bridge::message_render {
+namespace ros2_livekit_bridge::introspection {
 
 /// @brief Introspection type-support namespace alias.
 namespace introspection = rosidl_typesupport_introspection_cpp;
@@ -72,12 +72,6 @@ void renderString(std::ostringstream &stream, const std::string &value);
 /// lossless and locale-independent. Surrogate pairs are decoded to a single
 /// code point.
 void renderWideString(std::ostringstream &stream, const std::u16string &value);
-
-/// @brief Return a pointer to a member inside a message buffer.
-/// @param message Pointer to the start of the message memory.
-/// @param member Introspection metadata describing the member offset.
-/// @return Pointer to @p member inside @p message.
-const void *memberMemory(const void *message, const introspection::MessageMember &member);
 
 /// @brief Return whether a member renders as a nested message block.
 /// @param member Introspection metadata for the field.
@@ -138,4 +132,4 @@ void renderField(std::ostringstream &stream, const introspection::MessageMember 
 /// @return CLI-style YAML rendering of @p message.
 std::string toYaml(const introspection::MessageMembers &members, const void *message);
 
-} // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::introspection

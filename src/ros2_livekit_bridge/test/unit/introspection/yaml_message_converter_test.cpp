@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
@@ -25,6 +25,10 @@
 #include <nav_msgs/msg/path.hpp>
 #include <optional>
 #include <rclcpp/serialization.hpp>
+#include <rclcpp/typesupport_helpers.hpp>
+#include <rcpputils/shared_library.hpp>
+#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
+#include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/byte.hpp>
@@ -36,10 +40,12 @@
 #include <std_msgs/msg/u_int64.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
 #include <string>
+#include <test_msgs/msg/basic_types.hpp>
 #include <test_msgs/msg/bounded_sequences.hpp>
 #include <test_msgs/msg/strings.hpp>
 #include <test_msgs/msg/w_strings.hpp>
 
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge {
@@ -57,7 +63,7 @@ MessageT deserialize(const rclcpp::SerializedMessage& serialized) {
 // error string on failure so the test name plus message pinpoints the cause.
 rclcpp::SerializedMessage serialize(const std::string& msg_type, const std::string& payload) {
   std::string error;
-  auto serialized = ros2_cli::serializedMessageFromYaml(msg_type, payload, error);
+  auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
   EXPECT_TRUE(serialized.has_value()) << error;
   return serialized.value_or(rclcpp::SerializedMessage{});
 }
@@ -65,7 +71,7 @@ rclcpp::SerializedMessage serialize(const std::string& msg_type, const std::stri
 // Asserts conversion fails and reports a non-empty diagnostic message.
 void expectFailure(const std::string& msg_type, const std::string& payload) {
   std::string error;
-  const auto serialized = ros2_cli::serializedMessageFromYaml(msg_type, payload, error);
+  const auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
   EXPECT_FALSE(serialized.has_value());
   EXPECT_FALSE(error.empty());
 }
@@ -239,18 +245,44 @@ TEST(YamlMessageTest, RejectsOversizedResizableSequence) {
 
 TEST(YamlMessageTest, RejectsUnknownInterfaceType) { expectFailure("missing_msgs/msg/Nope", "{data: hello}"); }
 
+// The mutable memberMemory overload must resolve to the same address as the
+// concrete field so the converter can write parsed values back into storage.
+TEST(YamlMessageTest, MutableMemberMemoryPointsAtField) {
+  namespace ts_introspection = rosidl_typesupport_introspection_cpp;
+  auto library = rclcpp::get_typesupport_library("test_msgs/msg/BasicTypes", ts_introspection::typesupport_identifier);
+  const auto* handle = rclcpp::get_message_typesupport_handle("test_msgs/msg/BasicTypes",
+                                                              ts_introspection::typesupport_identifier, *library);
+  const auto* members = static_cast<const ts_introspection::MessageMembers*>(handle->data);
+
+  const ts_introspection::MessageMember* target = nullptr;
+  for (std::uint32_t index = 0; index < members->member_count_; ++index) {
+    if (std::string("int32_value") == members->members_[index].name_) {
+      target = &members->members_[index];
+      break;
+    }
+  }
+  ASSERT_NE(target, nullptr);
+
+  test_msgs::msg::BasicTypes message;
+  void* field = introspection::memberMemory(static_cast<void*>(&message), *target);
+
+  EXPECT_EQ(field, static_cast<void*>(&message.int32_value));
+  *static_cast<std::int32_t*>(field) = 321;
+  EXPECT_EQ(message.int32_value, 321);
+}
+
 // ---------------------------------------------------------------------------
-// Direct coverage of the leaf scalar converters in ros2_cli::detail. These hold
+// Direct coverage of the leaf scalar converters in introspection::detail. These hold
 // the value-level parsing and range-checking logic and are unit tested against
 // raw YAML nodes, independent of ROS type introspection.
 // ---------------------------------------------------------------------------
 
-using ros2_cli::detail::checkedChar;
-using ros2_cli::detail::checkedFloat;
-using ros2_cli::detail::checkedInteger;
-using ros2_cli::detail::checkedString;
-using ros2_cli::detail::checkedU16String;
-using ros2_cli::detail::checkedWChar;
+using introspection::detail::checkedChar;
+using introspection::detail::checkedFloat;
+using introspection::detail::checkedInteger;
+using introspection::detail::checkedString;
+using introspection::detail::checkedU16String;
+using introspection::detail::checkedWChar;
 
 YAML::Node node(const std::string& text) { return YAML::Load(text); }
 

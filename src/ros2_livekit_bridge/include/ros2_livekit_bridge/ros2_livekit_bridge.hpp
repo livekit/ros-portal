@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
 namespace ros2_livekit_bridge {
@@ -138,6 +139,11 @@ private:
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
   bool initializeRos2CliManager();
 
+  /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
+  /// @param routes Outgoing service routes derived from bridge config.
+  /// @return True on success, false when the service forwarder could not be initialized.
+  bool initializeServiceForwarder(std::vector<ServiceForwarder::ServiceRoute> routes);
+
   //! @brief The name of the room
   std::string room_name_;
   //! @brief The period for polling the topics
@@ -165,6 +171,8 @@ private:
   std::unique_ptr<TopicForwarder> topic_forwarder_;
   //! @brief ROS CLI service/RPC manager for remote graph introspection.
   std::unique_ptr<Ros2CliManager> ros2_cli_manager_;
+  //! @brief ROS service forwarding component for local proxy services.
+  std::unique_ptr<ServiceForwarder> service_forwarder_;
   //! @brief LiveKit connection health diagnostics publisher.
   std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.

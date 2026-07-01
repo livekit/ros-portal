@@ -19,10 +19,6 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <memory>
-#include <rclcpp/typesupport_helpers.hpp>
-#include <rcpputils/shared_library.hpp>
-#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <sstream>
 #include <std_msgs/msg/int32_multi_array.hpp>
@@ -34,29 +30,18 @@
 #include <test_msgs/msg/nested.hpp>
 #include <test_msgs/msg/strings.hpp>
 
-namespace ros2_livekit_bridge::message_render {
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
+
+namespace ros2_livekit_bridge::introspection {
 namespace {
 
-/// @brief Loaded introspection type support kept alive for the test scope.
+/// @brief Load runtime type support for a message type identifier.
 ///
-/// The MessageMembers metadata points into @ref library, so the library must
-/// outlive any rendering call that consumes @ref members.
-struct LoadedIntrospection {
-  /// @brief Library owning the introspection type-support handle.
-  std::shared_ptr<rcpputils::SharedLibrary> library;
-  /// @brief Message member metadata for the loaded type.
-  const introspection::MessageMembers *members{nullptr};
-};
-
-/// @brief Load introspection members for a message type identifier.
-LoadedIntrospection loadIntrospection(const std::string &type) {
-  LoadedIntrospection loaded;
-  loaded.library = rclcpp::get_typesupport_library(type, introspection::typesupport_identifier);
-  const auto *handle =
-      rclcpp::get_message_typesupport_handle(type, introspection::typesupport_identifier, *loaded.library);
-  loaded.members = static_cast<const introspection::MessageMembers *>(handle->data);
-  return loaded;
-}
+/// Reuses the production loader so the introspection library is kept alive for
+/// the returned value's scope and @ref RuntimeMessageTypeSupport::members points
+/// into it.
+RuntimeMessageTypeSupport loadIntrospection(const std::string &type) { return RuntimeMessageTypeSupport(type); }
 
 /// @brief Find a member by name within introspection metadata.
 const introspection::MessageMember *memberByName(const introspection::MessageMembers &members,
@@ -139,7 +124,7 @@ TEST(MessageRenderTest, MemberMemoryPointsAtField) {
   test_msgs::msg::BasicTypes message;
   message.int32_value = 123;
 
-  const auto *member = memberByName(*loaded.members, "int32_value");
+  const auto *member = memberByName(loaded.members, "int32_value");
   const void *field = memberMemory(&message, *member);
 
   EXPECT_EQ(field, static_cast<const void *>(&message.int32_value));
@@ -150,8 +135,18 @@ TEST(MessageRenderTest, DetectsNestedMessageBlocks) {
   const auto nested_loaded = loadIntrospection("test_msgs/msg/Nested");
   const auto basic_loaded = loadIntrospection("test_msgs/msg/BasicTypes");
 
-  EXPECT_TRUE(isNestedMessageBlock(*memberByName(*nested_loaded.members, "basic_types_value")));
-  EXPECT_FALSE(isNestedMessageBlock(*memberByName(*basic_loaded.members, "int32_value")));
+  EXPECT_TRUE(isNestedMessageBlock(*memberByName(nested_loaded.members, "basic_types_value")));
+  EXPECT_FALSE(isNestedMessageBlock(*memberByName(basic_loaded.members, "int32_value")));
+}
+
+TEST(MessageRenderTest, NestedMembersReturnsMetadataOrNull) {
+  const auto nested_loaded = loadIntrospection("test_msgs/msg/Nested");
+
+  EXPECT_NE(nestedMembers(*memberByName(nested_loaded.members, "basic_types_value")), nullptr);
+
+  introspection::MessageMember member{};
+  member.members_ = nullptr;
+  EXPECT_EQ(nestedMembers(member), nullptr);
 }
 
 TEST(MessageRenderTest, RendersScalarFieldsAsYaml) {
@@ -171,7 +166,7 @@ TEST(MessageRenderTest, RendersScalarFieldsAsYaml) {
   message.int64_value = -1234567890;
   message.uint64_value = 1234567890;
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   EXPECT_NE(output.find("bool_value: true"), std::string::npos) << output;
   EXPECT_NE(output.find("byte_value: 7"), std::string::npos) << output;
@@ -193,7 +188,7 @@ TEST(MessageRenderTest, QuotesStringsThatAreNotPlainYamlScalars) {
   test_msgs::msg::Strings message;
   message.string_value = "reason: timeout\nretry \"soon\"";
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   EXPECT_NE(output.find("string_value: \"reason: timeout\\nretry \\\"soon\\\"\""), std::string::npos) << output;
 }
@@ -203,7 +198,7 @@ TEST(MessageRenderTest, RendersPlainStringsWithoutQuotes) {
   test_msgs::msg::Strings message;
   message.string_value = "plain-text";
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   EXPECT_NE(output.find("string_value: plain-text"), std::string::npos) << output;
 }
@@ -213,7 +208,7 @@ TEST(MessageRenderTest, RendersNestedMessageWithAccumulatingIndent) {
   test_msgs::msg::Nested message;
   message.basic_types_value.int32_value = 99;
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   // The nested message opens on its own line and its fields are indented two
   // spaces relative to the parent field name.
@@ -229,7 +224,7 @@ TEST(MessageRenderTest, RendersMessageArrayItemWithListMarker) {
   message.stride = 3U;
 
   std::ostringstream stream;
-  renderMessageArrayItem(stream, *loaded.members, &message, 0U);
+  renderMessageArrayItem(stream, loaded.members, &message, 0U);
 
   EXPECT_EQ(stream.str(), "  - label: width\n    size: 2\n    stride: 3");
 }
@@ -242,7 +237,7 @@ TEST(MessageRenderTest, DoesNotInsertBlankLineAfterNestedMessageFields) {
   message.time_value.sec = 3;
   message.time_value.nanosec = 4;
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   EXPECT_EQ(output.find("\n\n"), std::string::npos) << output;
   EXPECT_NE(output.find("\n  sec: 1\n  nanosec: 2\ntime_value: \n  sec: 3\n  nanosec: 4\n"), std::string::npos)
@@ -254,7 +249,7 @@ TEST(MessageRenderTest, RendersSequenceFieldAsCompactList) {
   std_msgs::msg::Int32MultiArray message;
   message.data = {1, 2, 3};
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   EXPECT_NE(output.find("data: [1, 2, 3]"), std::string::npos) << output;
   // An empty nested sequence renders as an empty list rather than being omitted.
@@ -270,7 +265,7 @@ TEST(MessageRenderTest, RendersNestedMessageSequenceAsBlockList) {
   message.layout.dim[0].stride = 3U;
   message.data = {1, 2, 3};
 
-  const std::string output = toYaml(*loaded.members, &message);
+  const std::string output = toYaml(loaded.members, &message);
 
   EXPECT_NE(output.find("  dim: \n    - label: width\n"), std::string::npos) << output;
   EXPECT_NE(output.find("\n      size: 2\n"), std::string::npos) << output;
@@ -279,4 +274,4 @@ TEST(MessageRenderTest, RendersNestedMessageSequenceAsBlockList) {
 }
 
 } // namespace
-} // namespace ros2_livekit_bridge::message_render
+} // namespace ros2_livekit_bridge::introspection

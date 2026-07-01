@@ -26,6 +26,7 @@ with existing package structure.
  test deterministic and document/emit the exact environment assumptions.
 - If tests cannot be run in the current environment, explicitly state what was
  not run and why, and provide the exact command(s) to run.
+- To set the environment variables for the integration tests, run `source .token_helpers/set_test_tokens.bash`.
 
 ## Architecture
 

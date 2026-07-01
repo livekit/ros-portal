@@ -21,10 +21,10 @@
 #include <stdexcept>
 #include <utility>
 
+#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 #include "ros2_livekit_bridge/ros2_cli/utils.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
 
@@ -97,7 +97,7 @@ Ros2TopicPubSrv::Response Ros2TopicPub::publish(TopicPubOptions options) {
 
   // Error: YAML payload could not be converted to ROS CDR.
   std::string yaml_error;
-  auto serialized = serializedMessageFromYaml(options.msg_type, options.payload, yaml_error);
+  auto serialized = introspection::serializedMessageFromYaml(options.msg_type, options.payload, yaml_error);
   if (!serialized) {
     return makeCliResponse<Ros2TopicPubSrv::Response>(false, "failed to publish message: " + yaml_error);
   }

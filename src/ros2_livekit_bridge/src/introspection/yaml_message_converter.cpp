@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
+#include "ros2_livekit_bridge/introspection/yaml_message_converter.hpp"
 
 #include <yaml-cpp/yaml.h>
 
@@ -22,45 +22,23 @@
 #include <cstdint>
 #include <optional>
 #include <rclcpp/serialization.hpp>
-#include <rclcpp/typesupport_helpers.hpp>
-#include <rosidl_typesupport_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/field_types.hpp>
-#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <string>
 #include <type_traits>
 #include <utility>
 
+#include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
 
-namespace ros2_livekit_bridge::ros2_cli {
+namespace ros2_livekit_bridge::introspection {
 namespace {
 
 namespace introspection = rosidl_typesupport_introspection_cpp;
 using introspection::MessageMember;
 using introspection::MessageMembers;
-
-const MessageMembers *messageMembersFromTypeSupport(const rosidl_message_type_support_t *type_support,
-                                                    const std::string &msg_type, std::string &error) {
-  if (type_support == nullptr || type_support->data == nullptr) {
-    error = "type support for '" + msg_type + "' does not contain introspection data";
-    return nullptr;
-  }
-  return static_cast<const MessageMembers *>(type_support->data);
-}
-
-const MessageMembers *nestedMessageMembers(const MessageMember &member, const std::string &path, std::string &error) {
-  if (member.members_ == nullptr || member.members_->data == nullptr) {
-    error = "field '" + path + "' does not contain nested message metadata";
-    return nullptr;
-  }
-  return static_cast<const MessageMembers *>(member.members_->data);
-}
-
-void *memberMemory(void *message, const MessageMember &member) {
-  return static_cast<void *>(static_cast<std::uint8_t *>(message) + member.offset_);
-}
 
 const MessageMember *findMember(const MessageMembers &members, const std::string &field_name) {
   for (std::uint32_t index = 0; index < members.member_count_; ++index) {
@@ -210,8 +188,9 @@ bool validateAndResizeArray(const MessageMember &member, const YAML::Node &node,
     error = "field '" + path + "' exceeds sequence upper bound " + std::to_string(member.array_size_);
     return false;
   }
-  if (requested_size > kMaxResizableSequenceLength) {
-    error = "field '" + path + "' exceeds maximum sequence length " + std::to_string(kMaxResizableSequenceLength);
+  if (requested_size > ros2_cli::kMaxResizableSequenceLength) {
+    error =
+        "field '" + path + "' exceeds maximum sequence length " + std::to_string(ros2_cli::kMaxResizableSequenceLength);
     return false;
   }
   member.resize_function(field_memory, requested_size);
@@ -227,8 +206,9 @@ bool assignArray(const MessageMember &member, const YAML::Node &node, void *fiel
     const auto element_path = path + "[" + std::to_string(index) + "]";
     if (member.type_id_ == introspection::ROS_TYPE_MESSAGE) {
       auto *item = member.get_function(field_memory, index);
-      const auto *nested = nestedMessageMembers(member, element_path, error);
+      const auto *nested = nestedMembers(member);
       if (nested == nullptr) {
+        error = "field '" + element_path + "' does not contain nested message metadata";
         return false;
       }
       if (!assignMessage(node[index], item, *nested, element_path, error)) {
@@ -340,8 +320,9 @@ bool assignField(const MessageMember &member, const YAML::Node &node, void *fiel
     case introspection::ROS_TYPE_WSTRING:
       return assignScalarValue<std::u16string>(member, node, field_memory, path, error);
     case introspection::ROS_TYPE_MESSAGE: {
-      const auto *nested = nestedMessageMembers(member, path, error);
+      const auto *nested = nestedMembers(member);
       if (nested == nullptr) {
+        error = "field '" + path + "' does not contain nested message metadata";
         return false;
       }
       return assignMessage(node, field_memory, *nested, path, error);
@@ -360,8 +341,8 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
     error = "payload must be non-empty";
     return std::nullopt;
   }
-  if (payload.size() > kMaxYamlPayloadBytes) {
-    error = "payload exceeds maximum size of " + std::to_string(kMaxYamlPayloadBytes) + " bytes";
+  if (payload.size() > ros2_cli::kMaxYamlPayloadBytes) {
+    error = "payload exceeds maximum size of " + std::to_string(ros2_cli::kMaxYamlPayloadBytes) + " bytes";
     return std::nullopt;
   }
 
@@ -373,30 +354,18 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
     return std::nullopt;
   }
 
-  // The ROS type-support lookup and CDR serialization throw for unknown types
-  // and internal failures; contain those so this function never propagates.
+  // Loading type support and CDR serialization throw for unknown types and
+  // internal failures; contain those so this function never propagates.
   try {
-    auto introspection_library = rclcpp::get_typesupport_library(msg_type, introspection::typesupport_identifier);
-    const auto *introspection_type_support =
-        rclcpp::get_message_typesupport_handle(msg_type, introspection::typesupport_identifier, *introspection_library);
-    const auto *members = messageMembersFromTypeSupport(introspection_type_support, msg_type, error);
-    if (members == nullptr) {
+    RuntimeMessageTypeSupport type_support(msg_type);
+
+    DynamicMessage message(type_support.members);
+    if (!assignMessage(root, message.data(), type_support.members, msg_type, error)) {
       return std::nullopt;
     }
 
-    DynamicMessage message(*members);
-    if (!assignMessage(root, message.data(), *members, msg_type, error)) {
-      return std::nullopt;
-    }
-
-    auto serialization_library =
-        rclcpp::get_typesupport_library(msg_type, rosidl_typesupport_cpp::typesupport_identifier);
-    const auto *serialization_type_support = rclcpp::get_message_typesupport_handle(
-        msg_type, rosidl_typesupport_cpp::typesupport_identifier, *serialization_library);
-
-    rclcpp::SerializationBase serialization(serialization_type_support);
     rclcpp::SerializedMessage serialized;
-    serialization.serialize_message(message.data(), &serialized);
+    type_support.serializer.serialize_message(message.data(), &serialized);
     return serialized;
   } catch (const std::exception &resolve_error) {
     error = resolve_error.what();
@@ -404,4 +373,4 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
   }
 }
 
-} // namespace ros2_livekit_bridge::ros2_cli
+} // namespace ros2_livekit_bridge::introspection

@@ -25,6 +25,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <regex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"
@@ -131,9 +132,13 @@ private:
   /// patterns.
   /// @param incoming_topic_compiled_patterns Compiled LiveKit-to-ROS topic
   /// patterns.
+  /// @param incoming_topic_types Explicit ROS message types for inbound tracks
+  /// keyed by normalized ROS topic name. TODO(BOT-301): temporary stopgap;
+  /// remove once LiveKit DataTracks carry the ROS message type.
   /// @return True on success, false when the topic forwarder could not be initialized.
   bool initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
-                                std::vector<std::regex> incoming_topic_compiled_patterns);
+                                std::vector<std::regex> incoming_topic_compiled_patterns,
+                                std::unordered_map<std::string, std::string> incoming_topic_types);
 
   /// @brief Create Ros2CliManager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.

@@ -89,6 +89,10 @@ bool Ros2LiveKitBridge::initialize() {
   auto incoming_topic_compiled_patterns = utils::compileRegexPatterns(incoming_topic_patterns, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
+  // TODO(BOT-301): Temporary stopgap. Explicit inbound-track types keyed by ROS
+  // topic name; remove once LiveKit DataTracks carry the ROS message type.
+  auto incoming_topic_types = utils::incomingTopicTypes(*config);
+
   std::vector<ServiceForwarder::ServiceRoute> outgoing_service_routes;
   outgoing_service_routes.reserve(config->services.size());
   for (const auto &service_config : config->services) {
@@ -291,11 +295,13 @@ void Ros2LiveKitBridge::onParticipantsUpdated(livekit::Room &room, const livekit
 /// Helpers
 
 bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
-                                                 std::vector<std::regex> incoming_topic_compiled_patterns) {
+                                                 std::vector<std::regex> incoming_topic_compiled_patterns,
+                                                 std::unordered_map<std::string, std::string> incoming_topic_types) {
   try {
     const TopicForwarder::TopicForwarderOptions forwarder_options{
         std::move(outgoing_topic_compiled_patterns),
         std::move(incoming_topic_compiled_patterns),
+        std::move(incoming_topic_types),
         best_effort_qos_topic_patterns_,
         min_qos_depth_,
         max_qos_depth_,

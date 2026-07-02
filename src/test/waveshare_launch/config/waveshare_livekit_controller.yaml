@@ -9,29 +9,45 @@ ros2_livekit_bridge:
 
   topics:
     # Robot telemetry consumed from LiveKit (LiveKit -> ROS)
+    #
+    # TODO(BOT-301): msg_type is a temporary stopgap. LiveKit DataTracks do not
+    # yet carry ROS message-type metadata, and this controller only *receives*
+    # these topics, so nothing on its local ROS graph reveals their type. The
+    # bridge needs the type to create the republishing publisher, so it must be
+    # stated explicitly here. Each must match the type the robot actually
+    # publishes (verify with `ros2 topic type <topic>` on the robot). Remove
+    # msg_type once DataTracks propagate the ROS type with the track.
     - topic: "/map"
       direction: "in"
+      msg_type: "nav_msgs/msg/OccupancyGrid"
 
     - topic: "/plan"
       direction: "in"
+      msg_type: "nav_msgs/msg/Path"
 
     - topic: "/robot_description"
       direction: "in"
+      msg_type: "std_msgs/msg/String"
 
     - topic: "/scan"
       direction: "in"
+      msg_type: "sensor_msgs/msg/LaserScan"
 
     - topic: "/camera/image_raw"
       direction: "in"
+      msg_type: "sensor_msgs/msg/Image"
 
     - topic: "/pose"
       direction: "in"
+      msg_type: "geometry_msgs/msg/PoseStamped"
 
     - topic: "/slam_toolbox/graph_visualization"
       direction: "in"
+      msg_type: "visualization_msgs/msg/MarkerArray"
 
     - topic: "/global_costmap/published_footprint"
       direction: "in"
+      msg_type: "geometry_msgs/msg/PolygonStamped"
 
     # Commands sent out to the robot (ROS -> LiveKit)
     - topic: "/cmd_vel"

@@ -113,6 +113,10 @@
         "direction": {
           "$ref": "#/$defs/direction"
         },
+        "msg_type": {
+          "description": "TEMPORARY STOPGAP (BOT-301): explicit ROS message type (e.g. 'nav_msgs/msg/OccupancyGrid') for an inbound LiveKit data track. LiveKit DataTracks do not yet carry ROS type metadata, so a pure consumer cannot infer the type of a track it only receives (nothing on its local ROS graph publishes it). Set this on 'in'/'bidirectional' topics so the bridge can create the republishing publisher. Remove once DataTracks propagate the ROS type.",
+          "$ref": "#/$defs/nonemptyString"
+        },
         "video_options": {
           "$ref": "#/$defs/videoOptions"
         }

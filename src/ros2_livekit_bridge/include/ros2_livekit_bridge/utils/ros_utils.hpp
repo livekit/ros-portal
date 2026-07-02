@@ -24,6 +24,8 @@
 #include <filesystem>
 #include <optional>
 #include <rclcpp/logger.hpp>
+#include <string>
+#include <unordered_map>
 
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
@@ -76,6 +78,19 @@ std::optional<ros2_livekit_bridge_config::BridgeConfig> parseBridgeConfig(const 
 std::vector<std::string> outgoingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
 
 std::vector<std::string> incomingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
+
+/// @brief Collect explicitly configured ROS message types for inbound tracks.
+///
+/// TODO(BOT-301): Temporary stopgap. LiveKit DataTracks do not yet carry ROS
+/// message-type metadata, so a pure consumer (e.g. the controller) cannot infer
+/// the type of a track it only receives when nothing on its local ROS graph
+/// already publishes/subscribes to that topic. This maps normalized ROS topic
+/// name -> ROS message type for every 'in'/'bidirectional' topic that sets
+/// `msg_type` in the config, so TopicForwarder can create the republishing
+/// publisher. Remove once DataTracks propagate the ROS type with the track.
+///
+/// @return Map of normalized ROS topic name to ROS message type.
+std::unordered_map<std::string, std::string> incomingTopicTypes(const ros2_livekit_bridge_config::BridgeConfig& config);
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

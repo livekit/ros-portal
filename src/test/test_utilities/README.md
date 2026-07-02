@@ -17,7 +17,7 @@ standalone launch file that starts inline `std_srvs/srv/SetBool` and
 Launch it on the remote side of a two-bridge setup:
 
 ```bash
-ros2 launch test_utilities stubs/server_stub.launch.py
+ros2 launch test_utilities server_stub.launch.py
 ```
 
 Service names can be overridden with launch arguments `service_name` and

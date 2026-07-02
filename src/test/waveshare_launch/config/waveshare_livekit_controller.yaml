@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=../../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# Copyright 2026 LiveKit
+
+ros2_livekit_bridge:
+  version: "0.0.1"
+  room_name: "robo_room"
+  topic_polling_period_ms: 500
+  ros_threads: 4
+
+  topics:
+    # Robot telemetry consumed from LiveKit (LiveKit -> ROS)
+    - topic: "/map"
+      direction: "in"
+
+    - topic: "/plan"
+      direction: "in"
+
+    - topic: "/robot_description"
+      direction: "in"
+
+    - topic: "/scan"
+      direction: "in"
+
+    - topic: "/camera/image_raw"
+      direction: "in"
+
+    - topic: "/pose"
+      direction: "in"
+
+    - topic: "/slam_toolbox/graph_visualization"
+      direction: "in"
+
+    - topic: "/global_costmap/published_footprint"
+      direction: "in"
+
+    # Commands sent out to the robot (ROS -> LiveKit)
+    - topic: "/cmd_vel"
+      direction: "out"
+
+    - topic: "/goal_pose"
+      direction: "out"

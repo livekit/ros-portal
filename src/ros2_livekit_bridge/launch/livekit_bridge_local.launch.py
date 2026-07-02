@@ -106,10 +106,12 @@ def _launch_setup(context, *args, **kwargs):
             'launch',
             'waveshare.launch.xml',
         ])
+        foxglove = LaunchConfiguration('foxglove').perform(context)
+        sim = LaunchConfiguration('sim').perform(context)
         actions.append(
             IncludeLaunchDescription(
                 AnyLaunchDescriptionSource(waveshare_launch),
-                launch_arguments={'sim': 'true', 'foxglove': 'true'}.items(),
+                launch_arguments={'sim': sim, 'foxglove': foxglove}.items(),
             )
         )
 
@@ -133,7 +135,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'sim',
             default_value='false',
-            description='Launch the Waveshare stack with sim:=true and foxglove:=true.',
+            description='Launch the Waveshare stack with sim:=true.',
+        ),
+        DeclareLaunchArgument(
+            'foxglove',
+            default_value='false',
+            description='Launch the Foxglove bridge when sim is enabled (passed to waveshare.launch.xml).',
         ),
         OpaqueFunction(function=_launch_setup),
     ])

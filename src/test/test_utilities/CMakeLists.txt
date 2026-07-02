@@ -23,10 +23,17 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
+  USE_SOURCE_PERMISSIONS
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
+)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
 
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE launch)
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

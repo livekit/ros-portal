@@ -103,6 +103,14 @@ std::optional<std::string> liveKitToRosTopicName(const std::string& participant_
   return "/" + *participant_prefix + *normalized_track_name;
 }
 
+std::optional<std::string> liveKitToRosTopicName(const std::string& track_name) {
+  const auto normalized_track_name = normalizeTrackTopicName(track_name);
+  if (!normalized_track_name.has_value() || *normalized_track_name == "/") {
+    return std::nullopt;
+  }
+  return normalized_track_name;
+}
+
 void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger) {
   for (const auto& error : errors) {
     RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s", error.pattern.c_str(), error.message.c_str());
@@ -144,6 +152,20 @@ std::vector<std::string> incomingTopicPatterns(const bridge_config::BridgeConfig
   for (const auto& topic_config : config.topics) {
     if (topic_config.direction == bridge_config::Direction::In ||
         topic_config.direction == bridge_config::Direction::Bidirectional) {
+      patterns.push_back(topic_config.topic);
+    }
+  }
+
+  return patterns;
+}
+
+std::vector<std::string> preserveIdTopicPatterns(const bridge_config::BridgeConfig& config) {
+  std::vector<std::string> patterns;
+
+  for (const auto& topic_config : config.topics) {
+    const bool inbound = topic_config.direction == bridge_config::Direction::In ||
+                         topic_config.direction == bridge_config::Direction::Bidirectional;
+    if (inbound && topic_config.preserve_id) {
       patterns.push_back(topic_config.topic);
     }
   }

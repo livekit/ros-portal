@@ -82,6 +82,7 @@ ros2_livekit_bridge:
       direction: "bidirectional"
     - topic: "/teleop_cmd"
       direction: "in"
+      preserve_id: true
 )");
 
   EXPECT_EQ(config.room_name, "robo_room");
@@ -107,8 +108,11 @@ ros2_livekit_bridge:
   EXPECT_EQ(*config.topics[0].video_options->bitrate_kbps, 3500);
   ASSERT_TRUE(config.topics[0].video_options->codec.has_value());
   EXPECT_EQ(*config.topics[0].video_options->codec, "h264");
+  EXPECT_FALSE(config.topics[0].preserve_id);
   EXPECT_EQ(config.topics[1].direction, Direction::Bidirectional);
+  EXPECT_FALSE(config.topics[1].preserve_id);
   EXPECT_EQ(config.topics[2].direction, Direction::In);
+  EXPECT_TRUE(config.topics[2].preserve_id);
 }
 
 TEST(ConfigParserTest, RejectsUnknownRootField) {
@@ -361,6 +365,9 @@ TEST(ConfigParserTest, ParsesFile) {
   ASSERT_EQ(config.services.size(), 2u);
   ASSERT_EQ(config.topics.size(), 6u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");
+  EXPECT_FALSE(config.topics[0].preserve_id);
+  EXPECT_EQ(config.topics[5].topic, "/teleop_cmd");
+  EXPECT_TRUE(config.topics[5].preserve_id);
 }
 
 TEST(ConfigParserTest, ParsesEmptySequences) {

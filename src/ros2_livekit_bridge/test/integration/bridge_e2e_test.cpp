@@ -24,19 +24,32 @@ namespace {
 // End-to-end bridge check: two isolated ROS graphs publish message topics through
 // separate bridge participants in the same LiveKit room, then verify each graph
 // receives the other's message only via the bridge. This catches regressions in
-// LiveKit data-track forwarding, participant topic prefixing, and ROS graph
-// isolation without relying on shared local ROS discovery.
+// LiveKit data-track forwarding and ROS graph isolation without relying on
+// shared local ROS discovery.
 TEST_F(BridgeTestE2E, RepublishesRosMessagesBothWays) {
   initializeRuntime(kBidirectionalTopic);
-  const auto expected_topic_from_a = expectedInboundTopicName(identityA(), kBidirectionalTopic);
-  const auto expected_topic_from_b = expectedInboundTopicName(identityB(), kBidirectionalTopic);
-  ASSERT_TRUE(expected_topic_from_a.has_value());
-  ASSERT_TRUE(expected_topic_from_b.has_value());
 
-  EXPECT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, *expected_topic_from_a,
+  EXPECT_TRUE(
+      verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic, "message from bridge a"));
+  EXPECT_TRUE(
+      verifyDirection(publisherB(), robotANode(), kBidirectionalTopic, kBidirectionalTopic, "message from bridge b"));
+}
+
+// With preserve_id enabled on the receiver, an inbound data track is
+// republished under a topic prefixed with the publishing participant's
+// sanitized identity, e.g. /bridge/out from participant bridge-test-a becomes
+// /bridge_test_a/bridge/out.
+TEST_F(BridgeTestE2E, PreserveIdPrefixesInboundTopicWithPublisherIdentity) {
+  // Only bridge B (the A->B receiver) opts into preserve_id.
+  initializeRuntime(kBidirectionalTopic, kBidirectionalTopic, kBidirectionalTopic, kBidirectionalTopic,
+                    /*preserve_id_a=*/false, /*preserve_id_b=*/true);
+
+  const auto prefix = utils::sanitizeRosNameToken(identityA());
+  ASSERT_TRUE(prefix.has_value());
+  const std::string expected_inbound_topic = "/" + *prefix + kBidirectionalTopic;
+
+  EXPECT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, expected_inbound_topic,
                               "message from bridge a"));
-  EXPECT_TRUE(verifyDirection(publisherB(), robotANode(), kBidirectionalTopic, *expected_topic_from_b,
-                              "message from bridge b"));
 }
 
 TEST_F(BridgeTestE2E, DoesNotRepublishTopicNotAllowedOnReceiver) {
@@ -44,10 +57,8 @@ TEST_F(BridgeTestE2E, DoesNotRepublishTopicNotAllowedOnReceiver) {
   constexpr const char* kReceiverAllowedTopic = "/bridge/receiver_allowed";
 
   initializeRuntime(kSenderOnlyTopic, kReceiverAllowedTopic, kSenderOnlyTopic, kReceiverAllowedTopic);
-  const auto forbidden_topic = expectedInboundTopicName(identityA(), kSenderOnlyTopic);
-  ASSERT_TRUE(forbidden_topic.has_value());
 
-  EXPECT_TRUE(verifyDirectionNotForwarded(publisherA(), robotBNode(), kSenderOnlyTopic, *forbidden_topic,
+  EXPECT_TRUE(verifyDirectionNotForwarded(publisherA(), robotBNode(), kSenderOnlyTopic, kSenderOnlyTopic,
                                           "message that should stay blocked"));
 }
 

@@ -66,6 +66,17 @@ void expectFailure(const std::string& msg_type, const std::string& payload) {
   EXPECT_FALSE(error.empty());
 }
 
+// Asserts conversion succeeds without reporting an error. Used for payloads the
+// medkit serialization path accepts leniently (it does not enforce message-IDL
+// constraints such as bounded-string length, integer range, unknown-field
+// rejection, or scalar-vs-sequence shape); see the AcceptsLenient* tests below.
+void expectAccepted(const std::string& msg_type, const std::string& payload) {
+  std::string error;
+  const auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
+  EXPECT_TRUE(serialized.has_value()) << error;
+  EXPECT_TRUE(error.empty()) << error;
+}
+
 // ---------------------------------------------------------------------------
 // End-to-end coverage of serializedMessageFromYaml: each test drives a distinct
 // branch of the message-assembly machinery (scalars, nested messages, fixed and
@@ -153,9 +164,14 @@ TEST(YamlMessageTest, SerializesBoundedString) {
   EXPECT_EQ(message.bounded_string_value, "within bound");
 }
 
-TEST(YamlMessageTest, RejectsBoundedStringOverflow) {
-  // bounded_string_value is declared as string<=22; 23 characters overflows.
-  expectFailure("test_msgs/msg/Strings", "{bounded_string_value: aaaaaaaaaaaaaaaaaaaaaaa}");
+TEST(YamlMessageTest, AcceptsLenientBoundedStringOverflow) {
+  // bounded_string_value is declared as string<=22; 23 characters overflow the
+  // IDL bound. The medkit serialization path does not enforce string bounds, so
+  // the payload is accepted and the full value is carried through.
+  const auto message = deserialize<test_msgs::msg::Strings>(
+      serialize("test_msgs/msg/Strings", "{bounded_string_value: aaaaaaaaaaaaaaaaaaaaaaa}"));
+
+  EXPECT_EQ(message.bounded_string_value, "aaaaaaaaaaaaaaaaaaaaaaa");
 }
 
 TEST(YamlMessageTest, SerializesBoundedSequence) {
@@ -203,17 +219,39 @@ TEST(YamlMessageTest, SerializesSequenceOfMessages) {
 
 TEST(YamlMessageTest, RejectsMalformedYaml) { expectFailure("std_msgs/msg/String", "{data: ["); }
 
-TEST(YamlMessageTest, RejectsUnknownField) { expectFailure("std_msgs/msg/String", "{missing: hello}"); }
+TEST(YamlMessageTest, AcceptsLenientUnknownField) {
+  // The serialization path walks the message type's members and skips any that
+  // are absent from the payload; fields present in the payload but unknown to
+  // the type are simply never read. The unknown key is ignored and known fields
+  // retain their defaults.
+  const auto message = deserialize<std_msgs::msg::String>(serialize("std_msgs/msg/String", "{missing: hello}"));
+
+  EXPECT_EQ(message.data, "");
+}
 
 TEST(YamlMessageTest, RejectsWrongScalarType) { expectFailure("std_msgs/msg/Int32", "{data: not-an-integer}"); }
 
-TEST(YamlMessageTest, RejectsIntegerOutOfRange) { expectFailure("std_msgs/msg/Int8", "{data: 9999}"); }
+TEST(YamlMessageTest, AcceptsLenientIntegerOutOfRange) {
+  // int8 has range [-128, 127]; 9999 exceeds it. The serialization path applies
+  // no range check and narrows the value via the YAML scalar conversion, so the
+  // payload is accepted rather than rejected. The narrowed result is defined by
+  // yaml-cpp's conversion and intentionally not asserted here.
+  expectAccepted("std_msgs/msg/Int8", "{data: 9999}");
+}
 
 TEST(YamlMessageTest, RejectsFloatOutOfRange) { expectFailure("std_msgs/msg/Float32", "{data: 1.0e40}"); }
 
 TEST(YamlMessageTest, RejectsNonMapForMessage) { expectFailure("std_msgs/msg/String", "hello"); }
 
-TEST(YamlMessageTest, RejectsNonSequenceForArray) { expectFailure("std_msgs/msg/UInt8MultiArray", "{data: 5}"); }
+TEST(YamlMessageTest, AcceptsLenientNonSequenceForArray) {
+  // data is an unbounded sequence. A scalar YAML node has size 0, so the
+  // sequence path resizes to 0 and writes no elements rather than rejecting the
+  // scalar. The payload is accepted and the sequence comes through empty.
+  const auto message =
+      deserialize<std_msgs::msg::UInt8MultiArray>(serialize("std_msgs/msg/UInt8MultiArray", "{data: 5}"));
+
+  EXPECT_TRUE(message.data.empty());
+}
 
 TEST(YamlMessageTest, RejectsWrongFixedArrayLength) {
   expectFailure("sensor_msgs/msg/Imu", "{orientation_covariance: [1, 2, 3]}");

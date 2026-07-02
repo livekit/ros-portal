@@ -151,20 +151,22 @@ TEST_F(Ros2ServiceCallTest, RendersNestedResponseFieldsWithAccumulatingIndent) {
 
   ASSERT_TRUE(response.success) << response.err_msg;
   // Indentation must accumulate two spaces per nesting level relative to the
-  // parent, rather than resetting to a fixed depth:
-  //   plan:           (0)
-  //     header:       (2)
-  //       stamp:      (4)
-  //         sec: 7    (6)
-  //         nanosec: 0(6)
-  //       frame_id: map (4)
-  //     poses: []     (2)
-  EXPECT_NE(response.output.find("\n  header: \n"), std::string::npos) << response.output;
-  EXPECT_NE(response.output.find("\n    stamp: \n"), std::string::npos) << response.output;
+  // parent, rather than resetting to a fixed depth. Keys are emitted in the
+  // serializer's (alphabetical) order and an empty sequence renders as the YAML
+  // null scalar '~':
+  //   plan:              (0)
+  //     header:          (2)
+  //       frame_id: map  (4)
+  //       stamp:         (4)
+  //         nanosec: 0   (6)
+  //         sec: 7       (6)
+  //     poses: ~         (2)
+  EXPECT_NE(response.output.find("\n  header:\n"), std::string::npos) << response.output;
+  EXPECT_NE(response.output.find("\n    stamp:\n"), std::string::npos) << response.output;
   EXPECT_NE(response.output.find("\n      sec: 7\n"), std::string::npos) << response.output;
   EXPECT_NE(response.output.find("\n      nanosec: 0\n"), std::string::npos) << response.output;
   EXPECT_NE(response.output.find("\n    frame_id: map\n"), std::string::npos) << response.output;
-  EXPECT_NE(response.output.find("\n  poses: ["), std::string::npos) << response.output;
+  EXPECT_NE(response.output.find("\n  poses: ~"), std::string::npos) << response.output;
 }
 
 TEST_F(Ros2ServiceCallTest, RejectsEmptyInterfaceType) {
@@ -249,7 +251,10 @@ TEST_F(Ros2ServiceCallTest, RejectsUnknownServiceTypeWithoutThrowing) {
       caller.call(makeSetBoolOptions("/service_call/unknown_type", "fake_msgs/srv/DoesNotExist", "{data: true}", 1));
 
   EXPECT_FALSE(response.success);
-  EXPECT_NE(response.err_msg.find("failed to build service request:"), std::string::npos);
+  // An unknown service type fails when its type support cannot be loaded, which
+  // happens while creating the client (before a request can be built), so the
+  // error surfaces with the client-creation prefix rather than throwing.
+  EXPECT_NE(response.err_msg.find("failed to create service client:"), std::string::npos) << response.err_msg;
 }
 
 TEST_F(Ros2ServiceCallTest, RejectsServiceClientCacheLimit) {

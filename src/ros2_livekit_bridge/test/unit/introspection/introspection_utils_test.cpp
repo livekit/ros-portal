@@ -40,9 +40,12 @@ std::string buildIntegerSequencePayload(const std::size_t count) {
   std::string payload = "[";
   payload.reserve(count * 2U + 2U);
   for (std::size_t index = 0; index < count; ++index) {
-    payload += "0,";
+    if (index > 0) {
+      payload += ",";
+    }
+    payload += "0";
   }
-  payload += "0]";
+  payload += "]";
   return payload;
 }
 
@@ -145,8 +148,9 @@ TEST(MessageRenderTest, RendersSequenceField) {
   EXPECT_EQ(output["data"][0].as<int>(), 1);
   EXPECT_EQ(output["data"][1].as<int>(), 2);
   EXPECT_EQ(output["data"][2].as<int>(), 3);
-  ASSERT_TRUE(output["layout"]["dim"].IsSequence());
-  EXPECT_EQ(output["layout"]["dim"].size(), 0U);
+  // An empty sequence is rendered as the YAML null scalar '~' rather than an
+  // empty flow sequence '[]', so layout.dim comes through as null here.
+  EXPECT_TRUE(output["layout"]["dim"].IsNull());
 }
 
 TEST(MessageRenderTest, RendersNestedMessageSequence) {

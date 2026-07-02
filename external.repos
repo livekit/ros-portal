@@ -1,8 +1,4 @@
 repositories:
-  diagnostics:
-    type: git
-    url: https://github.com/ros/diagnostics.git
-    version: 6f42879278aba0b62633189b7c5821693279e8f0
   ros2_medkit:
     type: git
     url: https://github.com/selfpatch/ros2_medkit.git

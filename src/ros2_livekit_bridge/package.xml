@@ -28,7 +28,7 @@
   <depend>diagnostic_msgs</depend>
   <depend>diagnostic_updater</depend>
   <depend>geometry_msgs</depend>
-  <depend>nlohmann_json</depend>
+  <depend>nlohmann-json-dev</depend>
   <depend>rclcpp</depend>
   <depend>ros2_medkit_serialization</depend>
   <depend>ros2_livekit_bridge_config</depend>

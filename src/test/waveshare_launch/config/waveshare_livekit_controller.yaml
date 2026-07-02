@@ -49,9 +49,29 @@ ros2_livekit_bridge:
       direction: "in"
       msg_type: "geometry_msgs/msg/PolygonStamped"
 
-    # Commands sent out to the robot (ROS -> LiveKit)
+    # Transform tree — gives this graph a valid fixed frame so Foxglove's 3D
+    # panel can resolve frames and show the click-to-publish tool. Keep these at
+    # the top level (not namespaced): TF frame_ids are global and Foxglove
+    # consumes /tf and /tf_static directly.
+    - topic: "/tf"
+      direction: "in"
+      msg_type: "tf2_msgs/msg/TFMessage"
+
+    - topic: "/tf_static"
+      direction: "in"
+      msg_type: "tf2_msgs/msg/TFMessage"
+
+    # Commands sent out to the robot (ROS -> LiveKit). Foxglove publishes these
+    # onto the controller's ROS graph, so the bridge infers the type from the
+    # live topic and no msg_type is needed.
     - topic: "/cmd_vel"
       direction: "out"
 
     - topic: "/goal_pose"
+      direction: "out"
+
+    - topic: "/initialpose"
+      direction: "out"
+
+    - topic: "/clicked_point"
       direction: "out"

@@ -8,12 +8,24 @@ ros2_livekit_bridge:
   ros_threads: 4
 
   topics:
-    # Commands received from the controller (LiveKit -> ROS)
+    # Commands received from the controller (LiveKit -> ROS).
+    # These are pure inbound tracks (nothing on the robot's ROS graph publishes
+    # them), so msg_type is required per the BOT-301 stopgap.
     - topic: "/cmd_vel"
       direction: "in"
+      msg_type: "geometry_msgs/msg/Twist"
 
     - topic: "/goal_pose"
       direction: "in"
+      msg_type: "geometry_msgs/msg/PoseStamped"
+
+    - topic: "/initialpose"
+      direction: "in"
+      msg_type: "geometry_msgs/msg/PoseWithCovarianceStamped"
+
+    - topic: "/clicked_point"
+      direction: "in"
+      msg_type: "geometry_msgs/msg/PointStamped"
 
     # Telemetry / sensor / nav streams sent out to LiveKit (ROS -> LiveKit)
     - topic: "/map"
@@ -38,4 +50,12 @@ ros2_livekit_bridge:
       direction: "out"
 
     - topic: "/global_costmap/published_footprint"
+      direction: "out"
+
+    # Transform tree — required so the controller's Foxglove 3D panel has a
+    # valid fixed frame (without it the click-to-publish tool is hidden).
+    - topic: "/tf"
+      direction: "out"
+
+    - topic: "/tf_static"
       direction: "out"

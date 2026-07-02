@@ -371,7 +371,10 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     return;
   }
 
-  const auto ros_topic_name = utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name);
+  const bool preserve_id = utils::matchesAnyPattern(*normalized_track_name, options_.preserve_id_topic_patterns);
+  const auto ros_topic_name = preserve_id
+                                  ? utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name)
+                                  : utils::liveKitToRosTopicName(descriptor.track_name);
   if (!ros_topic_name) {
     RCLCPP_WARN(logger_,
                 "Ignoring LiveKit data track '%s' from '%s' because ROS topic name "

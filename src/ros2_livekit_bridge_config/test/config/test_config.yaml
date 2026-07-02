@@ -57,6 +57,7 @@ ros2_livekit_bridge:
 
     - topic: "/teleop_cmd"
       direction: "in"
+      preserve_id: true
 
     # Audio is planned for a v2 config. The v1 parser intentionally rejects
     # audio_options, so keep this example commented until that schema lands.

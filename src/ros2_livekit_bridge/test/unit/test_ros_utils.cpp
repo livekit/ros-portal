@@ -174,36 +174,84 @@ TEST(RosUtilsTest, SanitizeRosNameTokenPrefixesLeadingDigit) {
   EXPECT_EQ(*sanitized, "_1robot");
 }
 
-TEST(RosUtilsTest, LiveKitToRosTopicNameBuildsParticipantPrefixedTopic) {
-  const auto ros_topic_name = liveKitToRosTopicName("bridge-test-a", "bridge/out");
+TEST(RosUtilsTest, LiveKitToRosTopicNameNormalizesTrackName) {
+  const auto ros_topic_name = liveKitToRosTopicName("bridge/out");
 
   ASSERT_TRUE(ros_topic_name.has_value());
-  EXPECT_EQ(*ros_topic_name, "/bridge_test_a/bridge/out");
+  EXPECT_EQ(*ros_topic_name, "/bridge/out");
 }
 
 TEST(RosUtilsTest, LiveKitToRosTopicNamePreservesLeadingSlashInTrackName) {
-  const auto ros_topic_name = liveKitToRosTopicName("bridge-test-a", "/bridge/out");
+  const auto ros_topic_name = liveKitToRosTopicName("/bridge/out");
 
   ASSERT_TRUE(ros_topic_name.has_value());
-  EXPECT_EQ(*ros_topic_name, "/bridge_test_a/bridge/out");
-}
-
-TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyIdentity) {
-  const auto ros_topic_name = liveKitToRosTopicName("", "/bridge/out");
-
-  EXPECT_FALSE(ros_topic_name.has_value());
+  EXPECT_EQ(*ros_topic_name, "/bridge/out");
 }
 
 TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyTrackName) {
-  const auto ros_topic_name = liveKitToRosTopicName("bridge-test-a", "");
-
+  const auto ros_topic_name = liveKitToRosTopicName("");
   EXPECT_FALSE(ros_topic_name.has_value());
 }
 
 TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForRootTrackName) {
-  const auto ros_topic_name = liveKitToRosTopicName("bridge-test-a", "/");
+  const auto ros_topic_name = liveKitToRosTopicName("/");
 
   EXPECT_FALSE(ros_topic_name.has_value());
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNamePrefixesSanitizedParticipantIdentity) {
+  const auto ros_topic_name = liveKitToRosTopicName("robot-1", "/tf");
+
+  ASSERT_TRUE(ros_topic_name.has_value());
+  EXPECT_EQ(*ros_topic_name, "/robot_1/tf");
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameWithIdentityNormalizesTrackName) {
+  const auto ros_topic_name = liveKitToRosTopicName("robot_a", "tf");
+
+  ASSERT_TRUE(ros_topic_name.has_value());
+  EXPECT_EQ(*ros_topic_name, "/robot_a/tf");
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameReturnsEmptyForEmptyIdentity) {
+  EXPECT_FALSE(liveKitToRosTopicName("", "/tf").has_value());
+}
+
+TEST(RosUtilsTest, LiveKitToRosTopicNameWithIdentityReturnsEmptyForRootTrackName) {
+  EXPECT_FALSE(liveKitToRosTopicName("robot-1", "/").has_value());
+}
+
+TEST(RosUtilsTest, PreserveIdTopicPatternsIncludesOnlyInboundOptedInTopics) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+
+  bridge_config::TopicConfig in_preserve;
+  in_preserve.topic = "/tf";
+  in_preserve.direction = bridge_config::Direction::In;
+  in_preserve.preserve_id = true;
+  config.topics.push_back(in_preserve);
+
+  bridge_config::TopicConfig bidirectional_preserve;
+  bidirectional_preserve.topic = "/odom";
+  bidirectional_preserve.direction = bridge_config::Direction::Bidirectional;
+  bidirectional_preserve.preserve_id = true;
+  config.topics.push_back(bidirectional_preserve);
+
+  bridge_config::TopicConfig in_no_preserve;
+  in_no_preserve.topic = "/teleop_cmd";
+  in_no_preserve.direction = bridge_config::Direction::In;
+  config.topics.push_back(in_no_preserve);
+
+  bridge_config::TopicConfig out_preserve;
+  out_preserve.topic = "/camera/image_raw";
+  out_preserve.direction = bridge_config::Direction::Out;
+  out_preserve.preserve_id = true;
+  config.topics.push_back(out_preserve);
+
+  const auto patterns = preserveIdTopicPatterns(config);
+
+  EXPECT_EQ(patterns, (std::vector<std::string>{"/tf", "/odom"}));
 }
 
 TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {

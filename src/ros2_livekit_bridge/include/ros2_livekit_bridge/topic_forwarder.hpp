@@ -97,6 +97,10 @@ public:
     /// track's type when nothing on its local ROS graph publishes it. Remove
     /// this map once DataTracks propagate the ROS type with the track.
     std::unordered_map<std::string, std::string> incoming_topic_types;
+    /// @brief Regex patterns for inbound tracks whose republished ROS topic
+    /// name is prefixed with the publishing participant's sanitized identity
+    /// (config `preserve_id: true`).
+    std::vector<std::regex> preserve_id_topic_patterns;
     /// @brief Regex patterns that force best-effort subscription QoS.
     std::vector<std::regex> best_effort_qos_topic_patterns;
     /// @brief Minimum subscription history depth when no publishers exist.

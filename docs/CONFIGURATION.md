@@ -65,6 +65,7 @@ used to limit which streams cross the bridge for bandwidth reasons.
 |---|---:|---:|---|
 | `topic` | string | yes | ROS topic pattern. Must be non-empty. |
 | `direction` | string | yes | `in`, `out`, or `bidirectional`. |
+| `preserve_id` | boolean | no | Default `false`. Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
 | `video_options` | map | no | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
@@ -76,6 +77,30 @@ Unlike services, topic direction is load-bearing: it controls which topics are
 forwarded and in which direction. Only forwarding the streams you actually need
 (and only in the required direction) keeps unnecessary traffic off the LiveKit
 connection, which matters for bandwidth on constrained links.
+
+### Preserving the publisher identity
+
+`preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is
+ignored for outbound topics. It defaults to `false`, which republishes an
+inbound data track under its own topic name (e.g. `/tf` stays `/tf`). When set
+to `true`, the publishing participant's identity is prepended to the
+republished ROS topic name, which prevents collisions when multiple
+participants publish the same topic:
+
+```yaml
+topics:
+  - topic: "/tf"
+    direction: "in"
+    preserve_id: true
+```
+
+```text
+LiveKit data track: /tf   (from participant "robot-1")
+ROS topic:          /robot_1/tf
+```
+
+The identity is sanitized into a legal ROS name token, so any character that is
+not alphanumeric or `_` becomes `_` (e.g. `robot-1` → `robot_1`).
 
 ## Video Options
 

@@ -10,7 +10,7 @@
 
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.`
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
@@ -19,28 +19,22 @@
   <arg name="rviz" default="false" description="Launch RViz alongside the robot stack." />
   <arg name="sim_gui" default="false" description="Launch the Gazebo GUI client when sim is enabled." />
   <arg name="foxglove" default="false" description="Launch the Foxglove bridge with default settings." />
-  <arg name="livekit" default="true" description="Launch the ROS 2 LiveKit bridge." />
-  <arg name="livekit_config" default="$(find-pkg-share ros2_livekit_bridge)/config/ros2_livekit_bridge.yaml" description="Config file for the ROS 2 LiveKit bridge." />
 
+  <!-- In sim, gazebo.launch.xml brings up the description with sim_control:=gazebo
+       (the DiffDrive plugin that consumes /cmd_vel and publishes odom + the
+       odom->base_footprint TF). Only launch the ros2_control description directly
+       on the real robot to avoid a duplicate robot_state_publisher. -->
   <include unless="$(var sim)" file="$(find-pkg-share waver_description)/launch/description.launch.xml">
-    <arg name="use_sim_time" value="false" />
+    <arg name="use_sim_time" value="$(var sim)" />
     <arg name="sim_control" value="ros2" />
   </include>
 
-  <include if="$(var sim)" file="$(find-pkg-share nav2_bringup)/launch/navigation_launch.py">
-    <arg name="use_sim_time" value="true" />
+  <include file="$(find-pkg-share nav2_bringup)/launch/navigation_launch.py">
+    <arg name="use_sim_time" value="$(var sim)" />
   </include>
 
-  <include unless="$(var sim)" file="$(find-pkg-share nav2_bringup)/launch/navigation_launch.py">
-    <arg name="use_sim_time" value="false" />
-  </include>
-
-  <include if="$(var sim)" file="$(find-pkg-share waver_nav)/launch/online_async.launch.xml">
-    <arg name="use_sim_time" value="true" />
-  </include>
-
-  <include unless="$(var sim)" file="$(find-pkg-share waver_nav)/launch/online_async.launch.xml">
-    <arg name="use_sim_time" value="false" />
+  <include file="$(find-pkg-share waver_nav)/launch/online_async.launch.xml">
+    <arg name="use_sim_time" value="$(var sim)" />
   </include>
 
   <include if="$(var sim)" file="$(find-pkg-share waveshare_launch)/launch/gazebo.launch.xml">
@@ -53,14 +47,11 @@
       <arg name="use_sim_time" value="true" />
     </include>
 
-    <include unless="$(var sim)" file="$(find-pkg-share waver_viz)/launch/rviz.launch.xml">
+    <!-- uncomment when xserver forwarding is working -->
+    <!-- <include unless="$(var sim)" file="$(find-pkg-share waver_viz)/launch/rviz.launch.xml">
       <arg name="use_sim_time" value="false" />
-    </include>
+    </include> -->
   </group>
 
   <include if="$(var foxglove)" file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml" />
-
-  <include if="$(var livekit)" file="$(find-pkg-share ros2_livekit_bridge)/launch/livekit_bridge.launch.xml">
-    <arg name="config" value="$(var livekit_config)" />
-  </include>
 </launch>

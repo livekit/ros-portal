@@ -48,7 +48,7 @@
       "enum": ["in", "out", "bidirectional"]
     },
     "serviceDirection": {
-      "enum": ["in", "out"]
+      "enum": ["out"]
     },
     "nonemptyString": {
       "type": "string",

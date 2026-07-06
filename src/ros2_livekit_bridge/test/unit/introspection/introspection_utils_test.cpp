@@ -54,7 +54,7 @@ std::string buildIntegerSequencePayload(const std::size_t count) {
 /// Reuses the production loader so the introspection library is kept alive for
 /// the returned value's scope and @ref RuntimeMessageTypeSupport::members points
 /// into it.
-RuntimeMessageTypeSupport loadIntrospection(const std::string &type) { return RuntimeMessageTypeSupport(type); }
+RuntimeMessageTypeSupport loadIntrospection(const std::string& type) { return RuntimeMessageTypeSupport(type); }
 
 TEST(MessageRenderTest, RendersScalarFieldsAsYaml) {
   const auto loaded = loadIntrospection("test_msgs/msg/BasicTypes");

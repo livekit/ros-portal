@@ -53,9 +53,9 @@ constexpr std::uint8_t kMaxStaleResponseDrains = 25;
 /// @brief Runtime service client for an arbitrary service type.
 struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Construct a ClientBase-backed runtime service client.
-  ServiceClient(const std::string &service_name, const std::string &msg_type,
+  ServiceClient(const std::string& service_name, const std::string& msg_type,
                 std::shared_ptr<introspection::RuntimeServiceTypeSupport> support,
-                rclcpp::node_interfaces::NodeBaseInterface *node_base,
+                rclcpp::node_interfaces::NodeBaseInterface* node_base,
                 rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph)
       : rclcpp::ClientBase(node_base, std::move(node_graph)), msg_type(msg_type), support(std::move(support)) {
     rcl_client_options_t options = rcl_client_get_default_options();
@@ -122,7 +122,7 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
   try {
     resolved_service =
         rclcpp::expand_topic_or_service_name(options.service, base_->get_name(), base_->get_namespace(), true);
-  } catch (const std::exception &error) {
+  } catch (const std::exception& error) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, error.what());
   }
 
@@ -130,7 +130,7 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "msg_type must be non-empty");
   }
 
-  const auto &msg_type = options.msg_type;
+  const auto& msg_type = options.msg_type;
 
   ClientPtr client;
   std::string client_error;
@@ -177,8 +177,8 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
   return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "Service call timed out.");
 }
 
-std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::string &service,
-                                                                     const std::string &msg_type, std::string &error) {
+std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::string& service,
+                                                                     const std::string& msg_type, std::string& error) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string key = service + ":" + msg_type;
   const auto existing = clients_.find(key);
@@ -198,13 +198,13 @@ std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::
   try {
     auto client = std::make_shared<ServiceClient>(service, msg_type, std::move(support), base_.get(), graph_);
     return clients_.emplace(key, std::move(client)).first->second;
-  } catch (const std::exception &exception) {
+  } catch (const std::exception& exception) {
     error = exception.what();
     return std::nullopt;
   }
 }
 
-std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(ServiceClient &client,
+std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(ServiceClient& client,
                                                                           std::int64_t sequence_number) {
   std::uint8_t attempt_count = 0;
   // Bounded two ways: each iteration either:
@@ -229,7 +229,7 @@ std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(Servic
             false, "failed to convert service response: unknown message type '" + client.msg_type + "_Response'");
       }
       return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", *output);
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
       return makeCliResponse<Ros2ServiceCallSrv::Response>(
           false, std::string("failed to convert service response: ") + error.what());
     }

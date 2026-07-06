@@ -34,7 +34,7 @@ constexpr char kRequestMessageTypeSuffix[] = "_Request";
 constexpr char kResponseMessageTypeSuffix[] = "_Response";
 } // namespace
 
-std::string serviceTypeSupportSymbol(const std::string &type, const std::string &typesupport_identifier) {
+std::string serviceTypeSupportSymbol(const std::string& type, const std::string& typesupport_identifier) {
   std::string symbol = typesupport_identifier + kServiceTypeSupportSymbolPrefix;
   for (const char ch : type) {
     if (ch == '/') {
@@ -46,20 +46,20 @@ std::string serviceTypeSupportSymbol(const std::string &type, const std::string 
   return symbol;
 }
 
-const rosidl_service_type_support_t *serviceTypeSupportHandle(const std::string &type,
-                                                              const std::string &typesupport_identifier,
-                                                              rcpputils::SharedLibrary &library) {
+const rosidl_service_type_support_t* serviceTypeSupportHandle(const std::string& type,
+                                                              const std::string& typesupport_identifier,
+                                                              rcpputils::SharedLibrary& library) {
   const std::string symbol = serviceTypeSupportSymbol(type, typesupport_identifier);
   if (!library.has_symbol(symbol)) {
     return nullptr;
   }
-  using GetServiceTypeSupportHandleFn = const rosidl_service_type_support_t *(*)();
+  using GetServiceTypeSupportHandleFn = const rosidl_service_type_support_t* (*)();
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   auto get_handle = reinterpret_cast<GetServiceTypeSupportHandleFn>(library.get_symbol(symbol));
   return get_handle();
 }
 
-RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string &type)
+RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string& type)
     : serialization_library(rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier)),
       introspection_library(
           rclcpp::get_typesupport_library(type, rosidl_typesupport_introspection_cpp::typesupport_identifier)),
@@ -70,35 +70,35 @@ RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string &type)
       members(requireMembers(introspection_handle)),
       serializer(serialization_handle) {}
 
-const rosidl_typesupport_introspection_cpp::MessageMembers &RuntimeMessageTypeSupport::requireMembers(
-    const rosidl_message_type_support_t *handle) {
-  const auto *members = membersFromHandle(handle);
+const rosidl_typesupport_introspection_cpp::MessageMembers& RuntimeMessageTypeSupport::requireMembers(
+    const rosidl_message_type_support_t* handle) {
+  const auto* members = membersFromHandle(handle);
   if (members == nullptr) {
     throw std::runtime_error("Introspection type support handle is null");
   }
   return *members;
 }
 
-RuntimeServiceTypeSupport::RuntimeServiceTypeSupport(const std::string &type,
+RuntimeServiceTypeSupport::RuntimeServiceTypeSupport(const std::string& type,
                                                      std::shared_ptr<rcpputils::SharedLibrary> library,
-                                                     const rosidl_service_type_support_t *handle)
+                                                     const rosidl_service_type_support_t* handle)
     : library(std::move(library)),
       handle(handle),
       request(type + kRequestMessageTypeSuffix),
       response(type + kResponseMessageTypeSuffix) {}
 
-std::shared_ptr<RuntimeServiceTypeSupport> RuntimeServiceTypeSupport::create(const std::string &type,
-                                                                             std::string &error) {
+std::shared_ptr<RuntimeServiceTypeSupport> RuntimeServiceTypeSupport::create(const std::string& type,
+                                                                             std::string& error) {
   try {
     auto library = rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier);
-    const auto *handle = serviceTypeSupportHandle(type, rosidl_typesupport_cpp::typesupport_identifier, *library);
+    const auto* handle = serviceTypeSupportHandle(type, rosidl_typesupport_cpp::typesupport_identifier, *library);
     if (handle == nullptr) {
       error = "Service typesupport symbol not found: " +
               serviceTypeSupportSymbol(type, rosidl_typesupport_cpp::typesupport_identifier);
       return nullptr;
     }
     return std::shared_ptr<RuntimeServiceTypeSupport>(new RuntimeServiceTypeSupport(type, std::move(library), handle));
-  } catch (const std::exception &exception) {
+  } catch (const std::exception& exception) {
     error = exception.what();
     return nullptr;
   }

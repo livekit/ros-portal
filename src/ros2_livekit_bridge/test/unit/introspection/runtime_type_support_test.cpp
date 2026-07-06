@@ -33,7 +33,7 @@ TEST(RuntimeTypeSupportTest, ServiceTypeSupportSymbolReplacesSlashes) {
 TEST(RuntimeTypeSupportTest, ServiceTypeSupportHandleLoadsKnownService) {
   auto library =
       rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle =
+  const auto* handle =
       serviceTypeSupportHandle("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier, *library);
   EXPECT_NE(handle, nullptr);
 }
@@ -41,7 +41,7 @@ TEST(RuntimeTypeSupportTest, ServiceTypeSupportHandleLoadsKnownService) {
 TEST(RuntimeTypeSupportTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol) {
   auto library =
       rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle =
+  const auto* handle =
       serviceTypeSupportHandle("std_srvs/srv/DoesNotExist", rosidl_typesupport_cpp::typesupport_identifier, *library);
   EXPECT_EQ(handle, nullptr);
 }

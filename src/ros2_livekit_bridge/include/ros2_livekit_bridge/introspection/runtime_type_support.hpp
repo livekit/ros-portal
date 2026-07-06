@@ -31,40 +31,40 @@ namespace ros2_livekit_bridge::introspection {
 /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
 /// @param typesupport_identifier Type-support identifier to build the symbol.
 /// @return Symbol name to resolve in the type-support shared library.
-std::string serviceTypeSupportSymbol(const std::string &type, const std::string &typesupport_identifier);
+std::string serviceTypeSupportSymbol(const std::string& type, const std::string& typesupport_identifier);
 
 /// @brief Load service type support by symbol from a type-support library.
 /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
 /// @param typesupport_identifier Type-support identifier to build the symbol.
 /// @param library Loaded type-support shared library to resolve the symbol in.
 /// @return Service type-support handle, or nullptr when the symbol is missing.
-const rosidl_service_type_support_t *serviceTypeSupportHandle(const std::string &type,
-                                                              const std::string &typesupport_identifier,
-                                                              rcpputils::SharedLibrary &library);
+const rosidl_service_type_support_t* serviceTypeSupportHandle(const std::string& type,
+                                                              const std::string& typesupport_identifier,
+                                                              rcpputils::SharedLibrary& library);
 
 /// @brief Runtime type-support data for one ROS message type.
 struct RuntimeMessageTypeSupport {
   /// @brief Load serialization and introspection type support for @p type.
   /// @param type ROS message type identifier.
-  explicit RuntimeMessageTypeSupport(const std::string &type);
+  explicit RuntimeMessageTypeSupport(const std::string& type);
 
   /// @brief Shared library that owns the serialization handle.
   std::shared_ptr<rcpputils::SharedLibrary> serialization_library;
   /// @brief Shared library that owns the introspection handle.
   std::shared_ptr<rcpputils::SharedLibrary> introspection_library;
   /// @brief C++ serialization type-support handle.
-  const rosidl_message_type_support_t *serialization_handle;
+  const rosidl_message_type_support_t* serialization_handle;
   /// @brief C++ introspection type-support handle.
-  const rosidl_message_type_support_t *introspection_handle;
+  const rosidl_message_type_support_t* introspection_handle;
   /// @brief Message member metadata from introspection type support.
-  const rosidl_typesupport_introspection_cpp::MessageMembers &members;
+  const rosidl_typesupport_introspection_cpp::MessageMembers& members;
   /// @brief Runtime serializer for this message type.
   rclcpp::SerializationBase serializer;
 
 private:
   /// @brief Require message introspection data.
-  static const rosidl_typesupport_introspection_cpp::MessageMembers &requireMembers(
-      const rosidl_message_type_support_t *handle);
+  static const rosidl_typesupport_introspection_cpp::MessageMembers& requireMembers(
+      const rosidl_message_type_support_t* handle);
 };
 
 /// @brief Runtime type-support data for one ROS service type.
@@ -74,20 +74,20 @@ struct RuntimeServiceTypeSupport {
   /// @param error Populated with a failure reason when creation fails.
   /// @return Loaded type support, or nullptr when service type support cannot
   /// be resolved.
-  static std::shared_ptr<RuntimeServiceTypeSupport> create(const std::string &type, std::string &error);
+  static std::shared_ptr<RuntimeServiceTypeSupport> create(const std::string& type, std::string& error);
 
   /// @brief Shared library that owns the service handle.
   std::shared_ptr<rcpputils::SharedLibrary> library;
   /// @brief C++ service type-support handle.
-  const rosidl_service_type_support_t *handle;
+  const rosidl_service_type_support_t* handle;
   /// @brief Request message type support.
   RuntimeMessageTypeSupport request;
   /// @brief Response message type support.
   RuntimeMessageTypeSupport response;
 
 private:
-  RuntimeServiceTypeSupport(const std::string &type, std::shared_ptr<rcpputils::SharedLibrary> library,
-                            const rosidl_service_type_support_t *handle);
+  RuntimeServiceTypeSupport(const std::string& type, std::shared_ptr<rcpputils::SharedLibrary> library,
+                            const rosidl_service_type_support_t* handle);
 };
 
 } // namespace ros2_livekit_bridge::introspection

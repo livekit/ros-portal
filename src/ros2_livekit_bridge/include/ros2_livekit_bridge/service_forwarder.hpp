@@ -80,7 +80,7 @@ public:
   /// @param node Bridge node used for service hosting and logs.
   /// @param callback_group Callback group used by created services.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Node &node,
+  ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Node& node,
                    rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods);
 
   /// @brief Return the number of local service servers created.
@@ -92,14 +92,14 @@ private:
   /// @brief Create one runtime-typed service server.
   /// @param route Service route metadata.
   /// @param callback_group Callback group used by the created service.
-  void createService(const ServiceRoute &route, rclcpp::CallbackGroup::SharedPtr callback_group);
+  void createService(const ServiceRoute& route, rclcpp::CallbackGroup::SharedPtr callback_group);
 
   /// @brief Forward one local ROS service request to the configured remote
   /// participant.
   /// @param route Route metadata for this service.
   /// @param request_data Runtime-typed request message memory.
   /// @param response_data Runtime-typed response message memory to populate.
-  void forwardRequest(const ServiceRoute &route, const void *request_data, void *response_data) const;
+  void forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data) const;
 
   NodeInterfaces node_interfaces_;
   rclcpp::Logger logger_;

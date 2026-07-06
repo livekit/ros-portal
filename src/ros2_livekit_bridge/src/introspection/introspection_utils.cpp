@@ -19,12 +19,12 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cstdint>
+#include <exception>
 #include <optional>
 #include <ros2_medkit_serialization/json_serializer.hpp>
 #include <ros2_medkit_serialization/type_cache.hpp>
 #include <ros2_medkit_serialization/vendored/dynmsg/message_reading.hpp>
 #include <ros2_medkit_serialization/vendored/dynmsg/yaml_utils.hpp>
-#include <stdexcept>
 #include <string>
 
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
@@ -78,10 +78,10 @@ std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &e
   }
 }
 
-std::string toYaml(const std::string &msg_type, const void *message) {
+std::optional<std::string> toYaml(const std::string &msg_type, const void *message) {
   const auto *type_info = ros2_medkit_serialization::TypeCache::instance().get_message_type_info(msg_type);
   if (type_info == nullptr) {
-    throw std::runtime_error("Type not found: " + msg_type);
+    return std::nullopt;
   }
   return toYaml(*type_info, message);
 }

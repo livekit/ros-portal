@@ -224,7 +224,11 @@ std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(Servic
 
     try {
       const auto output = introspection::toYaml(client.msg_type + "_Response", response_message.data());
-      return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", output);
+      if (!output) {
+        return makeCliResponse<Ros2ServiceCallSrv::Response>(
+            false, "failed to convert service response: unknown message type '" + client.msg_type + "_Response'");
+      }
+      return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", *output);
     } catch (const std::exception &error) {
       return makeCliResponse<Ros2ServiceCallSrv::Response>(
           false, std::string("failed to convert service response: ") + error.what());

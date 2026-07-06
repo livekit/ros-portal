@@ -57,8 +57,8 @@ std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &e
 /// @brief Format a runtime message as YAML.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Response`.
 /// @param message Pointer to the runtime message memory.
-/// @return YAML rendering of @p message.
-std::string toYaml(const std::string &msg_type, const void *message);
+/// @return YAML rendering of @p message, or `std::nullopt` when @p msg_type cannot be resolved.
+std::optional<std::string> toYaml(const std::string &msg_type, const void *message);
 
 /// @brief Format a runtime message as YAML.
 /// @param members Introspection metadata for the message type.

@@ -210,12 +210,17 @@ void ServiceForwarder::forwardRequest(const ServiceRoute &route, const void *req
   }
 
   const auto request_yaml = introspection::toYaml(route.msg_type + "_Request", request_data);
+  if (!request_yaml) {
+    RCLCPP_ERROR(logger_, "Cannot forward service '%s' [%s]: request message type could not be resolved",
+                 route.service.c_str(), route.msg_type.c_str());
+    return;
+  }
   const auto service_timeout_sec = ros2_cli::kDefaultTimeoutSec;
 
   ros2_cli::Ros2ServiceCallSrv::Request request;
   request.service = route.service;
   request.msg_type = route.msg_type;
-  request.payload = request_yaml;
+  request.payload = *request_yaml;
   request.timeout_sec = service_timeout_sec;
   const auto payload = serviceCallRequestToJson(request, service_timeout_sec);
 

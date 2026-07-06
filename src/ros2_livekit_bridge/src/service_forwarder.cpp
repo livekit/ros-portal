@@ -47,6 +47,10 @@ std::uint8_t serviceCallRpcTimeout(std::uint8_t service_timeout_sec) {
 } // namespace
 
 /// @brief Runtime-typed ROS service server for one forwarded service.
+///
+/// rclcpp's usual `Service<ServiceT>` fixes the service type at compile time. Here the type is only
+/// known at runtime (resolved from introspection type support), so we subclass `ServiceBase` and
+/// drive the rcl service API directly, mirroring what `Service<ServiceT>` does under the hood.
 struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
   using RequestHandler = std::function<void(const void *, void *)>;
 
@@ -56,12 +60,18 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
         service_name(std::move(service_name)),
         support(std::move(support)),
         handler(std::move(handler)) {
+    // support and handler are dereferenced on every request, so reject null inputs up front.
     if (!this->support || !this->handler) {
       throw std::invalid_argument("DynamicService requires type support and a request handler");
     }
 
+    // Use the same QoS rclcpp applies to services so ordinary clients stay compatible.
     rcl_service_options_t service_options = rcl_service_get_default_options();
     service_options.qos = rclcpp::ServicesQoS().get_rmw_qos_profile();
+
+    // Own the rcl_service_t through a shared_ptr with a custom deleter: rcl handles must be
+    // rcl_service_fini'd to release their RMW resources before the memory is freed. Capturing
+    // node_handle by value keeps the parent node alive until this deleter runs.
     service_handle_ = std::shared_ptr<rcl_service_t>(
         new rcl_service_t, [node_handle = node_handle_, service_name = this->service_name](rcl_service_t *service) {
           if (rcl_service_fini(service, node_handle.get()) != RCL_RET_OK) {
@@ -71,11 +81,15 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
           }
           delete service;
         });
+    // rcl_service_init requires a zero-initialized handle to start from.
     *service_handle_ = rcl_get_zero_initialized_service();
 
+    // Create the actual rcl/RMW service endpoint from the runtime type support handle.
     const rcl_ret_t ret = rcl_service_init(service_handle_.get(), node_handle_.get(), this->support->handle,
                                            this->service_name.c_str(), &service_options);
     if (ret != RCL_RET_OK) {
+      // rcl only reports a generic "invalid name" code, so re-run expansion to throw a descriptive
+      // error explaining exactly why the name was rejected.
       if (ret == RCL_RET_SERVICE_NAME_INVALID) {
         rcl_reset_error();
         rclcpp::expand_topic_or_service_name(this->service_name, rcl_node_get_name(node_handle_.get()),
@@ -85,7 +99,10 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
     }
   }
 
+  /// @brief Allocate request storage for the executor to deserialize the incoming request into
+  ///   (ServiceBase override).
   std::shared_ptr<void> create_request() override {
+    // Bundle the message with the type support that initialized it so the support outlives the message.
     struct RequestStorage {
       explicit RequestStorage(std::shared_ptr<introspection::RuntimeServiceTypeSupport> type_support)
           : support(std::move(type_support)),
@@ -95,15 +112,23 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
       introspection::DynamicMessage message;
     };
 
+    // Aliasing shared_ptr: keeps `storage` (support + message) alive but hands the executor only the
+    // raw message buffer it writes into.
     auto storage = std::make_shared<RequestStorage>(support);
     return std::shared_ptr<void>(storage, storage->message.data());
   }
 
+  /// @brief Allocate the request-id header the executor pairs with each request (ServiceBase override).
   std::shared_ptr<rmw_request_id_t> create_request_header() override { return std::make_shared<rmw_request_id_t>(); }
 
+  /// @brief Executor callback: run the forwarding handler on the request, then send the response
+  ///   (ServiceBase override).
   void handle_request(std::shared_ptr<rmw_request_id_t> request_header, std::shared_ptr<void> request) override {
+    // Zero-initialized response storage for the handler to populate.
     introspection::DynamicMessage response(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
 
+    // Never let a handler exception escape into the executor; log it and still send the (default)
+    // response below so the caller isn't left waiting on a reply that never comes.
     try {
       handler(request.get(), response.data());
     } catch (const std::exception &error) {
@@ -111,6 +136,8 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
                    error.what());
     }
 
+    // Send the reply back over rcl. A timeout is non-fatal (e.g. the client went away); any other
+    // failure is unexpected and thrown.
     const rcl_ret_t ret = rcl_send_response(get_service_handle().get(), request_header.get(), response.data());
     if (ret == RCL_RET_TIMEOUT) {
       RCLCPP_WARN(node_logger_.get_child("rclcpp"), "failed to send response to %s (timeout): %s", get_service_name(),

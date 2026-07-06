@@ -74,6 +74,9 @@ const rosidl_typesupport_introspection_cpp::MessageMembers& RuntimeMessageTypeSu
     const rosidl_message_type_support_t* handle) {
   const auto* members = membersFromHandle(handle);
   if (members == nullptr) {
+    // Near-unreachable: a non-null introspection handle with null members means corrupt type
+    // support. Thrown from the ctor init-list (members is a reference, so it cannot be null), and
+    // caught by RuntimeServiceTypeSupport::create, which surfaces it as nullptr + error.
     throw std::runtime_error("Introspection type support handle is null");
   }
   return *members;

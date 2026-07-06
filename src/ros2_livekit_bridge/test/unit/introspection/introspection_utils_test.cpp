@@ -197,6 +197,60 @@ TEST(ContainsOversizedSequenceTest, DetectsNestedOversizedSequenceInSequence) {
   EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
 }
 
+TEST(ContainsOversizedSequenceTest, DetectsDeeplyNestedOversizedSequence) {
+  // Oversized sequence buried several map/sequence levels deep: map -> seq -> map -> seq.
+  const auto payload =
+      "{outer: [{middle: {inner: " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}}]}";
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, RecursesPastEarlierMapKeys) {
+  // The oversized sequence lives under a later map key; recursion must not stop at the first.
+  const auto payload =
+      "{first: 1, second: [1, 2], third: " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}";
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, RecursesPastEarlierSequenceElements) {
+  // The oversized sequence lives under a later sequence element after small scalars/maps.
+  const auto payload =
+      "[0, {a: 1}, " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "]";
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, AcceptsDeeplyNestedSmallSequences) {
+  // Every nested sequence is within bounds, even though the structure is deep.
+  const auto inner = buildIntegerSequencePayload(kMaxResizableSequenceLength);
+  const auto payload = "{outer: [{middle: {inner: " + inner + "}}, " + inner + "]}";
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, AcceptsEmptyContainers) {
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load("[]")));
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load("{}")));
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load("{a: [], b: {}}")));
+}
+
+TEST(ContainsOversizedSequenceTest, IgnoresOversizedMap) {
+  // A map with many keys is not a sequence and must not be flagged.
+  std::string payload = "{";
+  for (std::size_t index = 0; index <= kMaxResizableSequenceLength; ++index) {
+    if (index > 0) {
+      payload += ",";
+    }
+    payload += "k" + std::to_string(index) + ": 0";
+  }
+  payload += "}";
+  EXPECT_FALSE(containsOversizedSequence(YAML::Load(payload)));
+}
+
+TEST(ContainsOversizedSequenceTest, DetectsSecondOfSiblingSequences) {
+  // First sibling sequence is in-bounds; the second is oversized.
+  const auto payload = "{a: " + buildIntegerSequencePayload(kMaxResizableSequenceLength) + ", b: " +
+                       buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}";
+  EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
+}
+
 TEST(LoadPayloadTest, RejectsEmptyPayload) {
   std::string error;
   const auto root = loadPayload("", error);

@@ -20,11 +20,8 @@ import subprocess
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
 from launch.actions import SetEnvironmentVariable
-from launch.actions import TimerAction
-from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
@@ -87,8 +84,6 @@ def _launch_setup(context, *args, **kwargs):
     room_name = _room_name_from_config(config_path)
     token = _mint_token(room_name, identity, valid_for, use_dev_credentials)
 
-    sim_enabled = _as_bool(LaunchConfiguration('sim').perform(context))
-
     bridge_node = Node(
         package='ros2_livekit_bridge',
         executable='ros2_livekit_bridge_node',
@@ -99,32 +94,11 @@ def _launch_setup(context, *args, **kwargs):
         arguments=['--ros-args', '--disable-external-lib-logs'],
     )
 
-    # When running against the simulator, give the sim stack time to come up
-    # before the bridge starts forwarding.
-    bridge_action = TimerAction(period=10.0, actions=[bridge_node]) if sim_enabled else bridge_node
-
-    actions = [
+    return [
         SetEnvironmentVariable('LIVEKIT_URL', livekit_url),
         SetEnvironmentVariable('LIVEKIT_TOKEN', token),
-        bridge_action,
+        bridge_node,
     ]
-
-    if sim_enabled:
-        waveshare_launch = PathJoinSubstitution([
-            FindPackageShare('waveshare_launch'),
-            'launch',
-            'waveshare.launch.xml',
-        ])
-        foxglove = LaunchConfiguration('foxglove').perform(context)
-        sim = LaunchConfiguration('sim').perform(context)
-        actions.append(
-            IncludeLaunchDescription(
-                AnyLaunchDescriptionSource(waveshare_launch),
-                launch_arguments={'sim': sim, 'foxglove': foxglove}.items(),
-            )
-        )
-
-    return actions
 
 
 def generate_launch_description():
@@ -141,15 +115,5 @@ def generate_launch_description():
         DeclareLaunchArgument('token_valid_for', default_value='1h'),
         DeclareLaunchArgument('use_dev_credentials', default_value='true'),
         DeclareLaunchArgument('ns', default_value='/'),
-        DeclareLaunchArgument(
-            'sim',
-            default_value='false',
-            description='Launch the Waveshare stack with sim:=true.',
-        ),
-        DeclareLaunchArgument(
-            'foxglove',
-            default_value='false',
-            description='Launch the Foxglove bridge when sim is enabled (passed to waveshare.launch.xml).',
-        ),
         OpaqueFunction(function=_launch_setup),
     ])

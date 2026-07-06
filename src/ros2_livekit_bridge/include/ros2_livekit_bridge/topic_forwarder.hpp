@@ -32,6 +32,7 @@
 #include <rclcpp/logger.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/qos.hpp>
+#include <rclcpp/timer.hpp>
 #include <regex>
 #include <string>
 #include <thread>
@@ -107,6 +108,10 @@ public:
     size_t min_qos_depth{kDefaultMinQosDepth};
     /// @brief Maximum subscription history depth after publisher aggregation.
     size_t max_qos_depth{kDefaultMaxQosDepth};
+    /// @brief Per-topic outbound forward-rate caps (Hz), keyed by ROS topic
+    /// name. Samples on a listed topic arriving faster than its cap are dropped
+    /// before being pushed to LiveKit (config `max_rate_hz`).
+    std::unordered_map<std::string, double> outbound_rate_limits;
   };
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
@@ -200,8 +205,22 @@ private:
 
   /// @brief Per-topic state for outbound serialized ROS forwarding.
   struct DataTopicState {
-    /// @brief LiveKit data writer lazily created on the first message.
+    /// @brief LiveKit data writer lazily created on the first forwarded sample.
     std::shared_ptr<DataTrackWriter> writer;
+    /// @brief Optional outbound forward-rate cap (Hz) from config `max_rate_hz`.
+    /// When set, samples are not forwarded on arrival; the latest is cached in
+    /// @ref pending_payload and emitted by @ref rate_timer at this rate.
+    std::optional<double> max_rate_hz;
+    /// @brief Most recently received serialized sample awaiting forwarding.
+    /// Only populated for rate-capped topics. Retained after a send so a failed
+    /// push can be retried on the next tick.
+    std::vector<std::uint8_t> pending_payload;
+    /// @brief Whether @ref pending_payload holds a sample not yet forwarded.
+    /// Acts as a dirty flag so an idle topic is not re-sent every tick.
+    bool has_pending{false};
+    /// @brief Wall timer that forwards @ref pending_payload at @ref max_rate_hz.
+    /// Null for uncapped topics, which forward on arrival instead.
+    rclcpp::TimerBase::SharedPtr rate_timer;
   };
 
   /// @brief Per-track state for inbound LiveKit-to-ROS data forwarding.
@@ -226,6 +245,17 @@ private:
     /// @brief Set to stop the inbound read loop during teardown.
     std::atomic_bool stop{false};
   };
+
+  /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,
+  /// creating it lazily on first use. Must be called with @ref
+  /// outbound_topics_mutex_ held.
+  /// @return true if a valid writer is available on @p state.
+  bool ensureWriterLocked(const std::string &topic_name, DataTopicState &state);
+
+  /// @brief Timer callback for a rate-capped outbound topic. Forwards the most
+  /// recently cached sample (if any new one has arrived) to LiveKit, giving an
+  /// egress rate fixed at `max_rate_hz` and decoupled from the input rate.
+  void forwardCachedSample(const std::string &topic_name);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
   void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);

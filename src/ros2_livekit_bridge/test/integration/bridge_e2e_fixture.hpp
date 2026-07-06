@@ -254,11 +254,12 @@ protected:
     if (!waitFor(
             [&]() {
               publisher->publish(makeMessage("warmup:" + expected_payload));
-              inbound_topic = findInboundTopic(*receiver_node, source_topic);
+              inbound_topic = findInboundTopic(*receiver_node, expected_inbound_topic);
               return inbound_topic.has_value();
             },
             kGraphTimeout)) {
-      ADD_FAILURE() << "No inbound ROS topic appeared for " << source_topic;
+      ADD_FAILURE() << "No inbound ROS topic appeared for " << expected_inbound_topic << " (from " << source_topic
+                    << ")";
       return false;
     }
 

@@ -159,6 +159,8 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   }
 
   auto callback = [this, topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+    auto& rcl_msg = msg->get_rcl_serialized_message();
+
     std::shared_ptr<DataTrackWriter> writer;
     {
       std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
@@ -168,28 +170,30 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       }
       auto& state = state_it->second;
 
-      if (!state.writer) {
-        const auto writer_result = livekit_methods_.publish_data_track(topic_name);
-        if (!writer_result) {
-          RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
-                       writer_result.error().c_str());
-          return;
-        }
-
-        state.writer = writer_result.value();
-        if (!state.writer || !state.writer->try_push) {
-          RCLCPP_ERROR(logger_, "publish_data_track('%s') returned an invalid writer", topic_name.c_str());
-          state.writer.reset();
-          return;
-        }
-
-        RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
+      // overly verbose comment for discussion purposes:
+      // Rate-capped topics do not forward on arrival. The latest sample is
+      // cached here (zero-order hold) and the topic's rate_timer forwards it at
+      // max_rate_hz (see forwardCachedSample). This decouples egress from the
+      // input rate, so the configured rate is hit exactly regardless of how the
+      // input rate divides it -- unlike a drop gate, which quantizes to
+      // input_rate / N. Trade-off: a sample is delayed up to one timer period,
+      // and because only the most recent sample survives, this is lossy for
+      // topics whose messages each carry distinct content (e.g. /tf, which
+      // aggregates separate transforms). It is ideal for large, whole-state
+      // messages where only the newest value matters.
+      if (state.max_rate_hz.has_value()) {
+        state.pending_payload.assign(rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length);
+        state.has_pending = true;
+        return;
       }
 
+      // Uncapped topics forward every sample immediately.
+      if (!ensureWriterLocked(topic_name, state)) {
+        return;
+      }
       writer = state.writer;
     }
 
-    auto& rcl_msg = msg->get_rcl_serialized_message();
     auto push_result =
         writer->try_push(std::vector<std::uint8_t>(rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length));
     if (!push_result) {
@@ -203,7 +207,13 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  data_topic_states_[topic_name] = DataTopicState{};
+  DataTopicState state{};
+  if (const auto rate_it = options_.outbound_rate_limits.find(topic_name);
+      rate_it != options_.outbound_rate_limits.end()) {
+    state.max_rate_hz = rate_it->second;
+    RCLCPP_INFO(logger_, "Outbound topic '%s' rate-capped at %.3g Hz", topic_name.c_str(), rate_it->second);
+  }
+  data_topic_states_[topic_name] = std::move(state);
 
   try {
     rclcpp::SubscriptionOptions sub_options;
@@ -211,6 +221,17 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     auto subscription =
         node->create_generic_subscription(topic_name, topic_type, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+
+    // For rate-capped topics, kick off a timer at the configured max_rate_hz
+    // to forwards the latest cached sample each tick (see forwardCachedSample).
+    const auto rate = data_topic_states_[topic_name].max_rate_hz;
+    if (rate.has_value()) {
+      const auto period =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / *rate));
+      auto timer =
+          node->create_wall_timer(period, [this, topic_name]() { forwardCachedSample(topic_name); }, callback_group_);
+      data_topic_states_[topic_name].rate_timer = std::move(timer);
+    }
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create generic subscription for '%s' [%s]: %s", topic_name.c_str(),
@@ -224,6 +245,69 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   }
 
   RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (CDR)", topic_name.c_str(), topic_type.c_str());
+}
+
+bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, DataTopicState& state) {
+  if (state.writer) {
+    return true;
+  }
+
+  const auto writer_result = livekit_methods_.publish_data_track(topic_name);
+  if (!writer_result) {
+    RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
+                 writer_result.error().c_str());
+    return false;
+  }
+
+  state.writer = writer_result.value();
+  if (!state.writer || !state.writer->try_push) {
+    RCLCPP_ERROR(logger_, "publish_data_track('%s') returned an invalid writer", topic_name.c_str());
+    state.writer.reset();
+    return false;
+  }
+
+  RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
+  return true;
+}
+
+void TopicForwarder::forwardCachedSample(const std::string& topic_name) {
+  std::shared_ptr<DataTrackWriter> writer;
+  std::vector<std::uint8_t> payload;
+  {
+    std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    const auto state_it = data_topic_states_.find(topic_name);
+    if (state_it == data_topic_states_.end()) {
+      return;
+    }
+    auto& state = state_it->second;
+
+    // Dirty flag: skip ticks where no new sample has arrived so an idle topic
+    // is not re-sent, which would turn the rate cap into a rate floor.
+    if (!state.has_pending) {
+      return;
+    }
+    if (!ensureWriterLocked(topic_name, state)) {
+      return;
+    }
+    writer = state.writer;
+    // Copy (not move) the payload: it is retained in pending_payload so a failed
+    // push can be retried on the next tick.
+    payload = state.pending_payload;
+    state.has_pending = false;
+  }
+
+  auto push_result = writer->try_push(std::move(payload));
+  if (!push_result) {
+    RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Failed to push data frame for '%s': %s", topic_name.c_str(),
+                         push_result.error().c_str());
+    // Re-arm so the next tick retries. If a newer sample arrived meanwhile,
+    // has_pending is already true with fresher data; setting it again is a no-op.
+    std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    const auto state_it = data_topic_states_.find(topic_name);
+    if (state_it != data_topic_states_.end()) {
+      state_it->second.has_pending = true;
+    }
+  }
 }
 
 void TopicForwarder::createImageSubscriber(const std::string& topic_name) {

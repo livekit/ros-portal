@@ -98,6 +98,8 @@ bool Ros2LiveKitBridge::initialize() {
   auto preserve_id_topic_compiled_patterns = utils::compileRegexPatterns(preserve_id_topic_patterns, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
+  auto outbound_rate_limits = utils::outboundRateLimits(*config);
+
   std::vector<ServiceForwarder::ServiceRoute> outgoing_service_routes;
   outgoing_service_routes.reserve(config->services.size());
   for (const auto &service_config : config->services) {
@@ -173,7 +175,7 @@ bool Ros2LiveKitBridge::initialize() {
 
   if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
                                 std::move(incoming_topic_compiled_patterns), std::move(incoming_topic_types),
-                                std::move(preserve_id_topic_compiled_patterns))) {
+                                std::move(preserve_id_topic_compiled_patterns), std::move(outbound_rate_limits))) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }
@@ -303,7 +305,8 @@ void Ros2LiveKitBridge::onParticipantsUpdated(livekit::Room &room, const livekit
 bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
                                                  std::vector<std::regex> incoming_topic_compiled_patterns,
                                                  std::unordered_map<std::string, std::string> incoming_topic_types,
-                                                 std::vector<std::regex> preserve_id_topic_compiled_patterns) {
+                                                 std::vector<std::regex> preserve_id_topic_compiled_patterns,
+                                                 std::unordered_map<std::string, double> outbound_rate_limits) {
   try {
     const TopicForwarder::TopicForwarderOptions forwarder_options{
         std::move(outgoing_topic_compiled_patterns),
@@ -313,6 +316,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
         best_effort_qos_topic_patterns_,
         min_qos_depth_,
         max_qos_depth_,
+        std::move(outbound_rate_limits),
     };
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;

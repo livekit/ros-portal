@@ -85,14 +85,18 @@ std::optional<std::string> sanitizeRosNameToken(const std::string& token) {
   return sanitized;
 }
 
-std::optional<std::string> liveKitToRosTopicName(const std::string& participant_identity,
-                                                 const std::string& track_name) {
-  if (participant_identity.empty()) {
-    return std::nullopt;
-  }
-
+std::optional<std::string> liveKitToRosTopicName(const std::string& track_name) {
   const auto normalized_track_name = normalizeTrackTopicName(track_name);
   if (!normalized_track_name.has_value() || *normalized_track_name == "/") {
+    return std::nullopt;
+  }
+  return normalized_track_name;
+}
+
+std::optional<std::string> liveKitToRosTopicName(const std::string& participant_identity,
+                                                 const std::string& track_name) {
+  const auto ros_topic_name = liveKitToRosTopicName(track_name);
+  if (!ros_topic_name.has_value()) {
     return std::nullopt;
   }
 
@@ -100,15 +104,7 @@ std::optional<std::string> liveKitToRosTopicName(const std::string& participant_
   if (!participant_prefix.has_value()) {
     return std::nullopt;
   }
-  return "/" + *participant_prefix + *normalized_track_name;
-}
-
-std::optional<std::string> liveKitToRosTopicName(const std::string& track_name) {
-  const auto normalized_track_name = normalizeTrackTopicName(track_name);
-  if (!normalized_track_name.has_value() || *normalized_track_name == "/") {
-    return std::nullopt;
-  }
-  return normalized_track_name;
+  return "/" + *participant_prefix + *ros_topic_name;
 }
 
 void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger) {
@@ -194,5 +190,21 @@ std::unordered_map<std::string, std::string> incomingTopicTypes(const bridge_con
   }
 
   return types;
+}
+
+std::unordered_map<std::string, double> outboundRateLimits(const bridge_config::BridgeConfig& config) {
+  std::unordered_map<std::string, double> limits;
+
+  for (const auto& topic_config : config.topics) {
+    const bool outbound = topic_config.direction == bridge_config::Direction::Out ||
+                          topic_config.direction == bridge_config::Direction::Bidirectional;
+    if (!outbound || !topic_config.max_rate_hz.has_value() || *topic_config.max_rate_hz <= 0.0) {
+      continue;
+    }
+
+    limits.emplace(topic_config.topic, *topic_config.max_rate_hz);
+  }
+
+  return limits;
 }
 } // namespace ros2_livekit_bridge::utils

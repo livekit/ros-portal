@@ -37,10 +37,11 @@ std::string fieldPath(const std::string& path, std::string_view field);
 std::string nodeContext(const std::string& path, const YAML::Node& node);
 
 // Throws ConfigError describing a node that failed validation.
-void fail(const std::string& path, const YAML::Node& node, const std::string& expected, const std::string& detail);
+[[noreturn]] void fail(const std::string& path, const YAML::Node& node, const std::string& expected,
+                       const std::string& detail);
 
 // Throws ConfigError describing a required field that is absent.
-void failMissing(const std::string& path, const std::string& expected);
+[[noreturn]] void failMissing(const std::string& path, const std::string& expected);
 
 // Validates that the node is a map / sequence, failing otherwise.
 void requireMap(const YAML::Node& node, const std::string& path);

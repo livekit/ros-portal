@@ -45,6 +45,7 @@ ros2_livekit_bridge:
 
     - topic: "/lidar/points"
       direction: "out"
+      max_rate_hz: 10
 
     - topic: "/odom"
       direction: "bidirectional"

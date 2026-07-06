@@ -289,28 +289,5 @@ TEST(LoadPayloadTest, ParsesValidPayload) {
   EXPECT_EQ((*root)["data"].as<std::string>(), "hello");
 }
 
-TEST(MessageTypeStringTest, ConvertsCppNamespaceSeparators) {
-  rosidl_typesupport_introspection_cpp::MessageMembers members{};
-  members.message_namespace_ = "std_msgs::msg";
-  members.message_name_ = "String";
-
-  const auto type = messageTypeString(members);
-  ASSERT_TRUE(type.has_value());
-  EXPECT_EQ(*type, "std_msgs/msg/String");
-}
-
-TEST(MessageTypeStringTest, RejectsMissingMetadata) {
-  rosidl_typesupport_introspection_cpp::MessageMembers members{};
-
-  EXPECT_FALSE(messageTypeString(members).has_value());
-
-  members.message_namespace_ = "std_msgs::msg";
-  EXPECT_FALSE(messageTypeString(members).has_value());
-
-  members.message_namespace_ = nullptr;
-  members.message_name_ = "String";
-  EXPECT_FALSE(messageTypeString(members).has_value());
-}
-
 } // namespace
 } // namespace ros2_livekit_bridge::introspection

@@ -18,11 +18,12 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <ros2_medkit_serialization/json_serializer.hpp>
 #include <ros2_medkit_serialization/type_cache.hpp>
-#include <sstream>
+#include <ros2_medkit_serialization/vendored/dynmsg/message_reading.hpp>
+#include <ros2_medkit_serialization/vendored/dynmsg/yaml_utils.hpp>
 #include <stdexcept>
 #include <string>
 
@@ -77,37 +78,20 @@ std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &e
   }
 }
 
-std::optional<std::string> messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members) {
-  std::string message_namespace = members.message_namespace_ == nullptr ? "" : members.message_namespace_;
-  const std::string message_name = members.message_name_ == nullptr ? "" : members.message_name_;
-  if (message_namespace.empty() || message_name.empty()) {
-    return std::nullopt;
-  }
-
-  std::size_t position = 0U;
-  while ((position = message_namespace.find("::", position)) != std::string::npos) {
-    message_namespace.replace(position, 2U, "/");
-    ++position;
-  }
-  return message_namespace + "/" + message_name;
-}
-
 std::string toYaml(const std::string &msg_type, const void *message) {
-  // JsonSerializer is stateless and thread-safe, so a single shared instance is reused across calls.
-  static const ros2_medkit_serialization::JsonSerializer serializer;
-  const auto json = serializer.to_json(msg_type, message);
-  const auto yaml = ros2_medkit_serialization::JsonSerializer::json_to_yaml(json);
-  std::ostringstream stream;
-  stream << yaml;
-  return stream.str();
+  const auto *type_info = ros2_medkit_serialization::TypeCache::instance().get_message_type_info(msg_type);
+  if (type_info == nullptr) {
+    throw std::runtime_error("Type not found: " + msg_type);
+  }
+  return toYaml(*type_info, message);
 }
 
 std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers &members, const void *message) {
-  const auto msg_type = messageTypeString(members);
-  if (!msg_type.has_value()) {
-    throw std::runtime_error("message introspection metadata is missing namespace or name");
-  }
-  return toYaml(*msg_type, message);
+  // dynmsg renders the message straight to a YAML node. medkit's JsonSerializer::to_json builds this
+  // same node internally and then converts it to JSON, so routing through it would round-trip
+  // message -> YAML -> JSON -> YAML. Calling dynmsg directly keeps it message -> YAML -> string.
+  const RosMessage_Cpp ros_msg{&members, const_cast<uint8_t *>(static_cast<const uint8_t *>(message))};
+  return dynmsg::yaml_to_string(dynmsg::cpp::message_to_yaml(ros_msg));
 }
 
 std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string &msg_type,

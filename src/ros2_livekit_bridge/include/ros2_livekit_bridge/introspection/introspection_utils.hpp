@@ -34,8 +34,7 @@ namespace ros2_livekit_bridge::introspection {
 /// type-erased `void *`; this is the single checked cast for that access.
 ///
 /// @param handle Introspection message type-support handle.
-/// @return Pointer to the message members, or nullptr when the handle or its
-///   payload is null.
+/// @return Pointer to the message members, or nullptr when the handle or its payload is null.
 inline const rosidl_typesupport_introspection_cpp::MessageMembers *membersFromHandle(
     const rosidl_message_type_support_t *handle) {
   if (handle == nullptr || handle->data == nullptr) {
@@ -45,7 +44,7 @@ inline const rosidl_typesupport_introspection_cpp::MessageMembers *membersFromHa
 }
 
 /// @brief Returns true when @p node or any nested map value contains a sequence longer than
-///   ros2_cli::kMaxResizableSequenceLength.
+/// ros2_cli::kMaxResizableSequenceLength.
 /// @param node Parsed YAML node to inspect.
 bool containsOversizedSequence(const YAML::Node &node);
 
@@ -54,12 +53,6 @@ bool containsOversizedSequence(const YAML::Node &node);
 /// @param error Set to a human-readable description when parsing or validation fails.
 /// @return Parsed YAML root node, or `std::nullopt` on failure.
 std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &error);
-
-/// @brief Build a ROS interface type string from message introspection metadata.
-/// @param members Introspection metadata for the message type.
-/// @return ROS interface type, such as `std_msgs/msg/String`, or `std::nullopt`
-///   when namespace or name metadata is missing.
-std::optional<std::string> messageTypeString(const rosidl_typesupport_introspection_cpp::MessageMembers &members);
 
 /// @brief Format a runtime message as YAML.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Response`.

@@ -213,8 +213,7 @@ TEST(ContainsOversizedSequenceTest, RecursesPastEarlierMapKeys) {
 
 TEST(ContainsOversizedSequenceTest, RecursesPastEarlierSequenceElements) {
   // The oversized sequence lives under a later sequence element after small scalars/maps.
-  const auto payload =
-      "[0, {a: 1}, " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "]";
+  const auto payload = "[0, {a: 1}, " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "]";
   EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
 }
 
@@ -246,8 +245,8 @@ TEST(ContainsOversizedSequenceTest, IgnoresOversizedMap) {
 
 TEST(ContainsOversizedSequenceTest, DetectsSecondOfSiblingSequences) {
   // First sibling sequence is in-bounds; the second is oversized.
-  const auto payload = "{a: " + buildIntegerSequencePayload(kMaxResizableSequenceLength) + ", b: " +
-                       buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}";
+  const auto payload = "{a: " + buildIntegerSequencePayload(kMaxResizableSequenceLength) +
+                       ", b: " + buildIntegerSequencePayload(kMaxResizableSequenceLength + 1U) + "}";
   EXPECT_TRUE(containsOversizedSequence(YAML::Load(payload)));
 }
 

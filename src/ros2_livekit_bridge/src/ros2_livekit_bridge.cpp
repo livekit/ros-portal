@@ -164,14 +164,17 @@ bool Ros2LiveKitBridge::initialize() {
 
   if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
                                 std::move(incoming_topic_compiled_patterns))) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }
 
   if (!initializeRos2CliManager()) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
     return false;
   }
 
   if (!initializeServiceForwarder(std::move(outgoing_service_routes))) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder");
     return false;
   }
 
@@ -368,7 +371,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
                                                                                 // constructor
                                                         std::move(forwarder_lk_methods));
   } catch (...) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder, unknown exception");
     return false;
   }
   return topic_forwarder_ != nullptr;
@@ -390,7 +393,7 @@ bool Ros2LiveKitBridge::initializeRos2CliManager() {
     ros2_cli_manager_ = std::make_unique<Ros2CliManager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
                                                          std::move(topic_publish_allowed));
   } catch (...) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");
     return false;
   }
 
@@ -411,7 +414,7 @@ bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder:
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
     return false;
   } catch (...) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder");
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder, unknown exception");
     return false;
   }
 

@@ -93,7 +93,8 @@ std::optional<std::string> messageTypeString(const rosidl_typesupport_introspect
 }
 
 std::string toYaml(const std::string &msg_type, const void *message) {
-  ros2_medkit_serialization::JsonSerializer serializer;
+  // JsonSerializer is stateless and thread-safe, so a single shared instance is reused across calls.
+  static const ros2_medkit_serialization::JsonSerializer serializer;
   const auto json = serializer.to_json(msg_type, message);
   const auto yaml = ros2_medkit_serialization::JsonSerializer::json_to_yaml(json);
   std::ostringstream stream;
@@ -117,7 +118,7 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
   }
 
   try {
-    ros2_medkit_serialization::JsonSerializer serializer;
+    static const ros2_medkit_serialization::JsonSerializer serializer;
     return serializer.serialize(msg_type, ros2_medkit_serialization::JsonSerializer::yaml_to_json(*root));
   } catch (const std::exception &resolve_error) {
     error = resolve_error.what();
@@ -143,7 +144,7 @@ bool populateMessageFromYaml(const std::string &msg_type, const std::string &pay
       error = "Type not found: " + msg_type;
       return false;
     }
-    ros2_medkit_serialization::JsonSerializer serializer;
+    static const ros2_medkit_serialization::JsonSerializer serializer;
     serializer.from_json_to_message(type_info, ros2_medkit_serialization::JsonSerializer::yaml_to_json(*root), message);
     return true;
   } catch (const std::exception &conversion_error) {

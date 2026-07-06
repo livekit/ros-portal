@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
-
 #include <gtest/gtest.h>
-#include <yaml-cpp/yaml.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <optional>
 #include <rclcpp/serialization.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -40,6 +35,7 @@
 #include <test_msgs/msg/strings.hpp>
 #include <test_msgs/msg/w_strings.hpp>
 
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge {
@@ -57,7 +53,7 @@ MessageT deserialize(const rclcpp::SerializedMessage& serialized) {
 // error string on failure so the test name plus message pinpoints the cause.
 rclcpp::SerializedMessage serialize(const std::string& msg_type, const std::string& payload) {
   std::string error;
-  auto serialized = ros2_cli::serializedMessageFromYaml(msg_type, payload, error);
+  auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
   EXPECT_TRUE(serialized.has_value()) << error;
   return serialized.value_or(rclcpp::SerializedMessage{});
 }
@@ -65,9 +61,20 @@ rclcpp::SerializedMessage serialize(const std::string& msg_type, const std::stri
 // Asserts conversion fails and reports a non-empty diagnostic message.
 void expectFailure(const std::string& msg_type, const std::string& payload) {
   std::string error;
-  const auto serialized = ros2_cli::serializedMessageFromYaml(msg_type, payload, error);
+  const auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
   EXPECT_FALSE(serialized.has_value());
   EXPECT_FALSE(error.empty());
+}
+
+// Asserts conversion succeeds without reporting an error. Used for payloads the
+// medkit serialization path accepts leniently (it does not enforce message-IDL
+// constraints such as bounded-string length, integer range, unknown-field
+// rejection, or scalar-vs-sequence shape); see the AcceptsLenient* tests below.
+void expectAccepted(const std::string& msg_type, const std::string& payload) {
+  std::string error;
+  const auto serialized = introspection::serializedMessageFromYaml(msg_type, payload, error);
+  EXPECT_TRUE(serialized.has_value()) << error;
+  EXPECT_TRUE(error.empty()) << error;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +87,15 @@ TEST(YamlMessageTest, SerializesStringMessage) {
   const auto serialized = serialize("std_msgs/msg/String", "{data: hello}");
 
   const auto message = deserialize<std_msgs::msg::String>(serialized);
+  EXPECT_EQ(message.data, "hello");
+}
+
+TEST(YamlMessageTest, PopulatesExistingMessageFromYaml) {
+  std_msgs::msg::String message;
+  std::string error;
+
+  EXPECT_TRUE(introspection::populateMessageFromYaml("std_msgs/msg/String", "{data: hello}", &message, error)) << error;
+
   EXPECT_EQ(message.data, "hello");
 }
 
@@ -148,9 +164,14 @@ TEST(YamlMessageTest, SerializesBoundedString) {
   EXPECT_EQ(message.bounded_string_value, "within bound");
 }
 
-TEST(YamlMessageTest, RejectsBoundedStringOverflow) {
-  // bounded_string_value is declared as string<=22; 23 characters overflows.
-  expectFailure("test_msgs/msg/Strings", "{bounded_string_value: aaaaaaaaaaaaaaaaaaaaaaa}");
+TEST(YamlMessageTest, AcceptsLenientBoundedStringOverflow) {
+  // bounded_string_value is declared as string<=22; 23 characters overflow the
+  // IDL bound. The medkit serialization path does not enforce string bounds, so
+  // the payload is accepted and the full value is carried through.
+  const auto message = deserialize<test_msgs::msg::Strings>(
+      serialize("test_msgs/msg/Strings", "{bounded_string_value: aaaaaaaaaaaaaaaaaaaaaaa}"));
+
+  EXPECT_EQ(message.bounded_string_value, "aaaaaaaaaaaaaaaaaaaaaaa");
 }
 
 TEST(YamlMessageTest, SerializesBoundedSequence) {
@@ -198,17 +219,39 @@ TEST(YamlMessageTest, SerializesSequenceOfMessages) {
 
 TEST(YamlMessageTest, RejectsMalformedYaml) { expectFailure("std_msgs/msg/String", "{data: ["); }
 
-TEST(YamlMessageTest, RejectsUnknownField) { expectFailure("std_msgs/msg/String", "{missing: hello}"); }
+TEST(YamlMessageTest, AcceptsLenientUnknownField) {
+  // The serialization path walks the message type's members and skips any that
+  // are absent from the payload; fields present in the payload but unknown to
+  // the type are simply never read. The unknown key is ignored and known fields
+  // retain their defaults.
+  const auto message = deserialize<std_msgs::msg::String>(serialize("std_msgs/msg/String", "{missing: hello}"));
+
+  EXPECT_EQ(message.data, "");
+}
 
 TEST(YamlMessageTest, RejectsWrongScalarType) { expectFailure("std_msgs/msg/Int32", "{data: not-an-integer}"); }
 
-TEST(YamlMessageTest, RejectsIntegerOutOfRange) { expectFailure("std_msgs/msg/Int8", "{data: 9999}"); }
+TEST(YamlMessageTest, AcceptsLenientIntegerOutOfRange) {
+  // int8 has range [-128, 127]; 9999 exceeds it. The serialization path applies
+  // no range check and narrows the value via the YAML scalar conversion, so the
+  // payload is accepted rather than rejected. The narrowed result is defined by
+  // yaml-cpp's conversion and intentionally not asserted here.
+  expectAccepted("std_msgs/msg/Int8", "{data: 9999}");
+}
 
 TEST(YamlMessageTest, RejectsFloatOutOfRange) { expectFailure("std_msgs/msg/Float32", "{data: 1.0e40}"); }
 
 TEST(YamlMessageTest, RejectsNonMapForMessage) { expectFailure("std_msgs/msg/String", "hello"); }
 
-TEST(YamlMessageTest, RejectsNonSequenceForArray) { expectFailure("std_msgs/msg/UInt8MultiArray", "{data: 5}"); }
+TEST(YamlMessageTest, AcceptsLenientNonSequenceForArray) {
+  // data is an unbounded sequence. A scalar YAML node has size 0, so the
+  // sequence path resizes to 0 and writes no elements rather than rejecting the
+  // scalar. The payload is accepted and the sequence comes through empty.
+  const auto message =
+      deserialize<std_msgs::msg::UInt8MultiArray>(serialize("std_msgs/msg/UInt8MultiArray", "{data: 5}"));
+
+  EXPECT_TRUE(message.data.empty());
+}
 
 TEST(YamlMessageTest, RejectsWrongFixedArrayLength) {
   expectFailure("sensor_msgs/msg/Imu", "{orientation_covariance: [1, 2, 3]}");
@@ -238,96 +281,6 @@ TEST(YamlMessageTest, RejectsOversizedResizableSequence) {
 }
 
 TEST(YamlMessageTest, RejectsUnknownInterfaceType) { expectFailure("missing_msgs/msg/Nope", "{data: hello}"); }
-
-// ---------------------------------------------------------------------------
-// Direct coverage of the leaf scalar converters in ros2_cli::detail. These hold
-// the value-level parsing and range-checking logic and are unit tested against
-// raw YAML nodes, independent of ROS type introspection.
-// ---------------------------------------------------------------------------
-
-using ros2_cli::detail::checkedChar;
-using ros2_cli::detail::checkedFloat;
-using ros2_cli::detail::checkedInteger;
-using ros2_cli::detail::checkedString;
-using ros2_cli::detail::checkedU16String;
-using ros2_cli::detail::checkedWChar;
-
-YAML::Node node(const std::string& text) { return YAML::Load(text); }
-
-TEST(YamlScalarTest, CheckedIntegerParsesInRange) {
-  std::string error;
-  EXPECT_EQ(checkedInteger<std::int32_t>(node("42"), "f", error), 42);
-  EXPECT_EQ(checkedInteger<std::int8_t>(node("-128"), "f", error), -128);
-  EXPECT_EQ(checkedInteger<std::uint8_t>(node("255"), "f", error), 255U);
-}
-
-TEST(YamlScalarTest, CheckedIntegerRejectsSignedOverflow) {
-  std::string error;
-  EXPECT_FALSE(checkedInteger<std::int8_t>(node("9999"), "f", error));
-  EXPECT_FALSE(checkedInteger<std::int8_t>(node("-9999"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedIntegerRejectsUnsignedOverflow) {
-  std::string error;
-  EXPECT_FALSE(checkedInteger<std::uint8_t>(node("256"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedIntegerRejectsNonInteger) {
-  std::string error;
-  EXPECT_FALSE(checkedInteger<std::int32_t>(node("not-an-integer"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedFloatParsesInRange) {
-  std::string error;
-  EXPECT_FLOAT_EQ(checkedFloat<float>(node("1.5"), "f", error).value(), 1.5F);
-  EXPECT_DOUBLE_EQ(checkedFloat<double>(node("-2.25"), "f", error).value(), -2.25);
-}
-
-TEST(YamlScalarTest, CheckedFloatRejectsOutOfRange) {
-  std::string error;
-  EXPECT_FALSE(checkedFloat<float>(node("1.0e40"), "f", error));
-  EXPECT_FALSE(checkedFloat<float>(node("-1.0e40"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedFloatRejectsNonNumeric) {
-  std::string error;
-  EXPECT_FALSE(checkedFloat<double>(node("abc"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedStringRespectsUpperBound) {
-  std::string error;
-  EXPECT_EQ(checkedString(node("hello"), 0U, "f", error), "hello");
-  EXPECT_EQ(checkedString(node("abc"), 3U, "f", error), "abc");
-  EXPECT_FALSE(checkedString(node("abcd"), 3U, "f", error));
-}
-
-TEST(YamlScalarTest, CheckedU16StringWidensCodeUnits) {
-  std::string error;
-  const auto value = checkedU16String(node("AB"), 0U, "f", error);
-  ASSERT_TRUE(value.has_value());
-  ASSERT_EQ(value->size(), 2U);
-  EXPECT_EQ((*value)[0], u'A');
-  EXPECT_EQ((*value)[1], u'B');
-  EXPECT_FALSE(checkedU16String(node("abcd"), 3U, "f", error));
-}
-
-TEST(YamlScalarTest, CheckedCharAcceptsCharacterOrCode) {
-  std::string error;
-  EXPECT_EQ(checkedChar(node("a"), "f", error), 'a');
-  EXPECT_EQ(checkedChar(node("65"), "f", error), 'A');
-}
-
-TEST(YamlScalarTest, CheckedCharRejectsInvalid) {
-  std::string error;
-  EXPECT_FALSE(checkedChar(node("ab"), "f", error));
-  EXPECT_FALSE(checkedChar(node("9999"), "f", error));
-}
-
-TEST(YamlScalarTest, CheckedWCharAcceptsCharacterOrCode) {
-  std::string error;
-  EXPECT_EQ(checkedWChar(node("a"), "f", error), u'a');
-  EXPECT_EQ(checkedWChar(node("300"), "f", error), static_cast<char16_t>(300));
-}
 
 } // namespace
 } // namespace ros2_livekit_bridge

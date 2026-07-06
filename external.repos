@@ -1,8 +1,8 @@
 repositories:
-  diagnostics:
+  ros2_medkit:
     type: git
-    url: https://github.com/ros/diagnostics.git
-    version: 6f42879278aba0b62633189b7c5821693279e8f0
+    url: https://github.com/selfpatch/ros2_medkit.git
+    version: e9697424c8e649a94c75678aaf26db2c00e48db2
   waver:
     type: git
     url: https://github.com/GGomezMorales/waver.git

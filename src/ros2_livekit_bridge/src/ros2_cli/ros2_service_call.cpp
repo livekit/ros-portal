@@ -29,21 +29,15 @@
 #include <rclcpp/client.hpp>
 #include <rclcpp/exceptions.hpp>
 #include <rclcpp/expand_topic_or_service_name.hpp>
-#include <rclcpp/serialization.hpp>
-#include <rclcpp/typesupport_helpers.hpp>
-#include <rcpputils/shared_library.hpp>
 #include <rosidl_runtime_cpp/message_initialization.hpp>
-#include <rosidl_typesupport_cpp/identifier.hpp>
-#include <rosidl_typesupport_introspection_cpp/identifier.hpp>
-#include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <stdexcept>
 #include <thread>
 #include <utility>
 
-#include "ros2_livekit_bridge/introspection/message_render.hpp"
+#include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/dynamic_message.hpp"
-#include "ros2_livekit_bridge/ros2_cli/yaml_message_converter.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
 
@@ -55,106 +49,13 @@ constexpr auto kPollPeriod = std::chrono::milliseconds(2);
 // the reader holds at most ~10 samples; this comfortably exceeds that and only
 // trips if the queue is being refilled faster than it drains.
 constexpr std::uint8_t kMaxStaleResponseDrains = 25;
-constexpr char kServiceTypeSupportSymbolPrefix[] = "__get_service_type_support_handle__";
-
-std::string Ros2ServiceCall::serviceTypeSupportSymbol(const std::string &type,
-                                                      const std::string &typesupport_identifier) {
-  std::string symbol = typesupport_identifier + kServiceTypeSupportSymbolPrefix;
-  for (const char ch : type) {
-    if (ch == '/') {
-      symbol += "__";
-    } else {
-      symbol += ch;
-    }
-  }
-  return symbol;
-}
-
-const rosidl_service_type_support_t *Ros2ServiceCall::serviceTypeSupportHandle(
-    const std::string &type, const std::string &typesupport_identifier, rcpputils::SharedLibrary &library) {
-  const std::string symbol = serviceTypeSupportSymbol(type, typesupport_identifier);
-  if (!library.has_symbol(symbol)) {
-    return nullptr;
-  }
-  using GetServiceTypeSupportHandleFn = const rosidl_service_type_support_t *(*)();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  auto get_handle = reinterpret_cast<GetServiceTypeSupportHandleFn>(library.get_symbol(symbol));
-  return get_handle();
-}
-
-/// @brief Runtime type-support data for one ROS message type.
-struct Ros2ServiceCall::MessageTypeSupport {
-  /// @brief Introspection type-support namespace alias.
-  using MessageMembers = rosidl_typesupport_introspection_cpp::MessageMembers;
-
-  /// @brief Load serialization and introspection type support for @p type.
-  explicit MessageTypeSupport(const std::string &type)
-      : serialization_library(rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier)),
-        introspection_library(
-            rclcpp::get_typesupport_library(type, rosidl_typesupport_introspection_cpp::typesupport_identifier)),
-        serialization_handle(rclcpp::get_message_typesupport_handle(
-            type, rosidl_typesupport_cpp::typesupport_identifier, *serialization_library)),
-        introspection_handle(rclcpp::get_message_typesupport_handle(
-            type, rosidl_typesupport_introspection_cpp::typesupport_identifier, *introspection_library)),
-        members(requireMembers(introspection_handle)),
-        serializer(serialization_handle) {}
-
-  /// @brief Shared library that owns the serialization handle.
-  std::shared_ptr<rcpputils::SharedLibrary> serialization_library;
-  /// @brief Shared library that owns the introspection handle.
-  std::shared_ptr<rcpputils::SharedLibrary> introspection_library;
-  /// @brief C++ serialization type-support handle.
-  const rosidl_message_type_support_t *serialization_handle;
-  /// @brief C++ introspection type-support handle.
-  const rosidl_message_type_support_t *introspection_handle;
-  /// @brief Message member metadata from introspection type support.
-  const MessageMembers &members;
-  /// @brief Runtime serializer for this message type.
-  rclcpp::SerializationBase serializer;
-
-private:
-  /// @brief Require message introspection data.
-  static const MessageMembers &requireMembers(const rosidl_message_type_support_t *handle) {
-    if (handle == nullptr || handle->data == nullptr) {
-      throw std::runtime_error("Introspection type support handle is null");
-    }
-    return *static_cast<const MessageMembers *>(handle->data);
-  }
-};
-
-/// @brief Runtime type-support data for one ROS service type.
-struct Ros2ServiceCall::ServiceTypeSupport {
-  /// @brief Load service, request, and response type support for @p type.
-  /// @param type Service type identifier, such as `std_srvs/srv/SetBool`.
-  /// @param error Populated with a failure reason when creation fails.
-  /// @return Loaded type support, or nullptr when service type support
-  ///   cannot be resolved.
-  static std::shared_ptr<ServiceTypeSupport> create(const std::string &type, std::string &error);
-
-  /// @brief Shared library that owns the service handle.
-  std::shared_ptr<rcpputils::SharedLibrary> library;
-  /// @brief C++ service type-support handle.
-  const rosidl_service_type_support_t *handle;
-  /// @brief Request message type support.
-  MessageTypeSupport request;
-  /// @brief Response message type support.
-  MessageTypeSupport response;
-
-private:
-  ServiceTypeSupport(const std::string &type, std::shared_ptr<rcpputils::SharedLibrary> library,
-                     const rosidl_service_type_support_t *handle);
-
-  /// @brief Request message type-name suffix.
-  static constexpr char kRequestMessageTypeSuffix[] = "_Request";
-  /// @brief Response message type-name suffix.
-  static constexpr char kResponseMessageTypeSuffix[] = "_Response";
-};
 
 /// @brief Runtime service client for an arbitrary service type.
 struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Construct a ClientBase-backed runtime service client.
-  ServiceClient(const std::string &service_name, const std::string &msg_type,
-                std::shared_ptr<ServiceTypeSupport> support, rclcpp::node_interfaces::NodeBaseInterface *node_base,
+  ServiceClient(const std::string& service_name, const std::string& msg_type,
+                std::shared_ptr<introspection::RuntimeServiceTypeSupport> support,
+                rclcpp::node_interfaces::NodeBaseInterface* node_base,
                 rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph)
       : rclcpp::ClientBase(node_base, std::move(node_graph)), msg_type(msg_type), support(std::move(support)) {
     rcl_client_options_t options = rcl_client_get_default_options();
@@ -174,14 +75,14 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   std::shared_ptr<void> create_response() override {
     struct ResponseStorage {
       /// @brief Keep type support alive beside response memory.
-      explicit ResponseStorage(std::shared_ptr<ServiceTypeSupport> type_support)
+      explicit ResponseStorage(std::shared_ptr<introspection::RuntimeServiceTypeSupport> type_support)
           : support(std::move(type_support)),
             message(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO) {}
 
       /// @brief Type support used to initialize message storage.
-      std::shared_ptr<ServiceTypeSupport> support;
+      std::shared_ptr<introspection::RuntimeServiceTypeSupport> support;
       /// @brief Runtime response message storage.
-      DynamicMessage message;
+      introspection::DynamicMessage message;
     };
 
     auto storage = std::make_shared<ResponseStorage>(support);
@@ -201,43 +102,10 @@ struct Ros2ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Service type used by this client.
   std::string msg_type;
   /// @brief Service, request, and response type support.
-  std::shared_ptr<ServiceTypeSupport> support;
+  std::shared_ptr<introspection::RuntimeServiceTypeSupport> support;
   /// @brief Serializes send+take on this client across concurrent callers.
   std::mutex call_mutex;
 };
-
-Ros2ServiceCall::ServiceTypeSupport::ServiceTypeSupport(const std::string &type,
-                                                        std::shared_ptr<rcpputils::SharedLibrary> library,
-                                                        const rosidl_service_type_support_t *handle)
-    : library(std::move(library)),
-      handle(handle),
-      request(type + kRequestMessageTypeSuffix),
-      response(type + kResponseMessageTypeSuffix) {}
-
-std::shared_ptr<Ros2ServiceCall::ServiceTypeSupport> Ros2ServiceCall::ServiceTypeSupport::create(
-    const std::string &type, std::string &error) {
-  try {
-    auto library = rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier);
-    const auto *handle = serviceTypeSupportHandle(type, rosidl_typesupport_cpp::typesupport_identifier, *library);
-    if (handle == nullptr) {
-      error = "Service typesupport symbol not found: " +
-              serviceTypeSupportSymbol(type, rosidl_typesupport_cpp::typesupport_identifier);
-      return nullptr;
-    }
-    return std::shared_ptr<ServiceTypeSupport>(new ServiceTypeSupport(type, std::move(library), handle));
-  } catch (const std::exception &exception) {
-    error = exception.what();
-    return nullptr;
-  }
-}
-
-#ifdef BUILD_TESTING
-std::string Ros2ServiceCall::serviceTypeSupportCreationError(const std::string &type) {
-  std::string error;
-  (void)ServiceTypeSupport::create(type, error);
-  return error;
-}
-#endif
 
 Ros2ServiceCall::Ros2ServiceCall(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base,
                                  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph, rclcpp::Logger logger)
@@ -254,7 +122,7 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
   try {
     resolved_service =
         rclcpp::expand_topic_or_service_name(options.service, base_->get_name(), base_->get_namespace(), true);
-  } catch (const std::exception &error) {
+  } catch (const std::exception& error) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, error.what());
   }
 
@@ -262,15 +130,7 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
     return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "msg_type must be non-empty");
   }
 
-  // The request arrives as native YAML; serialize it into the request type on
-  // this side, mirroring how `ros2 topic pub` is handled.
-  std::string yaml_error;
-  auto serialized_request = serializedMessageFromYaml(options.msg_type + "_Request", options.payload, yaml_error);
-  if (!serialized_request) {
-    return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "failed to build service request: " + yaml_error);
-  }
-
-  const auto &msg_type = options.msg_type;
+  const auto& msg_type = options.msg_type;
 
   ClientPtr client;
   std::string client_error;
@@ -281,12 +141,12 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
         false, std::string("failed to create service client: ") + client_error);
   }
 
-  DynamicMessage request_message(client->support->request.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
-  try {
-    client->support->request.serializer.deserialize_message(&serialized_request.value(), request_message.data());
-  } catch (const std::exception &error) {
-    return makeCliResponse<Ros2ServiceCallSrv::Response>(
-        false, std::string("failed to build service request: ") + error.what());
+  introspection::DynamicMessage request_message(client->support->request.members,
+                                                rosidl_runtime_cpp::MessageInitialization::ZERO);
+  std::string yaml_error;
+  if (!introspection::populateMessageFromYaml(options.msg_type + "_Request", options.payload, request_message.data(),
+                                              yaml_error)) {
+    return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "failed to build service request: " + yaml_error);
   }
 
   // Serialize all send+take operations on the same client so concurrent
@@ -317,8 +177,8 @@ Ros2ServiceCallSrv::Response Ros2ServiceCall::call(ServiceCallOptions options) {
   return makeCliResponse<Ros2ServiceCallSrv::Response>(false, "Service call timed out.");
 }
 
-std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::string &service,
-                                                                     const std::string &msg_type, std::string &error) {
+std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::string& service,
+                                                                     const std::string& msg_type, std::string& error) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string key = service + ":" + msg_type;
   const auto existing = clients_.find(key);
@@ -330,7 +190,7 @@ std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::
     return std::nullopt;
   }
 
-  auto support = ServiceTypeSupport::create(msg_type, error);
+  auto support = introspection::RuntimeServiceTypeSupport::create(msg_type, error);
   if (!support) {
     return std::nullopt;
   }
@@ -338,20 +198,21 @@ std::optional<Ros2ServiceCall::ClientPtr> Ros2ServiceCall::getClient(const std::
   try {
     auto client = std::make_shared<ServiceClient>(service, msg_type, std::move(support), base_.get(), graph_);
     return clients_.emplace(key, std::move(client)).first->second;
-  } catch (const std::exception &exception) {
+  } catch (const std::exception& exception) {
     error = exception.what();
     return std::nullopt;
   }
 }
 
-std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(ServiceClient &client,
+std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(ServiceClient& client,
                                                                           std::int64_t sequence_number) {
   std::uint8_t attempt_count = 0;
   // Bounded two ways: each iteration either:
   // 1. take_type_erased_response has no more items in the rmq queue to take
   // 2. takes a response with a mismatched sequence number > kMaxStaleResponseDrains
   while (attempt_count < kMaxStaleResponseDrains) {
-    DynamicMessage response_message(client.support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
+    introspection::DynamicMessage response_message(client.support->response.members,
+                                                   rosidl_runtime_cpp::MessageInitialization::ZERO);
     rmw_request_id_t header{};
     if (!client.take_type_erased_response(response_message.data(), header)) {
       return std::nullopt;
@@ -362,9 +223,13 @@ std::optional<Ros2ServiceCallSrv::Response> Ros2ServiceCall::takeResponse(Servic
     }
 
     try {
-      const auto output = message_render::toYaml(client.support->response.members, response_message.data());
-      return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", output);
-    } catch (const std::exception &error) {
+      const auto output = introspection::toYaml(client.msg_type + "_Response", response_message.data());
+      if (!output) {
+        return makeCliResponse<Ros2ServiceCallSrv::Response>(
+            false, "failed to convert service response: unknown message type '" + client.msg_type + "_Response'");
+      }
+      return makeCliResponse<Ros2ServiceCallSrv::Response>(true, "", *output);
+    } catch (const std::exception& error) {
       return makeCliResponse<Ros2ServiceCallSrv::Response>(
           false, std::string("failed to convert service response: ") + error.what());
     }

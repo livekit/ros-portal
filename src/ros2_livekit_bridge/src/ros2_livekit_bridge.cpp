@@ -32,8 +32,10 @@
 
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
+#include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 namespace ros2_livekit_bridge {
 
@@ -86,6 +88,19 @@ bool Ros2LiveKitBridge::initialize() {
   pattern_errors.clear();
   auto incoming_topic_compiled_patterns = utils::compileRegexPatterns(incoming_topic_patterns, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
+
+  std::vector<ServiceForwarder::ServiceRoute> outgoing_service_routes;
+  outgoing_service_routes.reserve(config->services.size());
+  for (const auto &service_config : config->services) {
+    if (service_config.direction != ros2_livekit_bridge_config::Direction::Out) {
+      continue;
+    }
+    outgoing_service_routes.push_back(ServiceForwarder::ServiceRoute{
+        service_config.service,
+        service_config.msg_type,
+        service_config.participant,
+    });
+  }
 
   RCLCPP_INFO(this->get_logger(),
               "Room: '%s', polling period: %d ms, watching %zu ROS topic "
@@ -149,10 +164,17 @@ bool Ros2LiveKitBridge::initialize() {
 
   if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
                                 std::move(incoming_topic_compiled_patterns))) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }
 
   if (!initializeRos2CliManager()) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
+    return false;
+  }
+
+  if (!initializeServiceForwarder(std::move(outgoing_service_routes))) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder");
     return false;
   }
 
@@ -170,6 +192,7 @@ bool Ros2LiveKitBridge::initialize() {
 }
 
 Ros2LiveKitBridge::~Ros2LiveKitBridge() {
+  service_forwarder_.reset();
   ros2_cli_manager_.reset();
   topic_forwarder_.reset();
   if (room_) {
@@ -348,7 +371,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
                                                                                 // constructor
                                                         std::move(forwarder_lk_methods));
   } catch (...) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder, unknown exception");
     return false;
   }
   return topic_forwarder_ != nullptr;
@@ -370,11 +393,32 @@ bool Ros2LiveKitBridge::initializeRos2CliManager() {
     ros2_cli_manager_ = std::make_unique<Ros2CliManager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
                                                          std::move(topic_publish_allowed));
   } catch (...) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");
     return false;
   }
 
   return ros2_cli_manager_ != nullptr;
+}
+
+bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder::ServiceRoute> routes) {
+  try {
+    const ServiceForwarder::LiveKitMethods livekit_methods{
+        [this](const std::string &id) { return hasParticipant(id); },
+        [this](const std::string &id, const std::string &method, const std::string &payload, std::uint8_t timeout_sec) {
+          return rpcPerform(id, method, payload, timeout_sec);
+        },
+    };
+    service_forwarder_ =
+        std::make_unique<ServiceForwarder>(std::move(routes), *this, reentrant_callback_group_, livekit_methods);
+  } catch (const std::exception &error) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
+    return false;
+  } catch (...) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder, unknown exception");
+    return false;
+  }
+
+  return service_forwarder_ != nullptr;
 }
 
 bool Ros2LiveKitBridge::hasParticipant(const std::string &participant_id) const {

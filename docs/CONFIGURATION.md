@@ -45,10 +45,19 @@ All config lives under `ros2_livekit_bridge`.
 | Field | Type | Required | Description |
 |---|---:|---:|---|
 | `service` | string | yes | ROS service name. Must be non-empty. |
-| `direction` | string | yes | `in` or `out`. |
+| `direction` | string | yes | `out` — the only supported value. |
 | `participant` | string | yes | LiveKit participant identity. Must be non-empty. |
+| `msg_type` | string | yes | ROS service type, such as `std_srvs/srv/SetBool`. Must be non-empty. |
 
-Service direction does not accept `bidirectional`.
+`direction: "out"` creates a local ROS service server that forwards calls to
+the configured LiveKit participant using `msg_type`.
+
+Services only accept `out`. `in` and `bidirectional` are **not** used for
+services: the bridge does not attempt to mirror the ROS 2 service graph in both
+directions. A service is a point-to-point request/response call, so a route is
+fully described by the single participant that answers it. This is unlike
+topics (see below), where `in` / `out` / `bidirectional` are meaningful and are
+used to limit which streams cross the bridge for bandwidth reasons.
 
 ## Topics
 
@@ -62,6 +71,11 @@ Outgoing topics are those with `direction: "out"` or
 `direction: "bidirectional"`. Incoming topics are those with `direction: "in"`
 or `direction: "bidirectional"`. Topic patterns are ECMAScript regular
 expressions matched against the full topic name.
+
+Unlike services, topic direction is load-bearing: it controls which topics are
+forwarded and in which direction. Only forwarding the streams you actually need
+(and only in the required direction) keeps unnecessary traffic off the LiveKit
+connection, which matters for bandwidth on constrained links.
 
 ## Video Options
 

@@ -70,7 +70,8 @@ jobs:
               set -eo pipefail
               source /opt/ros/jazzy/setup.bash
               set -u
-              colcon build
+              # target specific packages to avoid unneeded/wanted dependencies
+              colcon build --packages-up-to ros2_livekit_bridge test_utilities custom_msgs waveshare_launch
             '
 
       - name: Lint packages

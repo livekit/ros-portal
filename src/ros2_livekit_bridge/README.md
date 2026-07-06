@@ -103,13 +103,20 @@ graph lookup for the same topic name before creating the
 Bridge settings are loaded from `config/ros2_livekit_bridge.yaml` using the
 schema-driven `ros2_livekit_bridge_config` parser. Launch files pass this path
 to the node with the `config_path` ROS parameter. See the
-[configuration guide](../../docs/configuration.md) for the supported schema.
+[configuration guide](../../docs/CONFIGURATION.md) for the supported schema.
 
-Direction handling:
+Topic direction handling:
 
 - `out`: allow ROS -> LiveKit forwarding.
 - `in`: allow LiveKit -> ROS forwarding.
-- `bidirectional`: `in` and `out` forwarding/functionality
+- `bidirectional`: `in` and `out` forwarding/functionality.
+
+Topic direction is used to limit which streams cross the bridge (and in which
+direction) for bandwidth reasons. Services are different: they only accept
+`direction: "out"`. `in` and `bidirectional` are not used for services because
+the bridge does not mirror the ROS 2 service graph in both directions — a
+service call is point-to-point, so a route is fully described by the single
+participant that answers it.
 
 ## Remote ROS2 CLI Calls
 

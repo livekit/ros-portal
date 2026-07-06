@@ -25,7 +25,6 @@
 #include <nav_msgs/srv/get_plan.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <rosidl_typesupport_cpp/identifier.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
 #include <thread>
@@ -35,31 +34,6 @@
 #include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::ros2_cli {
-
-class Ros2ServiceCallPrivateTest : public ::testing::Test {};
-
-TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportSymbolReplacesSlashes) {
-  EXPECT_EQ(
-      Ros2ServiceCall::serviceTypeSupportSymbol("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier),
-      "rosidl_typesupport_cpp__get_service_type_support_handle__"
-      "std_srvs__srv__SetBool");
-}
-
-TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleLoadsKnownService) {
-  auto library =
-      rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = Ros2ServiceCall::serviceTypeSupportHandle(
-      "std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier, *library);
-  EXPECT_NE(handle, nullptr);
-}
-
-TEST_F(Ros2ServiceCallPrivateTest, ServiceTypeSupportHandleReturnsNullForMissingSymbol) {
-  auto library =
-      rclcpp::get_typesupport_library("std_srvs/srv/SetBool", rosidl_typesupport_cpp::typesupport_identifier);
-  const auto *handle = Ros2ServiceCall::serviceTypeSupportHandle(
-      "std_srvs/srv/DoesNotExist", rosidl_typesupport_cpp::typesupport_identifier, *library);
-  EXPECT_EQ(handle, nullptr);
-}
 
 namespace {
 
@@ -177,20 +151,22 @@ TEST_F(Ros2ServiceCallTest, RendersNestedResponseFieldsWithAccumulatingIndent) {
 
   ASSERT_TRUE(response.success) << response.err_msg;
   // Indentation must accumulate two spaces per nesting level relative to the
-  // parent, rather than resetting to a fixed depth:
-  //   plan:           (0)
-  //     header:       (2)
-  //       stamp:      (4)
-  //         sec: 7    (6)
-  //         nanosec: 0(6)
-  //       frame_id: map (4)
-  //     poses: []     (2)
-  EXPECT_NE(response.output.find("\n  header: \n"), std::string::npos) << response.output;
-  EXPECT_NE(response.output.find("\n    stamp: \n"), std::string::npos) << response.output;
+  // parent, rather than resetting to a fixed depth. Keys are emitted in the
+  // serializer's (alphabetical) order and an empty sequence renders as the YAML
+  // null scalar '~':
+  //   plan:              (0)
+  //     header:          (2)
+  //       frame_id: map  (4)
+  //       stamp:         (4)
+  //         nanosec: 0   (6)
+  //         sec: 7       (6)
+  //     poses: ~         (2)
+  EXPECT_NE(response.output.find("\n  header:\n"), std::string::npos) << response.output;
+  EXPECT_NE(response.output.find("\n    stamp:\n"), std::string::npos) << response.output;
   EXPECT_NE(response.output.find("\n      sec: 7\n"), std::string::npos) << response.output;
   EXPECT_NE(response.output.find("\n      nanosec: 0\n"), std::string::npos) << response.output;
   EXPECT_NE(response.output.find("\n    frame_id: map\n"), std::string::npos) << response.output;
-  EXPECT_NE(response.output.find("\n  poses: ["), std::string::npos) << response.output;
+  EXPECT_NE(response.output.find("\n  poses: ~"), std::string::npos) << response.output;
 }
 
 TEST_F(Ros2ServiceCallTest, RejectsEmptyInterfaceType) {
@@ -267,17 +243,6 @@ TEST_F(Ros2ServiceCallTest, RejectsEmptyRequestPayload) {
   EXPECT_EQ(response.err_msg, "failed to build service request: payload must be non-empty");
 }
 
-TEST_F(Ros2ServiceCallTest, ServiceTypeSupportCreationErrorForMissingSymbol) {
-  EXPECT_EQ(Ros2ServiceCall::serviceTypeSupportCreationError("std_srvs/srv/DoesNotExist"),
-            "Service typesupport symbol not found: rosidl_typesupport_cpp"
-            "__get_service_type_support_handle__std_srvs__srv__DoesNotExist");
-}
-
-TEST_F(Ros2ServiceCallTest, ServiceTypeSupportCreationErrorForMissingPackage) {
-  const std::string error = Ros2ServiceCall::serviceTypeSupportCreationError("fake_msgs/srv/DoesNotExist");
-  EXPECT_NE(error.find("package 'fake_msgs' not found"), std::string::npos);
-}
-
 TEST_F(Ros2ServiceCallTest, RejectsUnknownServiceTypeWithoutThrowing) {
   auto caller_node = std::make_shared<rclcpp::Node>("service_call_unknown_type_node");
   auto caller = makeCaller(caller_node);
@@ -286,7 +251,10 @@ TEST_F(Ros2ServiceCallTest, RejectsUnknownServiceTypeWithoutThrowing) {
       caller.call(makeSetBoolOptions("/service_call/unknown_type", "fake_msgs/srv/DoesNotExist", "{data: true}", 1));
 
   EXPECT_FALSE(response.success);
-  EXPECT_NE(response.err_msg.find("failed to build service request:"), std::string::npos);
+  // An unknown service type fails when its type support cannot be loaded, which
+  // happens while creating the client (before a request can be built), so the
+  // error surfaces with the client-creation prefix rather than throwing.
+  EXPECT_NE(response.err_msg.find("failed to create service client:"), std::string::npos) << response.err_msg;
 }
 
 TEST_F(Ros2ServiceCallTest, RejectsServiceClientCacheLimit) {

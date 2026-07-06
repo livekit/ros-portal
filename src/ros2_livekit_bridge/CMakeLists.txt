@@ -32,6 +32,7 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
+  ros2_medkit_serialization
   ros2_livekit_bridge_config
   ros2_livekit_bridge_msgs
   rosidl_typesupport_cpp
@@ -190,10 +191,23 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# Introspection library
+# ---------------------------------------------------------------------------
+ament_auto_add_library(introspection_lib SHARED
+  src/introspection/introspection_utils.cpp
+  src/introspection/runtime_type_support.cpp
+)
+target_link_libraries(introspection_lib
+  yaml-cpp::yaml-cpp
+)
+ament_target_dependencies(introspection_lib
+  ros2_medkit_serialization
+)
+
+# ---------------------------------------------------------------------------
 # ROS2 CLI library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_cli_lib SHARED
-  src/introspection/message_render.cpp  # if introspection ever grows, break out to separate library
   src/ros2_cli/ros2_interface_show.cpp
   src/ros2_cli/json_converters.cpp
   src/ros2_cli/ros2_service_call.cpp
@@ -201,13 +215,12 @@ ament_auto_add_library(ros2_cli_lib SHARED
   src/ros2_cli/ros2_topic_list.cpp
   src/ros2_cli/ros2_topic_pub.cpp
   src/ros2_cli/utils.cpp
-  src/ros2_cli/yaml_message_converter.cpp
   src/ros2_cli_manager.cpp
 )
 target_link_libraries(ros2_cli_lib
+  introspection_lib
   "${LIVEKIT_CORE_TARGET}"
   nlohmann_json::nlohmann_json
-  yaml-cpp::yaml-cpp
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros2_cli_lib)
@@ -218,12 +231,14 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/ros2_livekit_bridge.cpp
+  src/service_forwarder.cpp
   src/topic_forwarder.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
 target_link_libraries(ros2_livekit_bridge_lib
+  introspection_lib
   ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
   ${LIVEKIT_EXTRA_LINK_LIBS}

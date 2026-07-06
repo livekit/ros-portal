@@ -23,13 +23,18 @@ ros2_livekit_bridge:
     join_retries: 3
 
   services:
+    # Services only support "direction: out". Each route creates a local ROS
+    # service server that forwards calls to the configured LiveKit participant.
     - service: "/go_to_pose"
-      direction: "in"
+      direction: "out"
       participant: "robot-a"
+      msg_type: "nav2_msgs/srv/ComputePathToPose"
 
     - service: "/provide_status"
       direction: "out"
       participant: "robot-a"
+      msg_type: "std_srvs/srv/Trigger"
+      # Todo enable user timeout
 
   topics:
     - topic: "/camera/image_raw"

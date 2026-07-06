@@ -20,8 +20,10 @@ import subprocess
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
 from launch.actions import SetEnvironmentVariable
+from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
@@ -84,7 +86,7 @@ def _launch_setup(context, *args, **kwargs):
     room_name = _room_name_from_config(config_path)
     token = _mint_token(room_name, identity, valid_for, use_dev_credentials)
 
-    return [
+    actions = [
         SetEnvironmentVariable('LIVEKIT_URL', livekit_url),
         SetEnvironmentVariable('LIVEKIT_TOKEN', token),
         Node(
@@ -97,6 +99,21 @@ def _launch_setup(context, *args, **kwargs):
             arguments=['--ros-args', '--disable-external-lib-logs'],
         ),
     ]
+
+    if _as_bool(LaunchConfiguration('sim').perform(context)):
+        waveshare_launch = PathJoinSubstitution([
+            FindPackageShare('waveshare_launch'),
+            'launch',
+            'waveshare.launch.xml',
+        ])
+        actions.append(
+            IncludeLaunchDescription(
+                AnyLaunchDescriptionSource(waveshare_launch),
+                launch_arguments={'sim': 'true', 'foxglove': 'true'}.items(),
+            )
+        )
+
+    return actions
 
 
 def generate_launch_description():
@@ -113,5 +130,10 @@ def generate_launch_description():
         DeclareLaunchArgument('token_valid_for', default_value='1h'),
         DeclareLaunchArgument('use_dev_credentials', default_value='true'),
         DeclareLaunchArgument('ns', default_value='/'),
+        DeclareLaunchArgument(
+            'sim',
+            default_value='false',
+            description='Launch the Waveshare stack with sim:=true and foxglove:=true.',
+        ),
         OpaqueFunction(function=_launch_setup),
     ])

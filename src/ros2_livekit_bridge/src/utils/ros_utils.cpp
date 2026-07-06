@@ -195,4 +195,20 @@ std::unordered_map<std::string, std::string> incomingTopicTypes(const bridge_con
 
   return types;
 }
+
+std::unordered_map<std::string, double> outboundRateLimits(const bridge_config::BridgeConfig& config) {
+  std::unordered_map<std::string, double> limits;
+
+  for (const auto& topic_config : config.topics) {
+    const bool outbound = topic_config.direction == bridge_config::Direction::Out ||
+                          topic_config.direction == bridge_config::Direction::Bidirectional;
+    if (!outbound || !topic_config.max_rate_hz.has_value() || *topic_config.max_rate_hz <= 0.0) {
+      continue;
+    }
+
+    limits.emplace(topic_config.topic, *topic_config.max_rate_hz);
+  }
+
+  return limits;
+}
 } // namespace ros2_livekit_bridge::utils

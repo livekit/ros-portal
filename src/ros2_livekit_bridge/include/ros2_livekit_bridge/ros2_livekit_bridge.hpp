@@ -139,7 +139,8 @@ private:
   bool initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
                                 std::vector<std::regex> incoming_topic_compiled_patterns,
                                 std::unordered_map<std::string, std::string> incoming_topic_types,
-                                std::vector<std::regex> preserve_id_topic_compiled_patterns);
+                                std::vector<std::regex> preserve_id_topic_compiled_patterns,
+                                std::unordered_map<std::string, double> outbound_rate_limits);
 
   /// @brief Create Ros2CliManager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.

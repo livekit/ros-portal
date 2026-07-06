@@ -112,6 +112,16 @@ std::vector<std::string> preserveIdTopicPatterns(const ros2_livekit_bridge_confi
 ///
 /// @return Map of normalized ROS topic name to ROS message type.
 std::unordered_map<std::string, std::string> incomingTopicTypes(const ros2_livekit_bridge_config::BridgeConfig& config);
+
+/// @brief Collect per-topic outbound forward-rate caps.
+///
+/// Maps ROS topic name -> maximum forward rate in Hz for every 'out'/'bidirectional'
+/// topic that sets a positive `max_rate_hz` in the config. Keyed by the verbatim
+/// configured topic name (literal match, not regex), mirroring `incomingTopicTypes`.
+///
+/// @param config The bridge configuration.
+/// @return Map of ROS topic name to maximum outbound forward rate (Hz).
+std::unordered_map<std::string, double> outboundRateLimits(const ros2_livekit_bridge_config::BridgeConfig& config);
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

@@ -120,30 +120,6 @@ the bridge does not mirror the ROS 2 service graph in both directions — a
 service call is point-to-point, so a route is fully described by the single
 participant that answers it.
 
-### Preserving the publisher identity
-
-Each topic may set an optional `preserve_id` flag (default `false`). It applies
-only to inbound (`in` / `bidirectional`) topics and is ignored for outbound
-topics. When `true`, the publishing participant's identity is prepended to the
-republished ROS topic name, which prevents collisions when multiple participants
-publish the same topic:
-
-```yaml
-topics:
-  - topic: "/tf"
-    direction: "in"
-    preserve_id: true
-```
-
-```text
-LiveKit data track: /tf   (from participant "robot-1")
-ROS topic:          /robot_1/tf
-```
-
-The identity is sanitized into a legal ROS name token, so any character that is
-not alphanumeric or `_` becomes `_` (e.g. `robot-1` → `robot_1`). With
-`preserve_id: false`, the track is republished under `/tf` unchanged.
-
 ## Remote ROS2 CLI Calls
 
 The bridge exposes ROS2 services (backed by LiveKit RPC) that run a subset of

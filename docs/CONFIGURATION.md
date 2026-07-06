@@ -66,6 +66,7 @@ used to limit which streams cross the bridge for bandwidth reasons.
 | `topic` | string | yes | ROS topic pattern. Must be non-empty. |
 | `direction` | string | yes | `in`, `out`, or `bidirectional`. |
 | `preserve_id` | boolean | no | Default `false`. Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
+| `max_rate_hz` | number | no | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; faster samples are dropped. Literal topic names only. |
 | `video_options` | map | no | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
@@ -101,6 +102,27 @@ ROS topic:          /robot_1/tf
 
 The identity is sanitized into a legal ROS name token, so any character that is
 not alphanumeric or `_` becomes `_` (e.g. `robot-1` → `robot_1`).
+
+### Capping the outbound forward rate
+
+`max_rate_hz` applies only to outbound (`out` / `bidirectional`) topics and is
+ignored for inbound topics. When set, the bridge forwards at most that many
+samples per second for the topic and drops any that arrive sooner than
+`1 / max_rate_hz` after the last forwarded sample. This keeps a high-rate topic
+from saturating a constrained LiveKit link when a remote consumer only needs
+updates at a lower rate — for example, throttling a robot's `/tf` (often
+30–100+ Hz) down to a viewer-friendly rate:
+
+```yaml
+topics:
+  - topic: "/tf"
+    direction: "out"
+    max_rate_hz: 10
+```
+
+Unlike `topic` (an ECMAScript regex), `max_rate_hz` is matched by **literal
+topic name** — the cap applies to a discovered topic only when its name equals
+the configured `topic` string exactly.
 
 ## Video Options
 

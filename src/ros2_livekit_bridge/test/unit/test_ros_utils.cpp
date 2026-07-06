@@ -277,5 +277,47 @@ TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
 
   EXPECT_EQ(patterns, (std::vector<std::string>{"/teleop_cmd", "/odom"}));
 }
+
+TEST(RosUtilsTest, OutboundRateLimitsMapsOutboundTopicsOnly) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+
+  bridge_config::TopicConfig out_limited;
+  out_limited.topic = "/tf";
+  out_limited.direction = bridge_config::Direction::Out;
+  out_limited.max_rate_hz = 10.0;
+  config.topics.push_back(out_limited);
+
+  bridge_config::TopicConfig bidirectional_limited;
+  bidirectional_limited.topic = "/odom";
+  bidirectional_limited.direction = bridge_config::Direction::Bidirectional;
+  bidirectional_limited.max_rate_hz = 5.0;
+  config.topics.push_back(bidirectional_limited);
+
+  // Inbound topic: excluded even with a rate set.
+  bridge_config::TopicConfig in_limited;
+  in_limited.topic = "/teleop_cmd";
+  in_limited.direction = bridge_config::Direction::In;
+  in_limited.max_rate_hz = 20.0;
+  config.topics.push_back(in_limited);
+
+  // Outbound topic without a cap: excluded.
+  bridge_config::TopicConfig out_unlimited;
+  out_unlimited.topic = "/camera/image_raw";
+  out_unlimited.direction = bridge_config::Direction::Out;
+  config.topics.push_back(out_unlimited);
+
+  // Non-positive cap: excluded.
+  bridge_config::TopicConfig out_zero;
+  out_zero.topic = "/scan";
+  out_zero.direction = bridge_config::Direction::Out;
+  out_zero.max_rate_hz = 0.0;
+  config.topics.push_back(out_zero);
+
+  const auto limits = outboundRateLimits(config);
+
+  EXPECT_EQ(limits, (std::unordered_map<std::string, double>{{"/tf", 10.0}, {"/odom", 5.0}}));
+}
 } // namespace
 } // namespace ros2_livekit_bridge::utils

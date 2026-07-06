@@ -187,6 +187,22 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       }
 
       writer = state.writer;
+
+      // Enforce the optional outbound forward-rate cap: drop this sample if it
+      // arrives sooner than 1/max_rate_hz after the last one forwarded. Uses
+      // steady_clock (not the node clock, which may be sim time) so the cap
+      // tracks real network egress. State is guarded by outbound_topics_mutex_.
+      if (state.max_rate_hz.has_value()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (state.has_last_emit) {
+          const std::chrono::duration<double> min_interval(1.0 / *state.max_rate_hz);
+          if ((now - state.last_emit) < std::chrono::duration_cast<std::chrono::steady_clock::duration>(min_interval)) {
+            return;
+          }
+        }
+        state.last_emit = now;
+        state.has_last_emit = true;
+      }
     }
 
     auto& rcl_msg = msg->get_rcl_serialized_message();
@@ -203,7 +219,13 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  data_topic_states_[topic_name] = DataTopicState{};
+  DataTopicState state{};
+  if (const auto rate_it = options_.outbound_rate_limits.find(topic_name);
+      rate_it != options_.outbound_rate_limits.end()) {
+    state.max_rate_hz = rate_it->second;
+    RCLCPP_INFO(logger_, "Outbound topic '%s' rate-capped at %.3g Hz", topic_name.c_str(), rate_it->second);
+  }
+  data_topic_states_[topic_name] = std::move(state);
 
   try {
     rclcpp::SubscriptionOptions sub_options;

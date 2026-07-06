@@ -122,6 +122,11 @@
           "type": "boolean",
           "default": false
         },
+        "max_rate_hz": {
+          "description": "Outbound topics only. Optional cap (in Hz) on the rate at which this topic's samples are forwarded to LiveKit; samples arriving faster than this are dropped, keeping unnecessary traffic off constrained links (e.g. throttle a high-rate /tf to render rate for a remote viewer). Matched by literal topic name, not regex. Ignored for inbound topics.",
+          "type": "number",
+          "minimum": 0
+        },
         "video_options": {
           "$ref": "#/$defs/videoOptions"
         }

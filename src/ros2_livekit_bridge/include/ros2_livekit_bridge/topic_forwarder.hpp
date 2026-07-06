@@ -21,6 +21,7 @@
 #include <livekit/video_frame.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -107,6 +108,10 @@ public:
     size_t min_qos_depth{kDefaultMinQosDepth};
     /// @brief Maximum subscription history depth after publisher aggregation.
     size_t max_qos_depth{kDefaultMaxQosDepth};
+    /// @brief Per-topic outbound forward-rate caps (Hz), keyed by ROS topic
+    /// name. Samples on a listed topic arriving faster than its cap are dropped
+    /// before being pushed to LiveKit (config `max_rate_hz`).
+    std::unordered_map<std::string, double> outbound_rate_limits;
   };
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
@@ -202,6 +207,13 @@ private:
   struct DataTopicState {
     /// @brief LiveKit data writer lazily created on the first message.
     std::shared_ptr<DataTrackWriter> writer;
+    /// @brief Optional outbound forward-rate cap (Hz) from config `max_rate_hz`.
+    std::optional<double> max_rate_hz;
+    /// @brief Steady-clock timestamp of the last sample forwarded to LiveKit,
+    /// used to enforce @ref max_rate_hz. Valid only when @ref has_last_emit.
+    std::chrono::steady_clock::time_point last_emit{};
+    /// @brief Whether @ref last_emit holds a valid timestamp yet.
+    bool has_last_emit{false};
   };
 
   /// @brief Per-track state for inbound LiveKit-to-ROS data forwarding.

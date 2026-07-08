@@ -597,17 +597,6 @@ std::optional<std::string> TopicForwarder::liveKitToRosTopicType(const std::stri
     return std::nullopt;
   }
 
-  // TODO(BOT-301): Temporary stopgap. LiveKit DataTracks do not yet carry ROS
-  // message-type metadata, so a pure consumer (e.g. the controller) cannot
-  // learn an inbound track's type when nothing on its local ROS graph already
-  // publishes/subscribes to that topic. Honor an explicitly configured type
-  // first; remove this branch once the type travels with the track and the ROS
-  // graph lookup below suffices.
-  const auto configured_type = options_.incoming_topic_types.find(*normalized_track_name);
-  if (configured_type != options_.incoming_topic_types.end()) {
-    return configured_type->second;
-  }
-
   std::map<std::string, std::vector<std::string>> topics;
   {
     const auto node = node_.lock();

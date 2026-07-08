@@ -169,29 +169,6 @@ std::vector<std::string> preserveIdTopicPatterns(const bridge_config::BridgeConf
   return patterns;
 }
 
-std::unordered_map<std::string, std::string> incomingTopicTypes(const bridge_config::BridgeConfig& config) {
-  // TODO(BOT-301): Temporary stopgap. Remove once LiveKit DataTracks carry the
-  // ROS message type so inbound track types no longer need hand-configuration.
-  std::unordered_map<std::string, std::string> types;
-
-  for (const auto& topic_config : config.topics) {
-    const bool inbound = topic_config.direction == bridge_config::Direction::In ||
-                         topic_config.direction == bridge_config::Direction::Bidirectional;
-    if (!inbound || !topic_config.msg_type.has_value()) {
-      continue;
-    }
-
-    const auto normalized_topic_name = normalizeTrackTopicName(topic_config.topic);
-    if (!normalized_topic_name.has_value()) {
-      continue;
-    }
-
-    types.emplace(*normalized_topic_name, *topic_config.msg_type);
-  }
-
-  return types;
-}
-
 std::unordered_map<std::string, double> outboundRateLimits(const bridge_config::BridgeConfig& config) {
   std::unordered_map<std::string, double> limits;
 

@@ -6,8 +6,22 @@ ros2_livekit_bridge:
   topic_polling_period_ms: 500
   ros_threads: 0
 
+  services:
+    - service: "/slam_toolbox/reset"
+      direction: "out"
+      msg_type: "slam_toolbox/srv/Reset"
+      participant: "waver"
+
   topics:
     # Robot telemetry consumed from LiveKit (LiveKit -> ROS)
+    #
+    # TODO(BOT-331): msg_type is a temporary stopgap. LiveKit DataTracks do not
+    # yet carry ROS message-type metadata, and this controller only *receives*
+    # these topics, so nothing on its local ROS graph reveals their type. The
+    # bridge needs the type to create the republishing publisher, so it must be
+    # stated explicitly here. Each must match the type the robot actually
+    # publishes (verify with `ros2 topic type <topic>` on the robot). Remove
+    # msg_type once DataTracks propagate the ROS type with the track.
     - topic: "/map"
       direction: "in"
 
@@ -32,6 +46,9 @@ ros2_livekit_bridge:
     - topic: "/global_costmap/published_footprint"
       direction: "in"
 
+    - topic: "/imu/data_raw"
+      direction: "in"
+
     # Transform tree — gives this graph a valid fixed frame so Foxglove's 3D
     # panel can resolve frames and show the click-to-publish tool. Keep these at
     # the top level (not namespaced): TF frame_ids are global and Foxglove
@@ -47,7 +64,9 @@ ros2_livekit_bridge:
       direction: "in"
       latched: true
 
-    # Commands sent out to the robot (ROS -> LiveKit).
+    # Commands sent out to the robot (ROS -> LiveKit). Foxglove publishes these
+    # onto the controller's ROS graph, so the bridge infers the type from the
+    # live topic and no msg_type is needed.
     - topic: "/cmd_vel"
       direction: "out"
 

@@ -30,7 +30,7 @@ Service names can be overridden with launch arguments `service_name` and
 ```bash
 ros2 service call /ros2_livekit_bridge/ros2_service_call \
   ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
-  "{participant_id: 'bridge-b', service: '/test/set_bool', msg_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
+  "{participant_id: 'bridge-b', service: '/test/set_bool', payload: '{data: true}'}"
 ```
 
 On success, `output` contains YAML similar to native `ros2 service call`:
@@ -45,7 +45,7 @@ message: enabled
 ```bash
 ros2 service call /ros2_livekit_bridge/ros2_service_call \
   ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
-  "{participant_id: 'bridge-b', service: '/test/get_bool', msg_type: 'std_srvs/srv/Trigger', payload: '{}'}"
+  "{participant_id: 'bridge-b', service: '/test/get_bool', payload: '{}'}"
 ```
 
 Expected `output`:

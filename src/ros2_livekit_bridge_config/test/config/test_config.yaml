@@ -27,12 +27,10 @@ ros2_livekit_bridge:
     - service: "/go_to_pose"
       direction: "out"
       participant: "robot-a"
-      msg_type: "nav2_msgs/srv/ComputePathToPose"
 
     - service: "/provide_status"
       direction: "out"
       participant: "robot-a"
-      msg_type: "std_srvs/srv/Trigger"
       # Todo enable user timeout
 
   topics:

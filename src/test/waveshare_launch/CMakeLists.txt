@@ -30,4 +30,9 @@ endif()
 install(FILES README.md
   DESTINATION share/${PROJECT_NAME})
 
+install(PROGRAMS
+  scripts/sim_frame_prefix_relay.py
+  scripts/rf2o_covariance_relay.py
+  DESTINATION lib/${PROJECT_NAME})
+
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)

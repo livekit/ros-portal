@@ -1,0 +1,31 @@
+# Parameters for the camera_ros camera_node running the Arducam IMX219.
+#
+# The main knobs (camera, format, width, height, frame_id, camera_info_url) are
+# set from launch arguments and override anything here. This file is the place
+# for the optional libcamera image-processing controls, which are commented out
+# by default (the IPA auto-adjusts). Uncomment and tune as needed.
+#
+# `/**` applies to the node regardless of its name/namespace.
+/**:
+  ros__parameters:
+    # --- Frame rate -------------------------------------------------------
+    # FrameDurationLimits is [min_us, max_us] per frame. Pin both to the same
+    # value to lock a rate, e.g. [33333, 33333] = 30 fps, [16666, 16666] = 60 fps.
+    # Leave unset to let libcamera pick based on the sensor mode.
+    # FrameDurationLimits: [33333, 33333]
+
+    # --- Auto exposure / white balance -----------------------------------
+    # AeEnable: true
+    # AwbEnable: true
+    # AwbMode: 0            # 0=auto,1=incandescent,2=tungsten,3=fluorescent,4=indoor,5=daylight,6=cloudy
+
+    # --- Image tuning (defaults are fine for most uses) -------------------
+    # Brightness: 0.0       # [-1.0, 1.0]
+    # Contrast: 1.0         # [0.0, ~]
+    # Saturation: 1.0
+    # Sharpness: 1.0
+    # NoiseReductionMode: 0
+
+    # --- Orientation ------------------------------------------------------
+    # The 175-degree lens can be mounted either way; flip here if needed.
+    orientation: 180        # 0=normal, 1=rot180, 2=hflip, 3=vflip

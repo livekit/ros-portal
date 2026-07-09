@@ -1,0 +1,71 @@
+# robot_localization EKF: fuses rf2o laser odometry (/odom_rf2o) with the WAVE
+# ROVER IMU (/imu/data_raw) into a smooth, drift-resistant odom->base_footprint
+# estimate, republished as /odom.
+#
+# The base rover has NO wheel encoders, so rf2o (laser scan matching) is the only
+# source of linear motion and the gyro is the only fast heading source. rf2o alone
+# drifts badly during quick in-place rotations (feature-poor scans), which corrupts
+# the SLAM map; fusing the gyro's yaw rate fills those gaps.
+#
+# Frames here are unprefixed; ekf.launch.py rewrites them to "<robot_name>/" to
+# match robot_state_publisher's frame_prefix (same approach as slam.launch.py).
+ekf_filter_node:
+  ros__parameters:
+    frequency: 10.0
+    sensor_timeout: 0.2
+    two_d_mode: true            # planar robot: zero z / roll / pitch and their rates
+    publish_tf: true            # EKF now owns odom->base_footprint (rf2o's is disabled)
+    publish_acceleration: false
+
+    map_frame: map              # rewritten to <robot_name>/map at launch
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom           # estimate lives in the odom frame
+
+    # rf2o is split into TWO inputs (both via the covariance relay, since rf2o itself
+    # publishes all-zero covariances the EKF would over-trust) so heading can be gated
+    # independently of translation:
+    #
+    # odom0 -- TRANSLATION (x, y), always trusted. rf2o position is reliable; no gate.
+    # Order: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+    odom0: /odom_rf2o_cov
+    odom0_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # odom1 -- HEADING (yaw), consistency-gated. rf2o yaw is stable when still (anchors
+    # slow gyro-bias drift) but SLIPS during fast rotation. The Mahalanobis rejection
+    # drops updates that disagree with the gyro-driven estimate, so during rotation the
+    # gyro owns heading (clean, as in the gyro-only config) while at rest rf2o yaw still
+    # corrects drift. Split from odom0 so gating a yaw slip does NOT reject the good x/y.
+    # Lower the threshold to reject slips harder; raise it if stationary drift returns.
+    odom1: /odom_rf2o_cov
+    odom1_config: [false, false, false,
+                   false, false, true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_differential: false
+    odom1_relative: false
+    odom1_pose_rejection_threshold: 1.0
+    odom1_queue_size: 10
+
+    # IMU: trust only the yaw rate (gyro vyaw). Orientation is not published
+    # (orientation_covariance[0] = -1) and roll/pitch are irrelevant in 2D. Linear
+    # acceleration is left off initially -- enable ax/ay here if dead-reckoning
+    # between rf2o updates needs it.
+    imu0: /imu/data_raw
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 10
+    imu0_remove_gravitational_acceleration: true

@@ -6,6 +6,12 @@ ros2_livekit_bridge:
   topic_polling_period_ms: 500
   ros_threads: 0
 
+  services:
+    - service: "/slam_toolbox/reset"
+      direction: "out"
+      participant: "waver_controller"
+      msg_type: "slam_toolbox/srv/Reset"
+
   topics:
     # Commands received from the controller (LiveKit -> ROS).
     - topic: "/cmd_vel"
@@ -43,6 +49,10 @@ ros2_livekit_bridge:
       direction: "out"
 
     - topic: "/global_costmap/published_footprint"
+      direction: "out"
+    
+    - topic: "/imu/data_raw"
+      max_rate_hz: 20
       direction: "out"
 
     # Transform tree — required so the controller's Foxglove 3D panel has a

@@ -28,6 +28,7 @@ ament_auto_find_build_dependencies()
 
 install(PROGRAMS
   scripts/depth_time_offset_node.py
+  scripts/wave_rover_serial_teleop.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

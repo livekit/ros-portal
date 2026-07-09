@@ -23,14 +23,28 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <exec_depend>explore_lite</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
+  <exec_depend>imx219_camera</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>rf2o_laser_odometry</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>ros2_livekit_bridge</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>rplidar_ros</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>waveshare_driver</exec_depend>
   <exec_depend>waver_description</exec_depend>
   <exec_depend>waver_gazebo</exec_depend>
   <exec_depend>waver_nav</exec_depend>

@@ -1,0 +1,31 @@
+# explore_lite (frontier exploration) parameters.
+#
+# Based on m-explore-ros2/explore/config/params.yaml, keyed to the node name
+# (explore_node) so the launch wrapper can rewrite robot_base_frame by dotted path.
+#
+# robot_base_frame is rewritten to "<robot_name>/base_link" by explore.launch.py.
+# The global frame is NOT set here: explore_lite reads it from the frame_id of the
+# incoming map message (slam_toolbox stamps /map with <robot_name>/map), so it
+# tracks the prefixed frame automatically. Topics stay flat and are inherited.
+explore_node:
+  ros__parameters:
+    robot_base_frame: base_link
+    # Frontier detection off the slam_toolbox occupancy grid (full map republished
+    # ~1 Hz). /map_updates is unused by slam_toolbox; the subscription sits idle.
+    costmap_topic: /map
+    costmap_updates_topic: /map_updates
+    # Trims RViz/foxglove/bridge load on the Pi; flip on to debug frontier markers.
+    visualize: false
+    # Re-pick a frontier every ~6.7s. Low rate is fine and cheap on the Pi.
+    planner_frequency: 0.15
+    # Abandon a frontier if nav2 makes no progress toward it for this long.
+    progress_timeout: 30.0
+    potential_scale: 3.0
+    orientation_scale: 0.0
+    gain_scale: 1.0
+    # Match the generous tolerance used elsewhere; map->odom lags under Pi load.
+    transform_tolerance: 0.5
+    # Ignore frontiers smaller than this (m); filters noise/tiny gaps.
+    min_frontier_size: 0.5
+    # Drive back to the start pose once no frontiers remain.
+    return_to_init: true

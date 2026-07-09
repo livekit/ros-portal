@@ -15,31 +15,219 @@
   limitations under the License.
 -->
 <launch>
-  <arg name="sim" default="false" description="Launch Gazebo and use simulation settings." />
-  <arg name="sim_gui" default="false" description="Launch the Gazebo GUI client when sim is enabled." />
-  <arg name="foxglove" default="false" description="Launch the Foxglove bridge with default settings." />
+  <!-- ======================= Multi-robot identity ======================= -->
+  <!-- Single knob for putting this robot in its own TF world. Every frame_id
+       this robot emits is prefixed with "<robot_name>/" (base_link ->
+       robot_1/base_link, odom -> robot_1/odom, map -> robot_1/map), so several
+       robots can be merged onto one viewer's /tf without frame collisions.
+       Keep this aligned with the bridge's LiveKit participant identity
+       (identity:=robot_1) so the controller's preserve_id republishes this
+       robot's topics under the same /robot_1/* namespace.
+       Topics stay flat (/scan, /map, /tf) on the robot's own graph — only
+       frames are prefixed. Separation of topics happens at the controller. -->
+  <arg name="robot_name" default="robot_1" description="Per-robot TF frame prefix and bridge identity." />
 
+  <arg name="sim"        default="false" description="Launch Gazebo and use simulation settings." />
+  <arg name="sim_gui"    default="false" description="Launch the Gazebo GUI client when sim is enabled." />
+  <arg name="nav2"       default="true"  description="Launch the full nav2 navigation stack (off by default; teleop + mapping only)." />
+  <arg name="explore"    default="false" description="Autonomous frontier exploration (explore_lite); requires nav2:=true. Robot roams to map the whole area." />
+  <arg name="use_camera" default="false" description="Launch the IMX219 CSI camera (real robot only)." />
+  <!-- Odometry mode (two knobs, giving three A/B configurations):
+       ekf:=true  (default) -> a robot_localization EKF owns /odom and the
+         odom->base_footprint TF. rf2o feeds it on /odom_rf2o (publish_tf:=false).
+         - ekf_fuse_imu:=false (default): rf2o-only EKF  a pure 30 Hz TF
+           republisher (ekf_rf2o_only.yaml). Fixes nav2's "extrapolation into the
+           future" TF failures caused by rf2o's slow, scan-time-stamped 10 Hz TF.
+         - ekf_fuse_imu:=true: also fuse the gyro yaw rate (ekf.yaml) for
+           drift-resistant heading during fast rotations.
+       ekf:=false -> no EKF; rf2o_laser_odometry alone publishes /odom and owns the
+         odom->base_footprint TF at ~10 Hz. Simplest, but too stale for nav2's
+         high-rate TF lookups (fine for teleop/mapping only). -->
+  <arg name="ekf"          default="true"  description="Run a robot_localization EKF as the owner of /odom and the odom->base_footprint TF. false -> rf2o publishes /odom and the TF directly (too slow for nav2)." />
+  <arg name="ekf_fuse_imu" default="false" description="Only with ekf:=true. true -> fuse the gyro yaw rate (full fusion, ekf.yaml). false -> rf2o-only high-rate TF republisher (ekf_rf2o_only.yaml)." />
+
+  <!-- Robot description source (real-robot path; sim brings up its own via gazebo). -->
+  <arg name="model"       default="$(find-pkg-share waver_description)/urdf/waver.xacro" description="Xacro robot model." />
+  <arg name="camera_type" default="raspi"                                                description="Xacro camera variant (raspi/depth)." />
+
+  <!-- Real-robot hardware settings (ignored when sim:=true). -->
+  <arg name="lidar_serial_port" default="/dev/ttyUSB0" description="RPLidar C1 serial device." />
+  <arg name="rover_serial_port" default="/dev/serial0" description="ESP32 driver board UART (40-pin GPIO)." />
+  <arg name="rover_baud"        default="115200" description="ESP32 driver board baud rate." />
+  <!-- Commanded->actual velocity calibration gains (bench-fit 2026-07-16 against
+       rf2o/gyro; see wave_rover_driver.py). These normalize the twist BEFORE the
+       axis dead-zone lift, so they set the low-band slope nav2 operates in, not
+       the physical top speed. Raise a value if the robot moves faster than
+       commanded; lower it if slower. -->
+  <arg name="max_linear_speed"  default="2.4"
+    description="Linear calibration gain (m/s at full throttle, low-band fit); tune so commanded ~ actual speed." />
+  <arg name="max_angular_speed" default="2.5"
+    description="Angular calibration gain (rad/s at full throttle, low-band fit); tune so commanded ~ actual rate." />
+  <!-- RPLidar mount relative to base_link: ~0.205 m above, ~0.04 m behind (negative X = rear).
+       Empirically the scan's angle-0 ray points toward the robot's REAR (an object placed
+       in front of the robot returns at laser angle ~pi), so base_link->laser needs yaw = pi
+       to put front-of-robot at base_link +x. This is a property of the sensor's zero-angle
+       reference, not of which way the unit visually faces. With yaw = pi the scan, the map,
+       and rf2o odometry all agree that +x is the robot's physical front. -->
+  <arg name="lidar_x"   default="-0.04"      description="Lidar X offset from base_link (m, +forward)." />
+  <arg name="lidar_z"   default="0.205"      description="Lidar Z offset from base_link (m, +up)." />
+  <arg name="lidar_yaw" default="3.14159265" description="Lidar yaw offset from base_link (rad); pi = scan angle-0 points to robot rear." />
+
+  <!-- IMX219 camera image settings (ignored when sim:=true or use_camera:=false). -->
+  <arg name="camera_width"    default="1280"                     description="IMX219 image width (px)." />
+  <arg name="camera_height"   default="720"                      description="IMX219 image height (px)." />
+  <arg name="camera_frame_id" default="$(var robot_name)/camera" description="frame_id for published camera images." />
+
+  <!-- ============================ Robot description ============================ -->
   <!-- In sim, gazebo.launch.xml brings up the description with sim_control:=gazebo
        (the DiffDrive plugin that consumes /cmd_vel and publishes odom + the
-       odom->base_footprint TF). Only launch the ros2_control description directly
-       on the real robot to avoid a duplicate robot_state_publisher. -->
-  <include unless="$(var sim)" file="$(find-pkg-share waver_description)/launch/description.launch.xml">
+       odom->base_footprint TF).
+
+       On the real robot we run robot_state_publisher directly (rather than
+       including waver_description/description.launch.xml) so we can set
+       frame_prefix — the vendored launch does not expose it, and that tree is
+       re-imported by vcs so patching it there would not persist. frame_prefix
+       prepends "<robot_name>/" to every frame_id derived from the URDF. -->
+  <group unless="$(var sim)">
+    <node name="joint_state_publisher" pkg="joint_state_publisher" exec="joint_state_publisher">
+      <param name="use_sim_time" value="$(var sim)" />
+    </node>
+
+    <node name="robot_state_publisher" pkg="robot_state_publisher" exec="robot_state_publisher" output="screen">
+      <param name="use_sim_time" value="$(var sim)" />
+      <param name="frame_prefix" value="$(var robot_name)/" />
+      <param name="robot_description"
+        value="$(command 'xacro $(var model) sim_control:=ros2 camera_type:=$(var camera_type)')" />
+    </node>
+  </group>
+
+  <!-- ===================== Real-robot hardware (unless sim) ===================== -->
+  <group unless="$(var sim)">
+    <!-- RPLidar C1 -> /scan (frame_id: <robot_name>/laser). -->
+    <include file="$(find-pkg-share rplidar_ros)/launch/rplidar_c1_launch.py">
+      <arg name="serial_port" value="$(var lidar_serial_port)" />
+      <arg name="frame_id"    value="$(var robot_name)/laser" />
+    </include>
+
+    <!-- Physical lidar pose. The vendored URDF's lidar_link models the sim LD19 mount and
+         is left as an unused visual frame; the real scan is published in `<robot_name>/laser`. -->
+    <node pkg="tf2_ros" exec="static_transform_publisher" name="base_link_to_laser"
+      args="--x $(var lidar_x) --y 0.0 --z $(var lidar_z) --yaw $(var lidar_yaw) --pitch 0.0 --roll 0.0 --frame-id $(var robot_name)/base_link --child-frame-id $(var robot_name)/laser" />
+
+    <!-- cmd_vel -> ESP32 serial JSON motion driver. -->
+    <node pkg="waveshare_driver" exec="wave_rover_driver" name="wave_rover_driver" output="screen">
+      <param name="serial_port"       value="$(var rover_serial_port)" />
+      <param name="baud"              value="$(var rover_baud)" />
+      <param name="max_linear_speed"  value="$(var max_linear_speed)" />
+      <param name="max_angular_speed" value="$(var max_angular_speed)" />
+      <param name="output_max"        value="0.5" />
+      <param name="cmd_type"          value="1" />
+      <param name="cmd_timeout"       value="0.5" />
+      <!-- IMU published on /imu/data_raw in the robot's own TF frame. -->
+      <param name="imu_frame_id"      value="$(var robot_name)/imu_link" />
+    </node>
+
+    <!-- Laser-scan-matching odometry (no wheel encoders). The `ekf` flag selects
+         rf2o's role, so it's a clean A/B switch between "rf2o + EKF" and "rf2o alone":
+
+         ekf:=true (default) -> rf2o feeds the EKF. It publishes raw odometry on
+           /odom_rf2o with publish_tf:=false so the EKF is the sole owner of the
+           odom->base_footprint TF and /odom; the two must never both publish that TF.
+
+         ekf:=false -> rf2o IS the odometry source. It publishes /odom directly and
+           owns the odom->base_footprint TF (publish_tf:=true). nav2, slam_toolbox,
+           and the bridge consume rf2o's raw estimate unfiltered. -->
+    <!-- ros_args log-level WARN: rf2o logs 3 INFO lines per scan (30 msgs/s),
+         measurable CPU + log I/O on the Pi for zero diagnostic value. -->
+    <node unless="$(var ekf)" pkg="rf2o_laser_odometry" exec="rf2o_laser_odometry_node" name="rf2o_laser_odometry"
+      output="screen" ros_args="--log-level rf2o_laser_odometry:=warn">
+      <param name="laser_scan_topic"     value="/scan" />
+      <param name="odom_topic"           value="/odom" />
+      <param name="publish_tf"           value="true" />
+      <param name="base_frame_id"        value="$(var robot_name)/base_footprint" />
+      <param name="odom_frame_id"        value="$(var robot_name)/odom" />
+      <param name="init_pose_from_topic" value="" />
+      <param name="freq"                 value="10.0" />
+    </node>
+
+    <node if="$(var ekf)" pkg="rf2o_laser_odometry" exec="rf2o_laser_odometry_node" name="rf2o_laser_odometry"
+      output="screen" ros_args="--log-level rf2o_laser_odometry:=warn">
+      <param name="laser_scan_topic"     value="/scan" />
+      <param name="odom_topic"           value="/odom_rf2o" />
+      <param name="publish_tf"           value="false" />
+      <param name="base_frame_id"        value="$(var robot_name)/base_footprint" />
+      <param name="odom_frame_id"        value="$(var robot_name)/odom" />
+      <param name="init_pose_from_topic" value="" />
+      <param name="freq"                 value="10.0" />
+    </node>
+
+    <!-- EKF (behind the `ekf` flag, default ON). Owns /odom and the
+         odom->base_footprint TF that nav2, slam_toolbox, and the bridge consume.
+         ekf_fuse_imu picks the params file: rf2o-only high-rate TF republisher
+         (default) vs. full rf2o + gyro fusion. See the arg block up top. -->
+    <include if="$(var ekf)" file="$(find-pkg-share waveshare_launch)/launch/ekf.launch.py">
+      <arg name="robot_name"   value="$(var robot_name)" />
+      <arg name="use_sim_time" value="$(var sim)" />
+      <arg name="fuse_imu"     value="$(var ekf_fuse_imu)" />
+      <arg name="lidar_yaw"    value="$(var lidar_yaw)" />
+    </include>
+
+    <!-- IMX219 CSI camera -> /camera/image_raw (sensor_msgs/Image) via camera_ros/libcamera.
+         Requires udev in the container: run `sudo ros2 run imx219_camera setup_camera_udev.sh`
+         once per boot (see imx219_camera/README.md). -->
+    <include if="$(var use_camera)" file="$(find-pkg-share imx219_camera)/launch/imx219_camera.launch.py">
+      <arg name="width"    value="$(var camera_width)" />
+      <arg name="height"   value="$(var camera_height)" />
+      <arg name="frame_id" value="$(var camera_frame_id)" />
+    </include>
+
+    <!-- Camera pose. camera_ros stamps images with camera_frame_id as an OPTICAL
+         frame (z out of lens, x right, y down), but nothing else publishes it, so
+         without this the image has no TF. The camera faces the robot's front
+         (base_link +x); rpy -pi/2 0 -pi/2 is the standard body->optical rotation so
+         optical z points along +x.
+         TODO: measure the real x/z offset from base_link; these are estimates. -->
+    <node if="$(var use_camera)" pkg="tf2_ros" exec="static_transform_publisher" name="base_link_to_camera"
+      args="--x 0.05 --y 0.0 --z 0.19 --roll -1.5707963 --pitch 0.0 --yaw -1.5707963 --frame-id $(var robot_name)/base_link --child-frame-id $(var camera_frame_id)" />
+  </group>
+
+  <!-- ================================= Mapping ================================= -->
+  <!-- slam_toolbox's map/odom/base frames live in a params yaml (not launch args),
+       so a small Python helper rewrites them to the <robot_name>/ prefix before
+       handing off to slam_toolbox's online_async launch. Publishes
+       <robot_name>/map -> <robot_name>/odom, giving this robot its own map world. -->
+  <include file="$(find-pkg-share waveshare_launch)/launch/slam.launch.py">
+    <arg name="robot_name"   value="$(var robot_name)" />
     <arg name="use_sim_time" value="$(var sim)" />
-    <arg name="sim_control" value="ros2" />
   </include>
 
-  <include file="$(find-pkg-share nav2_bringup)/launch/navigation_launch.py">
+  <!-- ============================ Optional extras ============================= -->
+  <!-- Full nav2 navigation stack (costmaps, planner, controller, BT, behaviors).
+       Layers on top of the always-on slam_toolbox, which supplies <robot_name>/map
+       and the map->odom transform (navigation_launch does NOT start map_server/amcl).
+       Frames are rewritten to the <robot_name>/ prefix by nav2.launch.py, mirroring
+       slam.launch.py — nav2's stock params are unprefixed and would fail every TF
+       lookup otherwise. Topics stay flat (/scan, /odom, /cmd_vel, /map). -->
+  <include if="$(var nav2)" file="$(find-pkg-share waveshare_launch)/launch/nav2.launch.py">
+    <arg name="robot_name"   value="$(var robot_name)" />
     <arg name="use_sim_time" value="$(var sim)" />
   </include>
 
-  <include file="$(find-pkg-share waver_nav)/launch/online_async.launch.xml">
+  <!-- Autonomous frontier exploration (explore_lite). Drives the robot to the edges
+       of the mapped area via nav2 NavigateToPose goals until the whole space is
+       explored, then returns to start. Needs nav2:=true (the navigate_to_pose action)
+       and the always-on slam_toolbox (for <robot_name>/map). robot_base_frame is
+       rewritten to the <robot_name>/ prefix by explore.launch.py. -->
+  <include if="$(var explore)" file="$(find-pkg-share waveshare_launch)/launch/explore.launch.py">
+    <arg name="robot_name"   value="$(var robot_name)" />
     <arg name="use_sim_time" value="$(var sim)" />
   </include>
 
   <include if="$(var sim)" file="$(find-pkg-share waveshare_launch)/launch/gazebo.launch.xml">
     <arg name="use_sim_time" value="true" />
-    <arg name="gui" value="$(var sim_gui)" />
+    <arg name="gui"          value="$(var sim_gui)" />
+    <arg name="robot_name"   value="$(var robot_name)" />
+    <arg name="model"        value="$(var model)" />
+    <arg name="camera_type"  value="$(var camera_type)" />
   </include>
-
-  <include if="$(var foxglove)" file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml" />
 </launch>

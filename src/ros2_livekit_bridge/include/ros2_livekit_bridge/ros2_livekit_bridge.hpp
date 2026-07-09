@@ -132,11 +132,15 @@ private:
   /// patterns.
   /// @param incoming_topic_compiled_patterns Compiled LiveKit-to-ROS topic
   /// patterns.
+  /// @param incoming_topic_types Explicit ROS message types for inbound tracks
+  /// keyed by normalized ROS topic name. TODO(BOT-301): temporary stopgap;
+  /// remove once LiveKit DataTracks carry the ROS message type.
   /// @param preserve_id_topic_compiled_patterns Compiled topics that should be preserved with their original IDs.
   /// @param outbound_rate_limits Rate limits for outbound topics.
   /// @return True on success, false when the topic forwarder could not be initialized.
   bool initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
                                 std::vector<std::regex> incoming_topic_compiled_patterns,
+                                std::unordered_map<std::string, std::string> incoming_topic_types,
                                 std::vector<std::regex> preserve_id_topic_compiled_patterns,
                                 std::unordered_map<std::string, double> outbound_rate_limits);
 

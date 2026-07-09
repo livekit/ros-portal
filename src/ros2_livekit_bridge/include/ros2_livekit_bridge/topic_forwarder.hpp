@@ -90,6 +90,14 @@ public:
     std::vector<std::regex> outgoing_topic_patterns;
     /// @brief Regex patterns for LiveKit data tracks republished on ROS.
     std::vector<std::regex> incoming_topic_patterns;
+    /// @brief Explicit ROS message types for inbound tracks, keyed by
+    /// normalized ROS topic name, consulted before the ROS graph lookup.
+    ///
+    /// TODO(BOT-301): Temporary stopgap. LiveKit DataTracks do not yet carry
+    /// ROS message-type metadata, so a pure consumer cannot infer an inbound
+    /// track's type when nothing on its local ROS graph publishes it. Remove
+    /// this map once DataTracks propagate the ROS type with the track.
+    std::unordered_map<std::string, std::string> incoming_topic_types;
     /// @brief Regex patterns for inbound tracks whose republished ROS topic
     /// name is prefixed with the publishing participant's sanitized identity
     /// (config `preserve_id: true`).

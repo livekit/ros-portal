@@ -9,17 +9,23 @@ ros2_livekit_bridge:
 
   topics:
     # Commands received from the controller (LiveKit -> ROS).
+    # These are pure inbound tracks (nothing on the robot's ROS graph publishes
+    # them), so msg_type is required per the BOT-301 stopgap.
     - topic: "/cmd_vel"
       direction: "in"
+      msg_type: "geometry_msgs/msg/Twist"
 
     - topic: "/goal_pose"
       direction: "in"
+      msg_type: "geometry_msgs/msg/PoseStamped"
 
     - topic: "/initialpose"
       direction: "in"
+      msg_type: "geometry_msgs/msg/PoseWithCovarianceStamped"
 
     - topic: "/clicked_point"
       direction: "in"
+      msg_type: "geometry_msgs/msg/PointStamped"
 
     # Telemetry / sensor / nav streams sent out to LiveKit (ROS -> LiveKit)
     - topic: "/map"

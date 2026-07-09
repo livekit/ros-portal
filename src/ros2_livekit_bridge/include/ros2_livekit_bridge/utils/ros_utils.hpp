@@ -100,11 +100,24 @@ std::vector<std::string> incomingTopicPatterns(const ros2_livekit_bridge_config:
 /// prefixing.
 std::vector<std::string> preserveIdTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
 
+/// @brief Collect explicitly configured ROS message types for inbound tracks.
+///
+/// TODO(BOT-301): Temporary stopgap. LiveKit DataTracks do not yet carry ROS
+/// message-type metadata, so a pure consumer (e.g. the controller) cannot infer
+/// the type of a track it only receives when nothing on its local ROS graph
+/// already publishes/subscribes to that topic. This maps normalized ROS topic
+/// name -> ROS message type for every 'in'/'bidirectional' topic that sets
+/// `msg_type` in the config, so TopicForwarder can create the republishing
+/// publisher. Remove once DataTracks propagate the ROS type with the track.
+///
+/// @return Map of normalized ROS topic name to ROS message type.
+std::unordered_map<std::string, std::string> incomingTopicTypes(const ros2_livekit_bridge_config::BridgeConfig& config);
+
 /// @brief Collect per-topic outbound forward-rate caps.
 ///
 /// Maps ROS topic name -> maximum forward rate in Hz for every 'out'/'bidirectional'
 /// topic that sets a positive `max_rate_hz` in the config. Keyed by the verbatim
-/// configured topic name (literal match, not regex).
+/// configured topic name (literal match, not regex), mirroring `incomingTopicTypes`.
 ///
 /// @param config The bridge configuration.
 /// @return Map of ROS topic name to maximum outbound forward rate (Hz).

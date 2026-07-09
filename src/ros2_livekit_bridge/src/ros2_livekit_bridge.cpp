@@ -89,6 +89,10 @@ bool Ros2LiveKitBridge::initialize() {
   auto incoming_topic_compiled_patterns = utils::compileRegexPatterns(incoming_topic_patterns, &pattern_errors);
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
+  // TODO(BOT-301): Temporary stopgap. Explicit inbound-track types keyed by ROS
+  // topic name; remove once LiveKit DataTracks carry the ROS message type.
+  auto incoming_topic_types = utils::incomingTopicTypes(*config);
+
   const auto preserve_id_topic_patterns = utils::preserveIdTopicPatterns(*config);
   pattern_errors.clear();
   auto preserve_id_topic_compiled_patterns = utils::compileRegexPatterns(preserve_id_topic_patterns, &pattern_errors);
@@ -170,7 +174,7 @@ bool Ros2LiveKitBridge::initialize() {
   }
 
   if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
-                                std::move(incoming_topic_compiled_patterns),
+                                std::move(incoming_topic_compiled_patterns), std::move(incoming_topic_types),
                                 std::move(preserve_id_topic_compiled_patterns), std::move(outbound_rate_limits))) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
@@ -300,12 +304,14 @@ void Ros2LiveKitBridge::onParticipantsUpdated(livekit::Room &room, const livekit
 
 bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
                                                  std::vector<std::regex> incoming_topic_compiled_patterns,
+                                                 std::unordered_map<std::string, std::string> incoming_topic_types,
                                                  std::vector<std::regex> preserve_id_topic_compiled_patterns,
                                                  std::unordered_map<std::string, double> outbound_rate_limits) {
   try {
     const TopicForwarder::TopicForwarderOptions forwarder_options{
         std::move(outgoing_topic_compiled_patterns),
         std::move(incoming_topic_compiled_patterns),
+        std::move(incoming_topic_types),
         std::move(preserve_id_topic_compiled_patterns),
         best_effort_qos_topic_patterns_,
         min_qos_depth_,

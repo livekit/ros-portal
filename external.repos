@@ -15,3 +15,7 @@ repositories:
     type: git
     url: https://github.com/GGomezMorales/waver.git
     version: 9146ead456dc57f6b4bdaa1a8ca1c7b9fdb59465
+  rf2o_laser_odometry:
+    type: git
+    url: https://github.com/MAPIRlab/rf2o_laser_odometry.git
+    version: ros2

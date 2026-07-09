@@ -88,6 +88,7 @@ To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutor
 - `ros_portal_msgs`: custom message definitions for ROS Portal.
 - [`ros_portal_tutorials`](src/ros_portal_tutorials/README.md):
   tutorials for using ROS Portal in a variety of scenarios.
-- [`waveshare_launch`](src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
+- [`waver`](src/test/waver/README.md): packages for launching the physical and simulated Waveshare WAVE ROVER.
+- [`cobra_flex`](src/test/cobra_flex/README.md): packages for launching the physical and simulated Cobra Flex robot.
 
 Other package READMEs under `src/` document package-specific setup, fixtures, or examples.

@@ -1,6 +1,6 @@
 # Testing
 
-There are unit and integration tests which are run in CI. For more manual integration testing we have a simulation, see [`waveshare_launch`](../src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
+There are unit and integration tests which are run in CI. For more manual integration testing we have a simulation, see [`waver`](../src/test/waver/README.md): packages for launching the physical and simulated Waveshare WAVE ROVER.
 
 ## Unit Tests
 

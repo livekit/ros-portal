@@ -129,11 +129,32 @@ RUN if [ "${INSTALL_SIMULATION_DEPS}" = "true" ]; then \
         ros-${ROS_DISTRO}-joint-state-publisher \
         ros-${ROS_DISTRO}-nav2-bringup \
         ros-${ROS_DISTRO}-navigation2 \
+        ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
         ros-${ROS_DISTRO}-robot-localization \
         ros-${ROS_DISTRO}-ros-gz-* \
-        ros-${ROS_DISTRO}-ros2-control* && \
+        ros-${ROS_DISTRO}-ros2-control* \
+        && \
       rm -rf /var/lib/apt/lists/*; \
     fi
+
+# CycloneDDS RMW. This stack runs on Cyclone rather than the ROS 2 default
+# (Fast DDS): on the CPU-bound Pi 4, Fast DDS starved the slam_toolbox
+# (map->odom) and rf2o (odom->base) TF publishers and produced continuous TF
+# extrapolation errors. Cyclone is lighter and Nav2 is most reliable with it.
+# Selected via RMW_IMPLEMENTATION (set below). See src/test/waver/README.md.
+RUN apt-get update && apt-get install -y \
+    
+
+# Middleware config baked into the image so EVERY shell and process in the
+# container inherits it (no manual export needed). Cyclone as the RMW (installed
+# above); DDS discovery restricted to localhost because cross-machine transport
+# goes over the LiveKit bridge, not raw DDS — this saves CPU and prevents two
+# robots on the same LAN + ROS_DOMAIN_ID from cross-discovering each other's
+# graphs. Trade-off: the graph is no longer reachable via ros2 CLI / RViz from
+# another machine (inspect on the Pi, or via LiveKit/Foxglove). To allow remote
+# DDS access, override at runtime: -e ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET.
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 
 COPY ./setup-shell-env.sh /tmp/setup-shell-env.sh
 RUN chmod +x /tmp/setup-shell-env.sh && /tmp/setup-shell-env.sh && rm /tmp/setup-shell-env.sh

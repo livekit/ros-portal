@@ -1,0 +1,52 @@
+# robot_localization EKF, rf2o-ONLY (no IMU): a pure high-rate TF republisher.
+#
+# rf2o publishes its odom->base_footprint estimate at only ~10 Hz and stamps it
+# with the (already-latent) laser-scan time; on the CPU-bound Pi 4 the scan-match
+# adds more lag, so the newest rf2o TF is perpetually tens of ms behind "now" and
+# nav2's high-rate consumers (controller @10 Hz, collision_monitor, costmap message
+# filters) fail their "now" TF lookups with "extrapolation into the future".
+#
+# This EKF ingests ONLY rf2o (pose x/y/yaw + twist vx/vy/vyaw) and runs its own
+# 30 Hz timer. With predict_to_current_time it projects the state forward to the
+# current clock on every publish, so the odom->base_footprint TF is always fresh
+# for nav2. No IMU is fused -- this is not sensor fusion, just rate/latency repair.
+# (For actual gyro-assisted heading, launch with ekf_fuse_imu:=true, which selects
+# ekf.yaml instead.)
+#
+# Frames here are unprefixed; ekf.launch.py rewrites them to "<robot_name>/" to
+# match robot_state_publisher's frame_prefix (same approach as slam.launch.py).
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0             # republish TF at 30 Hz (well above rf2o's ~10 Hz)
+    sensor_timeout: 0.2
+    two_d_mode: true            # planar robot: zero z / roll / pitch and their rates
+    publish_tf: true            # EKF owns odom->base_footprint (rf2o's is disabled)
+    publish_acceleration: false
+    predict_to_current_time: true  # stamp the estimate at "now", not the last rf2o msg
+
+    map_frame: map              # rewritten to <robot_name>/map at launch
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom           # estimate lives in the odom frame
+
+    # Single input: rf2o, via the covariance relay (rf2o itself publishes all-zero
+    # covariances the EKF would read as "perfectly certain" and choke on). Fuse both
+    # the absolute pose (x, y, yaw) and the twist (vx, vy, vyaw); the velocity terms
+    # give the 30 Hz prediction something to integrate between the 10 Hz rf2o updates.
+    # Order: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+    odom0: /odom_rf2o_cov
+    odom0_config: [true,  true,  false,
+                   false, false, true,
+                   true,  true,  false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # NO IMU input here, deliberately: this config is the rf2o-only arm of the
+    # ekf_fuse_imu A/B. Gyro yaw-rate fusion lives in ekf.yaml (ekf_fuse_imu:=true).
+    # (A leftover imu0 block previously fused vyaw from here too, silently breaking
+    # the A/B -- and while the driver's gyro_bias was mis-signed, it dragged the
+    # heading at ~-1.8 deg/s. Keep this file sensor-fusion-free.)
+

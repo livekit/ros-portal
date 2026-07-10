@@ -23,8 +23,16 @@ ros2_livekit_bridge:
     - topic: "/battery_state"
       direction: "out"
 
-    - topic: "/tf.*"
+    # /tf carries dynamic transforms and stays on the DataTrack path.
+    - topic: "/tf"
       direction: "out"
+
+    # /tf_static is latched (published once with TRANSIENT_LOCAL durability), so
+    # it is forwarded over the RPC push-with-ack path instead of a DataTrack.
+    # See `latched` in docs/configuration.md.
+    - topic: "/tf_static"
+      direction: "out"
+      latched: true
 
     - topic: "/test/.*"
       direction: "bidirectional"

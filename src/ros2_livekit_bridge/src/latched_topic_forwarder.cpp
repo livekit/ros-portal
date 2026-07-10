@@ -1,0 +1,367 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
+
+#include <cstring>
+#include <exception>
+#include <map>
+#include <nlohmann/json.hpp>
+#include <rclcpp/generic_subscription.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/serialized_message.hpp>
+#include <stdexcept>
+#include <utility>
+
+#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/utils/base64.hpp"
+
+namespace ros2_livekit_bridge {
+
+namespace {
+
+/// @brief LiveKit RPC payload hard limit (15 KiB, UTF-8). A request larger than
+/// this cannot be sent, so an oversize latched message is dropped.
+constexpr std::size_t kMaxRpcPayloadBytes = 15U * 1024U;
+
+/// @brief History depth for latched publishers/subscriptions. Deep enough to
+/// hold one latched sample from each of many static broadcasters.
+constexpr std::size_t kLatchedQosDepth = 100U;
+
+/// @brief Read the shared `{success, ...}` RPC envelope, defaulting to failure.
+bool rpcSucceeded(const std::string& response) {
+  try {
+    const auto parsed = nlohmann::json::parse(response);
+    return parsed.at("success").get<bool>();
+  } catch (const std::exception&) {
+    return false;
+  }
+}
+
+} // namespace
+
+LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node,
+                                             LiveKitMethods livekit_methods)
+    : options_(std::move(options)),
+      node_(std::move(node)),
+      livekit_methods_(std::move(livekit_methods)),
+      logger_(rclcpp::get_logger("latched_topic_forwarder")) {
+  const auto locked_node = node_.lock();
+  if (!locked_node) {
+    throw std::invalid_argument("LatchedTopicForwarder requires a non-expired ROS node");
+  }
+  if (!livekit_methods_.register_rpc_method || !livekit_methods_.unregister_rpc_method ||
+      !livekit_methods_.perform_rpc || !livekit_methods_.list_remote_identities) {
+    throw std::invalid_argument("LatchedTopicForwarder requires fully populated LiveKitMethods");
+  }
+
+  logger_ = locked_node->get_logger().get_child("latched_topic_forwarder");
+  clock_ = locked_node->get_clock();
+  callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+
+  if (!options_.inbound_topics.empty()) {
+    rpc_registered_ = livekit_methods_.register_rpc_method(
+        kLatchedStateRpcMethod, [this](const std::string& payload) { return handleLatchedStateRpc(payload); });
+    if (!rpc_registered_) {
+      RCLCPP_ERROR(logger_, "Failed to register '%s' RPC handler; inbound latched topics will not be received",
+                   kLatchedStateRpcMethod);
+    }
+  }
+}
+
+LatchedTopicForwarder::~LatchedTopicForwarder() {
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    stop_.store(true);
+  }
+  state_cv_.notify_all();
+  if (worker_.joinable()) {
+    worker_.join();
+  }
+
+  if (rpc_registered_ && livekit_methods_.unregister_rpc_method) {
+    livekit_methods_.unregister_rpc_method(kLatchedStateRpcMethod);
+  }
+
+  std::lock_guard<std::mutex> sub_lock(subscriptions_mutex_);
+  subscriptions_.clear();
+}
+
+void LatchedTopicForwarder::start() {
+  if (options_.outbound_topics.empty() || worker_.joinable()) {
+    return;
+  }
+  stop_.store(false);
+  worker_ = std::thread(&LatchedTopicForwarder::runWorker, this);
+}
+
+rclcpp::QoS LatchedTopicForwarder::latchedQoS() const {
+  return rclcpp::QoS(rclcpp::KeepLast(kLatchedQosDepth)).reliable().transient_local();
+}
+
+void LatchedTopicForwarder::poll() {
+  if (options_.outbound_topics.empty()) {
+    return;
+  }
+
+  std::map<std::string, std::vector<std::string>> topic_names_and_types;
+  {
+    const auto node = node_.lock();
+    if (!node) {
+      RCLCPP_ERROR(logger_, "Skipping latched topic poll; ROS node has been destroyed");
+      return;
+    }
+    topic_names_and_types = node->get_topic_names_and_types();
+  }
+
+  for (const auto& topic_name : options_.outbound_topics) {
+    {
+      std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+      if (subscriptions_.count(topic_name) > 0) {
+        continue;
+      }
+    }
+
+    const auto it = topic_names_and_types.find(topic_name);
+    if (it == topic_names_and_types.end() || it->second.empty()) {
+      continue;
+    }
+
+    RCLCPP_INFO(logger_, "Discovered latched topic: '%s' [%s]", topic_name.c_str(), it->second.front().c_str());
+    createOutboundSubscription(topic_name, it->second.front());
+  }
+}
+
+void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_name, const std::string& topic_type) {
+  const auto node = node_.lock();
+  if (!node) {
+    return;
+  }
+
+  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+    const auto& rcl_msg = msg->get_rcl_serialized_message();
+    storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
+  };
+
+  std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+  if (subscriptions_.count(topic_name) > 0) {
+    return;
+  }
+
+  try {
+    rclcpp::SubscriptionOptions sub_options;
+    sub_options.callback_group = callback_group_;
+    auto subscription =
+        node->create_generic_subscription(topic_name, topic_type, latchedQoS(), std::move(callback), sub_options);
+    subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(logger_, "Failed to create latched subscription for '%s' [%s]: %s", topic_name.c_str(),
+                 topic_type.c_str(), e.what());
+    return;
+  }
+
+  RCLCPP_INFO(logger_, "Subscribed to latched topic '%s' [%s] (RELIABLE, TRANSIENT_LOCAL)", topic_name.c_str(),
+              topic_type.c_str());
+}
+
+void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, const std::string& topic_type,
+                                                 const std::uint8_t* data, std::size_t size) {
+  nlohmann::json request;
+  request["topic"] = topic_name;
+  request["msg_type"] = topic_type;
+  request["data"] = utils::base64Encode(data, size);
+  std::string request_json = request.dump();
+
+  if (request_json.size() > kMaxRpcPayloadBytes) {
+    RCLCPP_ERROR_THROTTLE(logger_, *clock_, 10000,
+                          "Latched message on '%s' is %zu bytes as an RPC payload, exceeding the %zu-byte LiveKit "
+                          "RPC limit; not forwarding it (consider splitting large latched state)",
+                          topic_name.c_str(), request_json.size(), kMaxRpcPayloadBytes);
+    return;
+  }
+
+  const std::size_t hash = std::hash<std::string>{}(request_json);
+
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  if (message_hashes_.count(hash) > 0) {
+    return; // duplicate content; no state change, no re-push
+  }
+
+  messages_.push_back({hash, std::move(request_json)});
+  message_hashes_.insert(hash);
+  while (messages_.size() > options_.max_stored_messages) {
+    message_hashes_.erase(messages_.front().hash);
+    messages_.pop_front();
+  }
+
+  ++version_;
+  // New state: re-arm every peer, including any that had been given up on.
+  for (auto& [id, state] : participant_states_) {
+    state.consecutive_failures = 0;
+  }
+
+  RCLCPP_INFO(logger_, "Stored latched message for '%s' (%zu retained, version %llu)", topic_name.c_str(),
+              messages_.size(), static_cast<unsigned long long>(version_));
+}
+
+void LatchedTopicForwarder::runWorker() {
+  std::unique_lock<std::mutex> lock(state_mutex_);
+  while (!stop_.load()) {
+    state_cv_.wait_for(lock, options_.push_interval, [this] { return stop_.load(); });
+    if (stop_.load()) {
+      break;
+    }
+    lock.unlock();
+    pushToPeers();
+    lock.lock();
+  }
+}
+
+void LatchedTopicForwarder::pushToPeers() {
+  const std::vector<std::string> identities = livekit_methods_.list_remote_identities();
+
+  std::vector<StoredMessage> messages;
+  std::uint64_t version = 0;
+  std::vector<std::string> targets;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    reconcileRosterLocked(identities);
+    if (messages_.empty()) {
+      return; // nothing latched to deliver yet
+    }
+    version = version_;
+    messages.assign(messages_.begin(), messages_.end());
+    for (const auto& [id, state] : participant_states_) {
+      if (state.delivered_version < version && state.consecutive_failures < options_.max_participant_failures) {
+        targets.push_back(id);
+      }
+    }
+  }
+
+  // Blocking RPCs run outside the lock so a slow/absent peer never stalls the
+  // subscription callbacks or other peers' bookkeeping.
+  for (const auto& id : targets) {
+    bool delivered = true;
+    for (const auto& message : messages) {
+      const auto response =
+          livekit_methods_.perform_rpc(id, kLatchedStateRpcMethod, message.request_json, options_.rpc_timeout_sec);
+      if (!response || !rpcSucceeded(*response)) {
+        delivered = false;
+        break;
+      }
+    }
+
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    const auto it = participant_states_.find(id);
+    if (it == participant_states_.end()) {
+      continue; // participant left mid-push; a rejoin re-pushes from scratch
+    }
+    if (delivered) {
+      it->second.delivered_version = version;
+      it->second.consecutive_failures = 0;
+      RCLCPP_INFO(logger_, "Delivered %zu latched message(s) to '%s'", messages.size(), id.c_str());
+    } else {
+      ++it->second.consecutive_failures;
+      if (it->second.consecutive_failures == options_.max_participant_failures) {
+        RCLCPP_WARN(logger_,
+                    "Giving up latched-state push to '%s' after %zu consecutive failures; "
+                    "will retry when new state arrives or it rejoins",
+                    id.c_str(), it->second.consecutive_failures);
+      }
+    }
+  }
+}
+
+void LatchedTopicForwarder::reconcileRosterLocked(const std::vector<std::string>& identities) {
+  const std::unordered_set<std::string> current(identities.begin(), identities.end());
+
+  for (const auto& id : current) {
+    participant_states_.try_emplace(id);
+  }
+
+  for (auto it = participant_states_.begin(); it != participant_states_.end();) {
+    if (current.count(it->first) == 0) {
+      it = participant_states_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payload) {
+  std::string topic;
+  std::string msg_type;
+  std::string data_b64;
+  try {
+    const auto parsed = nlohmann::json::parse(payload);
+    topic = parsed.at("topic").get<std::string>();
+    msg_type = parsed.at("msg_type").get<std::string>();
+    data_b64 = parsed.at("data").get<std::string>();
+  } catch (const std::exception& e) {
+    return cliResponseToJson(false, std::string("malformed latched-state request: ") + e.what(), "");
+  }
+
+  if (options_.inbound_topics.count(topic) == 0) {
+    return cliResponseToJson(false, "topic '" + topic + "' is not a configured inbound latched topic", "");
+  }
+
+  const auto decoded = utils::base64Decode(data_b64);
+  if (!decoded) {
+    return cliResponseToJson(false, "invalid base64 payload for '" + topic + "'", "");
+  }
+
+  rclcpp::GenericPublisher::SharedPtr publisher;
+  {
+    std::lock_guard<std::mutex> lock(publishers_mutex_);
+    const auto it = inbound_publishers_.find(topic);
+    if (it != inbound_publishers_.end()) {
+      publisher = it->second;
+    } else {
+      const auto node = node_.lock();
+      if (!node) {
+        return cliResponseToJson(false, "ROS node unavailable", "");
+      }
+      try {
+        publisher = node->create_generic_publisher(topic, msg_type, latchedQoS());
+      } catch (const std::exception& e) {
+        return cliResponseToJson(
+            false, std::string("failed to create publisher for '") + topic + "' [" + msg_type + "]: " + e.what(), "");
+      }
+      if (!publisher) {
+        return cliResponseToJson(false, "publisher handle invalid for '" + topic + "'", "");
+      }
+      inbound_publishers_.emplace(topic, publisher);
+      RCLCPP_INFO(logger_, "Created TRANSIENT_LOCAL publisher for latched '%s' [%s]", topic.c_str(), msg_type.c_str());
+    }
+  }
+
+  try {
+    rclcpp::SerializedMessage serialized(decoded->size());
+    auto& rcl_msg = serialized.get_rcl_serialized_message();
+    if (!decoded->empty()) {
+      std::memcpy(rcl_msg.buffer, decoded->data(), decoded->size());
+    }
+    rcl_msg.buffer_length = decoded->size();
+    publisher->publish(serialized);
+  } catch (const std::exception& e) {
+    return cliResponseToJson(false, std::string("failed to publish '") + topic + "': " + e.what(), "");
+  }
+
+  RCLCPP_INFO(logger_, "Republished latched '%s' [%s] (%zu bytes)", topic.c_str(), msg_type.c_str(), decoded->size());
+  return cliResponseToJson(true, "", "");
+}
+
+} // namespace ros2_livekit_bridge

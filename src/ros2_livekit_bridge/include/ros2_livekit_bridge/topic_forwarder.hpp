@@ -100,9 +100,10 @@ public:
     size_t min_qos_depth{kDefaultMinQosDepth};
     /// @brief Maximum subscription history depth after publisher aggregation.
     size_t max_qos_depth{kDefaultMaxQosDepth};
-    /// @brief Per-topic outbound forward-rate caps (Hz), keyed by ROS topic
-    /// name. Samples on a listed topic arriving faster than its cap are dropped
-    /// before being pushed to LiveKit (config `max_rate_hz`).
+    /// @brief Per-topic outbound forward-rate caps (Hz), keyed by ROS topic name.
+    /// When a topic is listed, the forwarder caches the latest sample and a wall
+    /// timer forwards it at `max_rate_hz` (zero-order hold), dropping intermediate
+    /// samples (config `max_rate_hz`).
     std::unordered_map<std::string, double> outbound_rate_limits;
   };
 

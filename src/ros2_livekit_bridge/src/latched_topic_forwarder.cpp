@@ -18,12 +18,14 @@
 
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
@@ -40,6 +42,23 @@ constexpr std::size_t kMaxRpcPayloadBytes = 15U * 1024U;
 /// @brief History depth for latched publishers/subscriptions. Deep enough to
 /// hold one latched sample from each of many static broadcasters.
 constexpr std::size_t kLatchedQosDepth = 100U;
+
+/// @brief Content hash over (topic, type, raw bytes) used to dedup outbound
+/// latched state without first base64/JSON-encoding it. Identical inputs always
+/// serialize to an identical RPC payload, so this is equivalent to hashing the
+/// payload for dedup. A std::size_t collision is acceptable (worst case: a
+/// distinct message is treated as a duplicate and skipped), matching the prior
+/// JSON-hash behavior.
+std::size_t contentHash(const std::string& topic, const std::string& type, const std::uint8_t* data,
+                        std::size_t size) {
+  std::size_t seed = std::hash<std::string>{}(topic);
+  const auto mix = [&seed](std::size_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+  };
+  mix(std::hash<std::string>{}(type));
+  mix(std::hash<std::string_view>{}(std::string_view(reinterpret_cast<const char*>(data), size)));
+  return seed;
+}
 
 /// @brief Read the shared `{success, ...}` RPC envelope, defaulting to failure.
 bool rpcSucceeded(const std::string& response) {
@@ -180,6 +199,19 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
 
 void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, const std::string& topic_type,
                                                  const std::uint8_t* data, std::size_t size) {
+  // Dedup on the raw (topic, type, bytes) before paying for base64 + JSON:
+  // identical inputs always serialize to an identical payload, so a hit here
+  // means we already hold this state and can skip re-encoding it entirely.
+  const std::size_t hash = contentHash(topic_name, topic_type, data, size);
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (message_hashes_.count(hash) > 0) {
+      return; // duplicate content; no state change, no re-push
+    }
+  }
+
+  // Encode outside the lock so a slow base64/JSON build never stalls the push
+  // worker or other subscription callbacks.
   nlohmann::json request;
   request["topic"] = topic_name;
   request["msg_type"] = topic_type;
@@ -194,11 +226,9 @@ void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, 
     return;
   }
 
-  const std::size_t hash = std::hash<std::string>{}(request_json);
-
   std::lock_guard<std::mutex> lock(state_mutex_);
   if (message_hashes_.count(hash) > 0) {
-    return; // duplicate content; no state change, no re-push
+    return; // another callback stored identical content while we encoded
   }
 
   messages_.push_back({hash, std::move(request_json)});

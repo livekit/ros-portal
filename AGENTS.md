@@ -50,7 +50,7 @@ with existing package structure.
 - Keep documentation clean, concise, and practical. Explain the supported path,
   key configuration, and verification steps without duplicating implementation
   details.
-- If new configuration fields are added, update the documentation in `docs/configuration.md`.
+- If new configuration fields are added, update the documentation in `docs/CONFIGURATION.md`.
 
 ## Style
 

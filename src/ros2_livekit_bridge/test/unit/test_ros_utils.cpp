@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
@@ -318,6 +319,99 @@ TEST(RosUtilsTest, OutboundRateLimitsMapsOutboundTopicsOnly) {
   const auto limits = outboundRateLimits(config);
 
   EXPECT_EQ(limits, (std::unordered_map<std::string, double>{{"/tf", 10.0}, {"/odom", 5.0}}));
+}
+
+TEST(RosUtilsTest, LatchedTopicsAreExcludedFromDataTrackPatterns) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+
+  bridge_config::TopicConfig out_latched;
+  out_latched.topic = "/tf_static";
+  out_latched.direction = bridge_config::Direction::Out;
+  out_latched.latched = true;
+  config.topics.push_back(out_latched);
+
+  bridge_config::TopicConfig out_plain;
+  out_plain.topic = "/tf";
+  out_plain.direction = bridge_config::Direction::Out;
+  config.topics.push_back(out_plain);
+
+  bridge_config::TopicConfig in_latched;
+  in_latched.topic = "/robot_description";
+  in_latched.direction = bridge_config::Direction::In;
+  in_latched.latched = true;
+  config.topics.push_back(in_latched);
+
+  bridge_config::TopicConfig in_plain;
+  in_plain.topic = "/map";
+  in_plain.direction = bridge_config::Direction::In;
+  config.topics.push_back(in_plain);
+
+  // Latched topics are handled by LatchedTopicForwarder, so they must not appear
+  // in the DataTrack forwarding patterns.
+  EXPECT_EQ(outgoingTopicPatterns(config), (std::vector<std::string>{"/tf"}));
+  EXPECT_EQ(incomingTopicPatterns(config), (std::vector<std::string>{"/map"}));
+}
+
+TEST(RosUtilsTest, LatchedOutboundTopicsCollectsOutboundLatchedOnly) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+
+  bridge_config::TopicConfig out_latched;
+  out_latched.topic = "/tf_static";
+  out_latched.direction = bridge_config::Direction::Out;
+  out_latched.latched = true;
+  config.topics.push_back(out_latched);
+
+  bridge_config::TopicConfig bidirectional_latched;
+  bidirectional_latched.topic = "/params";
+  bidirectional_latched.direction = bridge_config::Direction::Bidirectional;
+  bidirectional_latched.latched = true;
+  config.topics.push_back(bidirectional_latched);
+
+  // Inbound-only latched: excluded from the outbound set.
+  bridge_config::TopicConfig in_latched;
+  in_latched.topic = "/robot_description";
+  in_latched.direction = bridge_config::Direction::In;
+  in_latched.latched = true;
+  config.topics.push_back(in_latched);
+
+  // Outbound but not latched: excluded.
+  bridge_config::TopicConfig out_plain;
+  out_plain.topic = "/tf";
+  out_plain.direction = bridge_config::Direction::Out;
+  config.topics.push_back(out_plain);
+
+  EXPECT_EQ(latchedOutboundTopics(config), (std::unordered_set<std::string>{"/tf_static", "/params"}));
+}
+
+TEST(RosUtilsTest, LatchedInboundTopicsNormalizesInboundLatchedOnly) {
+  namespace bridge_config = ::ros2_livekit_bridge_config;
+
+  bridge_config::BridgeConfig config;
+
+  bridge_config::TopicConfig in_latched;
+  in_latched.topic = "tf_static"; // no leading slash -> normalized
+  in_latched.direction = bridge_config::Direction::In;
+  in_latched.latched = true;
+  config.topics.push_back(in_latched);
+
+  bridge_config::TopicConfig bidirectional_latched;
+  bidirectional_latched.topic = "/params";
+  bidirectional_latched.direction = bridge_config::Direction::Bidirectional;
+  bidirectional_latched.latched = true;
+  config.topics.push_back(bidirectional_latched);
+
+  // Outbound-only latched: excluded from the inbound set.
+  bridge_config::TopicConfig out_latched;
+  out_latched.topic = "/odom_static";
+  out_latched.direction = bridge_config::Direction::Out;
+  out_latched.latched = true;
+  config.topics.push_back(out_latched);
+
+  EXPECT_EQ(latchedInboundTopics(config), (std::unordered_set<std::string>{"/tf_static", "/params"}));
 }
 } // namespace
 } // namespace ros2_livekit_bridge::utils

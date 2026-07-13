@@ -22,6 +22,7 @@
 #include <livekit/local_participant.h>
 #include <livekit/local_video_track.h>
 #include <livekit/remote_data_track.h>
+#include <livekit/remote_participant.h>
 #include <livekit/room.h>
 #include <livekit/rpc_error.h>
 #include <livekit/video_source.h>
@@ -29,8 +30,10 @@
 #include <chrono>
 #include <filesystem>
 #include <utility>
+#include <vector>
 
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
 #include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
@@ -95,6 +98,9 @@ bool Ros2LiveKitBridge::initialize() {
   utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
   auto outbound_rate_limits = utils::outboundRateLimits(*config);
+
+  auto latched_outbound_topics = utils::latchedOutboundTopics(*config);
+  auto latched_inbound_topics = utils::latchedInboundTopics(*config);
 
   std::vector<ServiceForwarder::ServiceRoute> outgoing_service_routes;
   outgoing_service_routes.reserve(config->services.size());
@@ -186,6 +192,11 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
+  if (!initializeLatchedTopicForwarder(std::move(latched_outbound_topics), std::move(latched_inbound_topics))) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder");
+    return false;
+  }
+
   RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
 
   poll_timer_ = this->create_wall_timer(std::chrono::milliseconds(topic_polling_period_ms_),
@@ -202,6 +213,9 @@ bool Ros2LiveKitBridge::initialize() {
 Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   service_forwarder_.reset();
   ros2_cli_manager_.reset();
+  // Reset before room_ so the forwarder can unregister its RPC handler and stop
+  // its push worker (which reads the room roster) while the room is still alive.
+  latched_topic_forwarder_.reset();
   topic_forwarder_.reset();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
@@ -220,6 +234,10 @@ void Ros2LiveKitBridge::pollTopics() {
 
   if (topic_forwarder_) {
     topic_forwarder_->pollTopics();
+  }
+
+  if (latched_topic_forwarder_) {
+    latched_topic_forwarder_->poll();
   }
 }
 
@@ -431,6 +449,53 @@ bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder:
   }
 
   return service_forwarder_ != nullptr;
+}
+
+bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(std::unordered_set<std::string> outbound_latched_topics,
+                                                        std::unordered_set<std::string> inbound_latched_topics) {
+  if (outbound_latched_topics.empty() && inbound_latched_topics.empty()) {
+    RCLCPP_INFO(this->get_logger(), "No latched topics configured; skipping latched topic forwarder");
+    return true;
+  }
+
+  try {
+    LatchedTopicForwarder::Options options;
+    options.outbound_topics = std::move(outbound_latched_topics);
+    options.inbound_topics = std::move(inbound_latched_topics);
+
+    LatchedTopicForwarder::LiveKitMethods methods;
+    methods.register_rpc_method = [this](const std::string &method, RpcHandler handler) {
+      return rpcRegisterMethod(method, std::move(handler));
+    };
+    methods.unregister_rpc_method = [this](const std::string &method) { return rpcUnregisterMethod(method); };
+    methods.perform_rpc = [this](const std::string &id, const std::string &method, const std::string &payload,
+                                 std::uint8_t timeout_sec) { return rpcPerform(id, method, payload, timeout_sec); };
+    methods.list_remote_identities = [this]() {
+      std::vector<std::string> identities;
+      if (!room_) {
+        return identities;
+      }
+      for (const auto &weak_participant : room_->remoteParticipants()) {
+        if (const auto participant = weak_participant.lock()) {
+          identities.push_back(participant->identity());
+        }
+      }
+      return identities;
+    };
+
+    latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(std::move(options),
+                                                                       this->weak_from_this(), // after constructor
+                                                                       std::move(methods));
+    latched_topic_forwarder_->start();
+  } catch (const std::exception &error) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder: %s", error.what());
+    return false;
+  } catch (...) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder, unknown exception");
+    return false;
+  }
+
+  return latched_topic_forwarder_ != nullptr;
 }
 
 bool Ros2LiveKitBridge::hasParticipant(const std::string &participant_id) const {

@@ -123,6 +123,11 @@
           "type": "number",
           "minimum": 0
         },
+        "latched": {
+          "description": "When true, this topic is treated as latched (ROS RELIABLE + TRANSIENT_LOCAL durability, e.g. /tf_static). LiveKit DataTracks are not latched, so latched topics are routed off the DataTrack path and onto a reliable RPC push-with-ack mechanism instead. Outbound: the bridge subscribes with TRANSIENT_LOCAL (capturing state published before it started), stores the topic's messages, and pushes them to every peer bridge that joins the room, so state published before a peer connected is still delivered. Inbound: the bridge republishes received messages via a TRANSIENT_LOCAL publisher so ROS subscribers that start after the bridge still receive them; the ROS message type travels in the RPC payload, so 'msg_type' is not required for a latched inbound topic. Matched by literal topic name, not regex. Intended for small whole-state latched topics; a single message exceeding the LiveKit RPC payload limit (15 KiB) is skipped with a warning.",
+          "type": "boolean",
+          "default": false
+        },
         "video_options": {
           "$ref": "#/$defs/videoOptions"
         }

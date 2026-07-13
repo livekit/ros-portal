@@ -40,8 +40,13 @@ ros2_livekit_bridge:
     - topic: "/tf"
       direction: "in"
 
+    # /tf_static is latched: received over the RPC push-with-ack path and
+    # republished on a TRANSIENT_LOCAL publisher, so Foxglove (or any consumer)
+    # that starts after the bridge still resolves the static frames. The ROS
+    # type travels in the RPC payload, so no msg_type is needed here.
     - topic: "/tf_static"
       direction: "in"
+      latched: true
 
     # Commands sent out to the robot (ROS -> LiveKit).
     - topic: "/cmd_vel"

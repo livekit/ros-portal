@@ -132,6 +132,9 @@ std::vector<std::string> outgoingTopicPatterns(const bridge_config::BridgeConfig
   patterns.reserve(config.topics.size());
 
   for (const auto& topic_config : config.topics) {
+    if (topic_config.latched) {
+      continue; // handled by LatchedTopicForwarder, not the DataTrack path
+    }
     if (topic_config.direction == bridge_config::Direction::Out ||
         topic_config.direction == bridge_config::Direction::Bidirectional) {
       patterns.push_back(topic_config.topic);
@@ -146,6 +149,9 @@ std::vector<std::string> incomingTopicPatterns(const bridge_config::BridgeConfig
   patterns.reserve(config.topics.size());
 
   for (const auto& topic_config : config.topics) {
+    if (topic_config.latched) {
+      continue; // handled by LatchedTopicForwarder, not the DataTrack path
+    }
     if (topic_config.direction == bridge_config::Direction::In ||
         topic_config.direction == bridge_config::Direction::Bidirectional) {
       patterns.push_back(topic_config.topic);
@@ -183,5 +189,40 @@ std::unordered_map<std::string, double> outboundRateLimits(const bridge_config::
   }
 
   return limits;
+}
+
+std::unordered_set<std::string> latchedOutboundTopics(const bridge_config::BridgeConfig& config) {
+  std::unordered_set<std::string> topics;
+
+  for (const auto& topic_config : config.topics) {
+    const bool outbound = topic_config.direction == bridge_config::Direction::Out ||
+                          topic_config.direction == bridge_config::Direction::Bidirectional;
+    if (outbound && topic_config.latched) {
+      topics.insert(topic_config.topic);
+    }
+  }
+
+  return topics;
+}
+
+std::unordered_set<std::string> latchedInboundTopics(const bridge_config::BridgeConfig& config) {
+  std::unordered_set<std::string> topics;
+
+  for (const auto& topic_config : config.topics) {
+    const bool inbound = topic_config.direction == bridge_config::Direction::In ||
+                         topic_config.direction == bridge_config::Direction::Bidirectional;
+    if (!inbound || !topic_config.latched) {
+      continue;
+    }
+
+    const auto normalized_topic_name = normalizeTrackTopicName(topic_config.topic);
+    if (!normalized_topic_name.has_value()) {
+      continue;
+    }
+
+    topics.insert(*normalized_topic_name);
+  }
+
+  return topics;
 }
 } // namespace ros2_livekit_bridge::utils

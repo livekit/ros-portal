@@ -9,9 +9,6 @@
   },
   "workspaceFolder": "/livekit_ws",
   "workspaceMount": "source=${localWorkspaceFolder},target=/livekit_ws,type=bind",
-  "mounts": [
-    "source=${localEnv:DEVCONTAINER_SSH_AUTH_SOCK},target=/ssh-agent,type=bind"
-  ],
   "remoteUser": "root",
   "init": true,
   "privileged": true,

@@ -26,6 +26,7 @@
 #include <regex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"
@@ -38,6 +39,7 @@ class ConnectionHealthDiagnostics;
 } // namespace diagnostics
 class Ros2CliManager;
 class TopicForwarder;
+class LatchedTopicForwarder;
 
 /// @brief The main bridge node for the ROS2 LiveKit bridge.
 ///
@@ -149,6 +151,20 @@ private:
   /// @return True on success, false when the service forwarder could not be initialized.
   bool initializeServiceForwarder(std::vector<ServiceForwarder::ServiceRoute> routes);
 
+  /// @brief Create LatchedTopicForwarder after LiveKit room connection succeeds.
+  ///
+  /// Handles topics flagged `latched` (e.g. /tf_static) over a reliable RPC
+  /// push-with-ack instead of DataTracks. No-op when no latched topics are
+  /// configured.
+  /// @param outbound_latched_topics Literal ROS topic names forwarded outbound
+  /// as latched state.
+  /// @param inbound_latched_topics Normalized ROS topic names accepted inbound
+  /// as latched state.
+  /// @return True on success (including when there is nothing to do), false when
+  /// the forwarder could not be initialized.
+  bool initializeLatchedTopicForwarder(std::unordered_set<std::string> outbound_latched_topics,
+                                       std::unordered_set<std::string> inbound_latched_topics);
+
   //! @brief The name of the room
   std::string room_name_;
   //! @brief The period for polling the topics
@@ -174,6 +190,8 @@ private:
   std::unique_ptr<livekit::Room> room_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.
   std::unique_ptr<TopicForwarder> topic_forwarder_;
+  //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.
+  std::unique_ptr<LatchedTopicForwarder> latched_topic_forwarder_;
   //! @brief ROS CLI service/RPC manager for remote graph introspection.
   std::unique_ptr<Ros2CliManager> ros2_cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.

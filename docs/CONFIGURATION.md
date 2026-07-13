@@ -82,7 +82,7 @@ connection, which matters for bandwidth on constrained links.
 ### Preserving the publisher identity
 
 `preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is
-ignored for outbound topics. It defaults to `false`, which republishes an
+ignored for outbound topics. It defaults to `false` (as to preserve the original topic name), which republishes an
 inbound data track under its own topic name (e.g. `/imu` stays `/imu`). When set
 to `true`, the publishing participant's identity is prepended to the
 republished ROS topic name, which prevents collisions when multiple

@@ -42,9 +42,11 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
    subscription** (`rclcpp::GenericSubscription`) and are forwarded as raw
    CDR-serialized bytes over a LiveKit data track.
 5. **Subscribes to allowed remote LiveKit data tracks** and republishes their
-   raw CDR payloads into ROS with the remote participant identity prepended to
-   the topic name. For example, participant `robot_b` publishing data track
-   `/odom/global` is exposed locally as ROS topic `/robot_b/odom/global`.
+   raw CDR payloads into ROS using the track name as the local topic name. For
+   example, a LiveKit data track named `/odom/global` is exposed locally as ROS
+   topic `/odom/global`. If the matching inbound topic sets `preserve_id: true`,
+   the publishing participant's sanitized identity is prepended to the local
+   topic name (see [Preserving the publisher identity](#preserving-the-publisher-identity)).
 
 ### Message-type handling
 
@@ -135,17 +137,17 @@ introspection request is pending.
 
 ### LiveKit-to-ROS topic names
 
-Inbound data tracks are published under a participant namespace:
+Inbound data tracks are published on ROS using the LiveKit track name directly:
 
 ```text
-participant identity: robot_b
-LiveKit data track:   /odom/global
-ROS topic:            /robot_b/odom/global
+LiveKit data track: /odom/global
+ROS topic:          /odom/global
 ```
 
-Participant identities are converted to ROS-safe topic tokens by replacing
-characters outside `[A-Za-z0-9_]` with `_`. Use ROS-compatible LiveKit identities
-if the exact namespace matters.
+Track names without a leading `/` are normalized to absolute ROS topic paths.
+When the matching inbound topic sets `preserve_id: true`, the name is instead
+prefixed with the publishing participant's sanitized identity (see
+[Preserving the publisher identity](#preserving-the-publisher-identity)).
 
 ## QoS Determination
 

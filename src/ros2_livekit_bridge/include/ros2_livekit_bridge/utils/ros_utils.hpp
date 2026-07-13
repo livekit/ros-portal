@@ -24,6 +24,8 @@
 #include <filesystem>
 #include <optional>
 #include <rclcpp/logger.hpp>
+#include <string>
+#include <unordered_map>
 
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
@@ -65,6 +67,20 @@ std::optional<std::string> normalizeTrackTopicName(const std::string& track_name
 /// @return Sanitized token, or std::nullopt when @p token is empty.
 std::optional<std::string> sanitizeRosNameToken(const std::string& token);
 
+/// @brief Convert a LiveKit data track name into the local ROS topic path.
+///
+/// Returns std::nullopt for empty input or a track name that normalizes to '/'.
+///
+/// @param track_name LiveKit data track name to convert.
+/// @return Normalized ROS topic path, or std::nullopt when @p track_name is
+/// invalid.
+std::optional<std::string> liveKitToRosTopicName(const std::string& track_name);
+
+/// @brief Convert a LiveKit data track name into a participant-prefixed ROS
+/// topic path.
+/// @param participant_identity LiveKit identity of the publishing participant.
+/// @param track_name LiveKit data track name to convert.
+/// @return Prefixed ROS topic path, or std::nullopt when either input is invalid.
 std::optional<std::string> liveKitToRosTopicName(const std::string& participant_identity,
                                                  const std::string& track_name);
 
@@ -76,6 +92,23 @@ std::optional<ros2_livekit_bridge_config::BridgeConfig> parseBridgeConfig(const 
 std::vector<std::string> outgoingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
 
 std::vector<std::string> incomingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
+
+/// @brief Collect topic patterns for inbound topics that request identity
+/// prefixing.
+/// @param config The bridge configuration.
+/// @return Vector of topic patterns for inbound topics that request identity
+/// prefixing.
+std::vector<std::string> preserveIdTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
+
+/// @brief Collect per-topic outbound forward-rate caps.
+///
+/// Maps ROS topic name -> maximum forward rate in Hz for every 'out'/'bidirectional'
+/// topic that sets a positive `max_rate_hz` in the config. Keyed by the verbatim
+/// configured topic name (literal match, not regex).
+///
+/// @param config The bridge configuration.
+/// @return Map of ROS topic name to maximum outbound forward rate (Hz).
+std::unordered_map<std::string, double> outboundRateLimits(const ros2_livekit_bridge_config::BridgeConfig& config);
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

@@ -66,7 +66,6 @@ cbpu()
     else
         colcon build --packages-up-to "\$@"
     fi
-    
 }
 
 cbps()
@@ -74,9 +73,20 @@ cbps()
     cd "\${WS}" && sros && colcon build --packages-select "\$@" && sros
 }
 
+cbtps()
+{
+    pkgs="\$@"
+    cd "\${WS}" && sros && colcon build --packages-select "\$pkgs" && colcon test --packages-select "\$pkgs" && colcon test-result --verbose
+}
+
 cbtpu()
 {
     cd "\${WS}" && sros && colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
+}
+
+clean_ws()
+{
+    cd "\${WS}" && rm -rf build/ log/ install/
 }
 
 rtl()

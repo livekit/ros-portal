@@ -16,7 +16,6 @@
 -->
 <launch>
   <arg name="sim" default="false" description="Launch Gazebo and use simulation settings." />
-  <arg name="rviz" default="false" description="Launch RViz alongside the robot stack." />
   <arg name="sim_gui" default="false" description="Launch the Gazebo GUI client when sim is enabled." />
   <arg name="foxglove" default="false" description="Launch the Foxglove bridge with default settings." />
 
@@ -41,17 +40,6 @@
     <arg name="use_sim_time" value="true" />
     <arg name="gui" value="$(var sim_gui)" />
   </include>
-
-  <group if="$(var rviz)">
-    <include if="$(var sim)" file="$(find-pkg-share waver_viz)/launch/rviz.launch.xml">
-      <arg name="use_sim_time" value="true" />
-    </include>
-
-    <!-- uncomment when xserver forwarding is working -->
-    <!-- <include unless="$(var sim)" file="$(find-pkg-share waver_viz)/launch/rviz.launch.xml">
-      <arg name="use_sim_time" value="false" />
-    </include> -->
-  </group>
 
   <include if="$(var foxglove)" file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml" />
 </launch>

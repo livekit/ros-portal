@@ -45,6 +45,7 @@ ros2_livekit_bridge:
 
     - topic: "/lidar/points"
       direction: "out"
+      max_rate_hz: 10
 
     - topic: "/odom"
       direction: "bidirectional"
@@ -57,6 +58,7 @@ ros2_livekit_bridge:
 
     - topic: "/teleop_cmd"
       direction: "in"
+      preserve_id: true
 
     # Audio is planned for a v2 config. The v1 parser intentionally rejects
     # audio_options, so keep this example commented until that schema lands.

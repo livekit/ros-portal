@@ -116,7 +116,8 @@ inline rclcpp::NodeOptions createBridgeOptions(const rclcpp::Context::SharedPtr&
       });
 }
 
-inline std::string bridgeConfigYaml(const std::string& room_name, const std::string& topic_pattern) {
+inline std::string bridgeConfigYaml(const std::string& room_name, const std::string& topic_pattern,
+                                    bool preserve_id = false) {
   std::ostringstream stream;
   stream << "ros2_livekit_bridge:\n"
          << "  version: \"0.0.1\"\n"
@@ -126,6 +127,9 @@ inline std::string bridgeConfigYaml(const std::string& room_name, const std::str
          << "  topics:\n"
          << "    - topic: \"" << topic_pattern << "\"\n"
          << "      direction: \"bidirectional\"\n";
+  if (preserve_id) {
+    stream << "      preserve_id: true\n";
+  }
   return stream.str();
 }
 
@@ -183,7 +187,8 @@ protected:
   }
 
   void initializeRuntime(const std::string& topic_pattern_a, const std::string& topic_pattern_b,
-                         const std::string& publish_topic_a, const std::string& publish_topic_b) {
+                         const std::string& publish_topic_a, const std::string& publish_topic_b,
+                         bool preserve_id_a = false, bool preserve_id_b = false) {
     ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
     const auto [domain_id_a, domain_id_b] = testDomainIds();
@@ -193,10 +198,10 @@ protected:
     SCOPED_TRACE("ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()) +
                  ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
-    config_file_a_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a),
-                                                           "ros2_livekit_bridge_bridge_test_e2e_a_");
-    config_file_b_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b),
-                                                           "ros2_livekit_bridge_bridge_test_e2e_b_");
+    config_file_a_ = std::make_unique<TemporaryConfigFile>(
+        bridgeConfigYaml(testLiveKitRoom(), topic_pattern_a, preserve_id_a), "ros2_livekit_bridge_bridge_test_e2e_a_");
+    config_file_b_ = std::make_unique<TemporaryConfigFile>(
+        bridgeConfigYaml(testLiveKitRoom(), topic_pattern_b, preserve_id_b), "ros2_livekit_bridge_bridge_test_e2e_b_");
 
     bridge_a_ = createBridge(*graph_a_, "/bridge_a_node", token_a_, config_file_a_->path().string());
     bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());
@@ -249,11 +254,12 @@ protected:
     if (!waitFor(
             [&]() {
               publisher->publish(makeMessage("warmup:" + expected_payload));
-              inbound_topic = findParticipantPrefixedTopic(*receiver_node, source_topic);
+              inbound_topic = findInboundTopic(*receiver_node, expected_inbound_topic);
               return inbound_topic.has_value();
             },
             kGraphTimeout)) {
-      ADD_FAILURE() << "No participant-prefixed ROS topic appeared for " << source_topic;
+      ADD_FAILURE() << "No inbound ROS topic appeared for " << expected_inbound_topic << " (from " << source_topic
+                    << ")";
       return false;
     }
 
@@ -261,14 +267,9 @@ protected:
       ADD_FAILURE() << "No inbound topic captured for " << source_topic;
       return false;
     }
-    if (*inbound_topic == source_topic) {
-      ADD_FAILURE() << "Inbound topic was not participant-prefixed: " << *inbound_topic;
-      return false;
-    }
     if (*inbound_topic != expected_inbound_topic) {
-      ADD_FAILURE() << "Inbound topic did not use expected participant "
-                       "prefix. Expected "
-                    << expected_inbound_topic << ", got " << *inbound_topic;
+      ADD_FAILURE() << "Inbound topic did not match expected name. Expected " << expected_inbound_topic << ", got "
+                    << *inbound_topic;
       return false;
     }
 

@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# Copyright 2026 LiveKit
+
+ros2_livekit_bridge:
+  version: "0.0.1"
+  room_name: "robo_room"
+  topic_polling_period_ms: 500
+  ros_threads: 0
+
+  topics:
+    # Commands received from the controller (LiveKit -> ROS).
+    - topic: "/cmd_vel"
+      direction: "in"
+
+    - topic: "/goal_pose"
+      direction: "in"
+
+    - topic: "/initialpose"
+      direction: "in"
+
+    - topic: "/clicked_point"
+      direction: "in"
+
+    # Telemetry / sensor / nav streams sent out to LiveKit (ROS -> LiveKit)
+    - topic: "/map"
+      direction: "out"
+
+    - topic: "/plan"
+      direction: "out"
+
+    - topic: "/robot_description"
+      direction: "out"
+
+    - topic: "/scan"
+      direction: "out"
+
+    - topic: "/camera/image_raw"
+      direction: "out"
+
+    - topic: "/pose"
+      direction: "out"
+
+    - topic: "/slam_toolbox/graph_visualization"
+      direction: "out"
+
+    - topic: "/global_costmap/published_footprint"
+      direction: "out"
+
+    # Transform tree — required so the controller's Foxglove 3D panel has a
+    # valid fixed frame (without it the click-to-publish tool is hidden).
+    - topic: "/tf"
+      direction: "out"
+
+    - topic: "/tf_static"
+      direction: "out"

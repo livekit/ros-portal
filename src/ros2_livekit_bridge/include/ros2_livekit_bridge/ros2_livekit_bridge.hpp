@@ -25,6 +25,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <regex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"
@@ -131,9 +132,13 @@ private:
   /// patterns.
   /// @param incoming_topic_compiled_patterns Compiled LiveKit-to-ROS topic
   /// patterns.
+  /// @param preserve_id_topic_compiled_patterns Compiled topics that should be preserved with their original IDs.
+  /// @param outbound_rate_limits Rate limits for outbound topics.
   /// @return True on success, false when the topic forwarder could not be initialized.
   bool initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
-                                std::vector<std::regex> incoming_topic_compiled_patterns);
+                                std::vector<std::regex> incoming_topic_compiled_patterns,
+                                std::vector<std::regex> preserve_id_topic_compiled_patterns,
+                                std::unordered_map<std::string, double> outbound_rate_limits);
 
   /// @brief Create Ros2CliManager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.

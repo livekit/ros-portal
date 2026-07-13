@@ -27,7 +27,6 @@
 #include <memory>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
-#include <regex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -61,32 +60,22 @@ inline bool waitFor(Predicate&& predicate, std::chrono::milliseconds timeout,
   return predicate();
 }
 
-inline std::string escapedRegex(const std::string& value) {
-  static const std::regex special_chars{R"([.^$|()\\[\]{}*+?])"};
-  return std::regex_replace(value, special_chars, R"(\$&)");
-}
-
-inline std::optional<std::string> expectedInboundTopicName(const std::string& participant_identity,
-                                                           const std::string& source_topic) {
-  const auto sanitized_identity = utils::sanitizeRosNameToken(participant_identity);
-  if (!sanitized_identity.has_value()) {
+inline std::optional<std::string> findInboundTopic(const rclcpp::Node& node, const std::string& source_topic,
+                                                   const std::string& expected_topic_type = "std_msgs/msg/String") {
+  const auto normalized_topic = utils::normalizeTrackTopicName(source_topic);
+  if (!normalized_topic.has_value()) {
     return std::nullopt;
   }
-  return "/" + *sanitized_identity + source_topic;
-}
 
-inline std::optional<std::string> findParticipantPrefixedTopic(
-    const rclcpp::Node& node, const std::string& source_topic,
-    const std::string& expected_topic_type = "std_msgs/msg/String") {
-  const std::regex topic_regex("^/[^/]+" + escapedRegex(source_topic) + "$");
   const auto topics = node.get_topic_names_and_types();
-  for (const auto& [topic_name, topic_types] : topics) {
-    if (std::regex_match(topic_name, topic_regex) && topic_name != source_topic &&
-        std::find(topic_types.begin(), topic_types.end(), expected_topic_type) != topic_types.end()) {
-      return topic_name;
-    }
+  const auto topic_it = topics.find(*normalized_topic);
+  if (topic_it == topics.end()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  if (std::find(topic_it->second.begin(), topic_it->second.end(), expected_topic_type) == topic_it->second.end()) {
+    return std::nullopt;
+  }
+  return normalized_topic;
 }
 
 inline bool topicExists(const rclcpp::Node& node, const std::string& topic) {

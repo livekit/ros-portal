@@ -159,6 +159,8 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   }
 
   auto callback = [this, topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+    auto& rcl_msg = msg->get_rcl_serialized_message();
+
     std::shared_ptr<DataTrackWriter> writer;
     {
       std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
@@ -168,28 +170,31 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       }
       auto& state = state_it->second;
 
-      if (!state.writer) {
-        const auto writer_result = livekit_methods_.publish_data_track(topic_name);
-        if (!writer_result) {
-          RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
-                       writer_result.error().c_str());
-          return;
+      // Rate cap: mirror ros-tooling/topic_tools `throttle messages`. A sample
+      // is forwarded only once at least one period has elapsed since the last
+      // forwarded sample; samples arriving sooner are dropped on arrival.
+      if (state.max_rate_hz.has_value()) {
+        const auto now = clock_->now();
+        if (state.last_forward_time.has_value()) {
+          // Reset the window on a backward clock jump (e.g. a sim-time reset) so
+          // the cap does not stall until the old timestamp is reached again.
+          if (*state.last_forward_time > now) {
+            RCLCPP_WARN(logger_, "Detected jump back in time for '%s'; resetting rate-cap window", topic_name.c_str());
+            state.last_forward_time = now;
+          }
+          if ((now - *state.last_forward_time) < *state.min_period) {
+            return;
+          }
         }
-
-        state.writer = writer_result.value();
-        if (!state.writer || !state.writer->try_push) {
-          RCLCPP_ERROR(logger_, "publish_data_track('%s') returned an invalid writer", topic_name.c_str());
-          state.writer.reset();
-          return;
-        }
-
-        RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
+        state.last_forward_time = now;
       }
 
+      if (!ensureWriterLocked(topic_name, state)) {
+        return;
+      }
       writer = state.writer;
     }
 
-    auto& rcl_msg = msg->get_rcl_serialized_message();
     auto push_result =
         writer->try_push(std::vector<std::uint8_t>(rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length));
     if (!push_result) {
@@ -203,7 +208,14 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  data_topic_states_[topic_name] = DataTopicState{};
+  DataTopicState state{};
+  if (const auto rate_it = options_.outbound_rate_limits.find(topic_name);
+      rate_it != options_.outbound_rate_limits.end() && rate_it->second > 0.0) {
+    state.max_rate_hz = rate_it->second;
+    state.min_period = rclcpp::Duration::from_seconds(1.0 / rate_it->second);
+    RCLCPP_INFO(logger_, "Outbound topic '%s' rate-capped at %.3g Hz", topic_name.c_str(), rate_it->second);
+  }
+  data_topic_states_[topic_name] = std::move(state);
 
   try {
     rclcpp::SubscriptionOptions sub_options;
@@ -224,6 +236,29 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   }
 
   RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (CDR)", topic_name.c_str(), topic_type.c_str());
+}
+
+bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, DataTopicState& state) {
+  if (state.writer) {
+    return true;
+  }
+
+  const auto writer_result = livekit_methods_.publish_data_track(topic_name);
+  if (!writer_result) {
+    RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
+                 writer_result.error().c_str());
+    return false;
+  }
+
+  state.writer = writer_result.value();
+  if (!state.writer || !state.writer->try_push) {
+    RCLCPP_ERROR(logger_, "publish_data_track('%s') returned an invalid writer", topic_name.c_str());
+    state.writer.reset();
+    return false;
+  }
+
+  RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
+  return true;
 }
 
 void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
@@ -371,7 +406,10 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     return;
   }
 
-  const auto ros_topic_name = utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name);
+  const bool preserve_id = utils::matchesAnyPattern(*normalized_track_name, options_.preserve_id_topic_patterns);
+  const auto ros_topic_name = preserve_id
+                                  ? utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name)
+                                  : utils::liveKitToRosTopicName(descriptor.track_name);
   if (!ros_topic_name) {
     RCLCPP_WARN(logger_,
                 "Ignoring LiveKit data track '%s' from '%s' because ROS topic name "

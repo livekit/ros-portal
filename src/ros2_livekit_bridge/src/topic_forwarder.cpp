@@ -223,7 +223,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
 
     // For rate-capped topics, kick off a timer at the configured max_rate_hz
-    // to forwards the latest cached sample each tick (see forwardCachedSample).
+    // to forward the latest cached sample each tick (see forwardCachedSample).
     const auto rate = data_topic_states_[topic_name].max_rate_hz;
     if (rate.has_value()) {
       const auto period =

@@ -119,7 +119,7 @@
           "default": false
         },
         "max_rate_hz": {
-          "description": "Outbound topics only. Optional cap (in Hz) on the rate at which this topic is forwarded to LiveKit, keeping unnecessary traffic off constrained links (e.g. throttle a high-rate /tf to render rate for a remote viewer). The bridge caches the most recent sample and a timer resends it at this rate (zero-order hold), so the configured rate is produced exactly regardless of the input rate; an idle topic is not re-sent. This is lossy for topics whose messages each carry distinct content (e.g. /tf aggregates transforms from multiple broadcasters) and adds up to one period of latency; it is ideal for large whole-state messages where only the newest value matters. Matched by literal topic name, not regex. Ignored for inbound topics.",
+          "description": "Outbound topics only. Optional cap (in Hz) on the rate at which this topic is forwarded to LiveKit, keeping unnecessary traffic off constrained links (e.g. throttle a high-rate /imu to a viewer-friendly rate for a remote consumer). Mirrors ros-tooling/topic_tools `throttle messages`: samples are forwarded on arrival, but any sample arriving less than one period (1 / max_rate_hz) after the last forwarded one is dropped. Only new samples are ever forwarded, so an idle topic is never re-sent and the cap is not a rate floor. This is lossy for topics whose messages each carry distinct content (e.g. /tf aggregates transforms from multiple broadcasters). Matched by literal topic name, not regex. Ignored for inbound topics.",
           "type": "number",
           "minimum": 0
         },

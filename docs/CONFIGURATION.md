@@ -66,7 +66,7 @@ used to limit which streams cross the bridge for bandwidth reasons.
 | `topic` | string | yes | ROS topic pattern. Must be non-empty. |
 | `direction` | string | yes | `in`, `out`, or `bidirectional`. |
 | `preserve_id` | boolean | no | Default `false`. Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
-| `max_rate_hz` | number | no | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; the most recent sample is resent at this rate. Literal topic names only. |
+| `max_rate_hz` | number | no | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
 | `video_options` | map | no | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
@@ -106,12 +106,13 @@ not alphanumeric or `_` becomes `_` (e.g. `robot-1` → `robot_1`).
 ### Capping the outbound forward rate
 
 `max_rate_hz` applies only to outbound (`out` / `bidirectional`) topics and is
-ignored for inbound topics. When set, the bridge does **not** forward on
-arrival. Instead it caches the most recently received sample and a timer running
-at `max_rate_hz` forwards whatever is cached on each tick — a zero-order hold.
-This keeps a high-rate topic from saturating a constrained LiveKit link when a
-remote consumer only needs updates at a lower rate — for example, throttling a
-robot's `/imu` (often 30–100+ Hz) down to a viewer-friendly rate:
+ignored for inbound topics. The behavior mirrors
+[`topic_tools throttle messages`](https://github.com/ros-tooling/topic_tools#throttle):
+samples are forwarded **on arrival**, but a sample is dropped if it arrives less
+than one period (`1 / max_rate_hz`) after the last one that was forwarded. This
+keeps a high-rate topic from saturating a constrained LiveKit link when a remote
+consumer only needs updates at a lower rate — for example, throttling a robot's
+`/imu` (often 30–100+ Hz) down to a viewer-friendly rate:
 
 ```yaml
 topics:
@@ -120,23 +121,24 @@ topics:
     max_rate_hz: 10
 ```
 
-Why a timer rather than dropping fast samples: a drop gate can only emit at
-`input_rate / N`, so a 20 Hz cap against a 60 Hz source collapses to whichever
-divisor is reachable (typically 15 Hz, not 20). The timer decouples egress from
-the input rate, so the configured rate is produced exactly regardless of the
-source rate. Only new samples are forwarded, so the cap never acts as a rate *floor*.
+The first sample within each period is the one forwarded; later samples in the
+same period are dropped. Only newly arriving samples are ever forwarded, so an
+idle topic is never re-sent and the cap never acts as a rate *floor*. On a
+backward clock jump (e.g. a sim-time reset) the throttle window is reset so
+forwarding does not stall until the old timestamp is reached again.
 
 Trade-offs to be aware of:
 
-- **Latency.** A sample is held up to one timer period (`1 / max_rate_hz`)
-  before it is forwarded.
-- **Lossy for aggregate topics.** Only the newest sample survives each period,
-  so this is *not* a faithful downsample of topics whose messages each carry
+- **Effective rate tracks the input.** Because samples are gated on arrival,
+  the achieved rate is at most `max_rate_hz` and is bounded by the source rate;
+  a slow or bursty source produces fewer forwards than the cap.
+- **Lossy for aggregate topics.** Only the first sample per period survives, so
+  this is *not* a faithful downsample of topics whose messages each carry
   distinct content. `/tf` is the notable case: it aggregates transforms from
   multiple broadcasters in separate messages, so capping it can drop some
-  broadcasters' transforms between ticks. It works well for large, whole-state
-  messages where only the latest value matters (maps, costmaps, images-as-data,
-  robot descriptions, imu, etc).
+  broadcasters' transforms. It works well for large, whole-state messages where
+  only the latest value matters (maps, costmaps, images-as-data, robot
+  descriptions, imu, etc).
 
 Unlike `topic` (an ECMAScript regex), `max_rate_hz` is matched by **literal
 topic name** — the cap applies to a discovered topic only when its name equals

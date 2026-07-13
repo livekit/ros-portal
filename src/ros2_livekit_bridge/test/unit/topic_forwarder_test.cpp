@@ -266,12 +266,13 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
 
 } // namespace
 
-// A rate-capped topic forwards on a wall timer at max_rate_hz, not on arrival.
-// A dense burst of input samples is therefore downsampled to the handful of
-// timer ticks that elapse in the window, far fewer than the number published.
-TEST_F(TopicForwarderTest, RateCapDownsamplesBurstToTimerRate) {
+// A rate-capped topic forwards on arrival but drops samples that arrive within
+// one period of the last forwarded one (ros-tooling/topic_tools `throttle
+// messages`). A dense burst therefore collapses to far fewer forwarded samples
+// than were published — most of the burst lands inside a single period.
+TEST_F(TopicForwarderTest, RateCapDropsSamplesWithinPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
-  // 20 Hz cap -> one tick every 50 ms.
+  // 20 Hz cap -> one sample every 50 ms at most.
   TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count));
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(50)};
@@ -289,8 +290,8 @@ TEST_F(TopicForwarderTest, RateCapDownsamplesBurstToTimerRate) {
     publisher->publish(msg);
   }
 
-  // Wait for the first tick, then spin ~175 ms (a few more ticks). Only a few
-  // samples are forwarded, well below the 30 published.
+  // The burst is delivered in a tight window, so only the first sample (and at
+  // most a couple more, if delivery straddles a period boundary) is forwarded.
   ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 1; }));
   spinUntil([]() { return false; }, 175ms);
   EXPECT_GE(push_count->load(), 1);
@@ -298,14 +299,15 @@ TEST_F(TopicForwarderTest, RateCapDownsamplesBurstToTimerRate) {
   EXPECT_LT(push_count->load(), kSamples);
 }
 
-// The timer forwards the most recently cached sample (zero-order hold): when
-// several samples arrive within one period, only the newest is emitted. A slow
-// cap keeps the first tick far enough out that all three inbound samples are
-// processed before it fires.
-TEST_F(TopicForwarderTest, RateCapForwardsMostRecentSample) {
+// The first sample received in a period is the one forwarded (not the newest):
+// samples are gated on arrival, so once "first" passes, later samples arriving
+// within the same period are dropped. Delivery is synchronized on the first
+// forward so the subscriber's KEEP_LAST queue cannot silently drop "first"
+// before the callback sees it.
+TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto last_payload = std::make_shared<std::vector<std::uint8_t>>();
-  // 5 Hz cap -> 200 ms period, ample time to drain the three sends first.
+  // 5 Hz cap -> 200 ms period, ample room to send the later samples in-period.
   TopicForwarder forwarder(makeRateCapOptions(5.0), node_, makeRecordingLiveKitMethods(push_count, last_payload));
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
@@ -316,32 +318,40 @@ TEST_F(TopicForwarderTest, RateCapForwardsMostRecentSample) {
   forwarder.pollTopics();
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1u; }));
 
-  for (const auto *text : {"first", "second", "third"}) {
+  std_msgs::msg::String first_msg;
+  first_msg.data = "first";
+  publisher->publish(first_msg);
+
+  // Wait until "first" has been forwarded, opening the period.
+  ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 1; }));
+
+  // "second" and "third" arrive within the same 200 ms period and are dropped.
+  for (const auto *text : {"second", "third"}) {
     std_msgs::msg::String msg;
     msg.data = text;
     publisher->publish(msg);
   }
+  spinUntil([]() { return false; }, 100ms);
 
-  ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 1; }));
+  EXPECT_EQ(push_count->load(), 1);
 
-  // The forwarded payload must be the CDR encoding of the newest sample.
-  std_msgs::msg::String latest;
-  latest.data = "third";
+  // The forwarded payload must be the CDR encoding of the first sample.
   rclcpp::Serialization<std_msgs::msg::String> serializer;
   rclcpp::SerializedMessage expected;
-  serializer.serialize_message(&latest, &expected);
+  serializer.serialize_message(&first_msg, &expected);
   const auto &expected_rcl = expected.get_rcl_serialized_message();
   const std::vector<std::uint8_t> expected_bytes(expected_rcl.buffer, expected_rcl.buffer + expected_rcl.buffer_length);
 
   EXPECT_EQ(*last_payload, expected_bytes);
 }
 
-// The dirty flag keeps the cap from becoming a rate floor: after a single
-// sample, subsequent ticks with no new input forward nothing.
-TEST_F(TopicForwarderTest, RateCapDoesNotResendWhenIdle) {
+// Once a period elapses, the next arriving sample is forwarded again. An idle
+// topic is never re-sent: without new input nothing is forwarded (the cap is
+// not a rate floor).
+TEST_F(TopicForwarderTest, RateCapForwardsAgainAfterPeriodElapses) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
-  // 50 Hz -> 20 ms period, so ~10 ticks elapse during the wait window.
-  TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeCountingLiveKitMethods(push_count));
+  // 20 Hz cap -> 50 ms period.
+  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count));
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -354,18 +364,25 @@ TEST_F(TopicForwarderTest, RateCapDoesNotResendWhenIdle) {
   std_msgs::msg::String msg;
   msg.data = "x";
   publisher->publish(msg);
-
   ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 1; }));
-  spinUntil([]() { return false; }, 200ms);
+
+  // Stay idle well past one period: no new samples arrive, so nothing more is
+  // forwarded.
+  spinUntil([]() { return false; }, 150ms);
   EXPECT_EQ(push_count->load(), 1);
+
+  // A fresh sample after the period elapsed is forwarded.
+  publisher->publish(msg);
+  ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 2; }));
+  EXPECT_EQ(push_count->load(), 2);
 }
 
-// A failed push does not consume the cached sample: it is retained and re-armed,
-// so a later tick retries and forwards it exactly once.
-TEST_F(TopicForwarderTest, RateCapRetriesAfterFailedPush) {
+// A failed push is dropped, not retried: the throttle window advances when the
+// sample is passed through, and there is no timer to re-attempt a failed send.
+TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto remaining_failures = std::make_shared<std::atomic<int>>(1);
-  // 50 Hz -> 20 ms period so several ticks occur within the window.
+  // 50 Hz -> 20 ms period; the single sample is passed through immediately.
   TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeFlakyLiveKitMethods(push_count, remaining_failures));
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
@@ -380,10 +397,9 @@ TEST_F(TopicForwarderTest, RateCapRetriesAfterFailedPush) {
   msg.data = "x";
   publisher->publish(msg);
 
-  // First tick's push fails; a later tick retries and succeeds exactly once.
-  ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 1; }, 500ms));
+  // The push fails once; with no new samples and no retry, nothing is forwarded.
   spinUntil([]() { return false; }, 150ms);
-  EXPECT_EQ(push_count->load(), 1);
+  EXPECT_EQ(push_count->load(), 0);
 }
 
 // Without a configured cap, every delivered sample is forwarded. Publishing one

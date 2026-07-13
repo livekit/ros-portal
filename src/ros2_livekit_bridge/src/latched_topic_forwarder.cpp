@@ -49,12 +49,9 @@ constexpr std::size_t kLatchedQosDepth = 100U;
 /// payload for dedup. A std::size_t collision is acceptable (worst case: a
 /// distinct message is treated as a duplicate and skipped), matching the prior
 /// JSON-hash behavior.
-std::size_t contentHash(const std::string& topic, const std::string& type, const std::uint8_t* data,
-                        std::size_t size) {
+std::size_t contentHash(const std::string& topic, const std::string& type, const std::uint8_t* data, std::size_t size) {
   std::size_t seed = std::hash<std::string>{}(topic);
-  const auto mix = [&seed](std::size_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-  };
+  const auto mix = [&seed](std::size_t value) { seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2); };
   mix(std::hash<std::string>{}(type));
   mix(std::hash<std::string_view>{}(std::string_view(reinterpret_cast<const char*>(data), size)));
   return seed;
@@ -303,7 +300,7 @@ void LatchedTopicForwarder::pushToPeers() {
     if (delivered) {
       it->second.delivered_version = version;
       it->second.consecutive_failures = 0;
-      RCLCPP_INFO(logger_, "Delivered %zu latched message(s) to '%s'", messages.size(), id.c_str());
+      RCLCPP_DEBUG(logger_, "Delivered %zu latched message(s) to '%s'", messages.size(), id.c_str());
     } else {
       ++it->second.consecutive_failures;
       if (it->second.consecutive_failures == options_.max_participant_failures) {

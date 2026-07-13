@@ -179,11 +179,11 @@ private:
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   bool rpc_registered_{false};
 
-  /// @brief Outbound generic subscriptions keyed by ROS topic name.
+  // Outbound generic subscriptions keyed by ROS topic name.
   std::mutex subscriptions_mutex_;
   std::unordered_map<std::string, std::shared_ptr<void>> subscriptions_;
 
-  /// @brief Stored outbound state and per-peer delivery bookkeeping.
+  // Stored outbound state and per-peer delivery bookkeeping.
   std::mutex state_mutex_;
   std::condition_variable state_cv_;
   std::deque<StoredMessage> messages_;
@@ -191,11 +191,11 @@ private:
   std::uint64_t version_{0};
   std::unordered_map<std::string, ParticipantState> participant_states_;
 
-  /// @brief Inbound republishing publishers keyed by ROS topic name.
+  // Inbound republishing publishers keyed by ROS topic name.
   std::mutex publishers_mutex_;
   std::unordered_map<std::string, rclcpp::GenericPublisher::SharedPtr> inbound_publishers_;
 
-  /// @brief Background push worker.
+  // Background push worker.
   std::atomic_bool stop_{false};
   std::thread worker_;
 };

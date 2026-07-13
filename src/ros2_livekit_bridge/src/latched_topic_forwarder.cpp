@@ -148,6 +148,7 @@ void LatchedTopicForwarder::poll() {
 void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_name, const std::string& topic_type) {
   const auto node = node_.lock();
   if (!node) {
+    RCLCPP_ERROR(logger_, "Skipping latched topic subscription; ROS node has been destroyed");
     return;
   }
 

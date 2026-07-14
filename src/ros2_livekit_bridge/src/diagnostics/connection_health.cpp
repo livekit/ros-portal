@@ -375,8 +375,8 @@ ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr logging_interface,
     rclcpp::node_interfaces::NodeParametersInterface::SharedPtr parameters_interface,
     rclcpp::node_interfaces::NodeTimersInterface::SharedPtr timers_interface,
-    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface, std::string room_name)
-    : state_{ConnectionHealthStateKind::Disconnected, std::move(room_name), 0, 0, {}, std::nullopt},
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface)
+    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt},
       updater_(std::move(base_interface), std::move(clock_interface), std::move(logging_interface),
                std::move(parameters_interface), std::move(timers_interface), std::move(topics_interface),
                kDefaultDiagnosticPeriodSec) {
@@ -388,6 +388,7 @@ void ConnectionHealthDiagnostics::markConnected(livekit::Room &room) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_.kind = ConnectionHealthStateKind::Connected;
+    state_.room_name = room.roomInfo().name;
   }
   updatePeerCount(room);
 }
@@ -395,6 +396,7 @@ void ConnectionHealthDiagnostics::markConnected(livekit::Room &room) {
 void ConnectionHealthDiagnostics::markDisconnected() {
   std::lock_guard<std::mutex> lock(mutex_);
   state_.kind = ConnectionHealthStateKind::Disconnected;
+  state_.room_name.clear();
   state_.num_peers = 0;
   clearRtcSummary(state_);
   pending_stats_.reset();
@@ -466,6 +468,10 @@ void ConnectionHealthDiagnostics::onReconnected(livekit::Room &room, const livek
 }
 
 void ConnectionHealthDiagnostics::onRoomUpdated(livekit::Room &room, const livekit::RoomUpdatedEvent &) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    state_.room_name = room.roomInfo().name;
+  }
   updatePeerCount(room);
 }
 

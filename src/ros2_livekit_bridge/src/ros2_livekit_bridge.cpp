@@ -69,10 +69,9 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  room_name_ = config->room_name;
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
-  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(this, room_name_);
+  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(this);
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
@@ -116,10 +115,10 @@ bool Ros2LiveKitBridge::initialize() {
   }
 
   RCLCPP_INFO(this->get_logger(),
-              "Room: '%s', polling period: %d ms, watching %zu ROS topic "
+              "Polling period: %d ms, watching %zu ROS topic "
               "patterns, %zu LiveKit-to-ROS topic patterns, QoS depth range: "
               "[%zu, %zu]",
-              room_name_.c_str(), topic_polling_period_ms_, outgoing_topic_compiled_patterns.size(),
+              topic_polling_period_ms_, outgoing_topic_compiled_patterns.size(),
               incoming_topic_compiled_patterns.size(), min_qos_depth_, max_qos_depth_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
@@ -167,9 +166,11 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
+  connection_diagnostics_->markConnected(*room_);
+
   if (auto lp = room_->localParticipant().lock()) {
-    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_name_.c_str(),
-                lp->identity().c_str());
+    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'",
+                room_->roomInfo().name.c_str(), lp->identity().c_str());
   } else {
     RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
     return false;

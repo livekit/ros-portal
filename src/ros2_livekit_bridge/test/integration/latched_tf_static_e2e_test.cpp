@@ -54,11 +54,10 @@ constexpr auto kDeliveryTimeout = 25s;
 constexpr const char* kLatchedTopic = "/latched_state";
 constexpr const char* kPayload = "latched-payload";
 
-std::string latchedConfigYaml(const std::string& room_name, const std::string& topic, const std::string& direction) {
+std::string latchedConfigYaml(const std::string& topic, const std::string& direction) {
   std::ostringstream stream;
   stream << "ros2_livekit_bridge:\n"
          << "  version: \"0.0.1\"\n"
-         << "  room_name: \"" << room_name << "\"\n"
          << "  topic_polling_period_ms: 50\n"
          << "  ros_threads: 4\n"
          << "  topics:\n"
@@ -222,7 +221,7 @@ TEST_F(LatchedTfStaticE2E, RepublishesLatchedStatePublishedBeforePeerJoined) {
   publisher_a_ = robot_a_node_->create_publisher<std_msgs::msg::String>(kLatchedTopic, latchedQoS());
   publisher_a_->publish(makeMessage(kPayload)); // latched: retained for late subscribers, incl. the bridge
 
-  config_a_ = std::make_unique<TemporaryConfigFile>(latchedConfigYaml(testLiveKitRoom(), kLatchedTopic, "out"),
+  config_a_ = std::make_unique<TemporaryConfigFile>(latchedConfigYaml(kLatchedTopic, "out"),
                                                     "ros2_livekit_bridge_latched_a_");
   bridge_a_ = makeBridge(graph_a_->context(), "/latched_bridge_a", token_a_, config_a_->path().string());
   ASSERT_NE(bridge_a_, nullptr);
@@ -238,7 +237,7 @@ TEST_F(LatchedTfStaticE2E, RepublishesLatchedStatePublishedBeforePeerJoined) {
 
   // --- Graph B: bring up the consuming bridge only now (peer joins late). ---
   robot_b_node_ = std::make_shared<rclcpp::Node>("latched_robot_b", rclcpp::NodeOptions().context(graph_b_->context()));
-  config_b_ = std::make_unique<TemporaryConfigFile>(latchedConfigYaml(testLiveKitRoom(), kLatchedTopic, "in"),
+  config_b_ = std::make_unique<TemporaryConfigFile>(latchedConfigYaml(kLatchedTopic, "in"),
                                                     "ros2_livekit_bridge_latched_b_");
   bridge_b_ = makeBridge(graph_b_->context(), "/latched_bridge_b", token_b_, config_b_->path().string());
   ASSERT_NE(bridge_b_, nullptr);

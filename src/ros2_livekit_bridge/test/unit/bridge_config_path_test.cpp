@@ -87,7 +87,6 @@ protected:
 constexpr const char* kGoodConfig =
     R"(ros2_livekit_bridge:
   version: "0.0.1"
-  room_name: "param_flow_room"
   topic_polling_period_ms: 250
   ros_threads: 3
   topics:

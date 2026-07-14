@@ -15,7 +15,6 @@
 # limitations under the License.
 
 from pathlib import Path
-import re
 import subprocess
 
 from launch import LaunchDescription
@@ -30,14 +29,6 @@ from launch_ros.substitutions import FindPackageShare
 
 def _as_bool(value: str) -> bool:
     return value.strip().lower() in ('1', 'true', 'yes', 'on')
-
-
-def _room_name_from_config(config_path: Path) -> str:
-    text = config_path.read_text(encoding='utf-8')
-    match = re.search(r'^\s*room_name:\s*["\']?([^"\'\s#]+)', text, re.MULTILINE)
-    if not match:
-        raise RuntimeError(f'Could not find ros2_livekit_bridge.room_name in {config_path}')
-    return match.group(1)
 
 
 def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentials: bool) -> str:
@@ -76,13 +67,20 @@ def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentia
 
 def _launch_setup(context, *args, **kwargs):
     config_path = Path(LaunchConfiguration('config').perform(context))
+    if not config_path.is_file():
+        raise RuntimeError(f'Config file does not exist: {config_path}')
     livekit_url = LaunchConfiguration('livekit_url').perform(context)
     identity = LaunchConfiguration('identity').perform(context)
+    room_name = LaunchConfiguration('room_name').perform(context).strip()
     valid_for = LaunchConfiguration('token_valid_for').perform(context)
     use_dev_credentials = _as_bool(LaunchConfiguration('use_dev_credentials').perform(context))
-
-    room_name = _room_name_from_config(config_path)
-    token = _mint_token(room_name, identity, valid_for, use_dev_credentials)
+    provided_token = LaunchConfiguration('token').perform(context).strip()
+    if provided_token:
+        token = provided_token
+    else:
+        if not room_name:
+            raise RuntimeError('room_name launch argument must be non-empty when minting a token')
+        token = _mint_token(room_name, identity, valid_for, use_dev_credentials)
 
     bridge_node = Node(
         package='ros2_livekit_bridge',
@@ -112,6 +110,16 @@ def generate_launch_description():
         DeclareLaunchArgument('config', default_value=default_config),
         DeclareLaunchArgument('livekit_url', default_value='ws://host.docker.internal:7880'),
         DeclareLaunchArgument('identity', default_value='ros2-livekit-bridge'),
+        DeclareLaunchArgument(
+            'room_name',
+            default_value='robo_room',
+            description='LiveKit room used when minting a token via `lk`. Ignored when token is set.',
+        ),
+        DeclareLaunchArgument(
+            'token',
+            default_value='',
+            description='Optional LiveKit JWT. When set, skips minting via `lk`.',
+        ),
         DeclareLaunchArgument('token_valid_for', default_value='1h'),
         DeclareLaunchArgument('use_dev_credentials', default_value='true'),
         DeclareLaunchArgument('ns', default_value='/'),

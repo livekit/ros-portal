@@ -6,7 +6,8 @@ snapshot of the user specified config. Pass the file path with the node's
 ## Credentials
 
 LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
-`LIVEKIT_TOKEN` in the node environment.
+`LIVEKIT_TOKEN` in the node environment. The LiveKit room name comes from the
+active room connection (via the token grant), not from this config.
 
 
 ## Minimal Config
@@ -14,7 +15,6 @@ LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
 ```yaml
 ros2_livekit_bridge:
   version: "0.0.1"
-  room_name: "robo_room"
 ```
 
 The parser rejects unknown fields, empty required strings, invalid enum values,
@@ -27,7 +27,6 @@ All config lives under `ros2_livekit_bridge`.
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
 | `version` | string | yes | - | Must be `"0.0.1"`. |
-| `room_name` | string | yes | - | LiveKit room name. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
 | `ros_threads` | integer | no | `4` | ROS executor thread count. Use `0` for the rclcpp default. Keep this greater than `1` when using remote CLI services so a pending LiveKit RPC does not occupy the only executor thread. |
 | `room_options` | map | no | `{}` | LiveKit room connection options. |

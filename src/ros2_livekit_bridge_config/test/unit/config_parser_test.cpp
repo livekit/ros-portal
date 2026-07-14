@@ -40,12 +40,10 @@ void expectInvalid(const std::string& yaml, const std::string& expected_text) {
 TEST(ConfigParserTest, ParsesMinimalConfig) {
   const auto config = parse(R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
 )");
 
   EXPECT_EQ(config.version, "0.0.1");
-  EXPECT_EQ(config.room_name, "robo_room");
   EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
   EXPECT_FALSE(config.room_options.join_retries.has_value());
@@ -58,7 +56,6 @@ TEST(ConfigParserTest, ParsesFullConfig) {
       R"(
 ros2_livekit_bridge:
   version: "0.0.1"
-  room_name: "robo_room"
   topic_polling_period_ms: 500
   ros_threads: 4
   room_options:
@@ -86,7 +83,6 @@ ros2_livekit_bridge:
       preserve_id: true
 )");
 
-  EXPECT_EQ(config.room_name, "robo_room");
   EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
 
@@ -123,7 +119,6 @@ TEST(ConfigParserTest, RejectsNonNumericMaxRateHz) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/tf"
@@ -137,7 +132,6 @@ TEST(ConfigParserTest, RejectsUnknownRootField) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
 extra: true
 )",
@@ -148,7 +142,6 @@ TEST(ConfigParserTest, RejectsMisspelledParticipantField) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/provide_status"
@@ -163,7 +156,6 @@ TEST(ConfigParserTest, RejectsUnsupportedVersion) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.2"
 )",
       "expected '0.0.1'");
@@ -173,7 +165,6 @@ TEST(ConfigParserTest, RejectsWrongScalarType) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version:
     major: 0
 )",
@@ -184,7 +175,6 @@ TEST(ConfigParserTest, RejectsWrongSequenceType) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     topic: "/odom"
@@ -197,7 +187,6 @@ TEST(ConfigParserTest, RejectsWrongMapType) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   room_options:
     - join_retries
@@ -210,7 +199,6 @@ TEST(ConfigParserTest, RejectsInvalidServiceDirection) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -222,7 +210,6 @@ ros2_livekit_bridge:
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -237,7 +224,6 @@ TEST(ConfigParserTest, RejectsInvalidTopicDirection) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/teleop_cmd"
@@ -250,7 +236,6 @@ TEST(ConfigParserTest, RejectsMissingServiceParticipant) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -264,7 +249,6 @@ TEST(ConfigParserTest, RejectsMissingServiceMsgType) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -278,7 +262,6 @@ TEST(ConfigParserTest, RejectsEmptyServiceMsgType) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -293,7 +276,6 @@ TEST(ConfigParserTest, RejectsMissingTopicName) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - direction: "out"
@@ -305,7 +287,6 @@ TEST(ConfigParserTest, RejectsEmptyTopicName) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: ""
@@ -318,7 +299,6 @@ TEST(ConfigParserTest, RejectsInvalidJoinRetries) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   room_options:
     join_retries: 0
@@ -330,7 +310,6 @@ TEST(ConfigParserTest, RejectsInvalidVideoBitrate) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/camera/image_raw"
@@ -345,7 +324,6 @@ TEST(ConfigParserTest, RejectsEmptyCodec) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/camera/image_raw"
@@ -360,7 +338,6 @@ TEST(ConfigParserTest, RejectsAudioOptions) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/mic/audio_left"
@@ -377,7 +354,6 @@ TEST(ConfigParserTest, ParsesFile) {
   const auto config = ConfigParser{}.parseFile(path);
 
   EXPECT_EQ(config.version, "0.0.1");
-  EXPECT_EQ(config.room_name, "robo_room");
   EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
   ASSERT_EQ(config.services.size(), 2u);
@@ -396,7 +372,6 @@ TEST(ConfigParserTest, ParsesEmptySequences) {
   const auto config = parse(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services: []
   topics: []
@@ -410,12 +385,11 @@ TEST(ConfigParserTest, ConfigErrorExposesStructuredFields) {
   try {
     (void)parse(R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.2"
 )");
     FAIL() << "Expected ConfigError";
   } catch (const ConfigError& e) {
-    EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.version at line 4, column 12");
+    EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.version at line 3, column 12");
     EXPECT_EQ(e.expected(), "'0.0.1'");
     EXPECT_EQ(e.detail(), "found '0.0.2'");
   }
@@ -425,13 +399,12 @@ TEST(ConfigParserTest, ErrorContextIncludesLineAndColumn) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/teleop_cmd"
       direction: "sideways"
 )",
-      "at line 7, column 18");
+      "at line 6, column 18");
 }
 
 TEST(ConfigParserTest, MissingFieldErrorHasNoLineColumn) {
@@ -439,7 +412,6 @@ TEST(ConfigParserTest, MissingFieldErrorHasNoLineColumn) {
     (void)parse(
         R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - direction: "out"
@@ -478,31 +450,26 @@ TEST(ConfigParserTest, RejectsMissingVersion) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   room_options:
     join_retries: 3
 )",
       "missing required field");
 }
 
-TEST(ConfigParserTest, RejectsMissingRequiredFields) {
-  try {
-    (void)parse(R"(
+TEST(ConfigParserTest, RejectsUnknownRoomNameField) {
+  expectInvalid(
+      R"(
 ros2_livekit_bridge:
   version: "0.0.1"
-)");
-    FAIL() << "Expected ConfigError";
-  } catch (const ConfigError& e) {
-    EXPECT_EQ(e.context(), "$.ros2_livekit_bridge.room_name");
-    EXPECT_EQ(e.detail(), "missing required field");
-  }
+  room_name: "robo_room"
+)",
+      "unknown field 'room_name'");
 }
 
 TEST(ConfigParserTest, RejectsMissingServiceDirection) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -515,7 +482,6 @@ TEST(ConfigParserTest, RejectsMissingTopicDirection) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topics:
     - topic: "/odom"
@@ -527,7 +493,6 @@ TEST(ConfigParserTest, RejectsEmptyServiceName) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: ""
@@ -541,7 +506,6 @@ TEST(ConfigParserTest, RejectsEmptyParticipant) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   services:
     - service: "/go_to_pose"
@@ -555,7 +519,6 @@ TEST(ConfigParserTest, RejectsNonIntegerJoinRetries) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   room_options:
     join_retries: "three"
@@ -563,21 +526,10 @@ ros2_livekit_bridge:
       "expected positive integer");
 }
 
-TEST(ConfigParserTest, RejectsEmptyRoomName) {
-  expectInvalid(
-      R"(
-ros2_livekit_bridge:
-  version: "0.0.1"
-  room_name: ""
-)",
-      "expected nonempty string");
-}
-
 TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   topic_polling_period_ms: 0
 )",
@@ -588,7 +540,6 @@ TEST(ConfigParserTest, RejectsInvalidRosThreads) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   ros_threads: -1
 )",
@@ -599,7 +550,6 @@ TEST(ConfigParserTest, RejectsNonScalarMapKey) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_name: "robo_room"
   version: "0.0.1"
   ? [complex, key]
   : true

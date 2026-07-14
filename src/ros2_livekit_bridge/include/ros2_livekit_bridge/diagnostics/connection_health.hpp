@@ -108,7 +108,7 @@ struct ConnectionHealthState {
   /// Current connection state reported by the bridge or LiveKit SDK.
   ConnectionHealthStateKind kind{ConnectionHealthStateKind::Disconnected};
 
-  /// LiveKit room name associated with this bridge instance.
+  /// LiveKit room name from the active room connection (empty until connected).
   std::string room_name;
 
   /// Number of currently known remote participants.
@@ -163,14 +163,12 @@ public:
   /// @param parameters_interface Node parameters interface for the updater.
   /// @param timers_interface Node timers interface for the diagnostic updater.
   /// @param topics_interface Node topics interface for the diagnostic updater.
-  /// @param room_name LiveKit room name reported in diagnostic key/value fields.
   ConnectionHealthDiagnostics(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base_interface,
                               rclcpp::node_interfaces::NodeClockInterface::SharedPtr clock_interface,
                               rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr logging_interface,
                               rclcpp::node_interfaces::NodeParametersInterface::SharedPtr parameters_interface,
                               rclcpp::node_interfaces::NodeTimersInterface::SharedPtr timers_interface,
-                              rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface,
-                              std::string room_name);
+                              rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface);
 
   /// Convenience constructor that extracts the required interfaces from a node.
   ///
@@ -181,15 +179,13 @@ public:
   /// @tparam NodeT Node-like type exposing the standard `get_node_*_interface`
   ///   accessors (e.g. `rclcpp::Node *` or an `rclcpp::Node::SharedPtr`).
   /// @param node Node to source the diagnostic updater interfaces from.
-  /// @param room_name LiveKit room name reported in diagnostic key/value fields.
   template <typename NodeT>
-  ConnectionHealthDiagnostics(NodeT&& node, std::string room_name)
+  explicit ConnectionHealthDiagnostics(NodeT&& node)
       : ConnectionHealthDiagnostics(node->get_node_base_interface(), node->get_node_clock_interface(),
                                     node->get_node_logging_interface(), node->get_node_parameters_interface(),
-                                    node->get_node_timers_interface(), node->get_node_topics_interface(),
-                                    std::move(room_name)) {}
+                                    node->get_node_timers_interface(), node->get_node_topics_interface()) {}
 
-  /// Mark the bridge connected and refresh the remote participant count.
+  /// Mark the bridge connected, capture the LiveKit room name, and refresh peers.
   void markConnected(livekit::Room& room);
 
   /// Mark the bridge disconnected and clear cached RTC summary.

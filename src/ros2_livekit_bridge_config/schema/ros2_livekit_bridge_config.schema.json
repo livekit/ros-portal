@@ -9,13 +9,10 @@
     "ros2_livekit_bridge": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "room_name"],
+      "required": ["version"],
       "properties": {
         "version": {
           "const": "0.0.1"
-        },
-        "room_name": {
-          "$ref": "#/$defs/nonemptyString"
         },
         "topic_polling_period_ms": {
           "$ref": "#/$defs/positiveInteger",

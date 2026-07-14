@@ -165,8 +165,6 @@ private:
   bool initializeLatchedTopicForwarder(std::unordered_set<std::string> outbound_latched_topics,
                                        std::unordered_set<std::string> inbound_latched_topics);
 
-  //! @brief The name of the room
-  std::string room_name_;
   //! @brief The period for polling the topics
   int topic_polling_period_ms_;
 

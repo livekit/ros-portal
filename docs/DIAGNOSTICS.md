@@ -51,7 +51,7 @@ Every `connection_health` status includes these fields:
 | `state` | `connected`, `reconnecting`, or `disconnected`. |
 | `num_peers` | Current number of known remote LiveKit participants. |
 | `reconnect_count` | Number of times the SDK has entered reconnecting state. |
-| `room_name` | LiveKit room name from bridge configuration. |
+| `room_name` | LiveKit room name from the active room connection. |
 
 ### RTC Summary Fields
 

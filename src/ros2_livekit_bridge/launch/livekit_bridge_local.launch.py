@@ -67,13 +67,14 @@ def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentia
 
 def _launch_setup(context, *args, **kwargs):
     config_path = Path(LaunchConfiguration('config').perform(context))
+    if not config_path.is_file():
+        raise RuntimeError(f'Config file does not exist: {config_path}')
     livekit_url = LaunchConfiguration('livekit_url').perform(context)
     identity = LaunchConfiguration('identity').perform(context)
     room_name = LaunchConfiguration('room_name').perform(context).strip()
     valid_for = LaunchConfiguration('token_valid_for').perform(context)
     use_dev_credentials = _as_bool(LaunchConfiguration('use_dev_credentials').perform(context))
     provided_token = LaunchConfiguration('token').perform(context).strip()
-
     if provided_token:
         token = provided_token
     else:

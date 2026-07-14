@@ -169,8 +169,8 @@ bool Ros2LiveKitBridge::initialize() {
   connection_diagnostics_->markConnected(*room_);
 
   if (auto lp = room_->localParticipant().lock()) {
-    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'",
-                room_->roomInfo().name.c_str(), lp->identity().c_str());
+    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
+                lp->identity().c_str());
   } else {
     RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
     return false;

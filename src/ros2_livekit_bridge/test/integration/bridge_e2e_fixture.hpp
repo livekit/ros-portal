@@ -131,15 +131,6 @@ inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool prese
   return stream.str();
 }
 
-inline std::string testLiveKitRoom() {
-  std::string source;
-  const auto room = utils::resolveEnvironmentCredential("LIVEKIT_ROOM", source);
-  if (!room.empty()) {
-    return room;
-  }
-  return "ros_bridge_participant_id_test";
-}
-
 class BridgeTestE2E : public ::testing::Test {
 protected:
   // The LiveKit SDK lifecycle is process-global, so it is owned by the test
@@ -196,10 +187,10 @@ protected:
     SCOPED_TRACE("ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()) +
                  ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
-    config_file_a_ = std::make_unique<TemporaryConfigFile>(
-        bridgeConfigYaml(topic_pattern_a, preserve_id_a), "ros2_livekit_bridge_bridge_test_e2e_a_");
-    config_file_b_ = std::make_unique<TemporaryConfigFile>(
-        bridgeConfigYaml(topic_pattern_b, preserve_id_b), "ros2_livekit_bridge_bridge_test_e2e_b_");
+    config_file_a_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern_a, preserve_id_a),
+                                                           "ros2_livekit_bridge_bridge_test_e2e_a_");
+    config_file_b_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern_b, preserve_id_b),
+                                                           "ros2_livekit_bridge_bridge_test_e2e_b_");
 
     bridge_a_ = createBridge(*graph_a_, "/bridge_a_node", token_a_, config_file_a_->path().string());
     bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());

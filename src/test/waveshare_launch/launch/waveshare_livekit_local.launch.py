@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Top-level entrypoint that brings up the Waveshare stack alongside the
-LiveKit bridge. This keeps the composition (and its dependency on
-waveshare_launch) out of the reusable ros2_livekit_bridge package.
+"""
+Bring up the Waveshare stack alongside the LiveKit bridge.
+
+This keeps the composition (and its dependency on waveshare_launch) out of the
+reusable ros2_livekit_bridge package.
 """
 
 from launch import LaunchDescription

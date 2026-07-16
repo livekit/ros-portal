@@ -1,0 +1,120 @@
+# Architecture
+
+`ros2_livekit_bridge` is a ROS2 node that bridges selected ROS2 topics and
+services to other participants in a LiveKit room. It uses
+[LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/) for
+ROS message streaming and [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/)
+for remote introspection and latched-topic delivery.
+
+## Bridge Node
+
+The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
+
+1. Parses parameters from a YAML config declaring which topics and services to
+   route.
+2. Polls the ROS2 graph at a configurable interval using
+   `get_topic_names_and_types()`. This is a DDS graph-cache lookup and does not
+   add traffic to the network or affect other nodes.
+3. Matches discovered topics against the configured ECMAScript regular
+   expressions.
+4. Creates subscriptions for each newly matched topic, using a QoS profile
+   aggregated from all active publishers.
+5. Uses a typed subscription for `sensor_msgs/msg/Image` topics so frames can be
+   pushed into a LiveKit video track.
+6. Uses `rclcpp::GenericSubscription` for other topics and forwards raw
+   CDR-serialized bytes over a
+   [LiveKit DataTrack](https://docs.livekit.io/transport/data/data-tracks/).
+7. Subscribes to allowed remote LiveKit data tracks and republishes their raw CDR
+   payloads into ROS using the track name as the local topic name.
+
+## Message-Type Handling
+
+| ROS2 message type | LiveKit track type | Wire format | Behavior |
+| --- | --- | --- | --- |
+| `sensor_msgs/msg/Image` | Video track | RGBA pixels | A `livekit::VideoSource` and `livekit::LocalVideoTrack` are created lazily on the first received frame. Each callback converts the image to RGBA and pushes the frame through `VideoSource::captureFrame()`. Supported encodings are `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8`. |
+| Any other type | [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) | ROS 2 CDR | A generic subscription is created using the type string discovered from the ROS graph. Incoming serialized message buffers are pushed verbatim onto a `livekit::LocalDataTrack`. |
+
+The data-track payload is the unmodified CDR byte stream produced by the
+publisher. Consumers need the matching `.msg` definition, or an IDL/CDR-aware
+deserializer, to decode it.
+
+For LiveKit-to-ROS data tracks, the track name does not currently include ROS
+message type metadata. The bridge resolves inbound message type using local ROS
+graph lookup for the same topic name before creating the
+`rclcpp::GenericPublisher`.
+
+```text
+ROS topic publisher
+  -> Ros2LiveKitBridge subscription
+  -> LiveKit local video/data track
+  -> LiveKit room
+  -> remote bridge
+  -> ROS publisher
+```
+
+## LiveKit-To-ROS Topic Names
+
+Inbound data tracks are published on ROS using the LiveKit track name directly:
+
+```text
+LiveKit data track: /odom/global
+ROS topic:          /odom/global
+```
+
+Track names without a leading `/` are normalized to absolute ROS topic paths.
+When the matching inbound topic sets `preserve_id: true`, the publishing
+participant's sanitized identity is prepended to the local topic name. See
+[Configuration](CONFIGURATION.md#preserving-the-publisher-identity).
+
+## Topic Direction
+
+Topic direction controls which streams cross the bridge:
+
+- `out`: allow ROS-to-LiveKit forwarding.
+- `in`: allow LiveKit-to-ROS forwarding.
+- `bidirectional`: allow both directions.
+
+Only forwarding streams that are needed keeps unnecessary traffic off the
+LiveKit connection, which matters on constrained links.
+
+Services are different. They only accept `direction: "out"` because the bridge
+does not mirror the ROS2 service graph in both directions. A service call is
+point-to-point, so a route is fully described by the participant that answers
+it.
+
+## Remote ROS2 CLI Calls
+
+The bridge exposes ROS2 services backed by
+[LiveKit RPC](https://docs.livekit.io/transport/data/rpc/) that run a subset of
+`ros2` CLI commands against other connected bridges, including:
+
+- `ros2 topic list`
+- `ros2 topic pub`
+- `ros2 service list`
+- `ros2 service call`
+- `ros2 interface show`
+
+Because each service callback blocks until the remote LiveKit RPC returns or
+times out, keep `ros_threads` greater than `1`. The default `ros_threads: 4` is
+recommended so topic forwarding and timers continue while a remote
+introspection request is pending.
+
+See [Remote ROS2 CLI calls](ROS2_CLI_CALLS.md) for request fields and sample
+service calls.
+
+## QoS Determination
+
+The bridge determines subscriber QoS by aggregating all publisher endpoints for
+a topic, following the same approach as `ros2 topic echo` and Foxglove bridge:
+
+- **Depth:** sum each publisher's history depth, using a minimum of `1` per
+  publisher for RMW implementations that report `0`, then clamp to
+  `[min_qos_depth, max_qos_depth]`.
+- **Reliability:** use `RELIABLE` only when all publishers advertise
+  `RELIABLE`. Mixed policies fall back to `BEST_EFFORT` so the subscriber can
+  connect to every publisher. Topics matching `best_effort_qos_topics` are
+  forced to `BEST_EFFORT`.
+- **Durability:** use `TRANSIENT_LOCAL` only when all publishers advertise
+  `TRANSIENT_LOCAL`; otherwise use `VOLATILE`.
+
+The bridge does not currently register subscription QoS event callbacks.

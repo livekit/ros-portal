@@ -62,7 +62,7 @@ used to limit which streams cross the bridge for bandwidth reasons.
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
-| `topic` | string | yes | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the DataTrack path; matched as a literal name for `max_rate_hz` and `latched`. |
+| `topic` | string | yes | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz` and `latched`. |
 | `direction` | string | yes | `in`, `out`, or `bidirectional`. |
 | `preserve_id` | boolean | no | Default `false`. Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
 | `max_rate_hz` | number | no | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
@@ -152,10 +152,12 @@ subscribers that join later. `/tf_static` is the canonical example — static
 transforms are broadcast once at startup, and a node that starts afterward still
 receives them.
 
-LiveKit DataTracks are **not** latched: a frame pushed before a peer subscribes
-is lost, and a static topic never republishes it. Setting `latched: true` routes
-the topic off the DataTrack path and onto a reliable **RPC push-with-ack**
-mechanism instead:
+[LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/) are
+**not** latched: a frame pushed before a peer subscribes is lost, and a static
+topic never republishes it. Setting `latched: true` routes the topic off the
+data-track path and onto a reliable
+[**RPC**](https://docs.livekit.io/transport/data/rpc/) push-with-ack mechanism
+instead:
 
 - **Outbound** (`out` / `bidirectional`): the bridge subscribes with
   `TRANSIENT_LOCAL` QoS (so it captures state published before the bridge
@@ -172,12 +174,14 @@ mechanism instead:
 
 Like `max_rate_hz`, `latched` is matched by **literal topic name**, not regex.
 
-**Payload limit.** The push uses a LiveKit RPC whose payload is capped at
+**Payload limit.** The push uses a
+[LiveKit RPC](https://docs.livekit.io/transport/data/rpc/) whose payload is capped at
 **15 KiB** (base64 leaves ~11 KiB of message bytes per call). A single message
 larger than that cannot be sent and is skipped with a logged warning. This is
 ample for typical `/tf_static` trees (a few hundred short-named transforms), but
 large monolithic latched topics (e.g. `/robot_description`, large `/map`) are out
-of scope for this path — keep them on the DataTrack path or handle them out of
+of scope for this path — keep them on the
+[DataTrack path](https://docs.livekit.io/transport/data/data-tracks/) or handle them out of
 band.
 
 ```yaml

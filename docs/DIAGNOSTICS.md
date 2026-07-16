@@ -106,9 +106,7 @@ rtc.data_channels.total=1
 After launching the bridge with valid LiveKit credentials, inspect one diagnostic
 message with:
 
-```bash
-ros2 topic echo /diagnostics --once
-```
+    ros2 topic echo /diagnostics --once
 
 Look for a `connection_health` status containing the base fields above. When the
 room is connected, the status should also contain the fixed `rtc.*` summary
@@ -168,10 +166,8 @@ diagnostic tasks that should affect the aggregate health view.
 
 Start the bridge normally, then run:
 
-```bash
-ros2 run diagnostic_aggregator aggregator_node \
-  --ros-args --params-file livekit_bridge_diagnostics_aggregator.yaml
-```
+    ros2 run diagnostic_aggregator aggregator_node \
+    --ros-args --params-file livekit_bridge_diagnostics_aggregator.yaml
 
 or put the following in your launch file:
 ```xml
@@ -180,9 +176,10 @@ or put the following in your launch file:
 </node>
 ```
 
-Inspect the grouped output:
+Inspect the grouped aggregated diagnostics:
 
-```bash
-ros2 topic echo /diagnostics_agg --once
-ros2 topic echo /diagnostics_toplevel_state --once
-```
+    ros2 topic echo /diagnostics_agg --once
+
+Inspect the top-level state:
+
+    ros2 topic echo /diagnostics_toplevel_state --once

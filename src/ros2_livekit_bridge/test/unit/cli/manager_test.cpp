@@ -206,6 +206,17 @@ TEST(ManagerUtilityTest, ServiceCallRpcTimeoutAddsMargin) {
             cli::kDefaultTimeoutSec + cli::kServiceCallRpcTimeoutMarginSec);
 }
 
+TEST(ManagerRpcRegistrationTest, RegistrationFailureThrows) {
+  auto node = std::make_shared<rclcpp::Node>("cli_manager_rpc_registration_test");
+  const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeRpcClient rpc_client;
+  rpc_client.register_succeeds = false;
+
+  EXPECT_THROW(std::make_unique<cli::Manager>(*node, callback_group, rpc_client.makeLiveKitMethods()),
+               std::runtime_error);
+  EXPECT_TRUE(rpc_client.registered_methods.empty());
+}
+
 TEST_F(ManagerTest, EmptyParticipantFails) {
   const auto response = manager->callRemoteTopicList(makeRequest(""));
 

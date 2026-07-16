@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "ros2_livekit_bridge/cli/constants.hpp"
 #include "ros2_livekit_bridge/cli/interface_show.hpp"
@@ -89,20 +90,26 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
       },
       rclcpp::ServicesQoS(), callback_group);
 
-  livekit_methods_.register_rpc_method(kTopicListRpcMethod,
-                                       [this](const std::string& payload) { return handleTopicListRpc(payload); });
+  std::vector<const char*> registered_rpc_methods;
+  const auto register_rpc = [&](const char* method, auto handler) {
+    if (!livekit_methods_.register_rpc_method(method, std::move(handler))) {
+      for (auto it = registered_rpc_methods.rbegin(); it != registered_rpc_methods.rend(); ++it) {
+        livekit_methods_.unregister_rpc_method(*it);
+      }
+      throw std::runtime_error(std::string("Failed to register LiveKit RPC method '") + method + "'");
+    }
+    registered_rpc_methods.push_back(method);
+  };
 
-  livekit_methods_.register_rpc_method(kTopicPubRpcMethod,
-                                       [this](const std::string& payload) { return handleTopicPubRpc(payload); });
-
-  livekit_methods_.register_rpc_method(kServiceListRpcMethod,
-                                       [this](const std::string& payload) { return handleServiceListRpc(payload); });
-
-  livekit_methods_.register_rpc_method(kServiceCallRpcMethod,
-                                       [this](const std::string& payload) { return handleServiceCallRpc(payload); });
-
-  livekit_methods_.register_rpc_method(kInterfaceShowRpcMethod,
-                                       [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
+  register_rpc(kTopicListRpcMethod,
+               [this](const std::string& payload) { return handleTopicListRpc(payload); });
+  register_rpc(kTopicPubRpcMethod, [this](const std::string& payload) { return handleTopicPubRpc(payload); });
+  register_rpc(kServiceListRpcMethod,
+               [this](const std::string& payload) { return handleServiceListRpc(payload); });
+  register_rpc(kServiceCallRpcMethod,
+               [this](const std::string& payload) { return handleServiceCallRpc(payload); });
+  register_rpc(kInterfaceShowRpcMethod,
+               [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
 
   RCLCPP_INFO(node_interfaces_.node_logging->get_logger(),
               "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s", kTopicListServiceName,

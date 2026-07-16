@@ -1,5 +1,3 @@
-# ROS LiveKit Bridge
-
 <!--BEGIN_BANNER_IMAGE-->
 
 <picture>
@@ -10,31 +8,28 @@
 
 <!--END_BANNER_IMAGE-->
 
-ROS2 workspace for the LiveKit bridge. This repository is used as both the
-development environment and build environment for the bridge node and its
-supporting packages.
+# ROS LiveKit Bridge
 
 The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants (ROS2 or not) through LiveKit’s real-time network, enabling access to a ROS graph from anywhere in the world. It streams camera feeds as video, transports arbitrary ROS messages as schema-described data, republishes remote tracks into ROS, and forwards service calls over LiveKit RPC—enabling low-latency teleoperation, monitoring, and robot-to-cloud communication without exposing DDS across networks.
 
-<!-- TODO: need design team to make a sick ROS2 bridge diagram here -->
-```text
-                              LiveKit Room (Web)
-                        ROS2 ◄──► LK ◄──► LK ◄──► ROS2
-  ════════════════════════════════════════════════════════════════════════════
-           Computer A                                   Computer B
-  ┌────────────────────────────────┐       ┌─────────────────────────────────┐
-  │      ros2_livekit_bridge       │       │      ros2_livekit_bridge        │
-  │                                │       │                                 │
-  │  ┌─────────┐     ┌──────────┐  │       │  ┌──────────┐     ┌─────────┐   │
-  │  │  ROS2   │     │ LiveKit  │  │       │  │ LiveKit  │     │  ROS2   │   │
-  │  │ (local) │     │  client  │  │       │  │  client  │     │ (local) │   │
-  │  └────┬────┘     └────┬─────┘  │       │  └─────┬────┘     └────┬────┘   │
-  │       │               │        │       │        │               │        │
-  │  topics      ◄──►   DataTracks │       │    DataTracks ◄──►   topics     │
-  │  services    ◄──►   RPC        │       │    RPC        ◄──►   services   │
-  │  CLI calls   ◄──►   RPC        │       │    RPC        ◄──►   CLI calls  │
-  └────────────────────────────────┘       └─────────────────────────────────┘
+<img style="width:100%;height:100%;" alt="ROS LiveKit Bridge architecture" src="docs/assets/bridge-overview.png">
+
+## Quick Start
+
+Open the repository in the devcontainer, then build from `/livekit_ws`:
+
+    colcon build --packages-select ros2_livekit_bridge
+
+Run the bridge with LiveKit credentials:
+
+```bash
+source install/setup.bash
+export LIVEKIT_URL=<url>
+export LIVEKIT_TOKEN=<token>
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
 ```
+
+To get familiar with using the bridge, you can follow the [tutorials](docs/tutorials.md).
 
 ## User Guides
 
@@ -78,40 +73,3 @@ The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants
 - [`waveshare_launch`](src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
 
 Other package READMEs under `src/` document package-specific setup, fixtures, or examples.
-
-# Quickstart
-
-Open this repository in the devcontainer, then build the bridge package from the
-workspace root inside the container:
-
-    colcon build --packages-up-to ros2_livekit_bridge
-
-Source the workspace and launch the bridge with LiveKit credentials:
-
-```bash
-source install/setup.bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
-```
-
-For local development against a local LiveKit server, use the local launch file:
-
-```bash
-source install/setup.bash
-ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
-```
-
-The local launch file automatically generates and sets `LIVEKIT_URL` and `LIVEKIT_TOKEN` for the local development server.
-
-Optionally, you can pass `config_path`, `id`, and other args for customization. Run:
-
-    ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py --show-args
-
-to see all the available options.
-
-Bridge routes are configured through the YAML file passed by the node's
-`config_path` ROS parameter. See [Configuration](docs/configuration.md) for the
-supported schema.
-
-To get familiar with using the bridge, you can follow the [tutorials](docs/tutorials.md).

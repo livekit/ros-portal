@@ -66,7 +66,9 @@ RUN curl -sSL https://get.livekit.io/cli | bash
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-example-interfaces \
-    ros-${ROS_DISTRO}-test-msgs
+    ros-${ROS_DISTRO}-test-msgs \
+    ros-${ROS_DISTRO}-turtlesim \
+    ros-${ROS_DISTRO}-teleop-twist-keyboard
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-joint-state-publisher

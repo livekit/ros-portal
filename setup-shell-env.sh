@@ -103,6 +103,22 @@ rnl()
     cd "\${WS}" && sros && ros2 node list "\$@"
 }
 
+# print domain id
+did()
+{
+    echo "\${ROS_DOMAIN_ID:-}"
+}
+
+# source/set domain id
+sdid()
+{
+    if [ "\$#" -eq 0 ]; then
+        echo "Usage: sdid <domain_id>" >&2
+        return 1
+    fi
+    export ROS_DOMAIN_ID="\$1"
+}
+
 if [ -n "\${ZSH_VERSION:-}" ]; then
     PROMPT='(ros-livekit) %n@%m:%~ %# '
 else

@@ -139,14 +139,19 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   register_rpc(kServiceCallRpcMethod, [this](const std::string& payload) { return handleServiceCallRpc(payload); });
   register_rpc(kInterfaceShowRpcMethod, [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
 
-  RCLCPP_INFO(node_interfaces_.node_logging->get_logger(),
-              "CLI manager initialized: %d/5 ROS services, %zu/5 RPC methods",
-              (topic_list_service_ != nullptr) + (topic_pub_service_ != nullptr) + (service_list_service_ != nullptr) +
-                  (service_call_service_ != nullptr) + (interface_show_service_ != nullptr),
-              registered_rpc_methods_.size());
+  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(),
+               "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s", kTopicListServiceName,
+               kTopicPubServiceName, kServiceListServiceName, kServiceCallServiceName, kInterfaceShowServiceName);
+  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(),
+               "Registered LiveKit RPC methods:\n   - %s\n   - %s\n   - %s\n   - %s\n"
+               "   - %s",
+               kTopicListRpcMethod, kTopicPubRpcMethod, kServiceListRpcMethod, kServiceCallRpcMethod,
+               kInterfaceShowRpcMethod);
 
   diagnostics_.add(kCliManagerDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+
+  RCLCPP_INFO(node_interfaces_.node_logging->get_logger(), "CLI Manager is ready to rock!");
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,

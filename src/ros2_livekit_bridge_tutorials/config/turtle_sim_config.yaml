@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# Copyright 2026 LiveKit
+#
+# Turtlesim tutorial — turtle_sim side. See docs/tutorials.md.
+ros2_livekit_bridge:
+  version: "0.0.1"
+  ros_threads: 4          # keep > 1 so remote CLI calls have a free executor thread
+
+  topics:
+    # Velocity commands: received from LiveKit and re-exported so the
+    # controller can echo them. bidirectional = in + out.
+    - topic: "/turtle.*/cmd_vel"
+      direction: "in"
+
+    - topic: "/cmd_vel"
+      direction: "in"
+
+    # Pose telemetry out to the controller (ROS -> LiveKit).
+    - topic: "/turtle.*/pose"
+      direction: "out"

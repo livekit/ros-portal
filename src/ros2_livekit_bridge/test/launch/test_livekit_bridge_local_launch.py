@@ -85,13 +85,15 @@ def test_launch_setup_mints_token_and_passes_config_path(tmp_path, monkeypatch):
     actions = module._launch_setup(context)
 
     assert token_calls == [('launch_room', 'test-bridge', '10m', False)]
-    assert actions[0].name == 'LIVEKIT_URL'
-    assert actions[0].value == 'ws://example.test:7880'
-    assert actions[1].name == 'LIVEKIT_TOKEN'
-    assert actions[1].value == 'fake-token'
-    assert actions[2].kwargs['package'] == 'ros2_livekit_bridge'
-    assert actions[2].kwargs['executable'] == 'ros2_livekit_bridge_node'
-    assert actions[2].kwargs['parameters'] == [{'config_path': str(config_path)}]
+    assert actions[0].name == 'RUST_LOG'
+    assert actions[0].value == 'info'
+    assert actions[1].name == 'LIVEKIT_URL'
+    assert actions[1].value == 'ws://example.test:7880'
+    assert actions[2].name == 'LIVEKIT_TOKEN'
+    assert actions[2].value == 'fake-token'
+    assert actions[3].kwargs['package'] == 'ros2_livekit_bridge'
+    assert actions[3].kwargs['executable'] == 'ros2_livekit_bridge_node'
+    assert actions[3].kwargs['parameters'] == [{'config_path': str(config_path)}]
 
 
 def test_launch_setup_uses_provided_token_without_minting(tmp_path, monkeypatch):
@@ -129,11 +131,32 @@ def test_launch_setup_uses_provided_token_without_minting(tmp_path, monkeypatch)
     actions = module._launch_setup(context)
 
     assert token_calls == []
-    assert actions[0].name == 'LIVEKIT_URL'
-    assert actions[0].value == 'wss://example.livekit.cloud'
-    assert actions[1].name == 'LIVEKIT_TOKEN'
-    assert actions[1].value == 'provided-jwt-token'
-    assert actions[2].kwargs['parameters'] == [{'config_path': str(config_path)}]
+    assert actions[0].name == 'RUST_LOG'
+    assert actions[0].value == 'info'
+    assert actions[1].name == 'LIVEKIT_URL'
+    assert actions[1].value == 'wss://example.livekit.cloud'
+    assert actions[2].name == 'LIVEKIT_TOKEN'
+    assert actions[2].value == 'provided-jwt-token'
+    assert actions[3].kwargs['parameters'] == [{'config_path': str(config_path)}]
+
+
+def test_launch_setup_rejects_missing_config_file(tmp_path, monkeypatch):
+    module = _load_launch_module()
+    missing_config = tmp_path / 'missing.yaml'
+
+    monkeypatch.setattr(module, '_mint_token', lambda *args, **kwargs: 'unused')
+
+    context = LaunchContext()
+    context.launch_configurations['config'] = str(missing_config)
+    context.launch_configurations['livekit_url'] = 'ws://example.test:7880'
+    context.launch_configurations['identity'] = 'test-bridge'
+    context.launch_configurations['room_name'] = 'launch_room'
+    context.launch_configurations['token'] = ''
+    context.launch_configurations['token_valid_for'] = '10m'
+    context.launch_configurations['use_dev_credentials'] = 'false'
+
+    with pytest.raises(RuntimeError, match=f'Config file does not exist: {missing_config}'):
+        module._launch_setup(context)
 
 
 def test_launch_setup_rejects_empty_room_name_when_minting(tmp_path, monkeypatch):

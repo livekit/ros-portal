@@ -70,7 +70,9 @@ jobs:
           --ignore-src -r -y --rosdistro jazzy \
           --skip-keys ament_cmake_clang_tidy
       clang_tidy_configure_command: |
+        set +u
         source /opt/ros/jazzy/setup.bash
+        set -u
         colcon build \
           --packages-up-to ros2_livekit_bridge \
           --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF

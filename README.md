@@ -121,14 +121,26 @@ colcon build --packages-select ros2_livekit_bridge \
 If you build the SDK locally for use with this workspace, build the SDK itself
 with `-DLIVEKIT_USE_SYSTEM_SPDLOG=ON`.
 
-### Formatting
-ROS2 uses the ament_clang_format tool to format code. Style is defined in
-`.clang-format` at the workspace root. It can be run with:
+### C++ tools
+
+`clang-format` and `clang-tidy` are provided by the `cpp-tools` submodule and
+run in CI. Initialize the submodule and install its shared configuration links
+after cloning outside the devcontainer:
+
 ```bash
-ament_clang_format --config .clang-format --reformat src/ros2_livekit_bridge src/ros2_livekit_bridge_config
+git submodule update --init cpp-tools
+./cpp-tools/install.sh
 ```
 
-Or use the devcontainer helper: `ament_clang`
+Run the formatter locally with:
+
+```bash
+ament_clang_format --config .clang-format --reformat \
+  src/ros2_livekit_bridge \
+  src/ros2_livekit_bridge_config
+```
+
+The devcontainer installs the shared configuration links automatically.
 
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.

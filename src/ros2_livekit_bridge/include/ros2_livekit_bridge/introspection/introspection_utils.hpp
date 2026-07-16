@@ -35,36 +35,36 @@ namespace ros2_livekit_bridge::introspection {
 ///
 /// @param handle Introspection message type-support handle.
 /// @return Pointer to the message members, or nullptr when the handle or its payload is null.
-inline const rosidl_typesupport_introspection_cpp::MessageMembers *membersFromHandle(
-    const rosidl_message_type_support_t *handle) {
+inline const rosidl_typesupport_introspection_cpp::MessageMembers* membersFromHandle(
+    const rosidl_message_type_support_t* handle) {
   if (handle == nullptr || handle->data == nullptr) {
     return nullptr;
   }
-  return static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers *>(handle->data);
+  return static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers*>(handle->data);
 }
 
 /// @brief Returns true when @p node or any nested map value contains a sequence longer than
-/// ros2_cli::kMaxResizableSequenceLength.
+/// cli::kMaxResizableSequenceLength.
 /// @param node Parsed YAML node to inspect.
-bool containsOversizedSequence(const YAML::Node &node);
+bool containsOversizedSequence(const YAML::Node& node);
 
 /// @brief Parse and validate a YAML payload.
 /// @param payload YAML source string.
 /// @param error Set to a human-readable description when parsing or validation fails.
 /// @return Parsed YAML root node, or `std::nullopt` on failure.
-std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &error);
+std::optional<YAML::Node> loadPayload(const std::string& payload, std::string& error);
 
 /// @brief Format a runtime message as YAML.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Response`.
 /// @param message Pointer to the runtime message memory.
 /// @return YAML rendering of @p message, or `std::nullopt` when @p msg_type cannot be resolved.
-std::optional<std::string> toYaml(const std::string &msg_type, const void *message);
+std::optional<std::string> toYaml(const std::string& msg_type, const void* message);
 
 /// @brief Format a runtime message as YAML.
 /// @param members Introspection metadata for the message type.
 /// @param message Pointer to the runtime message memory.
 /// @return YAML rendering of @p message.
-std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers &members, const void *message);
+std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers& members, const void* message);
 
 /// @brief Convert a native `ros2 topic pub` YAML payload to serialized ROS CDR.
 /// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
@@ -72,8 +72,8 @@ std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers &m
 /// @param error Set to a human-readable description when conversion fails.
 /// @return Serialized ROS message bytes, or `std::nullopt` when the type cannot
 ///   be resolved or the payload is invalid.
-std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string &msg_type,
-                                                                   const std::string &payload, std::string &error);
+std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string& msg_type,
+                                                                   const std::string& payload, std::string& error);
 
 /// @brief Populate an existing runtime message from a native YAML payload.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Request`.
@@ -81,7 +81,7 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
 /// @param message Type-erased initialized message storage to populate.
 /// @param error Set to a human-readable description when conversion fails.
 /// @return True when @p message was populated successfully.
-bool populateMessageFromYaml(const std::string &msg_type, const std::string &payload, void *message,
-                             std::string &error);
+bool populateMessageFromYaml(const std::string& msg_type, const std::string& payload, void* message,
+                             std::string& error);
 
 } // namespace ros2_livekit_bridge::introspection

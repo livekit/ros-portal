@@ -29,18 +29,18 @@
 #include <stdexcept>
 #include <utility>
 
+#include "ros2_livekit_bridge/cli/constants.hpp"
+#include "ros2_livekit_bridge/cli/json_converters.hpp"
 #include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
 
 namespace ros2_livekit_bridge {
 
 namespace {
 
 std::uint8_t serviceCallRpcTimeout(std::uint8_t service_timeout_sec) {
-  const unsigned total = static_cast<unsigned>(service_timeout_sec) + ros2_cli::kServiceCallRpcTimeoutMarginSec;
+  const unsigned total = static_cast<unsigned>(service_timeout_sec) + cli::kServiceCallRpcTimeoutMarginSec;
   return static_cast<std::uint8_t>(std::min(total, 255U));
 }
 
@@ -52,7 +52,7 @@ std::uint8_t serviceCallRpcTimeout(std::uint8_t service_timeout_sec) {
 /// known at runtime (resolved from introspection type support), so we subclass `ServiceBase` and
 /// drive the rcl service API directly, mirroring what `Service<ServiceT>` does under the hood.
 struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
-  using RequestHandler = std::function<void(const void *, void *)>;
+  using RequestHandler = std::function<void(const void*, void*)>;
 
   DynamicService(std::shared_ptr<rcl_node_t> node_handle, std::string service_name,
                  std::shared_ptr<introspection::RuntimeServiceTypeSupport> support, RequestHandler handler)
@@ -73,7 +73,7 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
     // rcl_service_fini'd to release their RMW resources before the memory is freed. Capturing
     // node_handle by value keeps the parent node alive until this deleter runs.
     service_handle_ = std::shared_ptr<rcl_service_t>(
-        new rcl_service_t, [node_handle = node_handle_, service_name = this->service_name](rcl_service_t *service) {
+        new rcl_service_t, [node_handle = node_handle_, service_name = this->service_name](rcl_service_t* service) {
           if (rcl_service_fini(service, node_handle.get()) != RCL_RET_OK) {
             RCLCPP_ERROR(rclcpp::get_node_logger(node_handle.get()).get_child("rclcpp"),
                          "Error destroying service '%s': %s", service_name.c_str(), rcl_get_error_string().str);
@@ -131,7 +131,7 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
     // response below so the caller isn't left waiting on a reply that never comes.
     try {
       handler(request.get(), response.data());
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
       RCLCPP_ERROR(node_logger_, "Failed to handle forwarded service request for '%s': %s", service_name.c_str(),
                    error.what());
     }
@@ -171,12 +171,12 @@ ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, NodeInterfa
   }
 
   logger_ = node_interfaces_.node_logging->get_logger().get_child("service_forwarder");
-  for (const auto &route : routes) {
+  for (const auto& route : routes) {
     createService(route, callback_group);
   }
 }
 
-ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Node &node,
+ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Node& node,
                                    rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods)
     : ServiceForwarder(std::move(routes),
                        NodeInterfaces{
@@ -188,7 +188,7 @@ ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Nod
 
 std::size_t ServiceForwarder::serviceCount() const { return services_.size(); }
 
-void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::CallbackGroup::SharedPtr callback_group) {
+void ServiceForwarder::createService(const ServiceRoute& route, rclcpp::CallbackGroup::SharedPtr callback_group) {
   if (route.service.empty()) {
     RCLCPP_ERROR(logger_, "Skipping service route with empty service name");
     return;
@@ -213,14 +213,14 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   try {
     auto service =
         std::make_shared<DynamicService>(node_interfaces_.node_base->get_shared_rcl_node_handle(), route.service,
-                                         support, [this, route](const void *request_data, void *response_data) {
+                                         support, [this, route](const void* request_data, void* response_data) {
                                            forwardRequest(route, request_data, response_data);
                                          });
     node_interfaces_.node_services->add_service(service, callback_group);
     services_.push_back(std::move(service));
     RCLCPP_INFO(logger_, "Created forwarded service '%s' [%s] to LiveKit participant '%s'", route.service.c_str(),
                 route.msg_type.c_str(), route.participant.c_str());
-  } catch (const std::exception &error) {
+  } catch (const std::exception& error) {
     RCLCPP_ERROR(logger_, "Failed to create forwarded service '%s' [%s]: %s", route.service.c_str(),
                  route.msg_type.c_str(), error.what());
   } catch (...) {
@@ -229,7 +229,7 @@ void ServiceForwarder::createService(const ServiceRoute &route, rclcpp::Callback
   }
 }
 
-void ServiceForwarder::forwardRequest(const ServiceRoute &route, const void *request_data, void *response_data) const {
+void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data) const {
   if (!livekit_methods_.has_participant(route.participant)) {
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
                  route.participant.c_str());
@@ -242,29 +242,28 @@ void ServiceForwarder::forwardRequest(const ServiceRoute &route, const void *req
                  route.service.c_str(), route.msg_type.c_str());
     return;
   }
-  const auto service_timeout_sec = ros2_cli::kDefaultTimeoutSec;
+  const auto service_timeout_sec = cli::kDefaultTimeoutSec;
 
-  ros2_cli::Ros2ServiceCallSrv::Request request;
+  cli::ServiceCallSrv::Request request;
   request.service = route.service;
   request.msg_type = route.msg_type;
   request.payload = *request_yaml;
   request.timeout_sec = service_timeout_sec;
   const auto payload = serviceCallRequestToJson(request, service_timeout_sec);
 
-  const auto rpc_response = livekit_methods_.perform_rpc(route.participant, ros2_cli::kServiceCallRpcMethod, payload,
+  const auto rpc_response = livekit_methods_.perform_rpc(route.participant, cli::kServiceCallRpcMethod, payload,
                                                          serviceCallRpcTimeout(service_timeout_sec));
   if (!rpc_response) {
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' to participant '%s' failed while forwarding service '%s'",
-                 ros2_cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str());
+                 cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str());
     return;
   }
 
   std::string parse_error;
-  const auto response = cliResponseFromJson<ros2_cli::Ros2ServiceCallSrv::Response>(*rpc_response, parse_error);
+  const auto response = cliResponseFromJson<cli::ServiceCallSrv::Response>(*rpc_response, parse_error);
   if (!response) {
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' from participant '%s' returned malformed JSON for service '%s': %s",
-                 ros2_cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str(),
-                 parse_error.c_str());
+                 cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str(), parse_error.c_str());
     return;
   }
 

@@ -37,7 +37,9 @@ namespace ros2_livekit_bridge {
 namespace diagnostics {
 class ConnectionHealthDiagnostics;
 } // namespace diagnostics
-class Ros2CliManager;
+namespace cli {
+class Manager;
+} // namespace cli
 class TopicForwarder;
 class LatchedTopicForwarder;
 
@@ -142,9 +144,9 @@ private:
                                 std::vector<std::regex> preserve_id_topic_compiled_patterns,
                                 std::unordered_map<std::string, double> outbound_rate_limits);
 
-  /// @brief Create Ros2CliManager after LiveKit room connection succeeds.
+  /// @brief Create Manager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
-  bool initializeRos2CliManager();
+  bool initializeCliManager();
 
   /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
   /// @param routes Outgoing service routes derived from bridge config.
@@ -191,7 +193,7 @@ private:
   //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.
   std::unique_ptr<LatchedTopicForwarder> latched_topic_forwarder_;
   //! @brief ROS CLI service/RPC manager for remote graph introspection.
-  std::unique_ptr<Ros2CliManager> ros2_cli_manager_;
+  std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
   //! @brief LiveKit connection health diagnostics publisher.

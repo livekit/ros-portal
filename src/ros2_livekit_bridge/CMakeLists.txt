@@ -208,14 +208,14 @@ ament_target_dependencies(introspection_lib
 # ROS2 CLI library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros2_cli_lib SHARED
-  src/ros2_cli/ros2_interface_show.cpp
-  src/ros2_cli/json_converters.cpp
-  src/ros2_cli/ros2_service_call.cpp
-  src/ros2_cli/ros2_service_list.cpp
-  src/ros2_cli/ros2_topic_list.cpp
-  src/ros2_cli/ros2_topic_pub.cpp
-  src/ros2_cli/utils.cpp
-  src/ros2_cli_manager.cpp
+  src/cli/interface_show.cpp
+  src/cli/json_converters.cpp
+  src/cli/service_call.cpp
+  src/cli/service_list.cpp
+  src/cli/topic_list.cpp
+  src/cli/topic_pub.cpp
+  src/cli/utils.cpp
+  src/cli/manager.cpp
 )
 target_link_libraries(ros2_cli_lib
   introspection_lib

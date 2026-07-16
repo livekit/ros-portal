@@ -101,15 +101,11 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
     registered_rpc_methods.push_back(method);
   };
 
-  register_rpc(kTopicListRpcMethod,
-               [this](const std::string& payload) { return handleTopicListRpc(payload); });
+  register_rpc(kTopicListRpcMethod, [this](const std::string& payload) { return handleTopicListRpc(payload); });
   register_rpc(kTopicPubRpcMethod, [this](const std::string& payload) { return handleTopicPubRpc(payload); });
-  register_rpc(kServiceListRpcMethod,
-               [this](const std::string& payload) { return handleServiceListRpc(payload); });
-  register_rpc(kServiceCallRpcMethod,
-               [this](const std::string& payload) { return handleServiceCallRpc(payload); });
-  register_rpc(kInterfaceShowRpcMethod,
-               [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
+  register_rpc(kServiceListRpcMethod, [this](const std::string& payload) { return handleServiceListRpc(payload); });
+  register_rpc(kServiceCallRpcMethod, [this](const std::string& payload) { return handleServiceCallRpc(payload); });
+  register_rpc(kInterfaceShowRpcMethod, [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
 
   RCLCPP_INFO(node_interfaces_.node_logging->get_logger(),
               "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s", kTopicListServiceName,

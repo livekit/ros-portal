@@ -27,16 +27,16 @@
 #include <ros2_medkit_serialization/vendored/dynmsg/yaml_utils.hpp>
 #include <string>
 
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
+#include "ros2_livekit_bridge/cli/constants.hpp"
 
 namespace ros2_livekit_bridge::introspection {
 
-bool containsOversizedSequence(const YAML::Node &node) {
+bool containsOversizedSequence(const YAML::Node& node) {
   if (node.IsSequence()) {
-    if (node.size() > ros2_cli::kMaxResizableSequenceLength) {
+    if (node.size() > cli::kMaxResizableSequenceLength) {
       return true;
     }
-    for (const auto &entry : node) {
+    for (const auto& entry : node) {
       if (containsOversizedSequence(entry)) {
         return true;
       }
@@ -45,7 +45,7 @@ bool containsOversizedSequence(const YAML::Node &node) {
   }
 
   if (node.IsMap()) {
-    for (const auto &entry : node) {
+    for (const auto& entry : node) {
       if (containsOversizedSequence(entry.second)) {
         return true;
       }
@@ -54,48 +54,48 @@ bool containsOversizedSequence(const YAML::Node &node) {
   return false;
 }
 
-std::optional<YAML::Node> loadPayload(const std::string &payload, std::string &error) {
+std::optional<YAML::Node> loadPayload(const std::string& payload, std::string& error) {
   if (payload.empty()) {
     error = "payload must be non-empty";
     return std::nullopt;
   }
-  if (payload.size() > ros2_cli::kMaxYamlPayloadBytes) {
-    error = "payload exceeds maximum size of " + std::to_string(ros2_cli::kMaxYamlPayloadBytes) + " bytes";
+  if (payload.size() > cli::kMaxYamlPayloadBytes) {
+    error = "payload exceeds maximum size of " + std::to_string(cli::kMaxYamlPayloadBytes) + " bytes";
     return std::nullopt;
   }
 
   try {
     auto root = YAML::Load(payload);
     if (containsOversizedSequence(root)) {
-      error = "payload contains a sequence exceeding maximum length " +
-              std::to_string(ros2_cli::kMaxResizableSequenceLength);
+      error =
+          "payload contains a sequence exceeding maximum length " + std::to_string(cli::kMaxResizableSequenceLength);
       return std::nullopt;
     }
     return root;
-  } catch (const YAML::Exception &parse_error) {
+  } catch (const YAML::Exception& parse_error) {
     error = std::string("payload is not valid YAML: ") + parse_error.what();
     return std::nullopt;
   }
 }
 
-std::optional<std::string> toYaml(const std::string &msg_type, const void *message) {
-  const auto *type_info = ros2_medkit_serialization::TypeCache::instance().get_message_type_info(msg_type);
+std::optional<std::string> toYaml(const std::string& msg_type, const void* message) {
+  const auto* type_info = ros2_medkit_serialization::TypeCache::instance().get_message_type_info(msg_type);
   if (type_info == nullptr) {
     return std::nullopt;
   }
   return toYaml(*type_info, message);
 }
 
-std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers &members, const void *message) {
+std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers& members, const void* message) {
   // dynmsg renders the message straight to a YAML node. medkit's JsonSerializer::to_json builds this
   // same node internally and then converts it to JSON, so routing through it would round-trip
   // message -> YAML -> JSON -> YAML. Calling dynmsg directly keeps it message -> YAML -> string.
-  const RosMessage_Cpp ros_msg{&members, const_cast<uint8_t *>(static_cast<const uint8_t *>(message))};
+  const RosMessage_Cpp ros_msg{&members, const_cast<uint8_t*>(static_cast<const uint8_t*>(message))};
   return dynmsg::yaml_to_string(dynmsg::cpp::message_to_yaml(ros_msg));
 }
 
-std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string &msg_type,
-                                                                   const std::string &payload, std::string &error) {
+std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string& msg_type,
+                                                                   const std::string& payload, std::string& error) {
   const auto root = loadPayload(payload, error);
   if (!root) {
     return std::nullopt;
@@ -104,14 +104,14 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
   try {
     static const ros2_medkit_serialization::JsonSerializer serializer;
     return serializer.serialize(msg_type, ros2_medkit_serialization::JsonSerializer::yaml_to_json(*root));
-  } catch (const std::exception &resolve_error) {
+  } catch (const std::exception& resolve_error) {
     error = resolve_error.what();
     return std::nullopt;
   }
 }
 
-bool populateMessageFromYaml(const std::string &msg_type, const std::string &payload, void *message,
-                             std::string &error) {
+bool populateMessageFromYaml(const std::string& msg_type, const std::string& payload, void* message,
+                             std::string& error) {
   if (message == nullptr) {
     error = "message storage must be non-null";
     return false;
@@ -123,7 +123,7 @@ bool populateMessageFromYaml(const std::string &msg_type, const std::string &pay
   }
 
   try {
-    const auto *type_info = ros2_medkit_serialization::TypeCache::instance().get_message_type_info(msg_type);
+    const auto* type_info = ros2_medkit_serialization::TypeCache::instance().get_message_type_info(msg_type);
     if (type_info == nullptr) {
       error = "Type not found: " + msg_type;
       return false;
@@ -131,7 +131,7 @@ bool populateMessageFromYaml(const std::string &msg_type, const std::string &pay
     static const ros2_medkit_serialization::JsonSerializer serializer;
     serializer.from_json_to_message(type_info, ros2_medkit_serialization::JsonSerializer::yaml_to_json(*root), message);
     return true;
-  } catch (const std::exception &conversion_error) {
+  } catch (const std::exception& conversion_error) {
     error = conversion_error.what();
     return false;
   }

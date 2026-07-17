@@ -35,8 +35,8 @@
 #include <string>
 #include <thread>
 
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/types.hpp"
+#include "ros2_livekit_bridge/cli/constants.hpp"
+#include "ros2_livekit_bridge/cli/types.hpp"
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "test_common.hpp"
@@ -44,11 +44,11 @@
 namespace ros2_livekit_bridge::test {
 
 using namespace std::chrono_literals;
-using ros2_cli::Ros2InterfaceShow;
-using ros2_cli::Ros2ServiceCallSrv;
-using ros2_cli::Ros2ServiceList;
-using ros2_cli::Ros2TopicList;
-using ros2_cli::Ros2TopicPubSrv;
+using cli::InterfaceShowSrv;
+using cli::ServiceCallSrv;
+using cli::ServiceListSrv;
+using cli::TopicListSrv;
+using cli::TopicPubSrv;
 
 inline constexpr auto kGraphTimeout = 15s;
 inline constexpr auto kMessageTimeout = 20s;
@@ -342,17 +342,17 @@ protected:
     return "/" + service_name;
   }
 
-  Ros2TopicList::Response::SharedPtr callTopicListService(const std::shared_ptr<rclcpp::Node>& node,
-                                                          const std::string& participant_id,
-                                                          const TopicListServiceOptions& options = {}) {
-    auto client = node->create_client<Ros2TopicList>(bridgeServiceName(node, ros2_cli::kTopicListServiceName));
+  TopicListSrv::Response::SharedPtr callTopicListService(const std::shared_ptr<rclcpp::Node>& node,
+                                                         const std::string& participant_id,
+                                                         const TopicListServiceOptions& options = {}) {
+    auto client = node->create_client<TopicListSrv>(bridgeServiceName(node, cli::kTopicListServiceName));
 
     if (!waitFor([&]() { return client->wait_for_service(100ms); }, kGraphTimeout)) {
       ADD_FAILURE() << "ros2_topic_list service was not available";
       return nullptr;
     }
 
-    auto request = std::make_shared<Ros2TopicList::Request>();
+    auto request = std::make_shared<TopicListSrv::Request>();
     request->participant_id = participant_id;
     request->show_types = options.show_types;
     request->count_topics = options.count_topics;
@@ -369,17 +369,17 @@ protected:
     return future.get();
   }
 
-  Ros2ServiceList::Response::SharedPtr callServiceListService(const std::shared_ptr<rclcpp::Node>& node,
-                                                              const std::string& participant_id,
-                                                              const ServiceListServiceOptions& options = {}) {
-    auto client = node->create_client<Ros2ServiceList>(bridgeServiceName(node, ros2_cli::kServiceListServiceName));
+  ServiceListSrv::Response::SharedPtr callServiceListService(const std::shared_ptr<rclcpp::Node>& node,
+                                                             const std::string& participant_id,
+                                                             const ServiceListServiceOptions& options = {}) {
+    auto client = node->create_client<ServiceListSrv>(bridgeServiceName(node, cli::kServiceListServiceName));
 
     if (!waitFor([&]() { return client->wait_for_service(100ms); }, kGraphTimeout)) {
       ADD_FAILURE() << "ros2_service_list service was not available";
       return nullptr;
     }
 
-    auto request = std::make_shared<Ros2ServiceList::Request>();
+    auto request = std::make_shared<ServiceListSrv::Request>();
     request->participant_id = participant_id;
     request->show_types = options.show_types;
     request->count_services = options.count_services;
@@ -395,17 +395,19 @@ protected:
     return future.get();
   }
 
-  Ros2ServiceCallSrv::Response::SharedPtr callServiceCallService(
-      const std::shared_ptr<rclcpp::Node>& node, const std::string& participant_id, const std::string& service,
-      const std::string& msg_type, const std::string& payload, const ServiceCallServiceOptions& options = {}) {
-    auto client = node->create_client<Ros2ServiceCallSrv>(bridgeServiceName(node, ros2_cli::kServiceCallServiceName));
+  ServiceCallSrv::Response::SharedPtr callServiceCallService(const std::shared_ptr<rclcpp::Node>& node,
+                                                             const std::string& participant_id,
+                                                             const std::string& service, const std::string& msg_type,
+                                                             const std::string& payload,
+                                                             const ServiceCallServiceOptions& options = {}) {
+    auto client = node->create_client<ServiceCallSrv>(bridgeServiceName(node, cli::kServiceCallServiceName));
 
     if (!waitFor([&]() { return client->wait_for_service(100ms); }, kGraphTimeout)) {
       ADD_FAILURE() << "ros2_service_call service was not available";
       return nullptr;
     }
 
-    auto request = std::make_shared<Ros2ServiceCallSrv::Request>();
+    auto request = std::make_shared<ServiceCallSrv::Request>();
     request->participant_id = participant_id;
     request->service = service;
     request->msg_type = msg_type;
@@ -421,18 +423,18 @@ protected:
     return future.get();
   }
 
-  Ros2InterfaceShow::Response::SharedPtr callInterfaceShowService(const std::shared_ptr<rclcpp::Node>& node,
-                                                                  const std::string& participant_id,
-                                                                  const std::string& msg_type,
-                                                                  const InterfaceShowServiceOptions& options = {}) {
-    auto client = node->create_client<Ros2InterfaceShow>(bridgeServiceName(node, ros2_cli::kInterfaceShowServiceName));
+  InterfaceShowSrv::Response::SharedPtr callInterfaceShowService(const std::shared_ptr<rclcpp::Node>& node,
+                                                                 const std::string& participant_id,
+                                                                 const std::string& msg_type,
+                                                                 const InterfaceShowServiceOptions& options = {}) {
+    auto client = node->create_client<InterfaceShowSrv>(bridgeServiceName(node, cli::kInterfaceShowServiceName));
 
     if (!waitFor([&]() { return client->wait_for_service(100ms); }, kGraphTimeout)) {
       ADD_FAILURE() << "ros2_interface_show service was not available";
       return nullptr;
     }
 
-    auto request = std::make_shared<Ros2InterfaceShow::Request>();
+    auto request = std::make_shared<InterfaceShowSrv::Request>();
     request->participant_id = participant_id;
     request->type = msg_type;
     request->all_comments = options.all_comments;
@@ -448,18 +450,18 @@ protected:
     return future.get();
   }
 
-  Ros2TopicPubSrv::Response::SharedPtr callTopicPubService(const std::shared_ptr<rclcpp::Node>& node,
-                                                           const std::string& participant_id, const std::string& topic,
-                                                           const std::string& msg_type, const std::string& payload,
-                                                           const TopicPubServiceOptions& options = {}) {
-    auto client = node->create_client<Ros2TopicPubSrv>(bridgeServiceName(node, ros2_cli::kTopicPubServiceName));
+  TopicPubSrv::Response::SharedPtr callTopicPubService(const std::shared_ptr<rclcpp::Node>& node,
+                                                       const std::string& participant_id, const std::string& topic,
+                                                       const std::string& msg_type, const std::string& payload,
+                                                       const TopicPubServiceOptions& options = {}) {
+    auto client = node->create_client<TopicPubSrv>(bridgeServiceName(node, cli::kTopicPubServiceName));
 
     if (!waitFor([&]() { return client->wait_for_service(100ms); }, kGraphTimeout)) {
       ADD_FAILURE() << "ros2_topic_pub service was not available";
       return nullptr;
     }
 
-    auto request = std::make_shared<Ros2TopicPubSrv::Request>();
+    auto request = std::make_shared<TopicPubSrv::Request>();
     request->participant_id = participant_id;
     request->topic = topic;
     request->msg_type = msg_type;

@@ -32,9 +32,9 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/cli/manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
-#include "ros2_livekit_bridge/ros2_cli_manager.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
@@ -42,7 +42,7 @@
 
 namespace ros2_livekit_bridge {
 
-Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions &options)
+Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros2_livekit_bridge", options),
       topic_polling_period_ms_(0),
       min_qos_depth_(0),
@@ -103,7 +103,7 @@ bool Ros2LiveKitBridge::initialize() {
 
   std::vector<ServiceForwarder::ServiceRoute> outgoing_service_routes;
   outgoing_service_routes.reserve(config->services.size());
-  for (const auto &service_config : config->services) {
+  for (const auto& service_config : config->services) {
     if (service_config.direction != ros2_livekit_bridge_config::Direction::Out) {
       continue;
     }
@@ -183,7 +183,7 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  if (!initializeRos2CliManager()) {
+  if (!initializeCliManager()) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
     return false;
   }
@@ -213,7 +213,7 @@ bool Ros2LiveKitBridge::initialize() {
 
 Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   service_forwarder_.reset();
-  ros2_cli_manager_.reset();
+  cli_manager_.reset();
   // Reset before room_ so the forwarder can unregister its RPC handler and stop
   // its push worker (which reads the room roster) while the room is still alive.
   latched_topic_forwarder_.reset();
@@ -248,7 +248,7 @@ void Ros2LiveKitBridge::pollConnectionStats() {
   }
 }
 
-void Ros2LiveKitBridge::onDataTrackPublished(livekit::Room &, const livekit::DataTrackPublishedEvent &event) {
+void Ros2LiveKitBridge::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
   if (!event.track) {
     RCLCPP_ERROR(this->get_logger(), "Ignoring data track published event with null track pointer");
     return;
@@ -259,57 +259,57 @@ void Ros2LiveKitBridge::onDataTrackPublished(livekit::Room &, const livekit::Dat
   }
 }
 
-void Ros2LiveKitBridge::onDataTrackUnpublished(livekit::Room &, const livekit::DataTrackUnpublishedEvent &event) {
+void Ros2LiveKitBridge::onDataTrackUnpublished(livekit::Room&, const livekit::DataTrackUnpublishedEvent& event) {
   if (topic_forwarder_) {
     topic_forwarder_->onDataTrackUnpublished(event.sid);
   }
 }
 
-void Ros2LiveKitBridge::onParticipantConnected(livekit::Room &room, const livekit::ParticipantConnectedEvent &event) {
+void Ros2LiveKitBridge::onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onParticipantConnected(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onParticipantDisconnected(livekit::Room &room,
-                                                  const livekit::ParticipantDisconnectedEvent &event) {
+void Ros2LiveKitBridge::onParticipantDisconnected(livekit::Room& room,
+                                                  const livekit::ParticipantDisconnectedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onParticipantDisconnected(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onConnectionStateChanged(livekit::Room &room,
-                                                 const livekit::ConnectionStateChangedEvent &event) {
+void Ros2LiveKitBridge::onConnectionStateChanged(livekit::Room& room,
+                                                 const livekit::ConnectionStateChangedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onConnectionStateChanged(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onDisconnected(livekit::Room &room, const livekit::DisconnectedEvent &event) {
+void Ros2LiveKitBridge::onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onDisconnected(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onReconnecting(livekit::Room &room, const livekit::ReconnectingEvent &event) {
+void Ros2LiveKitBridge::onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onReconnecting(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onReconnected(livekit::Room &room, const livekit::ReconnectedEvent &event) {
+void Ros2LiveKitBridge::onReconnected(livekit::Room& room, const livekit::ReconnectedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onReconnected(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onRoomUpdated(livekit::Room &room, const livekit::RoomUpdatedEvent &event) {
+void Ros2LiveKitBridge::onRoomUpdated(livekit::Room& room, const livekit::RoomUpdatedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onRoomUpdated(room, event);
   }
 }
 
-void Ros2LiveKitBridge::onParticipantsUpdated(livekit::Room &room, const livekit::ParticipantsUpdatedEvent &event) {
+void Ros2LiveKitBridge::onParticipantsUpdated(livekit::Room& room, const livekit::ParticipantsUpdatedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onParticipantsUpdated(room, event);
   }
@@ -333,7 +333,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
     };
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
-    forwarder_lk_methods.publish_data_track = [this](const std::string &topic_name)
+    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name)
         -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
@@ -343,7 +343,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
 
       const auto publish_result = participant->publishDataTrack(topic_name);
       if (!publish_result) {
-        const auto &error = publish_result.error();
+        const auto& error = publish_result.error();
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
             "code=" + std::to_string(static_cast<std::uint32_t>(error.code)) + " message=" + error.message);
       }
@@ -358,7 +358,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
       writer->try_push = [track = std::move(track)](std::vector<std::uint8_t> payload) {
         const auto push_result = track->tryPush(std::move(payload));
         if (!push_result) {
-          const auto &error = push_result.error();
+          const auto& error = push_result.error();
           return livekit::Result<void, std::string>::failure(
               "code=" + std::to_string(static_cast<std::uint32_t>(error.code)) + " message=" + error.message);
         }
@@ -368,7 +368,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
     };
 
     forwarder_lk_methods.publish_video_track =
-        [this](const std::string &topic_name, int width,
+        [this](const std::string& topic_name, int width,
                int height) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
@@ -386,13 +386,13 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
         auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
         sink->width = width;
         sink->height = height;
-        sink->capture_frame = [source = std::move(source), track = std::move(track)](const livekit::VideoFrame &frame,
+        sink->capture_frame = [source = std::move(source), track = std::move(track)](const livekit::VideoFrame& frame,
                                                                                      std::int64_t timestamp_us) {
           (void)track;
           source->captureFrame(frame, timestamp_us);
         };
         return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::success(std::move(sink));
-      } catch (const std::exception &error) {
+      } catch (const std::exception& error) {
         return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure(error.what());
       }
     };
@@ -408,40 +408,40 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoin
   return topic_forwarder_ != nullptr;
 }
 
-bool Ros2LiveKitBridge::initializeRos2CliManager() {
+bool Ros2LiveKitBridge::initializeCliManager() {
   try {
-    const Ros2CliManager::LivekitMethods cli_lk_methods{
-        [this](const std::string &id) { return hasParticipant(id); },
-        [this](const std::string &id, const std::string &method, const std::string &payload, std::uint8_t timeout_sec) {
+    const cli::Manager::LiveKitMethods cli_lk_methods{
+        [this](const std::string& id) { return hasParticipant(id); },
+        [this](const std::string& id, const std::string& method, const std::string& payload, std::uint8_t timeout_sec) {
           return rpcPerform(id, method, payload, timeout_sec);
         },
-        [this](const std::string &method, RpcHandler handler) { return rpcRegisterMethod(method, std::move(handler)); },
-        [this](const std::string &method) { return rpcUnregisterMethod(method); },
+        [this](const std::string& method, RpcHandler handler) { return rpcRegisterMethod(method, std::move(handler)); },
+        [this](const std::string& method) { return rpcUnregisterMethod(method); },
     };
-    const auto topic_publish_allowed = [this](const std::string &topic_name) {
+    const auto topic_publish_allowed = [this](const std::string& topic_name) {
       return topic_forwarder_ && topic_forwarder_->isIncomingTopicAllowed(topic_name);
     };
-    ros2_cli_manager_ = std::make_unique<Ros2CliManager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
-                                                         std::move(topic_publish_allowed));
+    cli_manager_ = std::make_unique<cli::Manager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
+                                                  std::move(topic_publish_allowed));
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");
     return false;
   }
 
-  return ros2_cli_manager_ != nullptr;
+  return cli_manager_ != nullptr;
 }
 
 bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder::ServiceRoute> routes) {
   try {
     const ServiceForwarder::LiveKitMethods livekit_methods{
-        [this](const std::string &id) { return hasParticipant(id); },
-        [this](const std::string &id, const std::string &method, const std::string &payload, std::uint8_t timeout_sec) {
+        [this](const std::string& id) { return hasParticipant(id); },
+        [this](const std::string& id, const std::string& method, const std::string& payload, std::uint8_t timeout_sec) {
           return rpcPerform(id, method, payload, timeout_sec);
         },
     };
     service_forwarder_ =
         std::make_unique<ServiceForwarder>(std::move(routes), *this, reentrant_callback_group_, livekit_methods);
-  } catch (const std::exception &error) {
+  } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
     return false;
   } catch (...) {
@@ -465,18 +465,18 @@ bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(std::unordered_set<std::
     options.inbound_topics = std::move(inbound_latched_topics);
 
     LatchedTopicForwarder::LiveKitMethods methods;
-    methods.register_rpc_method = [this](const std::string &method, RpcHandler handler) {
+    methods.register_rpc_method = [this](const std::string& method, RpcHandler handler) {
       return rpcRegisterMethod(method, std::move(handler));
     };
-    methods.unregister_rpc_method = [this](const std::string &method) { return rpcUnregisterMethod(method); };
-    methods.perform_rpc = [this](const std::string &id, const std::string &method, const std::string &payload,
+    methods.unregister_rpc_method = [this](const std::string& method) { return rpcUnregisterMethod(method); };
+    methods.perform_rpc = [this](const std::string& id, const std::string& method, const std::string& payload,
                                  std::uint8_t timeout_sec) { return rpcPerform(id, method, payload, timeout_sec); };
     methods.list_remote_identities = [this]() {
       std::vector<std::string> identities;
       if (!room_) {
         return identities;
       }
-      for (const auto &weak_participant : room_->remoteParticipants()) {
+      for (const auto& weak_participant : room_->remoteParticipants()) {
         if (const auto participant = weak_participant.lock()) {
           identities.push_back(participant->identity());
         }
@@ -488,7 +488,7 @@ bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(std::unordered_set<std::
                                                                        this->weak_from_this(), // after constructor
                                                                        std::move(methods));
     latched_topic_forwarder_->start();
-  } catch (const std::exception &error) {
+  } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder: %s", error.what());
     return false;
   } catch (...) {
@@ -499,7 +499,7 @@ bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(std::unordered_set<std::
   return latched_topic_forwarder_ != nullptr;
 }
 
-bool Ros2LiveKitBridge::hasParticipant(const std::string &participant_id) const {
+bool Ros2LiveKitBridge::hasParticipant(const std::string& participant_id) const {
   if (!room_) {
     RCLCPP_ERROR(this->get_logger(), "Room is not available, cannot check for participant '%s'",
                  participant_id.c_str());
@@ -508,8 +508,8 @@ bool Ros2LiveKitBridge::hasParticipant(const std::string &participant_id) const 
   return static_cast<bool>(room_->remoteParticipant(participant_id).lock());
 }
 
-std::optional<std::string> Ros2LiveKitBridge::rpcPerform(const std::string &participant_id, const std::string &method,
-                                                         const std::string &payload, std::uint8_t timeout_sec) {
+std::optional<std::string> Ros2LiveKitBridge::rpcPerform(const std::string& participant_id, const std::string& method,
+                                                         const std::string& payload, std::uint8_t timeout_sec) {
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
     RCLCPP_ERROR(this->get_logger(),
@@ -521,14 +521,14 @@ std::optional<std::string> Ros2LiveKitBridge::rpcPerform(const std::string &part
 
   try {
     return local_participant->performRpc(participant_id, method, payload, static_cast<double>(timeout_sec));
-  } catch (const livekit::RpcError &error) {
+  } catch (const livekit::RpcError& error) {
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s", method.c_str(),
                  participant_id.c_str(), error.code(), error.message().c_str());
     return std::nullopt;
   }
 }
 
-bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string &method, RpcHandler handler) {
+bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
     RCLCPP_WARN(this->get_logger(),
@@ -540,10 +540,10 @@ bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string &method, RpcHandler 
 
   try {
     local_participant->registerRpcMethod(
-        method, [handler = std::move(handler)](const livekit::RpcInvocationData &data) -> std::optional<std::string> {
+        method, [handler = std::move(handler)](const livekit::RpcInvocationData& data) -> std::optional<std::string> {
           return handler(data.payload);
         });
-  } catch (const livekit::RpcError &error) {
+  } catch (const livekit::RpcError& error) {
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' registration failed: code=%u message=%s", method.c_str(),
                  error.code(), error.message().c_str());
     return false;
@@ -551,7 +551,7 @@ bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string &method, RpcHandler 
   return true;
 }
 
-bool Ros2LiveKitBridge::rpcUnregisterMethod(const std::string &method) {
+bool Ros2LiveKitBridge::rpcUnregisterMethod(const std::string& method) {
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
     RCLCPP_WARN(this->get_logger(),
@@ -563,7 +563,7 @@ bool Ros2LiveKitBridge::rpcUnregisterMethod(const std::string &method) {
 
   try {
     local_participant->unregisterRpcMethod(method);
-  } catch (const livekit::RpcError &error) {
+  } catch (const livekit::RpcError& error) {
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' unregistration failed: code=%u message=%s",
                  method.c_str(), error.code(), error.message().c_str());
     return false;

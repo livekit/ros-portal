@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/cli/json_converters.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 #include "ros2_livekit_bridge/utils/base64.hpp"
 

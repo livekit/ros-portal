@@ -34,7 +34,7 @@ ament_add_pytest_test(livekit_bridge_local_launch_test
 file(GLOB UNIT_TEST_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/introspection/*.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/unit/ros2_cli/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/unit/cli/*.cpp"
 )
 list(SORT UNIT_TEST_SOURCES)
 
@@ -60,8 +60,8 @@ endif()
 file(GLOB INTEGRATION_TEST_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_e2e.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/integration/*_test.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/integration/ros2_cli/*_e2e.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/integration/ros2_cli/*_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/cli/*_e2e.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/integration/cli/*_test.cpp"
 )
 list(SORT INTEGRATION_TEST_SOURCES)
 

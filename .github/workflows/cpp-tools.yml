@@ -1,0 +1,96 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: C++ Tools
+
+# Called by the top-level builds workflow.
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Prepare devcontainer SSH agent mount
+        run: touch /tmp/devcontainer-empty-ssh-agent
+
+      - name: Run clang-format in devcontainer
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          env: |
+            FORMAT_BLOB_SHA=${{ github.event.pull_request.head.sha || github.sha }}
+            GITHUB_ACTIONS=true
+            GITHUB_REPOSITORY=${{ github.repository }}
+            GITHUB_SERVER_URL=${{ github.server_url }}
+            GITHUB_SHA=${{ github.sha }}
+          push: never
+          runCmd: ./scripts/clang-format.sh
+
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Prepare devcontainer SSH agent mount
+        run: touch /tmp/devcontainer-empty-ssh-agent
+
+      - name: Run clang-tidy in devcontainer
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          env: |
+            GITHUB_ACTIONS=true
+            GITHUB_REPOSITORY=${{ github.repository }}
+            GITHUB_SERVER_URL=${{ github.server_url }}
+            GITHUB_SHA=${{ github.sha }}
+            TIDY_BLOB_SHA=${{ github.event.pull_request.head.sha || github.sha }}
+          push: never
+          runCmd: |
+            bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              set -u
+              colcon build \
+                --packages-up-to ros2_livekit_bridge \
+                --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
+              jq -s "add" build/*/compile_commands.json > build/compile_commands.json
+              ./scripts/clang-tidy.sh
+            '

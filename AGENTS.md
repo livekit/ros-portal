@@ -3,6 +3,18 @@
 This repository is a ROS2 workspace. Keep changes small, idiomatic, and aligned
 with existing package structure.
 
+## Shared C++ Baseline
+
+Follow `cpp-tools/AGENTS.md` for shared C++ rules and this file for SDK-specific
+guidance.
+
+Before C++ work, verify the shared guidance and root `.clang-format` /
+`.clang-tidy` symlinks are present. If not, flag it and recommend
+`git submodule update --init cpp-tools` or `./cpp-tools/install.sh` as
+appropriate. Never use `--force` without approval or claim tooling verification
+while these prerequisites are missing. Project-specific commands are documented
+in `docs/tools.md`.
+
 ## Build And Dependencies
 
 - Prefer `ament_cmake_auto` and the `ament_auto_*` helpers for ROS2 CMake

@@ -123,9 +123,11 @@ with `-DLIVEKIT_USE_SYSTEM_SPDLOG=ON`.
 
 ### C++ tools
 
-`clang-format` and `clang-tidy` are provided by the `cpp-tools` submodule and
-run in CI. Initialize the submodule and install its shared configuration links
-after cloning outside the devcontainer:
+`clang-format` and `clang-tidy` use the scripts and configuration provided by
+the `cpp-tools` submodule. The repository-owned CI workflow runs the project
+wrappers in the same devcontainer used for local development. Initialize the
+submodule and install its shared configuration links after cloning outside the
+devcontainer:
 
 ```bash
 git submodule update --init cpp-tools
@@ -149,7 +151,7 @@ jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
 
 Both project wrappers own this repository's paths and filters, then forward to
 the shared `cpp-tools` implementations. The devcontainer installs the shared
-configuration links automatically.
+configuration links and pinned tool versions automatically.
 
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.

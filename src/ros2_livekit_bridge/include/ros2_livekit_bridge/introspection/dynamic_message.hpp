@@ -32,7 +32,7 @@ public:
   /// @param members Introspection metadata for the message type.
   /// @param initialization ROS message initialization policy.
   explicit DynamicMessage(
-      const rosidl_typesupport_introspection_cpp::MessageMembers &members,
+      const rosidl_typesupport_introspection_cpp::MessageMembers& members,
       rosidl_runtime_cpp::MessageInitialization initialization = rosidl_runtime_cpp::MessageInitialization::ALL)
       : members_(members), data_(::operator new(members.size_of_), StorageDeleter{&members_, false}) {
     try {
@@ -44,28 +44,28 @@ public:
     }
   }
 
-  DynamicMessage(const DynamicMessage &) = delete;
-  DynamicMessage &operator=(const DynamicMessage &) = delete;
-  DynamicMessage(DynamicMessage &&) noexcept = default;
-  DynamicMessage &operator=(DynamicMessage &&) = delete;
+  DynamicMessage(const DynamicMessage&) = delete;
+  DynamicMessage& operator=(const DynamicMessage&) = delete;
+  DynamicMessage(DynamicMessage&&) noexcept = default;
+  DynamicMessage& operator=(DynamicMessage&&) = delete;
 
   /// @brief Access the type-erased message storage.
   ///
   /// The buffer is intentionally untyped: a dynamic message only knows its
   /// concrete type at runtime via introspection metadata, and every consumer
   /// (de/serialization, rcl send/take, YAML rendering) operates on `void *`.
-  void *data() { return data_.get(); }
+  void* data() { return data_.get(); }
 
 private:
   /// @brief Deleter that runs ROS fini before freeing untyped message storage.
   struct StorageDeleter {
     /// @brief Introspection members used for fini.
-    const rosidl_typesupport_introspection_cpp::MessageMembers *members{nullptr};
+    const rosidl_typesupport_introspection_cpp::MessageMembers* members{nullptr};
     /// @brief Whether init_function completed successfully.
     bool initialized{false};
 
     /// @brief Finalize initialized storage, then release raw memory.
-    void operator()(void *ptr) const noexcept {
+    void operator()(void* ptr) const noexcept {
       if (ptr == nullptr) {
         return;
       }
@@ -79,7 +79,7 @@ private:
   using StoragePtr = std::unique_ptr<void, StorageDeleter>;
 
   /// @brief Introspection members used for init/fini.
-  const rosidl_typesupport_introspection_cpp::MessageMembers &members_;
+  const rosidl_typesupport_introspection_cpp::MessageMembers& members_;
   /// @brief Allocated message memory.
   StoragePtr data_;
 };

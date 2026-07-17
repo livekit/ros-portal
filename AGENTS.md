@@ -64,10 +64,3 @@ prerequisites are missing. Project-specific commands are documented in
   key configuration, and verification steps without duplicating implementation
   details.
 - If new configuration fields are added, update the documentation in `docs/CONFIGURATION.md`.
-
-## Style
-
-- Follow ROS2 formatting and linting standards.
-- Add the LiveKit copyright header with the correct year to new code files.
-- Prefer the constructor initializer list rather than variable declaration and assignment in the constructor body.
-- Prefer to not throw exceptions, instead use Result<T, E> for error handling when both success and error cases are possible.

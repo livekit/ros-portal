@@ -17,19 +17,19 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-shared_script="${repo_root}/cpp-tools/clang-format.sh"
+shared_script="${repo_root}/src/externals/cpp-tools/clang-format.sh"
 config="${repo_root}/.clang-format"
-expected_config="cpp-tools/.clang-format"
+expected_config="src/externals/cpp-tools/.clang-format"
 
 if [[ ! -x "${shared_script}" ]]; then
-  echo "ERROR: cpp-tools/clang-format.sh is unavailable." >&2
-  echo "Run: git submodule update --init cpp-tools" >&2
+  echo "ERROR: src/externals/cpp-tools/clang-format.sh is unavailable." >&2
+  echo "Run: mkdir -p src/externals && vcs import src/externals < external.repos" >&2
   exit 1
 fi
 
 if [[ ! -L "${config}" ]] || [[ "$(readlink "${config}")" != "${expected_config}" ]]; then
   echo "ERROR: the project .clang-format link is not installed." >&2
-  echo "Run: ./cpp-tools/install.sh clang-format" >&2
+  echo "Run: ./src/externals/cpp-tools/install.sh clang-format --repo-root \"${repo_root}\"" >&2
   exit 1
 fi
 

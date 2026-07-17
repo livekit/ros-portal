@@ -34,11 +34,15 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Initialize cpp-tools
-        run: git submodule update --init cpp-tools
+      - name: Import cpp-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-vcstool
+          mkdir -p src/externals
+          vcs import --recursive --skip-existing src/externals < external.repos
 
       - name: Install shared clang-format configuration
-        run: ./cpp-tools/install.sh clang-format --repo-root "$GITHUB_WORKSPACE" --force
+        run: ./src/externals/cpp-tools/install.sh clang-format --repo-root "$GITHUB_WORKSPACE" --force
 
       - name: Install clang-format 22
         run: |
@@ -66,14 +70,20 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout with submodules
+      - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: recursive
           fetch-depth: 1
 
+      - name: Import cpp-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-vcstool
+          mkdir -p src/externals
+          vcs import --recursive --skip-existing src/externals < external.repos
+
       - name: Install shared clang-tidy configuration
-        run: ./cpp-tools/install.sh clang-tidy --repo-root "$GITHUB_WORKSPACE" --force
+        run: ./src/externals/cpp-tools/install.sh clang-tidy --repo-root "$GITHUB_WORKSPACE" --force
 
       - name: Install project dependencies
         run: |
@@ -98,7 +108,7 @@ jobs:
           fi
           rosdep update --rosdistro jazzy
           mkdir -p src/externals
-          vcs import --skip-existing src/externals < external.repos
+          vcs import --recursive --skip-existing src/externals < external.repos
           rosdep install \
             --from-paths \
               src/ros2_livekit_bridge \

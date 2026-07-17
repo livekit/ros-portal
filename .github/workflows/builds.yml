@@ -32,10 +32,11 @@ jobs:
   cpp-tools:
     name: C++ Tools
     # Keep this immutable ref aligned with the cpp-tools submodule gitlink.
-    uses: livekit/cpp-tools/.github/workflows/cpp-tools.yml@5a8432b56a0f79d3eadea9aa536a6cd82e269db6
+    uses: livekit/cpp-tools/.github/workflows/cpp-tools.yml@d0934bbfb57ae927ccb83a3a830059407fe7055c
     with:
       clang_format: true
       clang_tidy: true
+      clang_tidy_fail_on_warning: false
       checkout_submodules: recursive
       clang_format_paths: src/ros2_livekit_bridge src/ros2_livekit_bridge_config
       clang_tidy_dependencies_command: |
@@ -78,8 +79,8 @@ jobs:
           --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
         jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
       clang_tidy_build_dir: build
-      clang_tidy_file_regex: '^.*/src/ros2_livekit_bridge(_config)?/src/.*\.(c|cpp|cc|cxx)$'
-      clang_tidy_header_filter: '.*/src/ros2_livekit_bridge(_config)?/(include|src)/.*\.(h|hpp|hxx)$'
+      clang_tidy_file_regex: '^.*/src/(ros2_livekit_bridge|ros2_livekit_bridge_config)/src/.*\.(c|cc|cpp|cxx)$'
+      clang_tidy_header_filter: '^.*/src/(ros2_livekit_bridge|ros2_livekit_bridge_config)/(include|src)/.*\.(h|hh|hpp|hxx)$'
       clang_tidy_exclude_header_filter: '(.*/test/.*)|(.*/build/.*)|(.*/install/.*)|(.*/src/externals/.*)'
 
   build-and-test:

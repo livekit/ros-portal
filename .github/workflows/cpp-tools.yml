@@ -36,6 +36,14 @@ jobs:
 
       - name: Import cpp-tools
         run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          sudo curl -sSL \
+            https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+            -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME}") main" \
+            | sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null
           sudo apt-get update
           sudo apt-get install -y python3-vcstool
           mkdir -p src/externals
@@ -75,16 +83,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Import cpp-tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-vcstool
-          mkdir -p src/externals
-          vcs import --recursive --skip-existing src/externals < external.repos
-
-      - name: Install shared clang-tidy configuration
-        run: ./src/externals/cpp-tools/install.sh clang-tidy --repo-root "$GITHUB_WORKSPACE" --force
-
       - name: Install project dependencies
         run: |
           set -eux
@@ -118,6 +116,9 @@ jobs:
               src/externals/ros2_medkit/src/ros2_medkit_serialization \
             --ignore-src -r -y --rosdistro jazzy \
             --skip-keys ament_cmake_clang_tidy
+
+      - name: Install shared clang-tidy configuration
+        run: ./src/externals/cpp-tools/install.sh clang-tidy --repo-root "$GITHUB_WORKSPACE" --force
 
       - name: Install clang-tidy 19
         run: |

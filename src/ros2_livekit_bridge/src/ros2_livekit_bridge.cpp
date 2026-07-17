@@ -37,6 +37,7 @@
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
+#include "ros2_livekit_bridge/utils/config_mapping.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
@@ -76,50 +77,9 @@ bool Ros2LiveKitBridge::initialize() {
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
-  const auto outgoing_topic_patterns = utils::outgoingTopicPatterns(*config);
-  std::vector<utils::PatternCompileError> pattern_errors;
-  auto outgoing_topic_compiled_patterns = utils::compileRegexPatterns(outgoing_topic_patterns, &pattern_errors);
-  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
 
-  const auto best_effort_topics = this->get_parameter("best_effort_qos_topics").as_string_array();
-  pattern_errors.clear();
-  best_effort_qos_topic_patterns_ = utils::compileRegexPatterns(best_effort_topics, &pattern_errors);
-  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
-
-  const auto incoming_topic_patterns = utils::incomingTopicPatterns(*config);
-  pattern_errors.clear();
-  auto incoming_topic_compiled_patterns = utils::compileRegexPatterns(incoming_topic_patterns, &pattern_errors);
-  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
-
-  const auto preserve_id_topic_patterns = utils::preserveIdTopicPatterns(*config);
-  pattern_errors.clear();
-  auto preserve_id_topic_compiled_patterns = utils::compileRegexPatterns(preserve_id_topic_patterns, &pattern_errors);
-  utils::logPatternCompileErrors(pattern_errors, this->get_logger());
-
-  auto outbound_rate_limits = utils::outboundRateLimits(*config);
-
-  auto latched_outbound_topics = utils::latchedOutboundTopics(*config);
-  auto latched_inbound_topics = utils::latchedInboundTopics(*config);
-
-  std::vector<ServiceForwarder::ServiceRoute> outgoing_service_routes;
-  outgoing_service_routes.reserve(config->services.size());
-  for (const auto& service_config : config->services) {
-    if (service_config.direction != ros2_livekit_bridge_config::Direction::Out) {
-      continue;
-    }
-    outgoing_service_routes.push_back(ServiceForwarder::ServiceRoute{
-        service_config.service,
-        service_config.msg_type,
-        service_config.participant,
-    });
-  }
-
-  RCLCPP_INFO(this->get_logger(),
-              "Polling period: %d ms, watching %zu ROS topic "
-              "patterns, %zu LiveKit-to-ROS topic patterns, QoS depth range: "
-              "[%zu, %zu]",
-              topic_polling_period_ms_, outgoing_topic_compiled_patterns.size(),
-              incoming_topic_compiled_patterns.size(), min_qos_depth_, max_qos_depth_);
+  RCLCPP_INFO(this->get_logger(), "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu]",
+              topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
@@ -176,9 +136,7 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
-                                std::move(incoming_topic_compiled_patterns),
-                                std::move(preserve_id_topic_compiled_patterns), std::move(outbound_rate_limits))) {
+  if (!initializeTopicForwarder(config->topics)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }
@@ -188,12 +146,12 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  if (!initializeServiceForwarder(std::move(outgoing_service_routes))) {
+  if (!initializeServiceForwarder(config->services)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder");
     return false;
   }
 
-  if (!initializeLatchedTopicForwarder(std::move(latched_outbound_topics), std::move(latched_inbound_topics))) {
+  if (!initializeLatchedTopicForwarder(config->topics)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder");
     return false;
   }
@@ -317,20 +275,11 @@ void Ros2LiveKitBridge::onParticipantsUpdated(livekit::Room& room, const livekit
 
 /// Helpers
 
-bool Ros2LiveKitBridge::initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
-                                                 std::vector<std::regex> incoming_topic_compiled_patterns,
-                                                 std::vector<std::regex> preserve_id_topic_compiled_patterns,
-                                                 std::unordered_map<std::string, double> outbound_rate_limits) {
+bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics) {
   try {
-    const TopicForwarder::TopicForwarderOptions forwarder_options{
-        std::move(outgoing_topic_compiled_patterns),
-        std::move(incoming_topic_compiled_patterns),
-        std::move(preserve_id_topic_compiled_patterns),
-        best_effort_qos_topic_patterns_,
-        min_qos_depth_,
-        max_qos_depth_,
-        std::move(outbound_rate_limits),
-    };
+    const auto best_effort_qos_topics = this->get_parameter("best_effort_qos_topics").as_string_array();
+    auto forwarder_options = utils::topicForwarderOptions(topics, min_qos_depth_, max_qos_depth_,
+                                                          best_effort_qos_topics, this->get_logger());
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
     forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name)
@@ -431,7 +380,8 @@ bool Ros2LiveKitBridge::initializeCliManager() {
   return cli_manager_ != nullptr;
 }
 
-bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder::ServiceRoute> routes) {
+bool Ros2LiveKitBridge::initializeServiceForwarder(
+    const std::vector<ros2_livekit_bridge_config::ServiceConfig>& services) {
   try {
     const ServiceForwarder::LiveKitMethods livekit_methods{
         [this](const std::string& id) { return hasParticipant(id); },
@@ -439,8 +389,8 @@ bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder:
           return rpcPerform(id, method, payload, timeout_sec);
         },
     };
-    service_forwarder_ =
-        std::make_unique<ServiceForwarder>(std::move(routes), *this, reentrant_callback_group_, livekit_methods);
+    service_forwarder_ = std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this,
+                                                            reentrant_callback_group_, livekit_methods);
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
     return false;
@@ -452,18 +402,15 @@ bool Ros2LiveKitBridge::initializeServiceForwarder(std::vector<ServiceForwarder:
   return service_forwarder_ != nullptr;
 }
 
-bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(std::unordered_set<std::string> outbound_latched_topics,
-                                                        std::unordered_set<std::string> inbound_latched_topics) {
-  if (outbound_latched_topics.empty() && inbound_latched_topics.empty()) {
+bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(
+    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics) {
+  auto options = utils::latchedTopicForwarderOptions(topics);
+  if (options.outbound_topics.empty() && options.inbound_topics.empty()) {
     RCLCPP_INFO(this->get_logger(), "No latched topics configured; skipping latched topic forwarder");
     return true;
   }
 
   try {
-    LatchedTopicForwarder::Options options;
-    options.outbound_topics = std::move(outbound_latched_topics);
-    options.inbound_topics = std::move(inbound_latched_topics);
-
     LatchedTopicForwarder::LiveKitMethods methods;
     methods.register_rpc_method = [this](const std::string& method, RpcHandler handler) {
       return rpcRegisterMethod(method, std::move(handler));

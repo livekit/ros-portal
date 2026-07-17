@@ -27,6 +27,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
@@ -93,19 +94,19 @@ std::optional<ros2_livekit_bridge_config::BridgeConfig> parseBridgeConfig(const 
 /// @brief Collect ROS-to-LiveKit topic patterns for the DataTrack forwarding
 /// path. Topics flagged `latched` are excluded because they are handled by the
 /// LatchedTopicForwarder over RPC instead (see @ref latchedOutboundTopics).
-std::vector<std::string> outgoingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
+std::vector<std::string> outgoingTopicPatterns(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
 /// @brief Collect LiveKit-to-ROS topic patterns for the DataTrack forwarding
 /// path. Topics flagged `latched` are excluded because they are handled by the
 /// LatchedTopicForwarder over RPC instead (see @ref latchedInboundTopics).
-std::vector<std::string> incomingTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
+std::vector<std::string> incomingTopicPatterns(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
 /// @brief Collect topic patterns for inbound topics that request identity
 /// prefixing.
-/// @param config The bridge configuration.
+/// @param topics The configured topics.
 /// @return Vector of topic patterns for inbound topics that request identity
 /// prefixing.
-std::vector<std::string> preserveIdTopicPatterns(const ros2_livekit_bridge_config::BridgeConfig& config);
+std::vector<std::string> preserveIdTopicPatterns(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
 /// @brief Collect per-topic outbound forward-rate caps.
 ///
@@ -113,9 +114,10 @@ std::vector<std::string> preserveIdTopicPatterns(const ros2_livekit_bridge_confi
 /// topic that sets a positive `max_rate_hz` in the config. Keyed by the verbatim
 /// configured topic name (literal match, not regex).
 ///
-/// @param config The bridge configuration.
+/// @param topics The configured topics.
 /// @return Map of ROS topic name to maximum outbound forward rate (Hz).
-std::unordered_map<std::string, double> outboundRateLimits(const ros2_livekit_bridge_config::BridgeConfig& config);
+std::unordered_map<std::string, double> outboundRateLimits(
+    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
 /// @brief Collect literal ROS topic names for outbound latched topics.
 ///
@@ -124,9 +126,10 @@ std::unordered_map<std::string, double> outboundRateLimits(const ros2_livekit_br
 /// rather than as LiveKit DataTracks. Keyed by the verbatim configured topic
 /// name (literal match, not regex), mirroring `outboundRateLimits`.
 ///
-/// @param config The bridge configuration.
+/// @param topics The configured topics.
 /// @return Set of ROS topic names to forward as latched state.
-std::unordered_set<std::string> latchedOutboundTopics(const ros2_livekit_bridge_config::BridgeConfig& config);
+std::unordered_set<std::string> latchedOutboundTopics(
+    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
 /// @brief Collect normalized ROS topic names for inbound latched topics.
 ///
@@ -135,9 +138,10 @@ std::unordered_set<std::string> latchedOutboundTopics(const ros2_livekit_bridge_
 /// on a TRANSIENT_LOCAL publisher. Keyed by normalized ROS topic name, mirroring
 /// `incomingTopicTypes`.
 ///
-/// @param config The bridge configuration.
+/// @param topics The configured topics.
 /// @return Set of normalized ROS topic names accepted as inbound latched state.
-std::unordered_set<std::string> latchedInboundTopics(const ros2_livekit_bridge_config::BridgeConfig& config);
+std::unordered_set<std::string> latchedInboundTopics(
+    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__ROS_UTILS_HPP_

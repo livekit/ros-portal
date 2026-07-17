@@ -232,6 +232,7 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/service_forwarder.cpp
   src/topic_forwarder.cpp
   src/utils/base64.cpp
+  src/utils/config_mapping.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp

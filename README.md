@@ -151,7 +151,8 @@ jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
 
 Both project wrappers own this repository's paths and filters, then forward to
 the shared `cpp-tools` implementations. The devcontainer installs the shared
-configuration links automatically.
+configuration links and the same clang-format and clang-tidy major versions
+used in CI automatically.
 
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.

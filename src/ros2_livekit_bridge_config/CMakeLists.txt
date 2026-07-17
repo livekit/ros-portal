@@ -129,8 +129,11 @@ if(BUILD_TESTING)
   endif()
 
   set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_cmake_cpplint_FOUND TRUE)
-  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_uncrustify)
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE
+    ament_cmake_uncrustify
+    ament_cmake_clang_format
+    ament_cmake_cpplint
+  )
   ament_lint_auto_find_test_dependencies()
 endif()
 

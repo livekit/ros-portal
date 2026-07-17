@@ -32,7 +32,7 @@ jobs:
   cpp-tools:
     name: C++ Tools
     # Keep this immutable ref aligned with the cpp-tools submodule gitlink.
-    uses: livekit/cpp-tools/.github/workflows/cpp-tools.yml@d0934bbfb57ae927ccb83a3a830059407fe7055c
+    uses: livekit/cpp-tools/.github/workflows/cpp-tools.yml@28286583b59ab4f7d2690ac4748f749783344d41
     with:
       clang_format: true
       clang_tidy: true

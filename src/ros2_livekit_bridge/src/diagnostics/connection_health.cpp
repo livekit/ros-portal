@@ -120,28 +120,28 @@ std::string valueToString(livekit::IceCandidatePairState value) {
 }
 
 template <typename T>
-std::string valueToString(const T &value) {
+std::string valueToString(const T& value) {
   std::ostringstream stream;
   stream << value;
   return stream.str();
 }
 
-void addField(diagnostic_updater::DiagnosticStatusWrapper &status, const std::string &key, const std::string &value) {
+void addField(diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key, const std::string& value) {
   status.add(key, value);
 }
 
 template <typename T>
-void addField(diagnostic_updater::DiagnosticStatusWrapper &status, const std::string &key, const T &value) {
+void addField(diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key, const T& value) {
   status.add(key, valueToString(value));
 }
 
 template <typename T>
-void addOptionalField(diagnostic_updater::DiagnosticStatusWrapper &status, const std::string &key,
-                      const std::optional<T> &value) {
+void addOptionalField(diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key,
+                      const std::optional<T>& value) {
   addField(status, key, value.has_value() ? valueToString(*value) : "unset");
 }
 
-const char *stateToString(ConnectionHealthStateKind state) {
+const char* stateToString(ConnectionHealthStateKind state) {
   switch (state) {
     case ConnectionHealthStateKind::Connected:
       return "connected";
@@ -153,18 +153,18 @@ const char *stateToString(ConnectionHealthStateKind state) {
   return "disconnected";
 }
 
-std::uint64_t totalBytes(const livekit::CandidatePairStats &stats) { return stats.bytes_sent + stats.bytes_received; }
+std::uint64_t totalBytes(const livekit::CandidatePairStats& stats) { return stats.bytes_sent + stats.bytes_received; }
 
-void updateMaxJitter(RtcStatsAccumulator &accumulator, double jitter_seconds) {
+void updateMaxJitter(RtcStatsAccumulator& accumulator, double jitter_seconds) {
   const double jitter_ms = jitter_seconds * kSecondsToMilliseconds;
   if (!accumulator.max_jitter_ms.has_value() || jitter_ms > *accumulator.max_jitter_ms) {
     accumulator.max_jitter_ms = jitter_ms;
   }
 }
 
-void accumulateRtcStats(RtcStatsAccumulator &accumulator, const livekit::RtcStats &stats) {
+void accumulateRtcStats(RtcStatsAccumulator& accumulator, const livekit::RtcStats& stats) {
   std::visit(
-      [&accumulator](const auto &typed_stats) {
+      [&accumulator](const auto& typed_stats) {
         using StatsType = std::decay_t<decltype(typed_stats)>;
 
         if constexpr (std::is_same_v<StatsType, livekit::RtcTransportStats>) {
@@ -188,21 +188,21 @@ void accumulateRtcStats(RtcStatsAccumulator &accumulator, const livekit::RtcStat
       stats.stats);
 }
 
-RtcStatsAccumulator summarizeRawStats(const livekit::SessionStats &stats) {
+RtcStatsAccumulator summarizeRawStats(const livekit::SessionStats& stats) {
   RtcStatsAccumulator accumulator;
-  for (const auto &rtc_stats : stats.publisher_stats) {
+  for (const auto& rtc_stats : stats.publisher_stats) {
     accumulateRtcStats(accumulator, rtc_stats);
   }
-  for (const auto &rtc_stats : stats.subscriber_stats) {
+  for (const auto& rtc_stats : stats.subscriber_stats) {
     accumulateRtcStats(accumulator, rtc_stats);
   }
   return accumulator;
 }
 
-const TransportSnapshot *selectTransport(const RtcStatsAccumulator &accumulator) {
+const TransportSnapshot* selectTransport(const RtcStatsAccumulator& accumulator) {
   const auto selected_transport =
       std::find_if(accumulator.transports.begin(), accumulator.transports.end(),
-                   [](const auto &transport) { return !transport.stats.selected_candidate_pair_id.empty(); });
+                   [](const auto& transport) { return !transport.stats.selected_candidate_pair_id.empty(); });
 
   if (selected_transport != accumulator.transports.end()) {
     return &*selected_transport;
@@ -215,9 +215,9 @@ const TransportSnapshot *selectTransport(const RtcStatsAccumulator &accumulator)
   return nullptr;
 }
 
-const CandidatePairSnapshot *findCandidatePairById(const RtcStatsAccumulator &accumulator, const std::string &id) {
+const CandidatePairSnapshot* findCandidatePairById(const RtcStatsAccumulator& accumulator, const std::string& id) {
   const auto selected_pair = std::find_if(accumulator.candidate_pairs.begin(), accumulator.candidate_pairs.end(),
-                                          [&id](const auto &candidate_pair) { return candidate_pair.id == id; });
+                                          [&id](const auto& candidate_pair) { return candidate_pair.id == id; });
 
   if (selected_pair == accumulator.candidate_pairs.end()) {
     return nullptr;
@@ -225,17 +225,17 @@ const CandidatePairSnapshot *findCandidatePairById(const RtcStatsAccumulator &ac
   return &*selected_pair;
 }
 
-const CandidatePairSnapshot *selectCandidatePair(const RtcStatsAccumulator &accumulator,
-                                                 const TransportSnapshot *transport) {
+const CandidatePairSnapshot* selectCandidatePair(const RtcStatsAccumulator& accumulator,
+                                                 const TransportSnapshot* transport) {
   if (transport && !transport->stats.selected_candidate_pair_id.empty()) {
-    if (const auto *selected_pair = findCandidatePairById(accumulator, transport->stats.selected_candidate_pair_id)) {
+    if (const auto* selected_pair = findCandidatePairById(accumulator, transport->stats.selected_candidate_pair_id)) {
       return selected_pair;
     }
   }
 
-  const CandidatePairSnapshot *best_pair = nullptr;
-  for (const auto &candidate_pair : accumulator.candidate_pairs) {
-    const auto &stats = candidate_pair.stats;
+  const CandidatePairSnapshot* best_pair = nullptr;
+  for (const auto& candidate_pair : accumulator.candidate_pairs) {
+    const auto& stats = candidate_pair.stats;
     if (!stats.nominated || stats.state != livekit::IceCandidatePairState::Succeeded) {
       continue;
     }
@@ -258,8 +258,8 @@ std::optional<double> computeBitrate(std::uint64_t previous_bytes, std::uint64_t
          static_cast<double>(elapsed_ms);
 }
 
-void updateBitrates(ConnectionHealthState &state, const CandidatePairSnapshot &candidate_pair) {
-  auto &summary = state.rtc_summary;
+void updateBitrates(ConnectionHealthState& state, const CandidatePairSnapshot& candidate_pair) {
+  auto& summary = state.rtc_summary;
   if (!summary.bytes_sent.has_value() || !summary.bytes_received.has_value()) {
     state.previous_traffic.reset();
     return;
@@ -276,7 +276,7 @@ void updateBitrates(ConnectionHealthState &state, const CandidatePairSnapshot &c
                                                               *summary.bytes_sent, *summary.bytes_received};
 }
 
-ConnectionHealthRtcSummary makeRtcSummary(ConnectionHealthState &state, const livekit::SessionStats &stats) {
+ConnectionHealthRtcSummary makeRtcSummary(ConnectionHealthState& state, const livekit::SessionStats& stats) {
   auto accumulator = summarizeRawStats(stats);
   ConnectionHealthRtcSummary summary;
   summary.stats_available = true;
@@ -285,7 +285,7 @@ ConnectionHealthRtcSummary makeRtcSummary(ConnectionHealthState &state, const li
   summary.data_channels_open = accumulator.data_channels_open;
   summary.data_channels_total = accumulator.data_channels_total;
 
-  const auto *transport = selectTransport(accumulator);
+  const auto* transport = selectTransport(accumulator);
   if (transport) {
     if (transport->stats.ice_state.has_value()) {
       summary.ice_state = valueToString(*transport->stats.ice_state);
@@ -295,7 +295,7 @@ ConnectionHealthRtcSummary makeRtcSummary(ConnectionHealthState &state, const li
     }
   }
 
-  const auto *candidate_pair = selectCandidatePair(accumulator, transport);
+  const auto* candidate_pair = selectCandidatePair(accumulator, transport);
   if (candidate_pair) {
     if (candidate_pair->stats.state.has_value()) {
       summary.candidate_pair_state = valueToString(*candidate_pair->stats.state);
@@ -317,13 +317,13 @@ ConnectionHealthRtcSummary makeRtcSummary(ConnectionHealthState &state, const li
   return state.rtc_summary;
 }
 
-void clearRtcSummary(ConnectionHealthState &state) {
+void clearRtcSummary(ConnectionHealthState& state) {
   state.rtc_summary = ConnectionHealthRtcSummary{};
   state.previous_traffic.reset();
 }
 
-void addRtcSummaryFields(diagnostic_updater::DiagnosticStatusWrapper &status,
-                         const ConnectionHealthRtcSummary &summary) {
+void addRtcSummaryFields(diagnostic_updater::DiagnosticStatusWrapper& status,
+                         const ConnectionHealthRtcSummary& summary) {
   addField(status, "rtc.stats_available", summary.stats_available);
   addOptionalField(status, "rtc.transport.ice_state", summary.ice_state);
   addOptionalField(status, "rtc.transport.dtls_state", summary.dtls_state);
@@ -343,12 +343,12 @@ void addRtcSummaryFields(diagnostic_updater::DiagnosticStatusWrapper &status,
 
 } // namespace
 
-void updateConnectionHealthStatsSnapshot(ConnectionHealthState &state, const livekit::SessionStats &stats) {
+void updateConnectionHealthStatsSnapshot(ConnectionHealthState& state, const livekit::SessionStats& stats) {
   makeRtcSummary(state, stats);
 }
 
-void populateConnectionHealthStatus(const ConnectionHealthState &state,
-                                    diagnostic_updater::DiagnosticStatusWrapper &status) {
+void populateConnectionHealthStatus(const ConnectionHealthState& state,
+                                    diagnostic_updater::DiagnosticStatusWrapper& status) {
   const bool connected = state.kind == ConnectionHealthStateKind::Connected;
 
   if (connected) {
@@ -384,7 +384,7 @@ ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(
   updater_.add("connection_health", this, &ConnectionHealthDiagnostics::populateStatus);
 }
 
-void ConnectionHealthDiagnostics::markConnected(livekit::Room &room) {
+void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_.kind = ConnectionHealthStateKind::Connected;
@@ -402,7 +402,7 @@ void ConnectionHealthDiagnostics::markDisconnected() {
   pending_stats_.reset();
 }
 
-void ConnectionHealthDiagnostics::pollStats(livekit::Room &room) {
+void ConnectionHealthDiagnostics::pollStats(livekit::Room& room) {
   updateStatsFromReadyFuture();
 
   {
@@ -418,7 +418,7 @@ void ConnectionHealthDiagnostics::pollStats(livekit::Room &room) {
     if (state_.kind == ConnectionHealthStateKind::Connected && !pending_stats_.has_value()) {
       pending_stats_ = std::move(stats);
     }
-  } catch (const std::exception &) {
+  } catch (const std::exception&) {
     std::lock_guard<std::mutex> lock(mutex_);
     clearRtcSummary(state_);
     pending_stats_.reset();
@@ -430,18 +430,18 @@ ConnectionHealthState ConnectionHealthDiagnostics::snapshot() const {
   return state_;
 }
 
-void ConnectionHealthDiagnostics::onParticipantConnected(livekit::Room &room,
-                                                         const livekit::ParticipantConnectedEvent &) {
+void ConnectionHealthDiagnostics::onParticipantConnected(livekit::Room& room,
+                                                         const livekit::ParticipantConnectedEvent&) {
   updatePeerCount(room);
 }
 
-void ConnectionHealthDiagnostics::onParticipantDisconnected(livekit::Room &room,
-                                                            const livekit::ParticipantDisconnectedEvent &) {
+void ConnectionHealthDiagnostics::onParticipantDisconnected(livekit::Room& room,
+                                                            const livekit::ParticipantDisconnectedEvent&) {
   updatePeerCount(room);
 }
 
-void ConnectionHealthDiagnostics::onConnectionStateChanged(livekit::Room &room,
-                                                           const livekit::ConnectionStateChangedEvent &event) {
+void ConnectionHealthDiagnostics::onConnectionStateChanged(livekit::Room& room,
+                                                           const livekit::ConnectionStateChangedEvent& event) {
   switch (event.state) {
     case livekit::ConnectionState::Connected:
       markConnected(room);
@@ -455,19 +455,19 @@ void ConnectionHealthDiagnostics::onConnectionStateChanged(livekit::Room &room,
   }
 }
 
-void ConnectionHealthDiagnostics::onDisconnected(livekit::Room &, const livekit::DisconnectedEvent &) {
+void ConnectionHealthDiagnostics::onDisconnected(livekit::Room&, const livekit::DisconnectedEvent&) {
   markDisconnected();
 }
 
-void ConnectionHealthDiagnostics::onReconnecting(livekit::Room &room, const livekit::ReconnectingEvent &) {
+void ConnectionHealthDiagnostics::onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent&) {
   markReconnecting(room);
 }
 
-void ConnectionHealthDiagnostics::onReconnected(livekit::Room &room, const livekit::ReconnectedEvent &) {
+void ConnectionHealthDiagnostics::onReconnected(livekit::Room& room, const livekit::ReconnectedEvent&) {
   markConnected(room);
 }
 
-void ConnectionHealthDiagnostics::onRoomUpdated(livekit::Room &room, const livekit::RoomUpdatedEvent &) {
+void ConnectionHealthDiagnostics::onRoomUpdated(livekit::Room& room, const livekit::RoomUpdatedEvent&) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     state_.room_name = room.roomInfo().name;
@@ -475,16 +475,15 @@ void ConnectionHealthDiagnostics::onRoomUpdated(livekit::Room &room, const livek
   updatePeerCount(room);
 }
 
-void ConnectionHealthDiagnostics::onParticipantsUpdated(livekit::Room &room,
-                                                        const livekit::ParticipantsUpdatedEvent &) {
+void ConnectionHealthDiagnostics::onParticipantsUpdated(livekit::Room& room, const livekit::ParticipantsUpdatedEvent&) {
   updatePeerCount(room);
 }
 
-void ConnectionHealthDiagnostics::populateStatus(diagnostic_updater::DiagnosticStatusWrapper &status) {
+void ConnectionHealthDiagnostics::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
   populateConnectionHealthStatus(snapshot(), status);
 }
 
-void ConnectionHealthDiagnostics::markReconnecting(livekit::Room &room) {
+void ConnectionHealthDiagnostics::markReconnecting(livekit::Room& room) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (state_.kind != ConnectionHealthStateKind::Reconnecting) {
@@ -497,7 +496,7 @@ void ConnectionHealthDiagnostics::markReconnecting(livekit::Room &room) {
   updatePeerCount(room);
 }
 
-void ConnectionHealthDiagnostics::updatePeerCount(livekit::Room &room) {
+void ConnectionHealthDiagnostics::updatePeerCount(livekit::Room& room) {
   const auto num_peers = room.remoteParticipants().size();
   std::lock_guard<std::mutex> lock(mutex_);
   state_.num_peers = num_peers;
@@ -526,7 +525,7 @@ void ConnectionHealthDiagnostics::updateStatsFromReadyFuture() {
     if (state_.kind == ConnectionHealthStateKind::Connected) {
       updateConnectionHealthStatsSnapshot(state_, stats);
     }
-  } catch (const std::exception &) {
+  } catch (const std::exception&) {
     std::lock_guard<std::mutex> lock(mutex_);
     clearRtcSummary(state_);
   }

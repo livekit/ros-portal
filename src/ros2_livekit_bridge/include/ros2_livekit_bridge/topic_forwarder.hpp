@@ -52,7 +52,7 @@ class RemoteDataTrack;
 namespace ros2_livekit_bridge {
 
 /// @brief ROS type string for sensor image topics forwarded as video tracks.
-inline constexpr const char *kImageMsgType = "sensor_msgs/msg/Image";
+inline constexpr const char* kImageMsgType = "sensor_msgs/msg/Image";
 
 /// @brief Default minimum subscription history depth when no publishers exist.
 inline constexpr std::size_t kDefaultMinQosDepth = 1U;
@@ -82,7 +82,7 @@ public:
     /// @brief Track/source height fixed at publication time.
     int height{0};
     /// @brief Capture one video frame with the ROS message timestamp.
-    std::function<void(const livekit::VideoFrame &, std::int64_t)> capture_frame;
+    std::function<void(const livekit::VideoFrame&, std::int64_t)> capture_frame;
   };
 
   /// @brief Topic forwarding options derived from bridge configuration.
@@ -111,11 +111,11 @@ public:
   /// @brief LiveKit-facing callbacks needed by the forwarder.
   struct LiveKitMethods {
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
-    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string &)>
+    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&)>
         publish_data_track;
     /// @brief Create or reuse an outbound LiveKit video track for a ROS image
     /// topic.
-    std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(const std::string &, int, int)>
+    std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(const std::string&, int, int)>
         publish_video_track;
   };
 
@@ -138,10 +138,10 @@ public:
   void onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTrack> track);
 
   /// @brief Stop forwarding a remote LiveKit data track by SID.
-  void onDataTrackUnpublished(const std::string &sid);
+  void onDataTrackUnpublished(const std::string& sid);
 
   /// @brief Check whether a normalized ROS topic is allowed inbound.
-  bool isIncomingTopicAllowed(const std::string &topic_name) const;
+  bool isIncomingTopicAllowed(const std::string& topic_name) const;
 
 private:
 #ifdef BUILD_TESTING
@@ -152,22 +152,22 @@ private:
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
-  std::optional<std::string> liveKitToRosTopicType(const std::string &track_name) const;
+  std::optional<std::string> liveKitToRosTopicType(const std::string& track_name) const;
 
   /// @brief Determine subscription QoS for a ROS topic.
-  rclcpp::QoS determineQoS(const std::string &topic_name) const;
+  rclcpp::QoS determineQoS(const std::string& topic_name) const;
 
   /// @brief Create the appropriate ROS subscriber for @p topic_type.
-  void createSubscriber(const std::string &topic_name, const std::string &topic_type);
+  void createSubscriber(const std::string& topic_name, const std::string& topic_type);
   /// @brief Subscribe to a serialized ROS topic and forward CDR to LiveKit.
-  void createDataSubscriber(const std::string &topic_name, const std::string &topic_type);
+  void createDataSubscriber(const std::string& topic_name, const std::string& topic_type);
   /// @brief Subscribe to a ROS image topic and forward frames to LiveKit.
-  void createImageSubscriber(const std::string &topic_name);
+  void createImageSubscriber(const std::string& topic_name);
 
   /// @brief Stream returned after subscribing to an inbound LiveKit data track.
   struct RemoteDataTrackStream {
     /// @brief Read the next frame. Returns false when the stream ends.
-    std::function<bool(livekit::DataTrackFrame &)> read;
+    std::function<bool(livekit::DataTrackFrame&)> read;
     /// @brief Close the stream and unblock any pending read.
     std::function<void()> close;
     /// @brief Optional terminal error message after read returns false.
@@ -241,7 +241,7 @@ private:
   /// creating it lazily on first use. Must be called with @ref
   /// outbound_topics_mutex_ held.
   /// @return true if a valid writer is available on @p state.
-  bool ensureWriterLocked(const std::string &topic_name, DataTopicState &state);
+  bool ensureWriterLocked(const std::string& topic_name, DataTopicState& state);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
   void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);

@@ -61,11 +61,11 @@ TopicForwarder::TopicForwarderOptions makeOptions() {
 TopicForwarder::LiveKitMethods makeLiveKitMethods() {
   TopicForwarder::LiveKitMethods livekit_methods;
   livekit_methods.publish_data_track =
-      [](const std::string &) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+      [](const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure("unused");
   };
   livekit_methods.publish_video_track =
-      [](const std::string &, int,
+      [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
@@ -86,7 +86,7 @@ protected:
 
   // Spins the node until the ROS graph reflects a predicate (e.g. a freshly
   // created publisher has been discovered) or the timeout elapses.
-  bool spinUntil(const std::function<bool()> &predicate, std::chrono::milliseconds timeout = 2s) {
+  bool spinUntil(const std::function<bool()>& predicate, std::chrono::milliseconds timeout = 2s) {
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node_);
     const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -101,7 +101,7 @@ protected:
     return predicate();
   }
 
-  bool waitForPublishers(const std::string &topic, size_t expected) {
+  bool waitForPublishers(const std::string& topic, size_t expected) {
     return spinUntil([&]() { return node_->get_publishers_info_by_topic(topic).size() == expected; });
   }
 
@@ -200,7 +200,7 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
   TopicForwarder::LiveKitMethods livekit_methods;
   livekit_methods.publish_data_track =
       [push_count](
-          const std::string &) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count](std::vector<std::uint8_t>) {
       push_count->fetch_add(1);
@@ -209,7 +209,7 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
   };
   livekit_methods.publish_video_track =
-      [](const std::string &, int,
+      [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
@@ -221,7 +221,7 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
   TopicForwarder::LiveKitMethods livekit_methods;
   livekit_methods.publish_data_track =
       [push_count, remaining_failures](
-          const std::string &) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count, remaining_failures](std::vector<std::uint8_t>) {
       if (remaining_failures->fetch_sub(1) > 0) {
@@ -233,7 +233,7 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
   };
   livekit_methods.publish_video_track =
-      [](const std::string &, int,
+      [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
@@ -248,7 +248,7 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
   TopicForwarder::LiveKitMethods livekit_methods;
   livekit_methods.publish_data_track =
       [push_count, last_payload](
-          const std::string &) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count, last_payload](std::vector<std::uint8_t> payload) {
       *last_payload = std::move(payload);
@@ -258,7 +258,7 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
   };
   livekit_methods.publish_video_track =
-      [](const std::string &, int,
+      [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
@@ -327,7 +327,7 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   ASSERT_TRUE(spinUntil([&]() { return push_count->load() >= 1; }));
 
   // "second" and "third" arrive within the same 200 ms period and are dropped.
-  for (const auto *text : {"second", "third"}) {
+  for (const auto* text : {"second", "third"}) {
     std_msgs::msg::String msg;
     msg.data = text;
     publisher->publish(msg);
@@ -341,7 +341,7 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   // serialize_message() call omits, so compare deserialized content.
   ASSERT_FALSE(last_payload->empty());
   rclcpp::SerializedMessage serialized(last_payload->size());
-  auto &rcl_msg = serialized.get_rcl_serialized_message();
+  auto& rcl_msg = serialized.get_rcl_serialized_message();
   std::copy(last_payload->begin(), last_payload->end(), rcl_msg.buffer);
   rcl_msg.buffer_length = last_payload->size();
 

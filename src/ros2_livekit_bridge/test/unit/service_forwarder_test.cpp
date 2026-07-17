@@ -30,15 +30,15 @@
 #include <string>
 #include <thread>
 
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
-#include "ros2_livekit_bridge/ros2_cli/json_converters.hpp"
+#include "ros2_livekit_bridge/cli/constants.hpp"
+#include "ros2_livekit_bridge/cli/json_converters.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {
 
 using namespace std::chrono_literals;
 
-bool waitForService(rclcpp::Node &node, const std::string &service_name, std::chrono::milliseconds timeout = 2s) {
+bool waitForService(rclcpp::Node& node, const std::string& service_name, std::chrono::milliseconds timeout = 2s) {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   while (std::chrono::steady_clock::now() < deadline) {
     if (node.get_service_names_and_types().count(service_name) > 0U) {
@@ -51,7 +51,7 @@ bool waitForService(rclcpp::Node &node, const std::string &service_name, std::ch
 
 class ScopedExecutorSpin {
 public:
-  explicit ScopedExecutorSpin(rclcpp::executors::SingleThreadedExecutor &executor)
+  explicit ScopedExecutorSpin(rclcpp::executors::SingleThreadedExecutor& executor)
       : executor_(executor), spin_thread_([&executor]() { executor.spin(); }) {}
 
   ~ScopedExecutorSpin() {
@@ -61,11 +61,11 @@ public:
     }
   }
 
-  ScopedExecutorSpin(const ScopedExecutorSpin &) = delete;
-  ScopedExecutorSpin &operator=(const ScopedExecutorSpin &) = delete;
+  ScopedExecutorSpin(const ScopedExecutorSpin&) = delete;
+  ScopedExecutorSpin& operator=(const ScopedExecutorSpin&) = delete;
 
 private:
-  rclcpp::executors::SingleThreadedExecutor &executor_;
+  rclcpp::executors::SingleThreadedExecutor& executor_;
   std::thread spin_thread_;
 };
 
@@ -81,8 +81,8 @@ struct FakeLiveKit {
 
   ServiceForwarder::LiveKitMethods methods() {
     ServiceForwarder::LiveKitMethods methods;
-    methods.has_participant = [this](const std::string &) { return has_participant; };
-    methods.perform_rpc = [this](const std::string &participant, const std::string &method, const std::string &payload,
+    methods.has_participant = [this](const std::string&) { return has_participant; };
+    methods.perform_rpc = [this](const std::string& participant, const std::string& method, const std::string& payload,
                                  std::uint8_t) -> std::optional<std::string> {
       ++rpc_calls;
       last_participant = participant;
@@ -94,7 +94,7 @@ struct FakeLiveKit {
   }
 };
 
-ServiceForwarder::ServiceRoute setBoolRoute(const std::string &service_name = "/service_forwarder/set_bool") {
+ServiceForwarder::ServiceRoute setBoolRoute(const std::string& service_name = "/service_forwarder/set_bool") {
   return ServiceForwarder::ServiceRoute{
       service_name,
       "std_srvs/srv/SetBool",
@@ -102,7 +102,7 @@ ServiceForwarder::ServiceRoute setBoolRoute(const std::string &service_name = "/
   };
 }
 
-std_srvs::srv::SetBool::Response::SharedPtr callSetBool(rclcpp::Node &node, const std::string &service_name,
+std_srvs::srv::SetBool::Response::SharedPtr callSetBool(rclcpp::Node& node, const std::string& service_name,
                                                         bool data) {
   auto client = node.create_client<std_srvs::srv::SetBool>(service_name);
   if (!client->wait_for_service(2s)) {
@@ -141,7 +141,7 @@ TEST_F(ServiceForwarderTest, ForwardsSetBoolRequestAndPopulatesResponse) {
   EXPECT_EQ(response->message, "enabled");
   EXPECT_EQ(livekit.rpc_calls, 1);
   EXPECT_EQ(livekit.last_participant, "robot-b");
-  EXPECT_EQ(livekit.last_method, ros2_cli::kServiceCallRpcMethod);
+  EXPECT_EQ(livekit.last_method, cli::kServiceCallRpcMethod);
 
   const auto payload = nlohmann::json::parse(livekit.last_payload);
   EXPECT_EQ(payload.at("service"), "/service_forwarder/set_bool");

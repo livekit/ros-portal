@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -335,14 +336,19 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
 
   EXPECT_EQ(push_count->load(), 1);
 
-  // The forwarded payload must be the CDR encoding of the first sample.
-  rclcpp::Serialization<std_msgs::msg::String> serializer;
-  rclcpp::SerializedMessage expected;
-  serializer.serialize_message(&first_msg, &expected);
-  const auto &expected_rcl = expected.get_rcl_serialized_message();
-  const std::vector<std::uint8_t> expected_bytes(expected_rcl.buffer, expected_rcl.buffer + expected_rcl.buffer_length);
+  // The forwarded payload must decode to the first sample. Generic
+  // subscriptions may include trailing CDR alignment padding that a direct
+  // serialize_message() call omits, so compare deserialized content.
+  ASSERT_FALSE(last_payload->empty());
+  rclcpp::SerializedMessage serialized(last_payload->size());
+  auto &rcl_msg = serialized.get_rcl_serialized_message();
+  std::copy(last_payload->begin(), last_payload->end(), rcl_msg.buffer);
+  rcl_msg.buffer_length = last_payload->size();
 
-  EXPECT_EQ(*last_payload, expected_bytes);
+  rclcpp::Serialization<std_msgs::msg::String> serializer;
+  std_msgs::msg::String forwarded_msg;
+  serializer.deserialize_message(&serialized, &forwarded_msg);
+  EXPECT_EQ(forwarded_msg.data, first_msg.data);
 }
 
 // Once a period elapses, the next arriving sample is forwarded again. An idle

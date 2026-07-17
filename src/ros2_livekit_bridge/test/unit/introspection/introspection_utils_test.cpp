@@ -27,14 +27,14 @@
 #include <test_msgs/msg/nested.hpp>
 #include <test_msgs/msg/strings.hpp>
 
+#include "ros2_livekit_bridge/cli/constants.hpp"
 #include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge::introspection {
 namespace {
 
-using ros2_livekit_bridge::ros2_cli::kMaxResizableSequenceLength;
-using ros2_livekit_bridge::ros2_cli::kMaxYamlPayloadBytes;
+using ros2_livekit_bridge::cli::kMaxResizableSequenceLength;
+using ros2_livekit_bridge::cli::kMaxYamlPayloadBytes;
 
 std::string buildIntegerSequencePayload(const std::size_t count) {
   std::string payload = "[";

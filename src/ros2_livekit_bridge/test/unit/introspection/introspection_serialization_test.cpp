@@ -35,8 +35,8 @@
 #include <test_msgs/msg/strings.hpp>
 #include <test_msgs/msg/w_strings.hpp>
 
+#include "ros2_livekit_bridge/cli/constants.hpp"
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
-#include "ros2_livekit_bridge/ros2_cli/constants.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {
@@ -262,7 +262,7 @@ TEST(YamlMessageTest, RejectsEmptyPayload) { expectFailure("std_msgs/msg/String"
 TEST(YamlMessageTest, RejectsOversizedPayload) {
   // Payloads larger than the cap are rejected before any YAML parsing or
   // message allocation occurs.
-  const std::string payload(ros2_cli::kMaxYamlPayloadBytes + 1U, 'a');
+  const std::string payload(cli::kMaxYamlPayloadBytes + 1U, 'a');
   expectFailure("std_msgs/msg/String", payload);
 }
 
@@ -271,8 +271,8 @@ TEST(YamlMessageTest, RejectsOversizedResizableSequence) {
   // storage is grown. The compact "0," encoding keeps the payload itself well
   // under kMaxYamlPayloadBytes so the sequence-length guard is what trips.
   std::string payload = "{data: [";
-  payload.reserve((ros2_cli::kMaxResizableSequenceLength + 2U) * 2U + 16U);
-  for (std::size_t index = 0; index <= ros2_cli::kMaxResizableSequenceLength; ++index) {
+  payload.reserve((cli::kMaxResizableSequenceLength + 2U) * 2U + 16U);
+  for (std::size_t index = 0; index <= cli::kMaxResizableSequenceLength; ++index) {
     payload += "0,";
   }
   payload += "0]}";

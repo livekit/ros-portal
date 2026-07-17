@@ -23,14 +23,12 @@ ENV WS=/${WS_ROS}
 WORKDIR ${WS}
 
 RUN apt-get update && apt-get install -y \
-    ca-certificates \
     python3-jinja2 \
     python3-pip \
     python3-opencv \
     python3-vcstool \
     git \
     git-lfs \
-    gnupg \
     zsh \
     nano \
     iputils-ping \
@@ -38,23 +36,7 @@ RUN apt-get update && apt-get install -y \
     openssh-client \
     clangd \
     curl \
-    jq \
-    wget
-
-# Keep local and CI C++ tooling on the same versions.
-RUN install -m 0755 -d /etc/apt/keyrings \
- && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
-    | gpg --batch --yes --dearmor -o /etc/apt/keyrings/llvm.gpg \
- && . /etc/os-release \
- && echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-19 main" \
-    > /etc/apt/sources.list.d/llvm-19.list \
- && echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-22 main" \
-    > /etc/apt/sources.list.d/llvm-22.list \
- && apt-get update \
- && apt-get install -y clang-format-22 clang-tidy-19 clang-tools-19 \
- && ln -sf /usr/bin/clang-format-22 /usr/local/bin/clang-format \
- && ln -sf /usr/bin/clang-tidy-19 /usr/local/bin/clang-tidy \
- && ln -sf /usr/bin/run-clang-tidy-19 /usr/local/bin/run-clang-tidy
+    jq
 
 RUN git lfs install --system
 

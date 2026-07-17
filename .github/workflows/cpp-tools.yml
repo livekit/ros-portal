@@ -26,71 +26,117 @@ jobs:
   clang-format:
     name: clang-format
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          submodules: recursive
           fetch-depth: 1
 
-      - name: Prepare devcontainer SSH agent mount
-        run: touch /tmp/devcontainer-empty-ssh-agent
+      - name: Initialize cpp-tools
+        run: git submodule update --init cpp-tools
 
-      - name: Run clang-format in devcontainer
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+      - name: Install shared clang-format configuration
+        run: ./cpp-tools/install.sh clang-format --repo-root "$GITHUB_WORKSPACE" --force
+
+      - name: Install clang-format 22
+        run: |
+          set -eux
+          sudo install -m 0755 -d /etc/apt/keyrings
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/keyrings/llvm.asc >/dev/null
+          sudo chmod a+r /etc/apt/keyrings/llvm.asc
+          codename=$(lsb_release -cs)
+          echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y clang-format-22
+          sudo ln -sf /usr/bin/clang-format-22 /usr/local/bin/clang-format
+          clang-format --version
+
+      - name: Run clang-format
         env:
-          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          configFile: .devcontainer/devcontainer.json
-          env: |
-            FORMAT_BLOB_SHA=${{ github.event.pull_request.head.sha || github.sha }}
-            GITHUB_ACTIONS=true
-            GITHUB_REPOSITORY=${{ github.repository }}
-            GITHUB_SERVER_URL=${{ github.server_url }}
-            GITHUB_SHA=${{ github.sha }}
-          push: never
-          runCmd: ./scripts/clang-format.sh
+          FORMAT_BLOB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./scripts/clang-format.sh
 
   clang-tidy:
     name: clang-tidy
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 45
 
     steps:
-      - name: Check out repository
+      - name: Checkout with submodules
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Prepare devcontainer SSH agent mount
-        run: touch /tmp/devcontainer-empty-ssh-agent
+      - name: Install shared clang-tidy configuration
+        run: ./cpp-tools/install.sh clang-tidy --repo-root "$GITHUB_WORKSPACE" --force
 
-      - name: Run clang-tidy in devcontainer
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+      - name: Install project dependencies
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y \
+            ca-certificates curl gnupg software-properties-common wget
+          sudo add-apt-repository -y universe
+          sudo curl -sSL \
+            https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+            -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME}") main" \
+            | sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang cmake jq libclang-dev libcurl4-openssl-dev \
+            libssl-dev llvm-dev ninja-build pkg-config \
+            python3-colcon-common-extensions python3-rosdep python3-vcstool \
+            ros-jazzy-ros-base
+          if [[ ! -e /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
+            sudo rosdep init
+          fi
+          rosdep update --rosdistro jazzy
+          mkdir -p src/externals
+          vcs import --skip-existing src/externals < external.repos
+          rosdep install \
+            --from-paths \
+              src/ros2_livekit_bridge \
+              src/ros2_livekit_bridge_config \
+              src/ros2_livekit_bridge_msgs \
+              src/externals/ros2_medkit/src/ros2_medkit_cmake \
+              src/externals/ros2_medkit/src/ros2_medkit_serialization \
+            --ignore-src -r -y --rosdistro jazzy \
+            --skip-keys ament_cmake_clang_tidy
+
+      - name: Install clang-tidy 19
+        run: |
+          set -eux
+          sudo install -m 0755 -d /etc/apt/keyrings
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/keyrings/llvm.asc >/dev/null
+          sudo chmod a+r /etc/apt/keyrings/llvm.asc
+          codename=$(lsb_release -cs)
+          echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-19 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-19.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy-19 clang-tools-19
+          sudo ln -sf /usr/bin/clang-tidy-19 /usr/local/bin/clang-tidy
+          sudo ln -sf /usr/bin/run-clang-tidy-19 /usr/local/bin/run-clang-tidy
+          clang-tidy --version
+          run-clang-tidy --help >/dev/null
+
+      - name: Configure compilation database
+        run: |
+          set -eo pipefail
+          source /opt/ros/jazzy/setup.bash
+          set -u
+          colcon build \
+            --packages-up-to ros2_livekit_bridge \
+            --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
+          jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
+
+      - name: Run clang-tidy
         env:
-          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          configFile: .devcontainer/devcontainer.json
-          env: |
-            GITHUB_ACTIONS=true
-            GITHUB_REPOSITORY=${{ github.repository }}
-            GITHUB_SERVER_URL=${{ github.server_url }}
-            GITHUB_SHA=${{ github.sha }}
-            TIDY_BLOB_SHA=${{ github.event.pull_request.head.sha || github.sha }}
-          push: never
-          runCmd: |
-            bash -lc '
-              set -eo pipefail
-              source /opt/ros/jazzy/setup.bash
-              set -u
-              colcon build \
-                --packages-up-to ros2_livekit_bridge \
-                --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
-              jq -s "add" build/*/compile_commands.json > build/compile_commands.json
-              ./scripts/clang-tidy.sh
-            '
+          TIDY_BLOB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./scripts/clang-tidy.sh

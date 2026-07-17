@@ -1,4 +1,8 @@
 repositories:
+  cpp-tools:
+    type: git
+    url: https://github.com/livekit/cpp-tools.git
+    version: a3659e4f10ce06fd031817ea8c8131747f9bef3e  # v0.0.1
   ros2_medkit:
     type: git
     url: https://github.com/selfpatch/ros2_medkit.git

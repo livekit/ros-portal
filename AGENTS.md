@@ -3,6 +3,19 @@
 This repository is a ROS2 workspace. Keep changes small, idiomatic, and aligned
 with existing package structure.
 
+## Shared C++ Baseline
+
+Follow `src/externals/cpp-tools/AGENTS.md` for shared C++ rules and this file
+for SDK-specific guidance.
+
+Before C++ work, verify the shared guidance and root `.clang-format` /
+`.clang-tidy` symlinks are present. If not, flag it and recommend
+`vcs import src/externals < external.repos` or
+`./src/externals/cpp-tools/install.sh --repo-root .` as appropriate. Never use
+`--force` without approval or claim tooling verification while these
+prerequisites are missing. Project-specific commands are documented in
+`docs/tools.md`.
+
 ## Build And Dependencies
 
 - Prefer `ament_cmake_auto` and the `ament_auto_*` helpers for ROS2 CMake
@@ -51,10 +64,3 @@ with existing package structure.
   key configuration, and verification steps without duplicating implementation
   details.
 - If new configuration fields are added, update the documentation in `docs/CONFIGURATION.md`.
-
-## Style
-
-- Follow ROS2 formatting and linting standards.
-- Add the LiveKit copyright header with the correct year to new code files.
-- Prefer the constructor initializer list rather than variable declaration and assignment in the constructor body.
-- Prefer to not throw exceptions, instead use Result<T, E> for error handling when both success and error cases are possible.

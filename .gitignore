@@ -66,5 +66,11 @@ local-sdk-*/
 # Machine-specific devcontainer settings (e.g. macOS SSH agent path)
 .devcontainer/.env
 
+# Installed by cpp-tools/install.sh
+.clang-format
+.clang-tidy
+clang-format.log
+clang-tidy.log
+
 # Agents
 .claude/

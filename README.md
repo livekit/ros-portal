@@ -121,14 +121,39 @@ colcon build --packages-select ros2_livekit_bridge \
 If you build the SDK locally for use with this workspace, build the SDK itself
 with `-DLIVEKIT_USE_SYSTEM_SPDLOG=ON`.
 
-### Formatting
-ROS2 uses the ament_clang_format tool to format code. Style is defined in
-`.clang-format` at the workspace root. It can be run with:
+### C++ tools
+
+`clang-format` and `clang-tidy` use the scripts and configuration provided by
+the `cpp-tools` repository pinned in `external.repos`. The repository-owned CI
+workflow prepares the required tools and ROS dependencies directly on the
+runner. Import the external repositories and install the shared configuration
+links after cloning outside the devcontainer:
+
 ```bash
-ament_clang_format --config .clang-format --reformat src/ros2_livekit_bridge src/ros2_livekit_bridge_config
+mkdir -p src/externals
+vcs import --recursive src/externals < external.repos
+./src/externals/cpp-tools/install.sh --repo-root .
 ```
 
-Or use the devcontainer helper: `ament_clang`
+Run the formatter locally with:
+
+```bash
+./scripts/clang-format.sh
+./scripts/clang-format.sh --fix
+```
+
+After building with compile commands enabled, combine the package databases and
+run clang-tidy through the project wrapper:
+
+```bash
+jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
+./scripts/clang-tidy.sh
+```
+
+Both project wrappers own this repository's paths and filters, then forward to
+the shared `src/externals/cpp-tools` implementations. The devcontainer installs
+the shared configuration links and the same clang-format and clang-tidy major
+versions used in CI automatically.
 
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.

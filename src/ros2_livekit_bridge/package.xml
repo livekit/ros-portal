@@ -31,6 +31,8 @@
   <depend>nlohmann-json-dev</depend>
   <depend>rclcpp</depend>
   <depend>ros2_medkit_serialization</depend>
+  <depend>rosbag2_cpp</depend>
+  <depend>rosbag2_storage</depend>
   <depend>ros2_livekit_bridge_config</depend>
   <depend>ros2_livekit_bridge_msgs</depend>
   <depend>rosidl_typesupport_cpp</depend>

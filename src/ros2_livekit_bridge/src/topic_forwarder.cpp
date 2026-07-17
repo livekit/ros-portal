@@ -157,7 +157,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  auto callback = [this, topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg) {
     auto& rcl_msg = msg->get_rcl_serialized_message();
 
     std::shared_ptr<DataTrackWriter> writer;
@@ -188,7 +188,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
         state.last_forward_time = now;
       }
 
-      if (!ensureWriterLocked(topic_name, state)) {
+      if (!ensureWriterLocked(topic_name, topic_type, state)) {
         return;
       }
       writer = state.writer;
@@ -237,12 +237,13 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (CDR)", topic_name.c_str(), topic_type.c_str());
 }
 
-bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, DataTopicState& state) {
+bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std::string& topic_type,
+                                        DataTopicState& state) {
   if (state.writer) {
     return true;
   }
 
-  const auto writer_result = livekit_methods_.publish_data_track(topic_name);
+  const auto writer_result = livekit_methods_.publish_data_track(topic_name, topic_type);
   if (!writer_result) {
     RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
                  writer_result.error().c_str());

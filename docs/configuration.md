@@ -213,3 +213,22 @@ topics:
 | `codec` | string | no | Video codec name. Must be non-empty when set. |
 
 Audio options are not part of config version `0.0.1`.
+
+## Data Track Schema Metadata
+
+Outgoing ROS topics forwarded as LiveKit data tracks advertise their ROS2
+message schema automatically. No additional configuration fields are required.
+For each outgoing data topic the bridge:
+
+1. Uses `rosbag2_cpp::LocalMessageDefinitionSource` to collapse the root `.msg`
+   definition and all dependencies into one MCAP-format text blob.
+2. Passes that text unchanged to `LocalParticipant::defineSchema()`, keyed by
+   the ROS type and schema encoding.
+3. Publishes the data track with `DataTrackFrameEncoding::Cdr` and the matching
+   schema identifier.
+
+The bridge must be built with the temporary schema-capable SDK artifact
+described in the repository [README](../README.md#working-in-the-container).
+End-to-end schema delivery also requires a compatible `livekit-server` with
+participant data blobs enabled (`enable_participant_data_blob: true`, or the
+`--enable_participant_data_blob` CLI flag).

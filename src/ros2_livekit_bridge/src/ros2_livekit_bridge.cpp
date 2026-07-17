@@ -16,6 +16,8 @@
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 
+#include <livekit/data_track_options.h>
+#include <livekit/data_track_schema.h>
 #include <livekit/data_track_stream.h>
 #include <livekit/livekit.h>
 #include <livekit/local_data_track.h>
@@ -28,7 +30,9 @@
 #include <livekit/video_source.h>
 
 #include <chrono>
+#include <exception>
 #include <filesystem>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -39,9 +43,31 @@
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/config_mapping.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
+#include "ros2_livekit_bridge/utils/schema_text.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 namespace ros2_livekit_bridge {
+
+namespace {
+
+livekit::DataTrackSchemaEncoding schemaEncodingFromRosDefinition(const std::string& encoding) {
+  if (encoding == "ros2idl") {
+    return livekit::DataTrackSchemaEncoding::Ros2Idl;
+  }
+  if (encoding == "ros2msg") {
+    return livekit::DataTrackSchemaEncoding::Ros2Msg;
+  }
+  if (!encoding.empty() && encoding.size() <= 25U) {
+    return livekit::DataTrackSchemaEncoding::custom(encoding);
+  }
+  return livekit::DataTrackSchemaEncoding::Ros2Msg;
+}
+
+std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding) {
+  return encoding + "\n" + topic_type;
+}
+
+} // namespace
 
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros2_livekit_bridge", options),
@@ -282,7 +308,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
                                                           best_effort_qos_topics, this->get_logger());
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
-    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name)
+    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name, const std::string& topic_type)
         -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
@@ -290,7 +316,38 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
             "local participant is unavailable");
       }
 
-      const auto publish_result = participant->publishDataTrack(topic_name);
+      const auto publish_result = [&]() {
+        const auto schema = utils::renderRosMessageSchema(topic_type);
+        if (schema) {
+          const livekit::DataTrackSchemaId schema_id{
+              topic_type,
+              schemaEncodingFromRosDefinition(schema->encoding),
+          };
+          const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
+          {
+            std::lock_guard<std::mutex> lock(defined_schema_ids_mutex_);
+            if (defined_schema_ids_.count(dedupe_key) == 0U) {
+              try {
+                participant->defineSchema(schema_id, schema->text);
+                defined_schema_ids_.insert(dedupe_key);
+              } catch (const std::exception& error) {
+                RCLCPP_WARN(this->get_logger(), "Failed to define schema for '%s' [%s]: %s", topic_name.c_str(),
+                            topic_type.c_str(), error.what());
+              }
+            }
+          }
+
+          livekit::DataTrackPublishOptions options;
+          options.name = topic_name;
+          options.schema = schema_id;
+          options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+          return participant->publishDataTrack(options);
+        }
+
+        RCLCPP_WARN_ONCE(this->get_logger(), "Publishing data track '%s' [%s] without schema metadata",
+                         topic_name.c_str(), topic_type.c_str());
+        return participant->publishDataTrack(topic_name);
+      }();
       if (!publish_result) {
         const auto& error = publish_result.error();
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(

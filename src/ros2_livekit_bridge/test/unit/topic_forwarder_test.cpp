@@ -61,7 +61,8 @@ TopicForwarder::Options makeOptions() {
 TopicForwarder::LiveKitMethods makeLiveKitMethods() {
   TopicForwarder::LiveKitMethods livekit_methods;
   livekit_methods.publish_data_track =
-      [](const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+      [](const std::string&,
+         const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure("unused");
   };
   livekit_methods.publish_video_track =
@@ -198,9 +199,8 @@ TopicForwarder::Options makeRateCapOptions(std::optional<double> max_rate_hz) {
 // LiveKit callbacks whose data-track writer counts every forwarded payload.
 TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count) {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [push_count](
-          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [push_count](const std::string&, const std::string&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count](std::vector<std::uint8_t>) {
       push_count->fetch_add(1);
@@ -219,9 +219,8 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
 TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count,
                                                        std::shared_ptr<std::atomic<int>> remaining_failures) {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [push_count, remaining_failures](
-          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [push_count, remaining_failures](const std::string&, const std::string&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count, remaining_failures](std::vector<std::uint8_t>) {
       if (remaining_failures->fetch_sub(1) > 0) {
@@ -246,9 +245,8 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
 TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count,
                                                            std::shared_ptr<std::vector<std::uint8_t>> last_payload) {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [push_count, last_payload](
-          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [push_count, last_payload](const std::string&, const std::string&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count, last_payload](std::vector<std::uint8_t> payload) {
       *last_payload = std::move(payload);

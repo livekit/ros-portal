@@ -65,6 +65,7 @@ RUN git lfs install --system
 RUN curl -sSL https://get.livekit.io/cli | bash
 
 RUN apt-get update && apt-get install -y \
+    ros-${ROS_DISTRO}-example-interfaces \
     ros-${ROS_DISTRO}-test-msgs
 
 RUN apt-get update && apt-get install -y \

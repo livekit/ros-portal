@@ -111,7 +111,8 @@ public:
   /// @brief LiveKit-facing callbacks needed by the forwarder.
   struct LiveKitMethods {
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
-    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&)>
+    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&,
+                                                                                 const std::string&)>
         publish_data_track;
     /// @brief Create or reuse an outbound LiveKit video track for a ROS image
     /// topic.
@@ -240,8 +241,11 @@ private:
   /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,
   /// creating it lazily on first use. Must be called with @ref
   /// outbound_topics_mutex_ held.
+  /// @param topic_name ROS topic name used for the LiveKit track.
+  /// @param topic_type ROS message type used for schema metadata.
+  /// @param state Per-topic state that stores the lazily created writer.
   /// @return true if a valid writer is available on @p state.
-  bool ensureWriterLocked(const std::string& topic_name, DataTopicState& state);
+  bool ensureWriterLocked(const std::string& topic_name, const std::string& topic_type, DataTopicState& state);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
   void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);

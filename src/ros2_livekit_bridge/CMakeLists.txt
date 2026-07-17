@@ -33,6 +33,8 @@ ament_auto_find_build_dependencies(REQUIRED
   geometry_msgs
   rclcpp
   ros2_medkit_serialization
+  rosbag2_cpp
+  rosbag2_storage
   ros2_livekit_bridge_config
   ros2_livekit_bridge_msgs
   rosidl_typesupport_cpp
@@ -42,15 +44,14 @@ ament_auto_find_build_dependencies(REQUIRED
   yaml_cpp_vendor)
 
 # ---------------------------------------------------------------------------
-# LiveKit SDK install
+# Temporary LiveKit schema SDK artifact
 #
-# Use a local install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release
-# asset from GitHub. By default, a pinned SDK version is downloaded (see
-# LIVEKIT_SDK_VERSION below). The same pin is mirrored in this package's
-# colcon.pkg so that a bare `colcon build` is reproducible without the pin
-# leaking into other packages' CMake invocations.
+# This feature branch consumes the pinned successful Linux artifact downloaded
+# by tools/fetch-livekit-sdk-artifact.sh. LIVEKIT_LOCAL_SDK_DIR may override the
+# default cache path with either another raw CI artifact or an installed SDK.
 #
 # Examples:
+#   tools/fetch-livekit-sdk-artifact.sh
 #   colcon build --packages-select ros2_livekit_bridge
 #
 #   export LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk
@@ -61,38 +62,45 @@ ament_auto_find_build_dependencies(REQUIRED
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "1.1.1" CACHE STRING
-  "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
+set(_livekit_artifact_default
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../.cache/livekit-sdk/current")
+if(DEFINED ENV{LIVEKIT_LOCAL_SDK_DIR} AND
+    NOT "$ENV{LIVEKIT_LOCAL_SDK_DIR}" STREQUAL "")
+  set(_livekit_sdk_default "$ENV{LIVEKIT_LOCAL_SDK_DIR}")
+else()
+  set(_livekit_sdk_default "${_livekit_artifact_default}")
+endif()
+
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
   "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
-set(LIVEKIT_LOCAL_SDK_DIR "$ENV{LIVEKIT_LOCAL_SDK_DIR}" CACHE PATH
-  "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}.")
+set(LIVEKIT_LOCAL_SDK_DIR "${_livekit_sdk_default}" CACHE PATH
+  "Path to the schema-capable LiveKit SDK artifact or install prefix.")
 
-if(LIVEKIT_SDK_DIR AND NOT LIVEKIT_LOCAL_SDK_DIR)
+if(LIVEKIT_SDK_DIR AND
+    (NOT DEFINED ENV{LIVEKIT_LOCAL_SDK_DIR} OR
+     "$ENV{LIVEKIT_LOCAL_SDK_DIR}" STREQUAL ""))
   message(STATUS
     "LIVEKIT_SDK_DIR is deprecated; treating it as LIVEKIT_LOCAL_SDK_DIR")
   set(LIVEKIT_LOCAL_SDK_DIR "${LIVEKIT_SDK_DIR}" CACHE PATH
-    "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}."
+    "Path to the schema-capable LiveKit SDK artifact or install prefix."
     FORCE)
 endif()
 
-if(LIVEKIT_LOCAL_SDK_DIR)
-  if(NOT EXISTS "${LIVEKIT_LOCAL_SDK_DIR}")
-    message(FATAL_ERROR
-      "LIVEKIT_LOCAL_SDK_DIR does not exist: ${LIVEKIT_LOCAL_SDK_DIR}")
-  endif()
-  message(STATUS "Using local LiveKit SDK: ${LIVEKIT_LOCAL_SDK_DIR}")
-  list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
-else()
-  include(LiveKitSDK)
-  livekit_sdk_setup(
-    VERSION "${LIVEKIT_SDK_VERSION}"
-    SDK_DIR "${CMAKE_BINARY_DIR}/_deps/livekit-sdk"
-    GITHUB_TOKEN "$ENV{GITHUB_TOKEN}"
-  )
+if(NOT EXISTS "${LIVEKIT_LOCAL_SDK_DIR}")
+  message(FATAL_ERROR
+    "Schema-capable LiveKit SDK artifact not found at:\n"
+    "  ${LIVEKIT_LOCAL_SDK_DIR}\n"
+    "Run tools/fetch-livekit-sdk-artifact.sh on the host.")
 endif()
 
-find_package(LiveKit CONFIG REQUIRED)
+if(EXISTS "${LIVEKIT_LOCAL_SDK_DIR}/lib/cmake/LiveKit/LiveKitConfig.cmake")
+  list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
+  find_package(LiveKit CONFIG REQUIRED)
+else()
+  include(LiveKitArtifact)
+  livekit_import_artifact("${LIVEKIT_LOCAL_SDK_DIR}")
+endif()
+
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -181,11 +189,7 @@ else()
 endif()
 
 message(STATUS "LiveKit core target   : ${LIVEKIT_CORE_TARGET}")
-if(LIVEKIT_LOCAL_SDK_DIR)
-  message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_LOCAL_SDK_DIR}")
-else()
-  message(STATUS "LiveKit SDK version   : ${LIVEKIT_SDK_VERSION}")
-endif()
+message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_LOCAL_SDK_DIR}")
 
 # ---------------------------------------------------------------------------
 # Introspection library
@@ -235,6 +239,7 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/utils/config_mapping.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
+  src/utils/schema_text.cpp
   src/utils/topic_matcher.cpp
 )
 target_link_libraries(ros2_livekit_bridge_lib

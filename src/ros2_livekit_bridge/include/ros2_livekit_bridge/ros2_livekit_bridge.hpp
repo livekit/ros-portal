@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
@@ -190,6 +191,10 @@ private:
   std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.
   rclcpp::TimerBase::SharedPtr connection_stats_timer_;
+  //! @brief Protects schema registration deduplication across data topic callbacks.
+  std::mutex defined_schema_ids_mutex_;
+  //! @brief ROS message schema IDs for which defineSchema has already been called.
+  std::unordered_set<std::string> defined_schema_ids_;
 };
 
 } // namespace ros2_livekit_bridge

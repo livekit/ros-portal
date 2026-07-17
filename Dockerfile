@@ -61,7 +61,6 @@ RUN apt-get update && apt-get install -y \
 
 # ros-livekit-bridge dependencies
 RUN apt-get update && apt-get install -y \
-    ros-${ROS_DISTRO}-ament-cmake-clang-format \
     ros-${ROS_DISTRO}-rosx-introspection \
     ros-${ROS_DISTRO}-foxglove-bridge \
  && rm -rf /var/lib/apt/lists/*

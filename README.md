@@ -135,12 +135,21 @@ git submodule update --init cpp-tools
 Run the formatter locally with:
 
 ```bash
-ament_clang_format --config .clang-format --reformat \
-  src/ros2_livekit_bridge \
-  src/ros2_livekit_bridge_config
+./scripts/clang-format.sh
+./scripts/clang-format.sh --fix
 ```
 
-The devcontainer installs the shared configuration links automatically.
+After building with compile commands enabled, combine the package databases and
+run clang-tidy through the project wrapper:
+
+```bash
+jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
+./scripts/clang-tidy.sh
+```
+
+Both project wrappers own this repository's paths and filters, then forward to
+the shared `cpp-tools` implementations. The devcontainer installs the shared
+configuration links automatically.
 
 ## Simulation and display forwarding
 DISPLAY FORWARDING NOT YET SET UP.

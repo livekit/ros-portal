@@ -46,16 +46,10 @@ alias bros='cd "\${WS}" && colcon build'
 alias dros='cd "\${WS}" && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
 alias sros='_source_ros_env && _source_ws_overlay'
 
-# Helper for running ament_clang_format within the devcontainer
-ament_clang()
+# Helper for running the project clang-format wrapper within the devcontainer
+clang_format()
 {
-    cd "\${WS}" && sros
-    if [ "\$#" -eq 0 ]; then
-        ament_clang_format --config "\${WS}/.clang-format" --reformat \
-            src/ros2_livekit_bridge src/ros2_livekit_bridge_config
-    else
-        ament_clang_format --config "\${WS}/.clang-format" --reformat "\$@"
-    fi
+    cd "\${WS}" && ./scripts/clang-format.sh --fix "\$@"
 }
 
 cbpu()

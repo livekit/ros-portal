@@ -32,13 +32,14 @@ jobs:
   cpp-tools:
     name: C++ Tools
     # Keep this immutable ref aligned with the cpp-tools submodule gitlink.
-    uses: livekit/cpp-tools/.github/workflows/cpp-tools.yml@28286583b59ab4f7d2690ac4748f749783344d41
+    uses: livekit/cpp-tools/.github/workflows/cpp-tools.yml@707762771f079e0932c8c6a123e943a4b2fefe32
     with:
       clang_format: true
       clang_tidy: true
       clang_tidy_fail_on_warning: false
       checkout_submodules: recursive
-      clang_format_paths: src/ros2_livekit_bridge src/ros2_livekit_bridge_config
+      clang_format_runner: scripts/clang-format.sh
+      clang_tidy_runner: scripts/clang-tidy.sh
       clang_tidy_dependencies_command: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -78,10 +79,6 @@ jobs:
           --packages-up-to ros2_livekit_bridge \
           --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
         jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
-      clang_tidy_build_dir: build
-      clang_tidy_file_regex: '^.*/src/(ros2_livekit_bridge|ros2_livekit_bridge_config)/src/.*\.(c|cc|cpp|cxx)$'
-      clang_tidy_header_filter: '^.*/src/(ros2_livekit_bridge|ros2_livekit_bridge_config)/(include|src)/.*\.(h|hh|hpp|hxx)$'
-      clang_tidy_exclude_header_filter: '(.*/test/.*)|(.*/build/.*)|(.*/install/.*)|(.*/src/externals/.*)'
 
   build-and-test:
     strategy:

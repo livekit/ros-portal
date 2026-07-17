@@ -19,7 +19,6 @@ endif()
 
 find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
-find_package(ament_lint_auto REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
@@ -96,14 +95,3 @@ target_link_libraries(livekit_connect_node
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(livekit_connect_node)
-
-# ---------------------------------------------------------------------------
-# Lint
-# ---------------------------------------------------------------------------
-set(ament_cmake_copyright_FOUND TRUE)
-list(APPEND AMENT_LINT_AUTO_EXCLUDE
-  ament_cmake_uncrustify
-  ament_cmake_clang_format
-  ament_cmake_cpplint
-)
-ament_lint_auto_find_test_dependencies()

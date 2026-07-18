@@ -16,9 +16,12 @@
 
 #include "ros2_livekit_bridge/utils/schema_text.hpp"
 
-#include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
+#include <rcutils/sha256.h>
 
+#include <array>
+#include <cstdint>
 #include <exception>
+#include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
 
 namespace ros2_livekit_bridge::utils {
 
@@ -42,6 +45,23 @@ std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_
   } catch (const std::exception&) {
     return std::nullopt;
   }
+}
+
+std::string fingerprintSchemaText(const std::string& schema_text) {
+  rcutils_sha256_ctx_t context;
+  rcutils_sha256_init(&context);
+  rcutils_sha256_update(&context, reinterpret_cast<const std::uint8_t*>(schema_text.data()), schema_text.size());
+
+  std::array<std::uint8_t, RCUTILS_SHA256_BLOCK_SIZE> digest{};
+  rcutils_sha256_final(&context, digest.data());
+
+  constexpr char kHexDigits[] = "0123456789abcdef";
+  std::string fingerprint(digest.size() * 2U, '0');
+  for (std::size_t index = 0; index < digest.size(); ++index) {
+    fingerprint[index * 2U] = kHexDigits[digest[index] >> 4U];
+    fingerprint[index * 2U + 1U] = kHexDigits[digest[index] & 0x0FU];
+  }
+  return fingerprint;
 }
 
 } // namespace ros2_livekit_bridge::utils

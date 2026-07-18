@@ -35,6 +35,7 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/utils/schema_text.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
@@ -69,6 +70,10 @@ TopicForwarder::LiveKitMethods makeLiveKitMethods() {
       [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
+  };
+  livekit_methods.get_schema = [](const livekit::DataTrackSchemaId&,
+                                  const std::string&) -> livekit::Result<std::string, std::string> {
+    return livekit::Result<std::string, std::string>::failure("unused");
   };
   return livekit_methods;
 }
@@ -122,6 +127,171 @@ TEST_F(TopicForwarderTest, IncomingTopicAllowedUsesConfiguredPatterns) {
 
   EXPECT_TRUE(forwarder.isIncomingTopicAllowed("/remote/cmd"));
   EXPECT_FALSE(forwarder.isIncomingTopicAllowed("/blocked/cmd"));
+}
+
+TEST_F(TopicForwarderTest, SchemaValidationAcceptsExactMatch) {
+  const auto schema = utils::renderRosMessageSchema("std_msgs/msg/String");
+  if (!schema.has_value()) {
+    FAIL() << "std_msgs/msg/String schema was unavailable";
+    return;
+  }
+
+  auto methods = makeLiveKitMethods();
+  methods.get_schema = [text = schema->text](const livekit::DataTrackSchemaId&, const std::string&) {
+    return livekit::Result<std::string, std::string>::success(text);
+  };
+  const TopicForwarder forwarder(makeOptions(), node_, std::move(methods));
+  const TopicForwarder::RemoteDataTrackDescriptor descriptor{
+      "sid",
+      "/remote/data",
+      "publisher",
+      livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg},
+      livekit::DataTrackFrameEncoding::Cdr,
+      {},
+  };
+
+  const auto result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+
+  EXPECT_TRUE(result.accepted);
+  EXPECT_TRUE(result.reason.empty());
+  EXPECT_EQ(result.remote_fingerprint, result.local_fingerprint);
+}
+
+TEST_F(TopicForwarderTest, SchemaValidationRejectsMissingMetadata) {
+  const auto forwarder = makeForwarder();
+  TopicForwarder::RemoteDataTrackDescriptor descriptor{"sid",        "/remote/data", "publisher",
+                                                       std::nullopt, std::nullopt,   {}};
+
+  auto result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("frame encoding"), std::string::npos);
+
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+  result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("schema"), std::string::npos);
+}
+
+TEST_F(TopicForwarderTest, SchemaValidationRejectsWrongTypeAndEncoding) {
+  const auto forwarder = makeForwarder();
+  TopicForwarder::RemoteDataTrackDescriptor descriptor{
+      "sid",
+      "/remote/data",
+      "publisher",
+      livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::JsonSchema},
+      livekit::DataTrackFrameEncoding::Cdr,
+      {},
+  };
+
+  auto result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("schema encoding"), std::string::npos);
+
+  descriptor.schema = livekit::DataTrackSchemaId{"geometry_msgs/msg/Pose", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("does not match local ROS type"), std::string::npos);
+
+  descriptor.schema = livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("not CDR"), std::string::npos);
+}
+
+TEST_F(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures) {
+  auto methods = makeLiveKitMethods();
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return livekit::Result<std::string, std::string>::failure("schema unavailable");
+  };
+  const TopicForwarder retrieval_failure_forwarder(makeOptions(), node_, std::move(methods));
+  TopicForwarder::RemoteDataTrackDescriptor descriptor{
+      "sid",
+      "/remote/data",
+      "publisher",
+      livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg},
+      livekit::DataTrackFrameEncoding::Cdr,
+      {},
+  };
+
+  auto result = retrieval_failure_forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("retrieval failed"), std::string::npos);
+
+  methods = makeLiveKitMethods();
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return livekit::Result<std::string, std::string>::success("string data\n");
+  };
+  const TopicForwarder render_failure_forwarder(makeOptions(), node_, std::move(methods));
+  descriptor.schema =
+      livekit::DataTrackSchemaId{"nonexistent_pkg/msg/DoesNotExist", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  result = render_failure_forwarder.validateInboundSchema(descriptor, "nonexistent_pkg/msg/DoesNotExist");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("could not be rendered"), std::string::npos);
+}
+
+TEST_F(TopicForwarderTest, SchemaValidationRejectsRootAndNestedMismatches) {
+  const auto schema = utils::renderRosMessageSchema("geometry_msgs/msg/PoseStamped");
+  if (!schema.has_value()) {
+    FAIL() << "geometry_msgs/msg/PoseStamped schema was unavailable";
+    return;
+  }
+  const auto original_text = schema->text;
+  auto remote_text = std::make_shared<std::string>(schema->text);
+
+  auto methods = makeLiveKitMethods();
+  methods.get_schema = [remote_text](const livekit::DataTrackSchemaId&, const std::string&) {
+    return livekit::Result<std::string, std::string>::success(*remote_text);
+  };
+  const TopicForwarder forwarder(makeOptions(), node_, std::move(methods));
+  const TopicForwarder::RemoteDataTrackDescriptor descriptor{
+      "sid",
+      "/remote/data",
+      "publisher",
+      livekit::DataTrackSchemaId{"geometry_msgs/msg/PoseStamped", livekit::DataTrackSchemaEncoding::Ros2Msg},
+      livekit::DataTrackFrameEncoding::Cdr,
+      {},
+  };
+
+  const auto root_field = remote_text->find("Pose pose");
+  ASSERT_NE(root_field, std::string::npos);
+  remote_text->replace(root_field, std::string("Pose pose").size(), "Pose changed_pose");
+  auto result = forwarder.validateInboundSchema(descriptor, "geometry_msgs/msg/PoseStamped");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("definitions differ"), std::string::npos);
+
+  *remote_text = original_text;
+  const auto nested_field = remote_text->find("float64 x");
+  ASSERT_NE(nested_field, std::string::npos);
+  remote_text->replace(nested_field, std::string("float64 x").size(), "float32 x");
+  result = forwarder.validateInboundSchema(descriptor, "geometry_msgs/msg/PoseStamped");
+  EXPECT_FALSE(result.accepted);
+  EXPECT_NE(result.reason.find("definitions differ"), std::string::npos);
+}
+
+TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears) {
+  const auto forwarder = makeForwarder();
+  const livekit::DataTrackSchemaId string_schema{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
+
+  // A track may arrive before any application node advertises its ROS topic.
+  // Its schema name is a candidate type, but validateInboundSchema still has to
+  // render and compare the exact local definition before a publisher is made.
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", string_schema), "std_msgs/msg/String");
+
+  auto subscription = node_->create_subscription<std_msgs::msg::String>(
+      "/remote/late", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
+  ASSERT_NE(subscription, nullptr);
+  ASSERT_TRUE(spinUntil([&]() {
+    const auto topics = node_->get_topic_names_and_types();
+    return topics.count("/remote/late") > 0U;
+  }));
+
+  // Once an endpoint exists, the graph agrees with the schema regardless of
+  // arrival order. Conflicting remote metadata cannot override that graph type.
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", string_schema), "std_msgs/msg/String");
+  const livekit::DataTrackSchemaId conflicting_schema{"geometry_msgs/msg/Pose",
+                                                      livekit::DataTrackSchemaEncoding::Ros2Msg};
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", conflicting_schema), "std_msgs/msg/String");
 }
 
 TEST_F(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile) {
@@ -213,6 +383,10 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
+  livekit_methods.get_schema = [](const livekit::DataTrackSchemaId&,
+                                  const std::string&) -> livekit::Result<std::string, std::string> {
+    return livekit::Result<std::string, std::string>::failure("unused");
+  };
   return livekit_methods;
 }
 
@@ -235,6 +409,10 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
       [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
+  };
+  livekit_methods.get_schema = [](const livekit::DataTrackSchemaId&,
+                                  const std::string&) -> livekit::Result<std::string, std::string> {
+    return livekit::Result<std::string, std::string>::failure("unused");
   };
   return livekit_methods;
 }
@@ -259,6 +437,10 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
       [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
+  };
+  livekit_methods.get_schema = [](const livekit::DataTrackSchemaId&,
+                                  const std::string&) -> livekit::Result<std::string, std::string> {
+    return livekit::Result<std::string, std::string>::failure("unused");
   };
   return livekit_methods;
 }
@@ -404,6 +586,30 @@ TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   // The push fails once; with no new samples and no retry, nothing is forwarded.
   spinUntil([]() { return false; }, 150ms);
   EXPECT_EQ(push_count->load(), 0);
+}
+
+TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
+  auto publish_attempts = std::make_shared<std::atomic<int>>(0);
+  auto methods = makeLiveKitMethods();
+  methods.publish_data_track = [publish_attempts](const std::string&, const std::string&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+    publish_attempts->fetch_add(1);
+    return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
+        "required schema unavailable");
+  };
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods));
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  std_msgs::msg::String msg;
+  msg.data = "must not be forwarded";
+  publisher->publish(msg);
+
+  ASSERT_TRUE(spinUntil([&]() { return publish_attempts->load() >= 1; }));
+  EXPECT_EQ(publish_attempts->load(), 1);
 }
 
 // Without a configured cap, every delivered sample is forwarded. Publishing one

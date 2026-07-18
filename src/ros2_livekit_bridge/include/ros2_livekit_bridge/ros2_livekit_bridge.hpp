@@ -25,6 +25,7 @@
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"
@@ -193,8 +194,8 @@ private:
   rclcpp::TimerBase::SharedPtr connection_stats_timer_;
   //! @brief Protects schema registration deduplication across data topic callbacks.
   std::mutex defined_schema_ids_mutex_;
-  //! @brief ROS message schema IDs for which defineSchema has already been called.
-  std::unordered_set<std::string> defined_schema_ids_;
+  //! @brief Exact-text fingerprints keyed by each registered ROS schema ID.
+  std::unordered_map<std::string, std::string> defined_schema_fingerprints_;
 };
 
 } // namespace ros2_livekit_bridge

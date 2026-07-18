@@ -51,6 +51,17 @@ struct RosMessageSchema {
  */
 std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type);
 
+/**
+ * @brief Calculate a SHA-256 fingerprint of exact schema text bytes.
+ *
+ * No normalization is applied. Comments, whitespace, dependency ordering, and
+ * every other byte in @p schema_text contribute to the result.
+ *
+ * @param schema_text Schema definition text to fingerprint.
+ * @return Lowercase 64-character hexadecimal SHA-256 digest.
+ */
+std::string fingerprintSchemaText(const std::string& schema_text);
+
 } // namespace ros2_livekit_bridge::utils
 
 #endif // ROS2_LIVEKIT_BRIDGE__UTILS__SCHEMA_TEXT_HPP_

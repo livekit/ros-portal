@@ -227,6 +227,25 @@ For each outgoing data topic the bridge:
 3. Publishes the data track with `DataTrackFrameEncoding::Cdr` and the matching
    schema identifier.
 
+The unchanged full definition remains valid MCAP `Schema.data`: for
+`ros2msg`, the root definition appears first and every recursive dependency is
+included under the standard delimiter. The bridge computes a SHA-256
+fingerprint separately and never substitutes it for the schema body.
+
+Incoming data tracks are accepted only when they advertise CDR frames, a
+`ros2msg` or `ros2idl` schema whose name agrees with an existing local graph
+type when present, and full schema text whose encoding and exact-byte
+fingerprint match the locally rendered definition. When no endpoint has
+advertised the topic yet, the validated schema name supplies the type so late
+ROS nodes are supported. Missing metadata, schema retrieval/rendering errors,
+or mismatches reject the track before a ROS publisher is created. Outgoing
+tracks also fail closed if schema rendering or registration fails.
+
+No configuration field controls this validation. The comparison includes
+comments, whitespace, defaults, constants, and dependency ordering, so it is
+stricter than ROS RIHS01. Deploy each bridge with the same interface packages
+used by endpoints on its local ROS graph; endpoint type hashes are not queried.
+
 The bridge must be built with the temporary schema-capable SDK artifact
 described in the repository [README](../README.md#working-in-the-container).
 End-to-end schema delivery also requires a compatible `livekit-server` with

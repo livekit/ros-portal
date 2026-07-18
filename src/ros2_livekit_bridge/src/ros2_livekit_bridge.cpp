@@ -145,6 +145,16 @@ bool Ros2LiveKitBridge::initialize() {
   // Warning: avoid doing ROS operations in delegate callbacks
   room_->setDelegate(this);
 
+  // Room::connect() may emit events for data tracks that were already
+  // published. Install the forwarder first so those events are not dropped
+  // while the receiver joins the room.
+  if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
+                                std::move(incoming_topic_compiled_patterns),
+                                std::move(preserve_id_topic_compiled_patterns), std::move(outbound_rate_limits))) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
+    return false;
+  }
+
   if (!room_->connect(livekit_url, livekit_token, room_options)) {
     connection_diagnostics_->markDisconnected();
     room_.reset();
@@ -159,11 +169,6 @@ bool Ros2LiveKitBridge::initialize() {
                 lp->identity().c_str());
   } else {
     RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
-    return false;
-  }
-
-  if (!initializeTopicForwarder(config->topics)) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }
 
@@ -316,38 +321,42 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
             "local participant is unavailable");
       }
 
-      const auto publish_result = [&]() {
-        const auto schema = utils::renderRosMessageSchema(topic_type);
-        if (schema) {
-          const livekit::DataTrackSchemaId schema_id{
-              topic_type,
-              schemaEncodingFromRosDefinition(schema->encoding),
-          };
-          const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
-          {
-            std::lock_guard<std::mutex> lock(defined_schema_ids_mutex_);
-            if (defined_schema_ids_.count(dedupe_key) == 0U) {
-              try {
-                participant->defineSchema(schema_id, schema->text);
-                defined_schema_ids_.insert(dedupe_key);
-              } catch (const std::exception& error) {
-                RCLCPP_WARN(this->get_logger(), "Failed to define schema for '%s' [%s]: %s", topic_name.c_str(),
-                            topic_type.c_str(), error.what());
-              }
-            }
+      const auto schema = utils::renderRosMessageSchema(topic_type);
+      if (!schema) {
+        return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
+            "unable to render required ROS schema for type '" + topic_type + "'");
+      }
+
+      const livekit::DataTrackSchemaId schema_id{
+          topic_type,
+          schemaEncodingFromRosDefinition(schema->encoding),
+      };
+      const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
+      const auto schema_fingerprint = utils::fingerprintSchemaText(schema->text);
+      {
+        const std::lock_guard<std::mutex> lock(defined_schema_ids_mutex_);
+        const auto existing = defined_schema_fingerprints_.find(dedupe_key);
+        if (existing != defined_schema_fingerprints_.end()) {
+          if (existing->second != schema_fingerprint) {
+            return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
+                "schema ID for type '" + topic_type + "' was already defined with a different fingerprint");
           }
-
-          livekit::DataTrackPublishOptions options;
-          options.name = topic_name;
-          options.schema = schema_id;
-          options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
-          return participant->publishDataTrack(options);
+        } else {
+          try {
+            participant->defineSchema(schema_id, schema->text);
+            defined_schema_fingerprints_.emplace(dedupe_key, schema_fingerprint);
+          } catch (const std::exception& error) {
+            return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
+                "failed to define required schema for type '" + topic_type + "': " + error.what());
+          }
         }
+      }
 
-        RCLCPP_WARN_ONCE(this->get_logger(), "Publishing data track '%s' [%s] without schema metadata",
-                         topic_name.c_str(), topic_type.c_str());
-        return participant->publishDataTrack(topic_name);
-      }();
+      livekit::DataTrackPublishOptions options;
+      options.name = topic_name;
+      options.schema = schema_id;
+      options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+      const auto publish_result = participant->publishDataTrack(options);
       if (!publish_result) {
         const auto& error = publish_result.error();
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
@@ -371,6 +380,22 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
         return livekit::Result<void, std::string>::success();
       };
       return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
+    };
+
+    forwarder_lk_methods.get_schema =
+        [this](const livekit::DataTrackSchemaId& schema_id,
+               const std::string& participant_identity) -> livekit::Result<std::string, std::string> {
+      const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
+      if (!participant) {
+        return livekit::Result<std::string, std::string>::failure("local participant is unavailable");
+      }
+
+      try {
+        return livekit::Result<std::string, std::string>::success(
+            participant->getSchema(schema_id, participant_identity));
+      } catch (const std::exception& error) {
+        return livekit::Result<std::string, std::string>::failure(error.what());
+      }
     };
 
     forwarder_lk_methods.publish_video_track =

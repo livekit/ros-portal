@@ -17,6 +17,7 @@
 #pragma once
 
 #include <livekit/data_track_frame.h>
+#include <livekit/data_track_schema.h>
 #include <livekit/result.h>
 #include <livekit/video_frame.h>
 
@@ -118,6 +119,9 @@ public:
     /// topic.
     std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(const std::string&, int, int)>
         publish_video_track;
+    /// @brief Retrieve a remote participant's schema definition by ID.
+    std::function<livekit::Result<std::string, std::string>(const livekit::DataTrackSchemaId&, const std::string&)>
+        get_schema;
   };
 
   /// @brief Construct a topic forwarder.
@@ -150,10 +154,27 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSUsesReliableTransientLocalWhenAllPublishersMatch);
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
+  FRIEND_TEST(TopicForwarderTest, SchemaValidationAcceptsExactMatch);
+  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsMissingMetadata);
+  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsWrongTypeAndEncoding);
+  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures);
+  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsRootAndNestedMismatches);
+  FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
-  std::optional<std::string> liveKitToRosTopicType(const std::string& track_name) const;
+  ///
+  /// An existing local graph type takes precedence so conflicting remote
+  /// metadata is rejected during schema validation. When no local endpoint has
+  /// advertised the topic yet, the schema name supplies the candidate type;
+  /// validation still requires its exact definition to render locally.
+  ///
+  /// @param track_name LiveKit track name mapped to the local ROS topic.
+  /// @param schema Schema metadata advertised by the remote track, if any.
+  /// @return Candidate ROS message type, or std::nullopt when neither the graph
+  /// nor the schema supplies one.
+  std::optional<std::string> resolveInboundRosTopicType(const std::string& track_name,
+                                                        const std::optional<livekit::DataTrackSchemaId>& schema) const;
 
   /// @brief Determine subscription QoS for a ROS topic.
   rclcpp::QoS determineQoS(const std::string& topic_name) const;
@@ -183,12 +204,32 @@ private:
     std::string track_name;
     /// @brief LiveKit participant identity of the remote publisher.
     std::string publisher_identity;
+    /// @brief Schema ID advertised on the remote data track.
+    std::optional<livekit::DataTrackSchemaId> schema;
+    /// @brief Frame encoding advertised on the remote data track.
+    std::optional<livekit::DataTrackFrameEncoding> frame_encoding;
     /// @brief Subscribe to the remote track and return a readable stream.
     std::function<livekit::Result<std::shared_ptr<RemoteDataTrackStream>, std::string>()> subscribe;
   };
 
   /// @brief Build a descriptor from a remote LiveKit data track.
   static RemoteDataTrackDescriptor createRemoteDataTrackDescriptor(std::shared_ptr<livekit::RemoteDataTrack> track);
+
+  /// @brief Result of validating remote schema metadata against local text.
+  struct InboundSchemaValidationResult {
+    /// @brief Whether the remote track is safe to forward.
+    bool accepted{false};
+    /// @brief Human-readable rejection reason.
+    std::string reason;
+    /// @brief SHA-256 of the retrieved remote schema, when available.
+    std::string remote_fingerprint;
+    /// @brief SHA-256 of the rendered local schema, when available.
+    std::string local_fingerprint;
+  };
+
+  /// @brief Validate a remote track's schema against the local ROS definition.
+  InboundSchemaValidationResult validateInboundSchema(const RemoteDataTrackDescriptor& descriptor,
+                                                      const std::string& topic_type) const;
 
   /// @brief Per-topic state for outbound ROS image forwarding.
   struct ImageTopicState {

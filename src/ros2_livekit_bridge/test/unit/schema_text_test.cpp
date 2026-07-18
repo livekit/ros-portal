@@ -170,5 +170,32 @@ TEST(SchemaTextTest, ReturnsNulloptForUnknownType) {
   EXPECT_FALSE(schema.has_value());
 }
 
+TEST(SchemaTextTest, FingerprintUsesStableSha256Hex) {
+  EXPECT_EQ(fingerprintSchemaText(""),
+            "e3b0c44298fc1c149afbf4c8996fb924"
+            "27ae41e4649b934ca495991b7852b855");
+  EXPECT_EQ(fingerprintSchemaText("abc"),
+            "ba7816bf8f01cfea414140de5dae2223"
+            "b00361a396177a9cb410ff61f20015ad");
+}
+
+TEST(SchemaTextTest, FingerprintChangesForRootAndNestedDefinitionChanges) {
+  const std::string original = kGeometryMsgsPoseStampedSchemaText;
+
+  std::string changed_root = original;
+  const auto root_field = changed_root.find("Pose pose");
+  ASSERT_NE(root_field, std::string::npos);
+  changed_root.replace(root_field, std::string("Pose pose").size(), "Pose other_pose");
+
+  std::string changed_nested = original;
+  const auto nested_field = changed_nested.find("float64 x");
+  ASSERT_NE(nested_field, std::string::npos);
+  changed_nested.replace(nested_field, std::string("float64 x").size(), "float32 x");
+
+  EXPECT_EQ(fingerprintSchemaText(original), fingerprintSchemaText(original));
+  EXPECT_NE(fingerprintSchemaText(original), fingerprintSchemaText(changed_root));
+  EXPECT_NE(fingerprintSchemaText(original), fingerprintSchemaText(changed_nested));
+}
+
 } // namespace
 } // namespace ros2_livekit_bridge::utils

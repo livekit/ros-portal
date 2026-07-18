@@ -32,6 +32,7 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
+  rcutils
   ros2_medkit_serialization
   rosbag2_cpp
   rosbag2_storage

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "ros2_livekit_bridge/schema_manager.hpp"
+
 #include <gtest/gtest.h>
 #include <livekit/data_track_options.h>
 #include <livekit/local_data_track.h>
@@ -30,7 +32,6 @@
 #include <vector>
 
 #include "bridge_e2e_fixture.hpp"
-#include "ros2_livekit_bridge/schema_manager.hpp"
 
 namespace ros2_livekit_bridge::test {
 namespace {
@@ -55,8 +56,8 @@ std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   return schema_text;
 }
 
-// Case: An inbound LiveKit track with the locally installed ROS schema should create a publisher on the receiving ROS graph.
-// Event sequence:
+// Case: An inbound LiveKit track with the locally installed ROS schema should create a publisher on the receiving ROS
+// graph. Event sequence:
 // 1. Define the schema before publishing the track
 // 2. Publish the inbound track
 // 3. Verify the publisher is created on the receiving ROS graph
@@ -94,8 +95,8 @@ TEST_F(BridgeTestE2E, InboundTrackCreatesPublisher) {
   EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 }
 
-// Case: A receiving bridge should discover a preexisting LiveKit track and forward it when a matching ROS subscriber appears later.
-// Event sequence:
+// Case: A receiving bridge should discover a preexisting LiveKit track and forward it when a matching ROS subscriber
+// appears later. Event sequence:
 // 1. Publish a valid-schema LiveKit track before the receiving bridge starts.
 // 2. Start the bridge and verify it creates a ROS publisher for that track.
 // 3. Add the matching ROS subscription after the track has been discovered.
@@ -112,7 +113,7 @@ TEST_F(BridgeTestE2E, AcceptsTrackBeforeRosSubscriber) {
   ASSERT_TRUE(publisher_room.connect(liveKitUrl(), tokenA(), room_options));
   const auto publisher = publisher_room.localParticipant().lock();
   ASSERT_NE(publisher, nullptr);
-  
+
   // Define the schema before publishing the track
   const auto schema_text = renderSchemaText("std_msgs/msg/String");
   ASSERT_TRUE(schema_text.has_value()) << "std_msgs/msg/String schema was unavailable";
@@ -162,7 +163,8 @@ TEST_F(BridgeTestE2E, AcceptsTrackBeforeRosSubscriber) {
       kMessageTimeout));
 }
 
-// Case: A track whose advertised ROS type has different schema text should be rejected even when no matching local ROS subscriber exists.
+// Case: A track whose advertised ROS type has different schema text should be rejected even when no matching local ROS
+// subscriber exists.
 // 1. Start an inbound bridge without creating a local ROS subscriber.
 // 2. Define incorrect schema text under the expected ROS type.
 // 3. Publish a LiveKit track that advertises the mismatched schema.

@@ -45,14 +45,15 @@ ament_auto_find_build_dependencies(REQUIRED
   yaml_cpp_vendor)
 
 # ---------------------------------------------------------------------------
-# Temporary LiveKit schema SDK artifact
+# LiveKit SDK install
 #
-# This feature branch consumes the pinned successful Linux artifact downloaded
-# by tools/fetch-livekit-sdk-artifact.sh. LIVEKIT_LOCAL_SDK_DIR may override the
-# default cache path with either another raw CI artifact or an installed SDK.
+# Use a local install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release
+# asset from GitHub. By default, a pinned SDK version is downloaded (see
+# LIVEKIT_SDK_VERSION below). The same pin is mirrored in this package's
+# colcon.pkg so that a bare `colcon build` is reproducible without the pin
+# leaking into other packages' CMake invocations.
 #
 # Examples:
-#   tools/fetch-livekit-sdk-artifact.sh
 #   colcon build --packages-select ros2_livekit_bridge
 #
 #   export LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk
@@ -62,46 +63,42 @@ ament_auto_find_build_dependencies(REQUIRED
 #   colcon build --packages-select ros2_livekit_bridge \
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
+# If you build the SDK locally for use here, build the SDK itself with
+# -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
+# affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
-set(_livekit_artifact_default
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../.cache/livekit-sdk/current")
-if(DEFINED ENV{LIVEKIT_LOCAL_SDK_DIR} AND
-    NOT "$ENV{LIVEKIT_LOCAL_SDK_DIR}" STREQUAL "")
-  set(_livekit_sdk_default "$ENV{LIVEKIT_LOCAL_SDK_DIR}")
-else()
-  set(_livekit_sdk_default "${_livekit_artifact_default}")
-endif()
-
+set(LIVEKIT_SDK_VERSION "1.5.0-rc" CACHE STRING
+  "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
   "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
-set(LIVEKIT_LOCAL_SDK_DIR "${_livekit_sdk_default}" CACHE PATH
-  "Path to the schema-capable LiveKit SDK artifact or install prefix.")
+set(LIVEKIT_LOCAL_SDK_DIR "$ENV{LIVEKIT_LOCAL_SDK_DIR}" CACHE PATH
+  "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}.")
 
-if(LIVEKIT_SDK_DIR AND
-    (NOT DEFINED ENV{LIVEKIT_LOCAL_SDK_DIR} OR
-     "$ENV{LIVEKIT_LOCAL_SDK_DIR}" STREQUAL ""))
+if(LIVEKIT_SDK_DIR AND NOT LIVEKIT_LOCAL_SDK_DIR)
   message(STATUS
     "LIVEKIT_SDK_DIR is deprecated; treating it as LIVEKIT_LOCAL_SDK_DIR")
   set(LIVEKIT_LOCAL_SDK_DIR "${LIVEKIT_SDK_DIR}" CACHE PATH
-    "Path to the schema-capable LiveKit SDK artifact or install prefix."
+    "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}."
     FORCE)
 endif()
 
-if(NOT EXISTS "${LIVEKIT_LOCAL_SDK_DIR}")
-  message(FATAL_ERROR
-    "Schema-capable LiveKit SDK artifact not found at:\n"
-    "  ${LIVEKIT_LOCAL_SDK_DIR}\n"
-    "Run tools/fetch-livekit-sdk-artifact.sh on the host.")
-endif()
-
-if(EXISTS "${LIVEKIT_LOCAL_SDK_DIR}/lib/cmake/LiveKit/LiveKitConfig.cmake")
+if(LIVEKIT_LOCAL_SDK_DIR)
+  if(NOT EXISTS "${LIVEKIT_LOCAL_SDK_DIR}")
+    message(FATAL_ERROR
+      "LIVEKIT_LOCAL_SDK_DIR does not exist: ${LIVEKIT_LOCAL_SDK_DIR}")
+  endif()
+  message(STATUS "Using local LiveKit SDK: ${LIVEKIT_LOCAL_SDK_DIR}")
   list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
-  find_package(LiveKit CONFIG REQUIRED)
 else()
-  include(LiveKitArtifact)
-  livekit_import_artifact("${LIVEKIT_LOCAL_SDK_DIR}")
+  include(LiveKitSDK)
+  livekit_sdk_setup(
+    VERSION "${LIVEKIT_SDK_VERSION}"
+    SDK_DIR "${CMAKE_BINARY_DIR}/_deps/livekit-sdk"
+    GITHUB_TOKEN "$ENV{GITHUB_TOKEN}"
+  )
 endif()
 
+find_package(LiveKit CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 

@@ -28,6 +28,7 @@ flowchart LR
 
   subgraph SenderBridge["Sending bridge"]
     TF1[TopicForwarder]
+    Publish[Bridge publish callback]
     Render1[Schema renderer]
     Cache[Definition cache]
   end
@@ -38,6 +39,8 @@ flowchart LR
   end
 
   subgraph ReceiverBridge["Receiving bridge"]
+    Filter[Filter and normalize]
+    Resolve[Resolve candidate type]
     Validate[Schema validator]
     Render2[Schema renderer]
     GP[Generic publisher]
@@ -49,12 +52,16 @@ flowchart LR
 
   RP -->|serialized message| GS
   GS --> TF1
-  TF1 --> Render1
+  TF1 --> Publish
+  Publish --> Render1
   Render1 --> Cache
   Cache -->|defineSchema| Registry
+  Publish -->|publishDataTrack| Track
   TF1 -->|raw CDR frame| Track
+  Track --> Filter
+  Filter --> Resolve
+  Resolve --> Validate
   Registry -->|getSchema| Validate
-  Track --> Validate
   Render2 -->|local definition| Validate
   Validate -->|accepted CDR| GP
   GP --> RS
@@ -77,14 +84,13 @@ the installed interface package through the local ament index and returns:
 For a nested message, the schema body has this general shape:
 
 ```text
-# Root message definition
 std_msgs/Header header
-geometry_msgs/Pose pose
+Pose pose
 
 ================================================================================
 MSG: geometry_msgs/Pose
-geometry_msgs/Point position
-geometry_msgs/Quaternion orientation
+Point position
+Quaternion orientation
 
 ================================================================================
 MSG: geometry_msgs/Point
@@ -100,26 +106,37 @@ comments, reorder dependencies, or replace the body with a digest.
 
 ## LiveKit data contract
 
-Each published data track carries three related pieces of information:
+Each published data track carries four related pieces of information:
 
 ```mermaid
 flowchart TB
-  SchemaId["Schema ID<br/>name = ROS type<br/>encoding = Ros2Msg or Ros2Idl"]
-  SchemaBody["Participant schema blob<br/>full recursive definition text"]
-  TrackMetadata["Track metadata<br/>schema = Schema ID<br/>frame encoding = CDR"]
-  Frame["Data frame<br/>raw rclcpp SerializedMessage bytes"]
+  TrackName["Track name: ROS topic path"]
+  SchemaId["Schema ID: ROS type and schema encoding"]
+  SchemaBody["Participant schema blob: full recursive definition text"]
+  TrackMetadata["Track metadata: name, schema ID, and CDR frame encoding"]
+  Frame["Data frame: raw rclcpp SerializedMessage bytes"]
 
   SchemaId --> SchemaBody
+  TrackName --> TrackMetadata
   SchemaId --> TrackMetadata
   TrackMetadata --> Frame
 ```
 
 For example, a `geometry_msgs/msg/PoseStamped` topic is represented as:
 
-- schema name: `geometry_msgs/msg/PoseStamped`;
-- schema encoding: `Ros2Msg` when rosbag2 reports `ros2msg`;
-- schema body: the complete MCAP-format definition; and
-- frame encoding: `Cdr`.
+| Field | Value |
+| --- | --- |
+| Track name | ROS topic path, e.g. `/robot_pose` |
+| Schema name | `geometry_msgs/msg/PoseStamped` |
+| Schema encoding | `Ros2Msg` when rosbag2 reports `ros2msg` |
+| Schema body | Complete MCAP-format definition |
+| Frame encoding | `Cdr` |
+
+The outbound encoding mapper uses `Ros2Msg` for `ros2msg`, `Ros2Idl` for
+`ros2idl`, and a custom LiveKit schema encoding for other non-empty rosbag2
+encodings of at most 25 characters. Empty or longer encoding strings fall back
+to `Ros2Msg`. Inbound bridge-to-bridge validation intentionally accepts only
+`Ros2Msg` and `Ros2Idl`; a track using a custom encoding is rejected.
 
 The schema body is stored as a participant data blob by LiveKit. Consequently,
 the server must enable participant data blobs with
@@ -128,7 +145,9 @@ the server must enable participant data blobs with
 
 ## Outbound flow
 
-The data-track writer is created lazily when the first ROS message arrives.
+The data-track writer is created lazily when the first ROS message arrives and
+is cached per ROS topic after successful creation. Later messages use that
+writer directly.
 
 ```mermaid
 sequenceDiagram
@@ -158,25 +177,31 @@ sequenceDiagram
   TF->>LK: raw CDR bytes
 ```
 
-The registration cache is keyed by the rosbag2 encoding and ROS type. Its value
-is the SHA-256 fingerprint of the exact schema bytes. The cache:
+The registration cache key is the rosbag2 encoding, a newline, and the ROS type
+(`encoding + "\n" + topic_type`). Its value is the 64-character lowercase
+hexadecimal SHA-256 fingerprint of the exact schema bytes. The cache:
 
 - is protected by a mutex because track writers may be created concurrently;
 - records only successful `defineSchema()` calls;
 - is scoped to the `Ros2LiveKitBridge` instance; and
-- prevents a schema ID from being reused with different text.
+- rejects different schema text for an existing composite key.
 
 Schema rendering itself is not cached. The renderer creates a local rosbag2
-definition source for each request.
+definition source and recomputes the fingerprint for each writer-creation
+request, including requests that find an existing registration.
 
 Outbound handling is fail-closed. If the local definition cannot be rendered,
 schema registration fails, or LiveKit cannot create the track, no writer is
-returned and the message is not sent on an untyped fallback track.
+returned and the message is not sent on an untyped fallback track. Because the
+per-topic writer remains unset, the next eligible ROS message retries creation.
 
 ## Inbound flow
 
-An inbound track is validated before the bridge creates a ROS publisher or
-subscribes to its frames.
+Before schema work, the forwarder rejects an empty track SID or name, normalizes
+the track name to an absolute ROS path (`camera/image` becomes
+`/camera/image`), and checks it against the configured incoming-topic patterns.
+An eligible inbound track is validated before the bridge creates a ROS
+publisher or subscribes to its frames.
 
 ```mermaid
 sequenceDiagram
@@ -188,6 +213,7 @@ sequenceDiagram
   participant ROS as Local ROS topic
 
   LK->>TF: track published
+  TF->>TF: validate SID and name; normalize and filter topic
   TF->>Graph: look for an existing type on normalized topic
   alt local endpoint already exists
     Graph-->>TF: local ROS type
@@ -203,7 +229,8 @@ sequenceDiagram
   TF->>TF: compare encoding, SHA-256, and exact bytes
 
   alt all checks pass
-    TF->>ROS: create generic publisher
+    TF->>TF: map final ROS topic name
+    TF->>ROS: create generic publisher with QoS(10)
     TF->>LK: subscribe to data frames
     LK->>ROS: republish each raw CDR frame
   else any check fails
@@ -221,16 +248,23 @@ If the graph reports multiple types and one matches the advertised schema, the
 bridge selects that type. Otherwise it warns and uses the first graph type,
 which causes conflicting schema metadata to fail validation.
 
+After validation, the final ROS topic name is mapped from the LiveKit track
+name. For topics configured with `preserve_id: true`, the sanitized publisher
+identity is prepended. This mapping changes only the publication path; schema
+type resolution and validation still use the normalized track topic.
+
 Validation accepts a track only when all of these checks pass:
 
-1. The track advertises `Cdr` frame encoding.
-2. A schema ID is present.
-3. The schema encoding is `Ros2Msg` or `Ros2Idl`.
-4. The schema name agrees with an existing local graph type, when present.
-5. The remote participant's schema blob can be retrieved.
-6. The same ROS type can be rendered from the local installation.
-7. Remote and local schema encodings match.
-8. SHA-256 fingerprints and exact schema bytes both match.
+1. Frame-encoding metadata is present.
+2. The advertised frame encoding is `Cdr`.
+3. A schema ID is present.
+4. The schema encoding is `Ros2Msg` or `Ros2Idl`.
+5. The schema name exactly equals the resolved candidate ROS type. An existing
+   local graph type takes precedence when one is available.
+6. The remote participant's schema blob can be retrieved.
+7. The same ROS type can be rendered from the local installation.
+8. Remote and local schema encodings match.
+9. SHA-256 fingerprints and exact schema bytes both match.
 
 Checking both the digest and the text makes the intended byte-exact contract
 explicit. The digest is also included in mismatch diagnostics, while direct
@@ -238,17 +272,19 @@ comparison remains the final authority.
 
 ```mermaid
 flowchart TD
-  Start[Remote data track] --> Metadata{CDR and supported<br/>schema metadata?}
+  Start[Remote data track] --> Eligible{"Valid name and allowed incoming topic?"}
+  Eligible -- No --> Ignore[Ignore track]
+  Eligible -- Yes --> Metadata{"CDR and supported schema metadata?"}
   Metadata -- No --> Reject[Reject track]
-  Metadata -- Yes --> Graph{Local endpoint exists?}
-  Graph -- Yes --> Type{Schema name matches<br/>a local ROS type?}
+  Metadata -- Yes --> Graph{"Local endpoint exists?"}
+  Graph -- Yes --> Type{"Schema name matches a local ROS type?"}
   Type -- No --> Reject
-  Type -- Yes --> Fetch{Remote schema retrieved<br/>and local schema rendered?}
+  Type -- Yes --> Fetch{"Remote schema retrieved and local schema rendered?"}
   Graph -- No --> Fetch
   Fetch -- No --> Reject
-  Fetch -- Yes --> Match{Encoding, SHA-256, and<br/>exact bytes match?}
+  Fetch -- Yes --> Match{"Encoding, SHA-256, and exact bytes match?"}
   Match -- No --> Reject
-  Match -- Yes --> Accept[Create ROS publisher<br/>and forward CDR frames]
+  Match -- Yes --> Accept["Create ROS publisher and forward CDR frames"]
 ```
 
 ### Arrival-order guarantee
@@ -280,8 +316,12 @@ This design assumes:
 
 - sender and receiver have compatible interface packages installed;
 - rosbag2 renders those packages identically on both sides;
-- the schema-capable LiveKit SDK is used; and
-- the LiveKit server supports participant data blobs.
+- the bridge is built against the pinned schema-capable LiveKit C++ SDK release
+  or a compatible local install; and
+- the LiveKit server supports and enables participant data blobs.
+
+Current SDK and server setup requirements are maintained in the repository
+[README](../../README.md#working-in-the-container).
 
 The bridge does not query endpoint type hashes. A semantically compatible but
 textually different definition is rejected rather than risking CDR
@@ -303,16 +343,18 @@ unverified CDR bytes cannot enter the local ROS graph.
 ## Implementation map
 
 - Schema rendering and fingerprinting:
-  [`schema_text.cpp`](../src/ros2_livekit_bridge/src/utils/schema_text.cpp) and
-  [`schema_text.hpp`](../src/ros2_livekit_bridge/include/ros2_livekit_bridge/utils/schema_text.hpp)
+  [`schema_text.cpp`](../../src/ros2_livekit_bridge/src/utils/schema_text.cpp) and
+  [`schema_text.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/utils/schema_text.hpp)
 - LiveKit schema registration and retrieval:
-  [`ros2_livekit_bridge.cpp`](../src/ros2_livekit_bridge/src/ros2_livekit_bridge.cpp)
+  [`ros2_livekit_bridge.cpp`](../../src/ros2_livekit_bridge/src/ros2_livekit_bridge.cpp) and
+  [`ros2_livekit_bridge.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/ros2_livekit_bridge.hpp)
 - Inbound validation and CDR forwarding:
-  [`topic_forwarder.cpp`](../src/ros2_livekit_bridge/src/topic_forwarder.cpp) and
-  [`topic_forwarder.hpp`](../src/ros2_livekit_bridge/include/ros2_livekit_bridge/topic_forwarder.hpp)
+  [`topic_forwarder.cpp`](../../src/ros2_livekit_bridge/src/topic_forwarder.cpp) and
+  [`topic_forwarder.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/topic_forwarder.hpp)
+- Inbound topic normalization and identity-preserving mapping:
+  [`ros_utils.cpp`](../../src/ros2_livekit_bridge/src/utils/ros_utils.cpp)
 - Unit coverage:
-  [`schema_text_test.cpp`](../src/ros2_livekit_bridge/test/unit/schema_text_test.cpp) and
-  [`topic_forwarder_test.cpp`](../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp)
+  [`schema_text_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_text_test.cpp) and
+  [`topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp)
 - End-to-end acceptance and rejection:
-  [`bridge_e2e_test.cpp`](../src/ros2_livekit_bridge/test/integration/bridge_e2e_test.cpp)
-
+  [`bridge_e2e_test.cpp`](../../src/ros2_livekit_bridge/test/integration/bridge_e2e_test.cpp)

@@ -23,9 +23,11 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
    pushed into a LiveKit video track.
 6. Uses `rclcpp::GenericSubscription` for other topics and forwards raw
    CDR-serialized bytes over a
-   [LiveKit DataTrack](https://docs.livekit.io/transport/data/data-tracks/).
-7. Subscribes to allowed remote LiveKit data tracks and republishes their raw CDR
-   payloads into ROS using the track name as the local topic name.
+   [LiveKit DataTrack](https://docs.livekit.io/transport/data/data-tracks/) with
+   a self-contained ROS message schema.
+7. Subscribes to allowed remote LiveKit data tracks, validates their schemas
+   against the local ROS installation, and republishes accepted CDR payloads
+   into ROS using the track name as the local topic name.
 
 ## Message-Type Handling
 
@@ -35,13 +37,16 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
 | Any other type | [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) | ROS 2 CDR | A generic subscription is created using the type string discovered from the ROS graph. Incoming serialized message buffers are pushed verbatim onto a `livekit::LocalDataTrack`. |
 
 The data-track payload is the unmodified CDR byte stream produced by the
-publisher. Consumers need the matching `.msg` definition, or an IDL/CDR-aware
-deserializer, to decode it.
+publisher. The bridge registers the matching recursive ROS message definition
+with LiveKit so consumers can discover the schema needed to decode it.
 
-For LiveKit-to-ROS data tracks, the track name does not currently include ROS
-message type metadata. The bridge resolves inbound message type using local ROS
-graph lookup for the same topic name before creating the
-`rclcpp::GenericPublisher`.
+For LiveKit-to-ROS data tracks, the track name supplies the ROS topic name and
+the schema ID supplies a candidate ROS message type. An existing local graph
+type takes precedence. Before creating an `rclcpp::GenericPublisher`, the bridge
+requires the remote schema encoding, SHA-256 hash, and exact definition text to
+match the locally rendered definition. See
+[Data Track Schema Design](schema.md) for the wire contract and validation
+flow.
 
 ```text
 ROS topic publisher
@@ -64,7 +69,7 @@ ROS topic:          /odom/global
 Track names without a leading `/` are normalized to absolute ROS topic paths.
 When the matching inbound topic sets `preserve_id: true`, the publishing
 participant's sanitized identity is prepended to the local topic name. See
-[Configuration](configuration.md#preserving-the-publisher-identity).
+[Configuration](../configuration.md#preserving-the-publisher-identity).
 
 ## Topic Direction
 
@@ -94,7 +99,7 @@ The bridge exposes ROS2 services backed by
 - `ros2 service call`
 - `ros2 interface show`
 
-See [Remote ROS2 CLI calls](ros2_cli_calls.md) for request fields and sample
+See [Remote ROS2 CLI calls](../ros2_cli_calls.md) for request fields and sample
 service calls.
 
 ## QoS Determination

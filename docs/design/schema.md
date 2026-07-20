@@ -324,7 +324,7 @@ This design assumes:
 - the LiveKit server supports and enables participant data blobs.
 
 Current SDK and server setup requirements are maintained in the repository
-[README](../../README.md#working-in-the-container).
+[development guide](../development.md#livekit-sdk).
 
 The bridge does not query endpoint type hashes. A semantically compatible but
 textually different definition is rejected rather than risking CDR

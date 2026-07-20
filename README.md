@@ -14,7 +14,8 @@ ROS2 workspace for the LiveKit bridge. This repository is used as both the
 development environment and build environment for the bridge node and its
 supporting packages.
 
-Most development and builds are expected to happen in the devcontainer.
+The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants (ROS2 or not) through LiveKit’s real-time network, enabling access to a ROS graph from anywhere in the world. It streams camera feeds as video, transports arbitrary ROS messages as schema-described data, republishes remote tracks into ROS, and forwards service calls over LiveKit RPC—enabling low-latency teleoperation, monitoring, and robot-to-cloud communication without exposing DDS across networks.
+
 <!-- TODO: need design team to make a sick ROS2 bridge diagram here -->
 ```text
                               LiveKit Room (Web)
@@ -37,8 +38,6 @@ Most development and builds are expected to happen in the devcontainer.
 
 ## User Guides
 
-- [Building](docs/building.md): devcontainer builds, LiveKit SDK selection, and
-  artifact-based SDK builds.
 - [Running](docs/running.md): launch commands, credentials, local development launch,
   and simulation examples.
 - [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,
@@ -50,16 +49,19 @@ Most development and builds are expected to happen in the devcontainer.
 
 ## Developer Guides
 
-- [Architecture](docs/architecture.md): bridge data flow,
-  [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
-  [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), message paths, and
-  QoS selection.
 - [Testing](docs/testing.md): unit and integration test commands and required
   LiveKit test environment.
 - [Development environment](docs/development.md): devcontainer layout, SSH agent
   forwarding, Docker image caching, and C++ tooling.
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
+
+## Design Guides
+
+- [Architecture](docs/design/architecture.md): bridge data flow,
+  [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
+  [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), message paths, and
+  QoS selection.
 
 ## Packages of Interest
 

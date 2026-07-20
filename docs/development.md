@@ -90,6 +90,8 @@ LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk \
 colcon build --packages-select ros2_livekit_bridge
 ```
 
+__NOTE:__ If in the devcontainer, mount the SDK install prefix from the host before building. Or move the install artifacts to the root of the repo.
+
 ### Building Against A PR Pipeline Artifact
 
 To build against the SDK produced by a `client-sdk-cpp` GitHub Actions run, pass

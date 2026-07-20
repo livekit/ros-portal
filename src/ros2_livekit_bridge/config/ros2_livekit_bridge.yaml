@@ -28,7 +28,7 @@ ros2_livekit_bridge:
 
     # /tf_static is latched (published once with TRANSIENT_LOCAL durability), so
     # it is forwarded over the RPC push-with-ack path instead of a DataTrack.
-    # See `latched` in docs/CONFIGURATION.md.
+    # See `latched` in docs/configuration.md.
     - topic: "/tf_static"
       direction: "out"
       latched: true

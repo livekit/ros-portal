@@ -112,7 +112,7 @@ jobs:
           CI: true
           GITHUB_TOKEN: ${{ github.token }}
           LIVEKIT_URL: ws://127.0.0.1:7880
-          LIVEKIT_ROOM: ros_bridge_participant_id_test
+          LIVEKIT_ROOM: ros2_livekit_bridge_test_room
         with:
           configFile: .devcontainer/devcontainer.json
           push: never

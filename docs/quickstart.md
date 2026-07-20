@@ -30,5 +30,5 @@ Optionally, you can pass `config_path`, `id`, and other args for customization. 
 to see all the available options.
 
 Bridge routes are configured through the YAML file passed by the node's
-`config_path` ROS parameter. See [Configuration](CONFIGURATION.md) for the
+`config_path` ROS parameter. See [Configuration](configuration.md) for the
 supported schema.

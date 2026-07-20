@@ -21,16 +21,5 @@ exposes selected remote `ros2` CLI operations through ROS2 services backed by
 Bridge-specific service interfaces live in the sibling
 `ros2_livekit_bridge_msgs` package.
 
-## Documentation
 
-Long-form documentation lives at the repository root:
-
-- [Quickstart](../../docs/QUICKSTART.md)
-- [Building](../../docs/BUILDING.md)
-- [Running](../../docs/RUNNING.md)
-- [Configuration](../../docs/CONFIGURATION.md)
-- [Architecture](../../docs/ARCHITECTURE.md)
-- [Remote ROS2 CLI calls](../../docs/ROS2_CLI_CALLS.md)
-- [Diagnostics](../../docs/DIAGNOSTICS.md)
-- [Testing](../../docs/TESTING.md)
-- [Current limitations](../../docs/LIMITATIONS.md)
+### See [../../README.md](../../README.md) for more information.

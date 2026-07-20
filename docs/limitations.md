@@ -1,11 +1,6 @@
 # Current Limitations
 
 ## Video Tracks
-
-- All `sensor_msgs/msg/Image` topics are published as
-  `livekit::TrackSource::SOURCE_CAMERA`. LiveKit allows only one track per
-  source type per participant, so publishing multiple image topics at once can
-  conflict.
 - `VideoSource` and `LocalVideoTrack` are created from the first received image
   dimensions. If camera resolution changes mid-stream, the track is not
   recreated.

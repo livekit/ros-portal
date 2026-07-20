@@ -37,30 +37,28 @@ Most development and builds are expected to happen in the devcontainer.
 
 ## User Guides
 
-- [Quickstart](docs/QUICKSTART.md): shortest supported path to build and launch the
-  bridge.
-- [Building](docs/BUILDING.md): devcontainer builds, LiveKit SDK selection, and
+- [Building](docs/building.md): devcontainer builds, LiveKit SDK selection, and
   artifact-based SDK builds.
-- [Running](docs/RUNNING.md): launch commands, credentials, local development launch,
+- [Running](docs/running.md): launch commands, credentials, local development launch,
   and simulation examples.
-- [Configuration](docs/CONFIGURATION.md): YAML schema, topic routes, service routes,
+- [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,
   throttling, latched topics (via
   [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/)), and video options.
-- [Remote ROS2 CLI calls](docs/ROS2_CLI_CALLS.md): remote `ros2` command services
+- [Remote ROS2 CLI calls](docs/ros2_cli_calls.md): remote `ros2` command services
   backed by [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/).
-- [Diagnostics](docs/DIAGNOSTICS.md): `/diagnostics` fields and aggregator setup.
+- [Diagnostics](docs/diagnostics.md): `/diagnostics` fields and aggregator setup.
 
 ## Developer Guides
 
-- [Architecture](docs/ARCHITECTURE.md): bridge data flow,
+- [Architecture](docs/architecture.md): bridge data flow,
   [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
   [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), message paths, and
   QoS selection.
-- [Testing](docs/TESTING.md): unit and integration test commands and required
+- [Testing](docs/testing.md): unit and integration test commands and required
   LiveKit test environment.
-- [Development environment](docs/DEVELOPMENT.md): devcontainer layout, SSH agent
+- [Development environment](docs/development.md): devcontainer layout, SSH agent
   forwarding, Docker image caching, and C++ tooling.
-- [Current limitations](docs/LIMITATIONS.md): known implementation limits and
+- [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
 
 ## Packages of Interest
@@ -72,19 +70,18 @@ Most development and builds are expected to happen in the devcontainer.
 - `ros2_livekit_bridge_msgs`: custom message definitions for the bridge.
 - [`ros2_livekit_bridge_tutorials`](src/ros2_livekit_bridge_tutorials/README.md):
   tutorials for using the bridge in a variety of scenarios.
-- [`waveshare_launch`](src/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
+- [`waveshare_launch`](src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
 
 Other package READMEs under `src/` document package-specific setup, fixtures, or examples.
 
-## Quick Start
+# Quickstart
 
-Open the repository in the devcontainer, then build from `/livekit_ws`:
+Open this repository in the devcontainer, then build the bridge package from the
+workspace root inside the container:
 
-```bash
-colcon build --packages-select ros2_livekit_bridge
-```
+    colcon build --packages-up-to ros2_livekit_bridge
 
-Run the bridge with LiveKit credentials:
+Source the workspace and launch the bridge with LiveKit credentials:
 
 ```bash
 source install/setup.bash
@@ -93,8 +90,24 @@ export LIVEKIT_TOKEN=<token>
 ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
 ```
 
-See the [quickstart](docs/QUICKSTART.md) for the shortest supported path and the
-[configuration guide](docs/CONFIGURATION.md) for route configuration.
+For local development against a local LiveKit server, use the local launch file:
 
-To get familiar with using the bridge, you can follow the
-[tutorials](docs/TUTORIALS.md).
+```bash
+source install/setup.bash
+ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
+```
+
+The local launch file automatically generates and sets `LIVEKIT_URL` and `LIVEKIT_TOKEN` for the local development server.
+
+Optionally, you can pass `config_path`, `id`, and other args for customization. Run:
+
+    ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py --show-args
+
+to see all the available options.
+
+Bridge routes are configured through the YAML file passed by the node's
+`config_path` ROS parameter. See [Configuration](configuration.md) for the
+supported schema.
+
+See the [configuration guide](docs/configuration.md) for route configuration.
+To get familiar with using the bridge, you can follow the [tutorials](docs/tutorials.md).

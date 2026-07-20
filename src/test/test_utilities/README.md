@@ -55,5 +55,5 @@ success: true
 message: 'state is: True'
 ```
 
-See [ROS2 CLI calls](../../ros2_livekit_bridge/docs/ROS2_CLI_CALLS.md) for the
+See [ROS2 CLI calls](../../docs/ros2_cli_calls.md) for the
 full `ros2 service call` proxy reference.

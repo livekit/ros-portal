@@ -1,7 +1,6 @@
 # Testing
 
-Prefer targeted tests during iteration, then run the package-level suite before
-finalizing behavior changes.
+There are unit and integration tests which are run in CI. For more manual integration testing we have a simulation, see [`waveshare_launch`](../src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
 
 ## Unit Tests
 
@@ -40,7 +39,7 @@ colcon test-result --verbose
 ```
 
 The token helper defaults to local development credentials (`devkey` /
-`secret`) and the room `ros_bridge_participant_id_test`. It uses
+`secret`) and the room `ros2_livekit_bridge_test_room`. It uses
 `ws://host.docker.internal:7880` by default to match the devcontainer launch
 setup. Override `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
 `LIVEKIT_ROOM`, or the `LIVEKIT_IDENTITY_A/B` values before sourcing the script

@@ -54,7 +54,7 @@ ros2_livekit_bridge:
     # durability). DataTracks are not latched, so it is forwarded over the RPC
     # push-with-ack path: the bridge stores it and pushes it to every peer that
     # joins, so transforms published before the controller connected still
-    # arrive. See `latched` in docs/CONFIGURATION.md.
+    # arrive. See `latched` in docs/configuration.md.
     - topic: "/tf_static"
       direction: "out"
       latched: true

@@ -64,7 +64,7 @@ ROS topic:          /odom/global
 Track names without a leading `/` are normalized to absolute ROS topic paths.
 When the matching inbound topic sets `preserve_id: true`, the publishing
 participant's sanitized identity is prepended to the local topic name. See
-[Configuration](CONFIGURATION.md#preserving-the-publisher-identity).
+[Configuration](configuration.md#preserving-the-publisher-identity).
 
 ## Topic Direction
 
@@ -94,12 +94,7 @@ The bridge exposes ROS2 services backed by
 - `ros2 service call`
 - `ros2 interface show`
 
-Because each service callback blocks until the remote LiveKit RPC returns or
-times out, keep `ros_threads` greater than `1`. The default `ros_threads: 4` is
-recommended so topic forwarding and timers continue while a remote
-introspection request is pending.
-
-See [Remote ROS2 CLI calls](ROS2_CLI_CALLS.md) for request fields and sample
+See [Remote ROS2 CLI calls](ros2_cli_calls.md) for request fields and sample
 service calls.
 
 ## QoS Determination

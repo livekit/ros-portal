@@ -27,7 +27,7 @@
 #include <vector>
 
 #include "bridge_e2e_fixture.hpp"
-#include "ros2_livekit_bridge/utils/schema_text.hpp"
+#include "ros2_livekit_bridge/message_schema.hpp"
 
 namespace ros2_livekit_bridge::test {
 namespace {
@@ -81,7 +81,7 @@ TEST_F(BridgeTestE2E, AcceptsInboundTrackWithExactSchema) {
   ASSERT_NE(subscription, nullptr);
   ASSERT_TRUE(waitFor([&]() { return topicExists(*robotBNode(), kTopic); }, kGraphTimeout));
 
-  const auto schema = utils::renderRosMessageSchema("std_msgs/msg/String");
+  const auto schema = renderRosMessageSchema("std_msgs/msg/String");
   if (!schema.has_value()) {
     FAIL() << "std_msgs/msg/String schema was unavailable";
     return;
@@ -110,7 +110,7 @@ TEST_F(BridgeTestE2E, AcceptsPreexistingInboundTrackBeforeLocalRosEndpointAppear
   constexpr const char* kTopic = "/bridge/schema_before_endpoint";
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
-  const auto schema = utils::renderRosMessageSchema("std_msgs/msg/String");
+  const auto schema = renderRosMessageSchema("std_msgs/msg/String");
   if (!schema.has_value()) {
     FAIL() << "std_msgs/msg/String schema was unavailable";
     return;

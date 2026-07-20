@@ -343,8 +343,8 @@ unverified CDR bytes cannot enter the local ROS graph.
 ## Implementation map
 
 - Schema rendering and fingerprinting:
-  [`schema_text.cpp`](../../src/ros2_livekit_bridge/src/utils/schema_text.cpp) and
-  [`schema_text.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/utils/schema_text.hpp)
+  [`message_schema.cpp`](../../src/ros2_livekit_bridge/src/message_schema.cpp) and
+  [`message_schema.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/message_schema.hpp)
 - LiveKit schema registration and retrieval:
   [`ros2_livekit_bridge.cpp`](../../src/ros2_livekit_bridge/src/ros2_livekit_bridge.cpp) and
   [`ros2_livekit_bridge.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/ros2_livekit_bridge.hpp)
@@ -354,7 +354,7 @@ unverified CDR bytes cannot enter the local ROS graph.
 - Inbound topic normalization and identity-preserving mapping:
   [`ros_utils.cpp`](../../src/ros2_livekit_bridge/src/utils/ros_utils.cpp)
 - Unit coverage:
-  [`schema_text_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_text_test.cpp) and
+  [`message_schema_test.cpp`](../../src/ros2_livekit_bridge/test/unit/message_schema_test.cpp) and
   [`topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp)
 - End-to-end acceptance and rejection:
   [`bridge_e2e_test.cpp`](../../src/ros2_livekit_bridge/test/integration/bridge_e2e_test.cpp)

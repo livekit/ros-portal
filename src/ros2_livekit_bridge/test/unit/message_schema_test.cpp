@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/utils/schema_text.hpp"
+#include "ros2_livekit_bridge/message_schema.hpp"
 
 #include <gtest/gtest.h>
 
 #include <string>
 
-namespace ros2_livekit_bridge::utils {
+namespace ros2_livekit_bridge {
 namespace {
 
 // Full recursive schema text in MCAP ros2msg format, as produced by
@@ -142,14 +142,14 @@ int32 sec
 uint32 nanosec
 )";
 
-TEST(SchemaTextTest, RendersStdMsgsString) {
+TEST(MessageSchemaTest, RendersStdMsgsString) {
   const auto schema = renderRosMessageSchema("std_msgs/msg/String");
   ASSERT_TRUE(schema.has_value());
   EXPECT_EQ(schema->encoding, "ros2msg");
   EXPECT_EQ(schema->text, kStdMsgsStringSchemaText);
 }
 
-TEST(SchemaTextTest, RendersNestedDependencies) {
+TEST(MessageSchemaTest, RendersNestedDependencies) {
   const auto schema = renderRosMessageSchema("geometry_msgs/msg/PoseStamped");
   ASSERT_TRUE(schema.has_value());
   EXPECT_EQ(schema->encoding, "ros2msg");
@@ -158,42 +158,42 @@ TEST(SchemaTextTest, RendersNestedDependencies) {
 
 // TODO: double nested payload
 
-TEST(SchemaTextTest, RendersSensorMsgsImage) {
+TEST(MessageSchemaTest, RendersSensorMsgsImage) {
   const auto schema = renderRosMessageSchema("sensor_msgs/msg/Image");
   ASSERT_TRUE(schema.has_value());
   EXPECT_EQ(schema->encoding, "ros2msg");
   EXPECT_EQ(schema->text, kSensorMsgsImageSchemaText);
 }
 
-TEST(SchemaTextTest, ReturnsNulloptForUnknownType) {
+TEST(MessageSchemaTest, ReturnsNulloptForUnknownType) {
   const auto schema = renderRosMessageSchema("nonexistent_pkg/msg/DoesNotExist");
   EXPECT_FALSE(schema.has_value());
 }
 
-TEST(SchemaTextTest, ConvertsKnownRosSchemaEncodings) {
+TEST(MessageSchemaTest, ConvertsKnownRosSchemaEncodings) {
   EXPECT_EQ(schemaEncodingFromRosDefinition("ros2idl"), livekit::DataTrackSchemaEncoding::Ros2Idl);
   EXPECT_EQ(schemaEncodingFromRosDefinition("ros2msg"), livekit::DataTrackSchemaEncoding::Ros2Msg);
 }
 
-TEST(SchemaTextTest, PreservesValidCustomSchemaEncoding) {
+TEST(MessageSchemaTest, PreservesValidCustomSchemaEncoding) {
   EXPECT_EQ(schemaEncodingFromRosDefinition("custom_encoding"),
             livekit::DataTrackSchemaEncoding::custom("custom_encoding"));
   EXPECT_EQ(schemaEncodingFromRosDefinition(std::string(25U, 'a')),
             livekit::DataTrackSchemaEncoding::custom(std::string(25U, 'a')));
 }
 
-TEST(SchemaTextTest, FallsBackForInvalidCustomSchemaEncoding) {
+TEST(MessageSchemaTest, FallsBackForInvalidCustomSchemaEncoding) {
   EXPECT_EQ(schemaEncodingFromRosDefinition(""), livekit::DataTrackSchemaEncoding::Ros2Msg);
   EXPECT_EQ(schemaEncodingFromRosDefinition(std::string(26U, 'a')), livekit::DataTrackSchemaEncoding::Ros2Msg);
 }
 
-TEST(SchemaTextTest, BuildsSchemaDedupeKeyFromEncodingAndTopicType) {
+TEST(MessageSchemaTest, BuildsSchemaDedupeKeyFromEncodingAndTopicType) {
   EXPECT_EQ(schemaDedupeKey("std_msgs/msg/String", "ros2msg"), "ros2msg\nstd_msgs/msg/String");
   EXPECT_NE(schemaDedupeKey("std_msgs/msg/String", "ros2msg"), schemaDedupeKey("std_msgs/msg/String", "ros2idl"));
   EXPECT_NE(schemaDedupeKey("std_msgs/msg/String", "ros2msg"), schemaDedupeKey("example_msgs/msg/String", "ros2msg"));
 }
 
-TEST(SchemaTextTest, FingerprintUsesStableSha256Hex) {
+TEST(MessageSchemaTest, FingerprintUsesStableSha256Hex) {
   EXPECT_EQ(fingerprintSchemaText(""),
             "e3b0c44298fc1c149afbf4c8996fb924"
             "27ae41e4649b934ca495991b7852b855");
@@ -202,7 +202,7 @@ TEST(SchemaTextTest, FingerprintUsesStableSha256Hex) {
             "b00361a396177a9cb410ff61f20015ad");
 }
 
-TEST(SchemaTextTest, FingerprintChangesForRootAndNestedDefinitionChanges) {
+TEST(MessageSchemaTest, FingerprintChangesForRootAndNestedDefinitionChanges) {
   const std::string original = kGeometryMsgsPoseStampedSchemaText;
 
   std::string changed_root = original;
@@ -221,4 +221,4 @@ TEST(SchemaTextTest, FingerprintChangesForRootAndNestedDefinitionChanges) {
 }
 
 } // namespace
-} // namespace ros2_livekit_bridge::utils
+} // namespace ros2_livekit_bridge

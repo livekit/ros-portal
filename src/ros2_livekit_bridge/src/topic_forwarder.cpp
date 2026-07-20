@@ -31,9 +31,9 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/message_schema.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
-#include "ros2_livekit_bridge/utils/schema_text.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 namespace ros2_livekit_bridge {
@@ -111,14 +111,14 @@ TopicForwarder::InboundSchemaValidationResult TopicForwarder::validateInboundSch
     return validation;
   }
   const auto& remote_schema_text = remote_schema_result.value();
-  validation.remote_fingerprint = utils::fingerprintSchemaText(remote_schema_text);
+  validation.remote_fingerprint = fingerprintSchemaText(remote_schema_text);
 
-  const auto local_schema = utils::renderRosMessageSchema(topic_type);
+  const auto local_schema = renderRosMessageSchema(topic_type);
   if (!local_schema.has_value()) {
     validation.reason = "local ROS schema could not be rendered";
     return validation;
   }
-  validation.local_fingerprint = utils::fingerprintSchemaText(local_schema->text);
+  validation.local_fingerprint = fingerprintSchemaText(local_schema->text);
 
   const bool encoding_matches =
       (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Msg && local_schema->encoding == "ros2msg") ||

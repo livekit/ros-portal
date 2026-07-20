@@ -230,6 +230,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
+  src/message_schema.cpp
   src/ros2_livekit_bridge.cpp
   src/service_forwarder.cpp
   src/topic_forwarder.cpp
@@ -237,7 +238,6 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/utils/config_mapping.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
-  src/utils/schema_text.cpp
   src/utils/topic_matcher.cpp
 )
 target_link_libraries(ros2_livekit_bridge_lib

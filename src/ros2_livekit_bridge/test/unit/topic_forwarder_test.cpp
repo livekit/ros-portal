@@ -35,7 +35,7 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/utils/schema_text.hpp"
+#include "ros2_livekit_bridge/message_schema.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
@@ -130,7 +130,7 @@ TEST_F(TopicForwarderTest, IncomingTopicAllowedUsesConfiguredPatterns) {
 }
 
 TEST_F(TopicForwarderTest, SchemaValidationAcceptsExactMatch) {
-  const auto schema = utils::renderRosMessageSchema("std_msgs/msg/String");
+  const auto schema = renderRosMessageSchema("std_msgs/msg/String");
   if (!schema.has_value()) {
     FAIL() << "std_msgs/msg/String schema was unavailable";
     return;
@@ -231,7 +231,7 @@ TEST_F(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures) {
 }
 
 TEST_F(TopicForwarderTest, SchemaValidationRejectsRootAndNestedMismatches) {
-  const auto schema = utils::renderRosMessageSchema("geometry_msgs/msg/PoseStamped");
+  const auto schema = renderRosMessageSchema("geometry_msgs/msg/PoseStamped");
   if (!schema.has_value()) {
     FAIL() << "geometry_msgs/msg/PoseStamped schema was unavailable";
     return;

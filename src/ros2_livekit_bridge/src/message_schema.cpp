@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/utils/schema_text.hpp"
+#include "ros2_livekit_bridge/message_schema.hpp"
 
 #include <rcutils/sha256.h>
 
@@ -23,7 +23,7 @@
 #include <exception>
 #include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
 
-namespace ros2_livekit_bridge::utils {
+namespace ros2_livekit_bridge {
 
 std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type) {
   if (topic_type.empty()) {
@@ -81,4 +81,4 @@ std::string fingerprintSchemaText(const std::string& schema_text) {
   return fingerprint;
 }
 
-} // namespace ros2_livekit_bridge::utils
+} // namespace ros2_livekit_bridge

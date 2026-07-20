@@ -39,11 +39,11 @@
 #include "ros2_livekit_bridge/cli/manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
+#include "ros2_livekit_bridge/message_schema.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/config_mapping.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
-#include "ros2_livekit_bridge/utils/schema_text.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 namespace ros2_livekit_bridge {
@@ -300,7 +300,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
             "local participant is unavailable");
       }
 
-      const auto schema = utils::renderRosMessageSchema(topic_type);
+      const auto schema = renderRosMessageSchema(topic_type);
       if (!schema) {
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
             "unable to render required ROS schema for type '" + topic_type + "'");
@@ -308,10 +308,10 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
 
       const livekit::DataTrackSchemaId schema_id{
           topic_type,
-          utils::schemaEncodingFromRosDefinition(schema->encoding),
+          schemaEncodingFromRosDefinition(schema->encoding),
       };
-      const auto dedupe_key = utils::schemaDedupeKey(topic_type, schema->encoding);
-      const auto schema_fingerprint = utils::fingerprintSchemaText(schema->text);
+      const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
+      const auto schema_fingerprint = fingerprintSchemaText(schema->text);
       {
         const std::lock_guard<std::mutex> lock(defined_schema_ids_mutex_);
         const auto existing = defined_schema_fingerprints_.find(dedupe_key);

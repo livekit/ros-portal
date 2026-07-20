@@ -47,6 +47,23 @@ std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_
   }
 }
 
+livekit::DataTrackSchemaEncoding schemaEncodingFromRosDefinition(const std::string& encoding) {
+  if (encoding == "ros2idl") {
+    return livekit::DataTrackSchemaEncoding::Ros2Idl;
+  }
+  if (encoding == "ros2msg") {
+    return livekit::DataTrackSchemaEncoding::Ros2Msg;
+  }
+  if (!encoding.empty() && encoding.size() <= 25U) {
+    return livekit::DataTrackSchemaEncoding::custom(encoding);
+  }
+  return livekit::DataTrackSchemaEncoding::Ros2Msg;
+}
+
+std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding) {
+  return encoding + "\n" + topic_type;
+}
+
 std::string fingerprintSchemaText(const std::string& schema_text) {
   rcutils_sha256_ctx_t context;
   rcutils_sha256_init(&context);

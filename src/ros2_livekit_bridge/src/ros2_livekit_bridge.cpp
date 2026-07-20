@@ -48,27 +48,6 @@
 
 namespace ros2_livekit_bridge {
 
-namespace {
-
-livekit::DataTrackSchemaEncoding schemaEncodingFromRosDefinition(const std::string& encoding) {
-  if (encoding == "ros2idl") {
-    return livekit::DataTrackSchemaEncoding::Ros2Idl;
-  }
-  if (encoding == "ros2msg") {
-    return livekit::DataTrackSchemaEncoding::Ros2Msg;
-  }
-  if (!encoding.empty() && encoding.size() <= 25U) {
-    return livekit::DataTrackSchemaEncoding::custom(encoding);
-  }
-  return livekit::DataTrackSchemaEncoding::Ros2Msg;
-}
-
-std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding) {
-  return encoding + "\n" + topic_type;
-}
-
-} // namespace
-
 Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros2_livekit_bridge", options),
       topic_polling_period_ms_(0),
@@ -329,9 +308,9 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
 
       const livekit::DataTrackSchemaId schema_id{
           topic_type,
-          schemaEncodingFromRosDefinition(schema->encoding),
+          utils::schemaEncodingFromRosDefinition(schema->encoding),
       };
-      const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
+      const auto dedupe_key = utils::schemaDedupeKey(topic_type, schema->encoding);
       const auto schema_fingerprint = utils::fingerprintSchemaText(schema->text);
       {
         const std::lock_guard<std::mutex> lock(defined_schema_ids_mutex_);

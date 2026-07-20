@@ -17,6 +17,8 @@
 #ifndef ROS2_LIVEKIT_BRIDGE__UTILS__SCHEMA_TEXT_HPP_
 #define ROS2_LIVEKIT_BRIDGE__UTILS__SCHEMA_TEXT_HPP_
 
+#include <livekit/data_track_schema.h>
+
 #include <optional>
 #include <string>
 
@@ -50,6 +52,26 @@ struct RosMessageSchema {
  * cannot be resolved.
  */
 std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type);
+
+/**
+ * @brief Convert a ROS definition encoding to its LiveKit representation.
+ *
+ * Supported custom encodings are preserved. Empty or oversized encodings fall
+ * back to `Ros2Msg`.
+ *
+ * @param encoding ROS definition encoding.
+ * @return Matching LiveKit data track schema encoding.
+ */
+livekit::DataTrackSchemaEncoding schemaEncodingFromRosDefinition(const std::string& encoding);
+
+/**
+ * @brief Build the key used to deduplicate registered ROS schemas.
+ *
+ * @param topic_type ROS message type in `pkg/msg/Type` form.
+ * @param encoding ROS definition encoding.
+ * @return A key unique to the encoding and topic type pair.
+ */
+std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding);
 
 /**
  * @brief Calculate a SHA-256 fingerprint of exact schema text bytes.

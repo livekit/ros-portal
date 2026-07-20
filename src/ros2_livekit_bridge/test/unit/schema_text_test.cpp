@@ -170,6 +170,29 @@ TEST(SchemaTextTest, ReturnsNulloptForUnknownType) {
   EXPECT_FALSE(schema.has_value());
 }
 
+TEST(SchemaTextTest, ConvertsKnownRosSchemaEncodings) {
+  EXPECT_EQ(schemaEncodingFromRosDefinition("ros2idl"), livekit::DataTrackSchemaEncoding::Ros2Idl);
+  EXPECT_EQ(schemaEncodingFromRosDefinition("ros2msg"), livekit::DataTrackSchemaEncoding::Ros2Msg);
+}
+
+TEST(SchemaTextTest, PreservesValidCustomSchemaEncoding) {
+  EXPECT_EQ(schemaEncodingFromRosDefinition("custom_encoding"),
+            livekit::DataTrackSchemaEncoding::custom("custom_encoding"));
+  EXPECT_EQ(schemaEncodingFromRosDefinition(std::string(25U, 'a')),
+            livekit::DataTrackSchemaEncoding::custom(std::string(25U, 'a')));
+}
+
+TEST(SchemaTextTest, FallsBackForInvalidCustomSchemaEncoding) {
+  EXPECT_EQ(schemaEncodingFromRosDefinition(""), livekit::DataTrackSchemaEncoding::Ros2Msg);
+  EXPECT_EQ(schemaEncodingFromRosDefinition(std::string(26U, 'a')), livekit::DataTrackSchemaEncoding::Ros2Msg);
+}
+
+TEST(SchemaTextTest, BuildsSchemaDedupeKeyFromEncodingAndTopicType) {
+  EXPECT_EQ(schemaDedupeKey("std_msgs/msg/String", "ros2msg"), "ros2msg\nstd_msgs/msg/String");
+  EXPECT_NE(schemaDedupeKey("std_msgs/msg/String", "ros2msg"), schemaDedupeKey("std_msgs/msg/String", "ros2idl"));
+  EXPECT_NE(schemaDedupeKey("std_msgs/msg/String", "ros2msg"), schemaDedupeKey("example_msgs/msg/String", "ros2msg"));
+}
+
 TEST(SchemaTextTest, FingerprintUsesStableSha256Hex) {
   EXPECT_EQ(fingerprintSchemaText(""),
             "e3b0c44298fc1c149afbf4c8996fb924"

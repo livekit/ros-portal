@@ -92,7 +92,7 @@ std::string schemaHashToHex(const SchemaHash& hash) {
   return hex;
 }
 
-SchemaManager::SchemaManager(LiveKitMethods livekit_methods, RenderSchema render_schema)
+SchemaManager::SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn render_schema)
     : livekit_methods_(std::move(livekit_methods)), render_schema_(std::move(render_schema)) {
   if (!livekit_methods_.define_schema || !livekit_methods_.get_schema) {
     throw std::invalid_argument("SchemaManager requires fully populated LiveKitMethods");

@@ -70,7 +70,7 @@ public:
   };
 
   /// @brief Callback used to render a local ROS message definition.
-  using RenderSchema = std::function<std::optional<RosMessageSchema>(const std::string&)>;
+  using RenderSchemaFn = std::function<std::optional<RosMessageSchema>(const std::string&)>;
 
   /// @brief Result of validating remote schema metadata against local text.
   struct ValidationResult {
@@ -92,7 +92,7 @@ public:
   /// When unset, rosbag2 is used to render definitions from the local ament
   /// index.
   /// @throws std::invalid_argument when either LiveKit callback is unset.
-  explicit SchemaManager(LiveKitMethods livekit_methods, RenderSchema render_schema = {});
+  explicit SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn render_schema = {});
 
   /// @brief Ensure the local participant has defined the schema for a ROS type.
   /// @param topic_type ROS message type in `pkg/msg/Type` form.
@@ -119,7 +119,7 @@ private:
   };
 
   LiveKitMethods livekit_methods_;
-  RenderSchema render_schema_;
+  RenderSchemaFn render_schema_;
   std::mutex defined_schemas_mutex_;
   std::condition_variable defined_schemas_cv_;
   std::unordered_map<std::string, DefinitionState> defined_schemas_;

@@ -21,5 +21,6 @@ exposes selected remote `ros2` CLI operations through ROS2 services backed by
 Bridge-specific service interfaces live in the sibling
 `ros2_livekit_bridge_msgs` package.
 
-
-### See [../../README.md](../../README.md) for more information.
+See the repository [README](../../README.md) for user and developer guides, and
+the [data-track schema design](../../docs/design/schema.md) for the schema wire
+contract and validation flow.

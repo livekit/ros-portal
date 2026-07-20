@@ -31,7 +31,6 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/message_schema.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
@@ -77,9 +76,9 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
   };
 }
 
-TopicForwarder::InboundSchemaValidationResult TopicForwarder::validateInboundSchema(
-    const RemoteDataTrackDescriptor& descriptor, const std::string& topic_type) const {
-  InboundSchemaValidationResult validation;
+SchemaManager::ValidationResult TopicForwarder::validateInboundSchema(const RemoteDataTrackDescriptor& descriptor,
+                                                                      const std::string& topic_type) const {
+  SchemaManager::ValidationResult validation;
 
   if (!descriptor.frame_encoding.has_value()) {
     validation.reason = "track does not advertise a frame encoding";
@@ -93,52 +92,13 @@ TopicForwarder::InboundSchemaValidationResult TopicForwarder::validateInboundSch
     validation.reason = "track does not advertise a schema";
     return validation;
   }
-
-  const auto& schema_id = *descriptor.schema;
-  if (schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Msg &&
-      schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Idl) {
-    validation.reason = "track schema encoding is not ros2msg or ros2idl";
-    return validation;
-  }
-  if (schema_id.name != topic_type) {
-    validation.reason = "track schema name '" + schema_id.name + "' does not match local ROS type '" + topic_type + "'";
-    return validation;
-  }
-
-  const auto remote_schema_result = livekit_methods_.get_schema(schema_id, descriptor.publisher_identity);
-  if (!remote_schema_result) {
-    validation.reason = "remote schema retrieval failed: " + remote_schema_result.error();
-    return validation;
-  }
-  const auto& remote_schema_text = remote_schema_result.value();
-  validation.remote_fingerprint = fingerprintSchemaText(remote_schema_text);
-
-  const auto local_schema = renderRosMessageSchema(topic_type);
-  if (!local_schema.has_value()) {
-    validation.reason = "local ROS schema could not be rendered";
-    return validation;
-  }
-  validation.local_fingerprint = fingerprintSchemaText(local_schema->text);
-
-  const bool encoding_matches =
-      (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Msg && local_schema->encoding == "ros2msg") ||
-      (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Idl && local_schema->encoding == "ros2idl");
-  if (!encoding_matches) {
-    validation.reason = "remote and local schema encodings differ";
-    return validation;
-  }
-  if (validation.remote_fingerprint != validation.local_fingerprint || remote_schema_text != local_schema->text) {
-    validation.reason = "remote and local schema definitions differ";
-    return validation;
-  }
-
-  validation.accepted = true;
-  return validation;
+  return schema_manager_.validateInboundSchema(*descriptor.schema, descriptor.publisher_identity, topic_type);
 }
 
 TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods)
     : options_(std::move(options)),
       node_(std::move(node)),
+      schema_manager_(std::move(livekit_methods.schema)),
       livekit_methods_(std::move(livekit_methods)),
       logger_(rclcpp::get_logger("topic_forwarder")) {
   const auto locked_node = node_.lock();
@@ -146,7 +106,7 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
     throw std::invalid_argument("TopicForwarder requires a non-expired ROS node");
   }
 
-  if (!livekit_methods_.publish_data_track || !livekit_methods_.publish_video_track || !livekit_methods_.get_schema) {
+  if (!livekit_methods_.publish_data_track || !livekit_methods_.publish_video_track) {
     throw std::invalid_argument("TopicForwarder requires fully populated LiveKitMethods");
   }
 
@@ -305,7 +265,13 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
     return true;
   }
 
-  const auto writer_result = livekit_methods_.publish_data_track(topic_name, topic_type);
+  const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type);
+  if (!schema_result) {
+    RCLCPP_ERROR(logger_, "Failed to define schema for '%s': %s", topic_name.c_str(), schema_result.error().c_str());
+    return false;
+  }
+
+  const auto writer_result = livekit_methods_.publish_data_track(topic_name, schema_result.value());
   if (!writer_result) {
     RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
                  writer_result.error().c_str());
@@ -470,15 +436,15 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
 
   const auto schema_validation = validateInboundSchema(descriptor, *topic_type);
   if (!schema_validation.accepted) {
-    const auto remote_fingerprint =
-        schema_validation.remote_fingerprint.empty() ? "unavailable" : schema_validation.remote_fingerprint;
-    const auto local_fingerprint =
-        schema_validation.local_fingerprint.empty() ? "unavailable" : schema_validation.local_fingerprint;
+    const std::string remote_hash =
+        schema_validation.remote_hash ? schemaHashToHex(*schema_validation.remote_hash) : "unavailable";
+    const std::string local_hash =
+        schema_validation.local_hash ? schemaHashToHex(*schema_validation.local_hash) : "unavailable";
     RCLCPP_ERROR(logger_,
                  "Rejecting LiveKit data track '%s' [%s] from '%s': %s "
                  "(remote_schema_sha256=%s local_schema_sha256=%s)",
                  descriptor.track_name.c_str(), topic_type->c_str(), descriptor.publisher_identity.c_str(),
-                 schema_validation.reason.c_str(), remote_fingerprint.c_str(), local_fingerprint.c_str());
+                 schema_validation.reason.c_str(), remote_hash.c_str(), local_hash.c_str());
     return;
   }
 

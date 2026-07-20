@@ -32,14 +32,12 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
-#include <mutex>
 #include <utility>
 #include <vector>
 
 #include "ros2_livekit_bridge/cli/manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
-#include "ros2_livekit_bridge/message_schema.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/config_mapping.hpp"
@@ -292,43 +290,13 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
                                                           best_effort_qos_topics, this->get_logger());
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
-    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name, const std::string& topic_type)
+    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name,
+                                                     const livekit::DataTrackSchemaId& schema_id)
         -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
             "local participant is unavailable");
-      }
-
-      const auto schema = renderRosMessageSchema(topic_type);
-      if (!schema) {
-        return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
-            "unable to render required ROS schema for type '" + topic_type + "'");
-      }
-
-      const livekit::DataTrackSchemaId schema_id{
-          topic_type,
-          schemaEncodingFromRosDefinition(schema->encoding),
-      };
-      const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
-      const auto schema_fingerprint = fingerprintSchemaText(schema->text);
-      {
-        const std::lock_guard<std::mutex> lock(defined_schema_ids_mutex_);
-        const auto existing = defined_schema_fingerprints_.find(dedupe_key);
-        if (existing != defined_schema_fingerprints_.end()) {
-          if (existing->second != schema_fingerprint) {
-            return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
-                "schema ID for type '" + topic_type + "' was already defined with a different fingerprint");
-          }
-        } else {
-          try {
-            participant->defineSchema(schema_id, schema->text);
-            defined_schema_fingerprints_.emplace(dedupe_key, schema_fingerprint);
-          } catch (const std::exception& error) {
-            return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
-                "failed to define required schema for type '" + topic_type + "': " + error.what());
-          }
-        }
       }
 
       livekit::DataTrackPublishOptions options;
@@ -361,7 +329,23 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
       return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
     };
 
-    forwarder_lk_methods.get_schema =
+    forwarder_lk_methods.schema.define_schema =
+        [this](const livekit::DataTrackSchemaId& schema_id,
+               const std::string& schema_text) -> livekit::Result<void, std::string> {
+      const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
+      if (!participant) {
+        return livekit::Result<void, std::string>::failure("local participant is unavailable");
+      }
+
+      try {
+        participant->defineSchema(schema_id, schema_text);
+        return livekit::Result<void, std::string>::success();
+      } catch (const std::exception& error) {
+        return livekit::Result<void, std::string>::failure(error.what());
+      }
+    };
+
+    forwarder_lk_methods.schema.get_schema =
         [this](const livekit::DataTrackSchemaId& schema_id,
                const std::string& participant_identity) -> livekit::Result<std::string, std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;

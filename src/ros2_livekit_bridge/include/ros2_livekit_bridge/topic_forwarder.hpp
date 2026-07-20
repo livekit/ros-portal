@@ -42,6 +42,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ros2_livekit_bridge/schema_manager.hpp"
+
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
@@ -113,15 +115,14 @@ public:
   struct LiveKitMethods {
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
     std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&,
-                                                                                 const std::string&)>
+                                                                                 const livekit::DataTrackSchemaId&)>
         publish_data_track;
     /// @brief Create or reuse an outbound LiveKit video track for a ROS image
     /// topic.
     std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(const std::string&, int, int)>
         publish_video_track;
-    /// @brief Retrieve a remote participant's schema definition by ID.
-    std::function<livekit::Result<std::string, std::string>(const livekit::DataTrackSchemaId&, const std::string&)>
-        get_schema;
+    /// @brief LiveKit schema operations owned by the embedded schema manager.
+    SchemaManager::LiveKitMethods schema;
   };
 
   /// @brief Construct a topic forwarder.
@@ -215,21 +216,9 @@ private:
   /// @brief Build a descriptor from a remote LiveKit data track.
   static RemoteDataTrackDescriptor createRemoteDataTrackDescriptor(std::shared_ptr<livekit::RemoteDataTrack> track);
 
-  /// @brief Result of validating remote schema metadata against local text.
-  struct InboundSchemaValidationResult {
-    /// @brief Whether the remote track is safe to forward.
-    bool accepted{false};
-    /// @brief Human-readable rejection reason.
-    std::string reason;
-    /// @brief SHA-256 of the retrieved remote schema, when available.
-    std::string remote_fingerprint;
-    /// @brief SHA-256 of the rendered local schema, when available.
-    std::string local_fingerprint;
-  };
-
   /// @brief Validate a remote track's schema against the local ROS definition.
-  InboundSchemaValidationResult validateInboundSchema(const RemoteDataTrackDescriptor& descriptor,
-                                                      const std::string& topic_type) const;
+  SchemaManager::ValidationResult validateInboundSchema(const RemoteDataTrackDescriptor& descriptor,
+                                                        const std::string& topic_type) const;
 
   /// @brief Per-topic state for outbound ROS image forwarding.
   struct ImageTopicState {
@@ -298,6 +287,8 @@ private:
   /// @brief Non-owning handle to the ROS node used to create subscriptions and
   /// publishers. Locked per operation so the node lifecycle stays at the edge.
   rclcpp::Node::WeakPtr node_;
+  /// @brief Stateful ROS/LiveKit schema registration and validation component.
+  SchemaManager schema_manager_;
   /// @brief LiveKit publish callbacks supplied by the bridge.
   LiveKitMethods livekit_methods_;
   /// @brief Reentrant callback group for outbound ROS subscriptions.

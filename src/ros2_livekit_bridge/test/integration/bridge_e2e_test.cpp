@@ -22,15 +22,35 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "bridge_e2e_fixture.hpp"
-#include "ros2_livekit_bridge/message_schema.hpp"
+#include "ros2_livekit_bridge/schema_manager.hpp"
 
 namespace ros2_livekit_bridge::test {
 namespace {
+
+std::optional<std::string> renderSchemaText(const std::string& topic_type) {
+  SchemaManager::LiveKitMethods methods;
+  std::optional<std::string> schema_text;
+  methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string& text) {
+    schema_text = text;
+    return livekit::Result<void, std::string>::success();
+  };
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return livekit::Result<std::string, std::string>::failure("unused");
+  };
+  SchemaManager manager(std::move(methods));
+  if (!manager.ensureSchemaDefined(topic_type)) {
+    return std::nullopt;
+  }
+  return schema_text;
+}
 
 // End-to-end bridge check: two isolated ROS graphs publish message topics through
 // separate bridge participants in the same LiveKit room, then verify each graph
@@ -81,8 +101,8 @@ TEST_F(BridgeTestE2E, AcceptsInboundTrackWithExactSchema) {
   ASSERT_NE(subscription, nullptr);
   ASSERT_TRUE(waitFor([&]() { return topicExists(*robotBNode(), kTopic); }, kGraphTimeout));
 
-  const auto schema = renderRosMessageSchema("std_msgs/msg/String");
-  if (!schema.has_value()) {
+  const auto schema_text = renderSchemaText("std_msgs/msg/String");
+  if (!schema_text.has_value()) {
     FAIL() << "std_msgs/msg/String schema was unavailable";
     return;
   }
@@ -95,7 +115,7 @@ TEST_F(BridgeTestE2E, AcceptsInboundTrackWithExactSchema) {
   ASSERT_NE(publisher, nullptr);
 
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, schema->text));
+  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
   livekit::DataTrackPublishOptions options;
   options.name = kTopic;
   options.schema = schema_id;
@@ -110,8 +130,8 @@ TEST_F(BridgeTestE2E, AcceptsPreexistingInboundTrackBeforeLocalRosEndpointAppear
   constexpr const char* kTopic = "/bridge/schema_before_endpoint";
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
-  const auto schema = renderRosMessageSchema("std_msgs/msg/String");
-  if (!schema.has_value()) {
+  const auto schema_text = renderSchemaText("std_msgs/msg/String");
+  if (!schema_text.has_value()) {
     FAIL() << "std_msgs/msg/String schema was unavailable";
     return;
   }
@@ -124,7 +144,7 @@ TEST_F(BridgeTestE2E, AcceptsPreexistingInboundTrackBeforeLocalRosEndpointAppear
   ASSERT_NE(publisher, nullptr);
 
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, schema->text));
+  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
   livekit::DataTrackPublishOptions options;
   options.name = kTopic;
   options.schema = schema_id;

@@ -28,9 +28,8 @@ flowchart LR
 
   subgraph SenderBridge["Sending bridge"]
     TF1[TopicForwarder]
-    Publish[Bridge publish callback]
-    Render1[Schema renderer]
-    Cache[Definition cache]
+    SM1[SchemaManager]
+    Publish[Bridge SDK callbacks]
   end
 
   subgraph LiveKit["LiveKit"]
@@ -41,8 +40,7 @@ flowchart LR
   subgraph ReceiverBridge["Receiving bridge"]
     Filter[Filter and normalize]
     Resolve[Resolve candidate type]
-    Validate[Schema validator]
-    Render2[Schema renderer]
+    SM2[SchemaManager]
     GP[Generic publisher]
   end
 
@@ -52,18 +50,16 @@ flowchart LR
 
   RP -->|serialized message| GS
   GS --> TF1
-  TF1 --> Publish
-  Publish --> Render1
-  Render1 --> Cache
-  Cache -->|defineSchema| Registry
+  TF1 --> SM1
+  SM1 --> Publish
+  Publish -->|defineSchema| Registry
   Publish -->|publishDataTrack| Track
   TF1 -->|raw CDR frame| Track
   Track --> Filter
   Filter --> Resolve
-  Resolve --> Validate
-  Registry -->|getSchema| Validate
-  Render2 -->|local definition| Validate
-  Validate -->|accepted CDR| GP
+  Resolve --> SM2
+  Registry -->|getSchema| SM2
+  SM2 -->|accepted CDR| GP
   GP --> RS
 ```
 
@@ -153,41 +149,45 @@ writer directly.
 sequenceDiagram
   participant ROS as ROS publisher
   participant TF as TopicForwarder
+  participant SM as SchemaManager
   participant Bridge as Ros2LiveKitBridge
   participant RB as rosbag2 definition source
   participant LK as LiveKit participant
 
   ROS->>TF: SerializedMessage
-  TF->>Bridge: publish_data_track(topic, type)
-  Bridge->>RB: get_full_text(type)
-  RB-->>Bridge: encoding + full schema text
-  Bridge->>Bridge: SHA-256(exact schema bytes)
+  TF->>SM: ensureSchemaDefined(type)
+  SM->>RB: get_full_text(type)
+  RB-->>SM: encoding + full schema text
+  SM->>SM: SHA-256(exact schema bytes)
 
   alt schema ID has not been defined
-    Bridge->>LK: defineSchema(type, encoding, text)
-    Bridge->>Bridge: cache fingerprint
-  else cached fingerprint matches
-    Bridge->>Bridge: reuse schema ID
-  else cached fingerprint differs
-    Bridge-->>TF: writer creation failure
+    SM->>Bridge: define_schema(type, encoding, text)
+    Bridge->>LK: defineSchema(...)
+    SM->>SM: cache hash
+  else cached hash matches
+    SM->>SM: reuse schema ID
+  else cached hash differs
+    SM-->>TF: writer creation failure
   end
 
+  TF->>Bridge: publish_data_track(topic, schema ID)
   Bridge->>LK: publishDataTrack(schema ID, CDR)
   LK-->>TF: data-track writer
   TF->>LK: raw CDR bytes
 ```
 
 The registration cache key is the rosbag2 encoding, a newline, and the ROS type
-(`encoding + "\n" + topic_type`). Its value is the 64-character lowercase
-hexadecimal SHA-256 fingerprint of the exact schema bytes. The cache:
+(`encoding + "\n" + topic_type`). Its value is the 32-byte binary SHA-256 hash
+of the exact schema bytes; hashes are converted to lowercase hexadecimal only
+for diagnostics. The cache:
 
 - is protected by a mutex because track writers may be created concurrently;
 - records only successful `defineSchema()` calls;
-- is scoped to the `Ros2LiveKitBridge` instance; and
+- is scoped to the `SchemaManager` owned by each `TopicForwarder`; and
 - rejects different schema text for an existing composite key.
 
 Schema rendering itself is not cached. The renderer creates a local rosbag2
-definition source and recomputes the fingerprint for each writer-creation
+definition source and recomputes the hash for each writer-creation
 request, including requests that find an existing registration.
 
 Outbound handling is fail-closed. If the local definition cannot be rendered,
@@ -207,6 +207,7 @@ publisher or subscribes to its frames.
 sequenceDiagram
   participant LK as Remote LiveKit track
   participant TF as TopicForwarder
+  participant SM as SchemaManager
   participant Graph as Local ROS graph
   participant Bridge as Ros2LiveKitBridge
   participant RB as rosbag2 definition source
@@ -220,13 +221,15 @@ sequenceDiagram
   else no local endpoint yet
     TF->>TF: use schema name as candidate type
   end
-  TF->>TF: check CDR, schema encoding, and type name
-  TF->>Bridge: get_schema(schema ID, publisher identity)
+  TF->>TF: check CDR and schema presence
+  TF->>SM: validateInboundSchema(schema ID, publisher identity, type)
+  SM->>SM: check schema encoding and type name
+  SM->>Bridge: get_schema(schema ID, publisher identity)
   Bridge->>LK: getSchema(...)
-  LK-->>TF: remote schema text
-  TF->>RB: get_full_text(local ROS type)
-  RB-->>TF: local encoding + schema text
-  TF->>TF: compare encoding, SHA-256, and exact bytes
+  LK-->>SM: remote schema text
+  SM->>RB: get_full_text(local ROS type)
+  RB-->>SM: local encoding + schema text
+  SM->>SM: compare encoding, SHA-256, and exact bytes
 
   alt all checks pass
     TF->>TF: map final ROS topic name
@@ -264,7 +267,7 @@ Validation accepts a track only when all of these checks pass:
 6. The remote participant's schema blob can be retrieved.
 7. The same ROS type can be rendered from the local installation.
 8. Remote and local schema encodings match.
-9. SHA-256 fingerprints and exact schema bytes both match.
+9. SHA-256 hashes and exact schema bytes both match.
 
 Checking both the digest and the text makes the intended byte-exact contract
 explicit. The digest is also included in mismatch diagnostics, while direct
@@ -342,10 +345,10 @@ unverified CDR bytes cannot enter the local ROS graph.
 
 ## Implementation map
 
-- Schema rendering and fingerprinting:
-  [`message_schema.cpp`](../../src/ros2_livekit_bridge/src/message_schema.cpp) and
-  [`message_schema.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/message_schema.hpp)
-- LiveKit schema registration and retrieval:
+- Schema rendering, registration state, and inbound validation:
+  [`schema_manager.cpp`](../../src/ros2_livekit_bridge/src/schema_manager.cpp) and
+  [`schema_manager.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/schema_manager.hpp)
+- LiveKit SDK callback adapters:
   [`ros2_livekit_bridge.cpp`](../../src/ros2_livekit_bridge/src/ros2_livekit_bridge.cpp) and
   [`ros2_livekit_bridge.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/ros2_livekit_bridge.hpp)
 - Inbound validation and CDR forwarding:
@@ -354,7 +357,7 @@ unverified CDR bytes cannot enter the local ROS graph.
 - Inbound topic normalization and identity-preserving mapping:
   [`ros_utils.cpp`](../../src/ros2_livekit_bridge/src/utils/ros_utils.cpp)
 - Unit coverage:
-  [`message_schema_test.cpp`](../../src/ros2_livekit_bridge/test/unit/message_schema_test.cpp) and
+  [`schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_manager_test.cpp) and
   [`topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp)
 - End-to-end acceptance and rejection:
   [`bridge_e2e_test.cpp`](../../src/ros2_livekit_bridge/test/integration/bridge_e2e_test.cpp)

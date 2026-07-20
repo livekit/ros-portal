@@ -62,6 +62,8 @@ The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants
   [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
   [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), message paths, and
   QoS selection.
+- [Data-track schemas](docs/design/schema.md): ROS message schema transport,
+  registration, validation, and failure behavior.
 
 ## Packages of Interest
 

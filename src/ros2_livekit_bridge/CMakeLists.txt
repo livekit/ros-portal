@@ -230,8 +230,8 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
-  src/message_schema.cpp
   src/ros2_livekit_bridge.cpp
+  src/schema_manager.cpp
   src/service_forwarder.cpp
   src/topic_forwarder.cpp
   src/utils/base64.cpp

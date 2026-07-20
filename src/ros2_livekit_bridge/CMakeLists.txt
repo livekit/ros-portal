@@ -60,9 +60,6 @@ ament_auto_find_build_dependencies(REQUIRED
 #   colcon build --packages-select ros2_livekit_bridge \
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
-# If you build the SDK locally for use here, build the SDK itself with
-# -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
-# affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
 set(LIVEKIT_SDK_VERSION "1.1.1" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")

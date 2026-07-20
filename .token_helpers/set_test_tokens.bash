@@ -49,7 +49,7 @@ fi
 
 LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-devkey}"
 LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-secret}"
-LIVEKIT_ROOM="${LIVEKIT_ROOM:-ros_bridge_participant_id_test}"
+LIVEKIT_ROOM="${LIVEKIT_ROOM:-ros2_livekit_bridge_test_room}"
 LIVEKIT_VALID_FOR="${LIVEKIT_VALID_FOR:-99999h}"
 LIVEKIT_IDENTITY_A="${LIVEKIT_IDENTITY_A:-bridge-test-a}"
 LIVEKIT_IDENTITY_B="${LIVEKIT_IDENTITY_B:-bridge-test-b}"

@@ -5,6 +5,10 @@ lets you run a subset of the `ros2` CLI introspection commands against a
 **remote** robot's ROS graph that is connected to the same LiveKit room. It is the bridge
 component that makes commands like `ros2 topic list` work across the network.
 
+Remote calls use [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/) to
+reach the peer bridge's registered RPC handlers. See the LiveKit docs for method
+registration, payload limits, and timeout behavior.
+
 ## How it works
 
 Each supported command is exposed two ways:
@@ -12,8 +16,9 @@ Each supported command is exposed two ways:
 1. **As a local ROS service.** When the bridge node starts, the manager creates
    one ROS service per command (e.g. `/ros2_livekit_bridge/ros2_topic_list`).
    You call these like any normal ROS service with `ros2 service call`.
-2. **As a LiveKit RPC method.** The same manager registers a matching LiveKit
-   RPC handler (e.g. `ros2_topic_list`) on the room's local participant.
+2. **As a LiveKit RPC method.** The same manager registers a matching
+   [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/) handler (e.g.
+   `ros2_topic_list`) on the room's local participant.
 
 The two halves connect across the network:
 

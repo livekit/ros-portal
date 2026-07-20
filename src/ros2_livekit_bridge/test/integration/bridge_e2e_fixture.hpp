@@ -116,7 +116,8 @@ inline rclcpp::NodeOptions createBridgeOptions(const rclcpp::Context::SharedPtr&
       });
 }
 
-inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool preserve_id = false) {
+inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool preserve_id = false,
+                                    const std::string& direction = "bidirectional") {
   std::ostringstream stream;
   stream << "ros2_livekit_bridge:\n"
          << "  version: \"0.0.1\"\n"
@@ -124,7 +125,7 @@ inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool prese
          << "  ros_threads: 4\n"
          << "  topics:\n"
          << "    - topic: \"" << topic_pattern << "\"\n"
-         << "      direction: \"bidirectional\"\n";
+         << "      direction: \"" << direction << "\"\n";
   if (preserve_id) {
     stream << "      preserve_id: true\n";
   }
@@ -248,8 +249,8 @@ protected:
     graph_b_ = std::make_unique<ScopedRosGraph>(domain_id_b);
     SCOPED_TRACE("ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
-    config_file_b_ =
-        std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern), "ros2_livekit_bridge_schema_test_b_");
+    config_file_b_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern, false, "in"),
+                                                           "ros2_livekit_bridge_schema_test_b_");
     bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());
     ASSERT_NE(bridge_b_, nullptr);
 
@@ -519,6 +520,13 @@ protected:
   const std::string& identityB() const { return identity_b_; }
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
+
+  void shutdownBridgeB() {
+    if (graph_b_executor_ && bridge_b_) {
+      graph_b_executor_->remove_node(bridge_b_);
+    }
+    bridge_b_.reset();
+  }
 
 private:
   static std_msgs::msg::String makeMessage(const std::string& data) {

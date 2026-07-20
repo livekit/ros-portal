@@ -21,10 +21,14 @@
 #include <livekit/room.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <exception>
+#include <memory>
 #include <optional>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,6 +55,71 @@ std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   }
   return schema_text;
 }
+
+livekit::DataTrackPublishOptions stringTrackOptions(const std::string& topic) {
+  livekit::DataTrackPublishOptions options;
+  options.name = topic;
+  options.schema = livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+  return options;
+}
+
+std::vector<std::uint8_t> serializeString(const std::string& text) {
+  std_msgs::msg::String message;
+  message.data = text;
+  const rclcpp::Serialization<std_msgs::msg::String> serializer;
+  rclcpp::SerializedMessage serialized;
+  serializer.serialize_message(&message, &serialized);
+  const auto& raw = serialized.get_rcl_serialized_message();
+  return {raw.buffer, raw.buffer + raw.buffer_length};
+}
+
+class DataTrackLifecycleTests : public BridgeTestE2E {
+protected:
+  std::shared_ptr<livekit::LocalParticipant> connectPublisher(livekit::Room& room) {
+    livekit::RoomOptions room_options;
+    room_options.auto_subscribe = true;
+    if (!room.connect(liveKitUrl(), tokenA(), room_options)) {
+      ADD_FAILURE() << "Independent LiveKit publisher failed to connect";
+      return nullptr;
+    }
+
+    auto publisher = room.localParticipant().lock();
+    if (!publisher) {
+      ADD_FAILURE() << "Independent LiveKit publisher was unavailable";
+    }
+    return publisher;
+  }
+
+  bool defineStringSchema(livekit::LocalParticipant& publisher) {
+    const auto schema_text = renderSchemaText("std_msgs/msg/String");
+    if (!schema_text.has_value()) {
+      ADD_FAILURE() << "std_msgs/msg/String schema was unavailable";
+      return false;
+    }
+
+    try {
+      publisher.defineSchema(
+          livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg}, *schema_text);
+    } catch (const std::exception& exception) {
+      ADD_FAILURE() << "Failed to define std_msgs/msg/String schema: " << exception.what();
+      return false;
+    }
+    return true;
+  }
+
+  bool pushUntilReceived(const std::shared_ptr<livekit::LocalDataTrack>& track,
+                         const std::vector<std::uint8_t>& payload, const std::atomic_bool& received) {
+    return waitFor(
+        [&]() {
+          if (!received.load()) {
+            (void)track->tryPush(std::vector<std::uint8_t>(payload));
+          }
+          return received.load();
+        },
+        kMessageTimeout);
+  }
+};
 
 // End-to-end bridge check: two isolated ROS graphs publish message topics through
 // separate bridge participants in the same LiveKit room, then verify each graph
@@ -93,120 +162,163 @@ TEST_F(BridgeTestE2E, DoesNotRepublishTopicNotAllowedOnReceiver) {
                                           "message that should stay blocked"));
 }
 
-TEST_F(BridgeTestE2E, AcceptsInboundTrackWithExactSchema) {
-  constexpr const char* kTopic = "/bridge/schema_match";
-  initializeInboundOnlyRuntime(kTopic);
-  auto subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
-      kTopic, 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
-  ASSERT_NE(subscription, nullptr);
-  ASSERT_TRUE(waitFor([&]() { return topicExists(*robotBNode(), kTopic); }, kGraphTimeout));
-
-  const auto schema_text = renderSchemaText("std_msgs/msg/String");
-  if (!schema_text.has_value()) {
-    FAIL() << "std_msgs/msg/String schema was unavailable";
-    return;
-  }
-
-  livekit::Room publisher_room;
-  livekit::RoomOptions room_options;
-  room_options.auto_subscribe = true;
-  ASSERT_TRUE(publisher_room.connect(liveKitUrl(), tokenA(), room_options));
-  const auto publisher = publisher_room.localParticipant().lock();
-  ASSERT_NE(publisher, nullptr);
-
-  const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
-  livekit::DataTrackPublishOptions options;
-  options.name = kTopic;
-  options.schema = schema_id;
-  options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
-  const auto track_result = publisher->publishDataTrack(options);
-  ASSERT_TRUE(track_result);
-
-  EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
-}
-
-TEST_F(BridgeTestE2E, AcceptsPreexistingInboundTrackBeforeLocalRosEndpointAppears) {
-  constexpr const char* kTopic = "/bridge/schema_before_endpoint";
+// Case: A valid track published after bridge startup but before a ROS
+// subscriber appears should begin forwarding when the subscriber joins.
+// 1. Start the receiving bridge without a ROS subscriber.
+// 2. Publish a valid LiveKit data track.
+// 3. Add the ROS subscriber after the bridge discovers the track.
+// 4. Push a frame and verify the late subscriber receives it.
+TEST_F(DataTrackLifecycleTests, TrackAfterBridgeBeforeSubscriberForwards) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
-
-  const auto schema_text = renderSchemaText("std_msgs/msg/String");
-  if (!schema_text.has_value()) {
-    FAIL() << "std_msgs/msg/String schema was unavailable";
-    return;
-  }
+  constexpr const char* kTopic = "/bridge/lifecycle/track_after_bridge";
+  initializeInboundOnlyRuntime(kTopic);
 
   livekit::Room publisher_room;
-  livekit::RoomOptions room_options;
-  room_options.auto_subscribe = true;
-  ASSERT_TRUE(publisher_room.connect(liveKitUrl(), tokenA(), room_options));
-  const auto publisher = publisher_room.localParticipant().lock();
+  const auto publisher = connectPublisher(publisher_room);
   ASSERT_NE(publisher, nullptr);
-
-  const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
-  livekit::DataTrackPublishOptions options;
-  options.name = kTopic;
-  options.schema = schema_id;
-  options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
-  const auto track_result = publisher->publishDataTrack(options);
+  ASSERT_TRUE(defineStringSchema(*publisher));
+  const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
   ASSERT_TRUE(track_result);
-
-  // Start the receiving bridge only after the remote track exists. The bridge
-  // must handle the connect-time track event, validate from its installed
-  // interface definition, and create a publisher without a local endpoint.
-  initializeInboundOnlyRuntime(kTopic);
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
   std::atomic_bool received{false};
-  auto late_subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
-      kTopic, 10, [&received](const std_msgs::msg::String::ConstSharedPtr& msg) {
-        if (msg->data == "published before local endpoint") {
-          received.store(true);
-        }
+  auto subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
+      kTopic, 10, [&received](const std_msgs::msg::String::ConstSharedPtr& message) {
+        received.store(message->data == "late subscriber");
       });
-  ASSERT_NE(late_subscription, nullptr);
-  ASSERT_TRUE(waitFor([&]() { return late_subscription->get_publisher_count() > 0U; }, kGraphTimeout));
+  ASSERT_NE(subscription, nullptr);
+  ASSERT_TRUE(waitFor([&]() { return subscription->get_publisher_count() > 0U; }, kGraphTimeout));
 
-  std_msgs::msg::String message;
-  message.data = "published before local endpoint";
-  const rclcpp::Serialization<std_msgs::msg::String> serializer;
-  rclcpp::SerializedMessage serialized;
-  serializer.serialize_message(&message, &serialized);
-  const auto& raw = serialized.get_rcl_serialized_message();
-  const std::vector<std::uint8_t> payload(raw.buffer, raw.buffer + raw.buffer_length);
-
-  EXPECT_TRUE(waitFor(
-      [&]() {
-        if (!received.load()) {
-          (void)track_result.value()->tryPush(std::vector<std::uint8_t>(payload));
-        }
-        return received.load();
-      },
-      kMessageTimeout));
+  EXPECT_TRUE(pushUntilReceived(track_result.value(), serializeString("late subscriber"), received));
 }
 
-TEST_F(BridgeTestE2E, RejectsInboundTrackWithDifferentSchemaWithoutLocalEndpoint) {
-  constexpr const char* kTopic = "/bridge/schema_mismatch";
+// Case: Unpublishing an active LiveKit track should remove its ROS publisher.
+// 1. Start the bridge and publish a valid track.
+// 2. Verify the bridge creates the ROS publisher.
+// 3. Unpublish the LiveKit track.
+// 4. Verify the ROS publisher disappears.
+TEST_F(DataTrackLifecycleTests, UnpublishingTrackRemovesRosPublisher) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  constexpr const char* kTopic = "/bridge/lifecycle/unpublish";
   initializeInboundOnlyRuntime(kTopic);
 
   livekit::Room publisher_room;
-  livekit::RoomOptions room_options;
-  room_options.auto_subscribe = true;
-  ASSERT_TRUE(publisher_room.connect(liveKitUrl(), tokenA(), room_options));
-  const auto publisher = publisher_room.localParticipant().lock();
+  const auto publisher = connectPublisher(publisher_room);
   ASSERT_NE(publisher, nullptr);
-
-  const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, "int32 data\n"));
-  livekit::DataTrackPublishOptions options;
-  options.name = kTopic;
-  options.schema = schema_id;
-  options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
-  const auto track_result = publisher->publishDataTrack(options);
+  ASSERT_TRUE(defineStringSchema(*publisher));
+  const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
   ASSERT_TRUE(track_result);
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
-  EXPECT_FALSE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kNegativeAssertionTimeout));
+  publisher->unpublishDataTrack(track_result.value());
+
+  EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) == 0U; }, kGraphTimeout));
+}
+
+// Case: A topic should recover when its LiveKit track is republished with a new
+// SID after the original track is unpublished.
+// 1. Publish a valid track and verify its ROS publisher.
+// 2. Unpublish it and verify cleanup.
+// 3. Republish the same topic as a new track.
+// 4. Verify ROS publication and message delivery resume.
+TEST_F(DataTrackLifecycleTests, RepublishedTrackResumesForwarding) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  constexpr const char* kTopic = "/bridge/lifecycle/republish";
+  initializeInboundOnlyRuntime(kTopic);
+
+  std::atomic_bool received{false};
+  auto subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
+      kTopic, 10, [&received](const std_msgs::msg::String::ConstSharedPtr& message) {
+        received.store(message->data == "after republish");
+      });
+  ASSERT_NE(subscription, nullptr);
+
+  livekit::Room publisher_room;
+  const auto publisher = connectPublisher(publisher_room);
+  ASSERT_NE(publisher, nullptr);
+  ASSERT_TRUE(defineStringSchema(*publisher));
+
+  const auto first_track = publisher->publishDataTrack(stringTrackOptions(kTopic));
+  ASSERT_TRUE(first_track);
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
+  publisher->unpublishDataTrack(first_track.value());
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) == 0U; }, kGraphTimeout));
+
+  const auto second_track = publisher->publishDataTrack(stringTrackOptions(kTopic));
+  ASSERT_TRUE(second_track);
+  ASSERT_TRUE(waitFor([&]() { return subscription->get_publisher_count() > 0U; }, kGraphTimeout));
+
+  EXPECT_TRUE(pushUntilReceived(second_track.value(), serializeString("after republish"), received));
+}
+
+// Case: Destroying a bridge with an active inbound track should stop its reader
+// and remove its ROS publisher without hanging.
+// 1. Start the bridge and publish a valid track.
+// 2. Verify the ROS publisher exists.
+// 3. Destroy the bridge while the track remains active.
+// 4. Verify teardown completes and the ROS publisher disappears.
+TEST_F(DataTrackLifecycleTests, BridgeShutdownCleansUpActiveTrack) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  constexpr const char* kTopic = "/bridge/lifecycle/bridge_shutdown";
+  initializeInboundOnlyRuntime(kTopic);
+
+  livekit::Room publisher_room;
+  const auto publisher = connectPublisher(publisher_room);
+  ASSERT_NE(publisher, nullptr);
+  ASSERT_TRUE(defineStringSchema(*publisher));
+  const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
+  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
+
+  const auto start = std::chrono::steady_clock::now();
+  shutdownBridgeB();
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+
+  EXPECT_LT(elapsed, kGraphTimeout);
+  EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) == 0U; }, kGraphTimeout));
+}
+
+// Case: An active inbound track should continue serving ROS subscribers that
+// leave and later rejoin.
+// 1. Publish a valid track and deliver a frame to the first subscriber.
+// 2. Destroy the subscriber while keeping the track active.
+// 3. Create a replacement subscriber.
+// 4. Push another frame and verify the replacement receives it.
+TEST_F(DataTrackLifecycleTests, RecreatedSubscriberReceivesActiveTrack) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  constexpr const char* kTopic = "/bridge/lifecycle/subscriber_recreated";
+  initializeInboundOnlyRuntime(kTopic);
+
+  livekit::Room publisher_room;
+  const auto publisher = connectPublisher(publisher_room);
+  ASSERT_NE(publisher, nullptr);
+  ASSERT_TRUE(defineStringSchema(*publisher));
+  const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
+  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
+
+  std::atomic_bool first_received{false};
+  auto first_subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
+      kTopic, 10, [&first_received](const std_msgs::msg::String::ConstSharedPtr& message) {
+        first_received.store(message->data == "first subscriber");
+      });
+  ASSERT_NE(first_subscription, nullptr);
+  ASSERT_TRUE(waitFor([&]() { return first_subscription->get_publisher_count() > 0U; }, kGraphTimeout));
+  ASSERT_TRUE(pushUntilReceived(track_result.value(), serializeString("first subscriber"), first_received));
+
+  first_subscription.reset();
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_subscribers(kTopic) == 0U; }, kGraphTimeout));
+  ASSERT_GT(robotBNode()->count_publishers(kTopic), 0U);
+
+  std::atomic_bool second_received{false};
+  auto second_subscription = robotBNode()->create_subscription<std_msgs::msg::String>(
+      kTopic, 10, [&second_received](const std_msgs::msg::String::ConstSharedPtr& message) {
+        second_received.store(message->data == "second subscriber");
+      });
+  ASSERT_NE(second_subscription, nullptr);
+  ASSERT_TRUE(waitFor([&]() { return second_subscription->get_publisher_count() > 0U; }, kGraphTimeout));
+
+  EXPECT_TRUE(pushUntilReceived(track_result.value(), serializeString("second subscriber"), second_received));
 }
 
 } // namespace

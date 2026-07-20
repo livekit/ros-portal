@@ -18,9 +18,23 @@ project(test_utilities)
 
 find_package(ament_cmake_auto REQUIRED)
 
+# Define the imported targets that the transitively-pulled medkit/bridge
+# CMake configs reference (yaml-cpp::yaml-cpp, nlohmann_json::nlohmann_json)
+# before ament_auto_find_build_dependencies resolves those packages.
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
+ament_auto_find_build_dependencies()
+
 install(PROGRAMS
   scripts/depth_time_offset_node.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Reuses the bridge introspection runtime (RuntimeMessageTypeSupport,
+# DynamicMessage) and the medkit JsonSerializer to print a type's JSON.
+ament_auto_add_executable(message_to_json
+  src/message_to_json.cpp
 )
 
 install(DIRECTORY launch/

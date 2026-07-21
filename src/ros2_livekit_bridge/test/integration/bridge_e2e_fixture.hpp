@@ -229,6 +229,15 @@ protected:
     ASSERT_TRUE(waitFor(
         [&]() { return topicExists(*robot_a_node_, publish_topic_a) && topicExists(*robot_b_node_, publish_topic_b); },
         kGraphTimeout));
+
+    // The local ROS graphs being ready says nothing about LiveKit participant
+    // discovery, which is delivered asynchronously as each bridge connects.
+    // Wait for the bridges to see each other in the room so that cross-
+    // participant RPCs (which reject unknown identities) do not race startup.
+    ASSERT_TRUE(
+        waitFor([&]() { return bridge_a_->hasParticipant(identity_b_) && bridge_b_->hasParticipant(identity_a_); },
+                kGraphTimeout))
+        << "Bridges did not discover each other in the LiveKit room";
   }
 
   bool verifyDirection(const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>& publisher,

@@ -63,6 +63,15 @@ public:
 
   int ros_threads() const { return ros_threads_; }
 
+  /// @brief Check whether a remote participant identity is present in the room.
+  /// @param participant_id LiveKit participant identity to look up.
+  /// @return True when the participant exists in the connected room.
+  ///
+  /// Participant presence is populated asynchronously as the room receives
+  /// connect/disconnect signaling, so callers that need a peer to be reachable
+  /// should poll this until it returns true rather than assuming immediacy.
+  bool hasParticipant(const std::string& participant_id) const;
+
 private:
   /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
@@ -102,11 +111,6 @@ private:
 
   /// @brief Forward participants-updated events to connection diagnostics.
   void onParticipantsUpdated(livekit::Room& room, const livekit::ParticipantsUpdatedEvent& event) override;
-
-  /// @brief Check whether a remote participant identity is present in the room.
-  /// @param participant_id LiveKit participant identity to look up.
-  /// @return True when the participant exists in the connected room.
-  bool hasParticipant(const std::string& participant_id) const;
 
   /// @brief Invoke a LiveKit RPC method through the room's local participant.
   /// @param participant_id LiveKit participant identity to call.

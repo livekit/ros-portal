@@ -30,11 +30,7 @@ namespace ros2_livekit_bridge::utils {
 
 /// @brief Build TopicForwarder options from the configured topics.
 ///
-/// Distills and compiles the outgoing/incoming/preserve-id topic patterns from
-/// @p topics, compiles @p best_effort_qos_topics, and wires in the QoS depth
-/// bounds and per-topic outbound rate caps. Pattern compile errors are logged
-/// via @p logger. This is bridge-side glue that knows both the config schema and
-/// the forwarders; the forwarders themselves stay unaware of
+/// Distills and compiles the outgoing/incoming/preserve-id topic patterns and QoS ars
 /// @ref ros2_livekit_bridge_config.
 /// @param topics Configured topics (latched topics are excluded from the
 /// DataTrack patterns internally).
@@ -43,9 +39,10 @@ namespace ros2_livekit_bridge::utils {
 /// @param best_effort_qos_topics Raw best-effort QoS topic patterns (from ROS
 /// params) compiled here.
 /// @param logger Logger used to report invalid regex patterns.
-TopicForwarder::TopicForwarderOptions topicForwarderOptions(
-    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics, std::size_t min_qos_depth,
-    std::size_t max_qos_depth, const std::vector<std::string>& best_effort_qos_topics, rclcpp::Logger logger);
+TopicForwarder::Options topicForwarderOptions(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics,
+                                              std::size_t min_qos_depth, std::size_t max_qos_depth,
+                                              const std::vector<std::string>& best_effort_qos_topics,
+                                              rclcpp::Logger logger);
 
 /// @brief Build outbound ServiceForwarder routes from the configured services.
 /// @param services Configured services; only `Direction::Out` entries yield a

@@ -74,8 +74,7 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
   };
 }
 
-TopicForwarder::TopicForwarder(TopicForwarderOptions options, rclcpp::Node::WeakPtr node,
-                               LiveKitMethods livekit_methods)
+TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods)
     : options_(std::move(options)),
       node_(std::move(node)),
       livekit_methods_(std::move(livekit_methods)),

@@ -35,10 +35,11 @@ std::vector<std::regex> compileAndLog(const std::vector<std::string>& patterns, 
 
 } // namespace
 
-TopicForwarder::TopicForwarderOptions topicForwarderOptions(
-    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics, std::size_t min_qos_depth,
-    std::size_t max_qos_depth, const std::vector<std::string>& best_effort_qos_topics, rclcpp::Logger logger) {
-  TopicForwarder::TopicForwarderOptions options;
+TopicForwarder::Options topicForwarderOptions(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics,
+                                              std::size_t min_qos_depth, std::size_t max_qos_depth,
+                                              const std::vector<std::string>& best_effort_qos_topics,
+                                              rclcpp::Logger logger) {
+  TopicForwarder::Options options;
   options.outgoing_topic_patterns = compileAndLog(outgoingTopicPatterns(topics), logger);
   options.incoming_topic_patterns = compileAndLog(incomingTopicPatterns(topics), logger);
   options.preserve_id_topic_patterns = compileAndLog(preserveIdTopicPatterns(topics), logger);

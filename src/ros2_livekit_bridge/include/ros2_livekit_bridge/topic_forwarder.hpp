@@ -86,7 +86,7 @@ public:
   };
 
   /// @brief Topic forwarding options derived from bridge configuration.
-  struct TopicForwarderOptions {
+  struct Options {
     /// @brief Regex patterns for ROS topics forwarded to LiveKit.
     std::vector<std::regex> outgoing_topic_patterns;
     /// @brief Regex patterns for LiveKit data tracks republished on ROS.
@@ -125,7 +125,7 @@ public:
   /// ROS operation; operations become no-ops once the node is destroyed.
   /// @throws std::invalid_argument when the node has already expired or any
   /// required LiveKit callback is unset.
-  TopicForwarder(TopicForwarderOptions options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods);
+  TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods);
 
   /// @brief Stop inbound streams before destruction.
   ~TopicForwarder();
@@ -249,7 +249,7 @@ private:
   void stopAllInboundDataTracks();
 
   /// @brief Forwarding configuration supplied at construction.
-  TopicForwarderOptions options_;
+  Options options_;
   /// @brief Non-owning handle to the ROS node used to create subscriptions and
   /// publishers. Locked per operation so the node lifecycle stays at the edge.
   rclcpp::Node::WeakPtr node_;

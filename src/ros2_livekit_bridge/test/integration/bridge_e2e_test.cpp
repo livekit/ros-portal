@@ -44,11 +44,9 @@ std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   std::optional<std::string> schema_text;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string& text) {
     schema_text = text;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
-  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::failure("unused");
-  };
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
   SchemaManager manager(std::move(methods));
   if (!manager.ensureSchemaDefined(topic_type)) {
     return std::nullopt;
@@ -99,8 +97,12 @@ protected:
     }
 
     try {
-      publisher.defineSchema(
-          livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg}, *schema_text);
+      if (!publisher.defineSchema(
+              livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg},
+              *schema_text)) {
+        ADD_FAILURE() << "LiveKit SDK rejected the std_msgs/msg/String schema";
+        return false;
+      }
     } catch (const std::exception& exception) {
       ADD_FAILURE() << "Failed to define std_msgs/msg/String schema: " << exception.what();
       return false;

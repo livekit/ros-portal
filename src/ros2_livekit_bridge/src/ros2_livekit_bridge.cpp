@@ -329,36 +329,23 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
       return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
     };
 
-    forwarder_lk_methods.schema.define_schema =
-        [this](const livekit::DataTrackSchemaId& schema_id,
-               const std::string& schema_text) -> livekit::Result<void, std::string> {
+    forwarder_lk_methods.schema.define_schema = [this](const livekit::DataTrackSchemaId& schema_id,
+                                                       const std::string& schema_text) {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
-        return livekit::Result<void, std::string>::failure("local participant is unavailable");
+        return false;
       }
-
-      try {
-        participant->defineSchema(schema_id, schema_text);
-        return livekit::Result<void, std::string>::success();
-      } catch (const std::exception& error) {
-        return livekit::Result<void, std::string>::failure(error.what());
-      }
+      return participant->defineSchema(schema_id, schema_text);
     };
 
     forwarder_lk_methods.schema.get_schema =
         [this](const livekit::DataTrackSchemaId& schema_id,
-               const std::string& participant_identity) -> livekit::Result<std::string, std::string> {
+               const std::string& participant_identity) -> std::optional<std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
-        return livekit::Result<std::string, std::string>::failure("local participant is unavailable");
+        return std::nullopt;
       }
-
-      try {
-        return livekit::Result<std::string, std::string>::success(
-            participant->getSchema(schema_id, participant_identity));
-      } catch (const std::exception& error) {
-        return livekit::Result<std::string, std::string>::failure(error.what());
-      }
+      return participant->getSchema(schema_id, participant_identity);
     };
 
     forwarder_lk_methods.publish_video_track =

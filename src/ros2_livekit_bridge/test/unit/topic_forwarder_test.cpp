@@ -70,12 +70,9 @@ TopicForwarder::LiveKitMethods makeLiveKitMethods() {
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
-  livekit_methods.schema.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<void, std::string>::success();
-  };
-  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&,
-                                         const std::string&) -> livekit::Result<std::string, std::string> {
-    return livekit::Result<std::string, std::string>::failure("unused");
+  livekit_methods.schema.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return true; };
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
   };
   return livekit_methods;
 }
@@ -85,7 +82,7 @@ std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   std::optional<std::string> schema_text;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string& text) {
     schema_text = text;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager manager(std::move(methods));
   if (!manager.ensureSchemaDefined(topic_type)) {
@@ -154,7 +151,7 @@ TEST_F(TopicForwarderTest, SchemaValidationAcceptsExactMatch) {
 
   auto methods = makeLiveKitMethods();
   methods.schema.get_schema = [text = *schema_text](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success(text);
+    return std::optional<std::string>{text};
   };
   const TopicForwarder forwarder(makeOptions(), node_, std::move(methods));
   TopicForwarder::RemoteDataTrackDescriptor descriptor{
@@ -223,9 +220,7 @@ TEST_F(TopicForwarderTest, SchemaValidationRejectsWrongTypeAndEncoding) {
 
 TEST_F(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures) {
   auto methods = makeLiveKitMethods();
-  methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::failure("schema unavailable");
-  };
+  methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
   const TopicForwarder retrieval_failure_forwarder(makeOptions(), node_, std::move(methods));
   TopicForwarder::RemoteDataTrackDescriptor descriptor{
       "sid",
@@ -242,7 +237,7 @@ TEST_F(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures) {
 
   methods = makeLiveKitMethods();
   methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success("string data\n");
+    return std::optional<std::string>{"string data\n"};
   };
   const TopicForwarder render_failure_forwarder(makeOptions(), node_, std::move(methods));
   descriptor.schema =
@@ -263,7 +258,7 @@ TEST_F(TopicForwarderTest, SchemaValidationRejectsRootAndNestedMismatches) {
 
   auto methods = makeLiveKitMethods();
   methods.schema.get_schema = [remote_text](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success(*remote_text);
+    return std::optional<std::string>{*remote_text};
   };
   const TopicForwarder forwarder(makeOptions(), node_, std::move(methods));
   const TopicForwarder::RemoteDataTrackDescriptor descriptor{
@@ -406,9 +401,8 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
   livekit_methods.schema = makeLiveKitMethods().schema;
-  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&,
-                                         const std::string&) -> livekit::Result<std::string, std::string> {
-    return livekit::Result<std::string, std::string>::failure("unused");
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
   };
   return livekit_methods;
 }
@@ -435,9 +429,8 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
   livekit_methods.schema = makeLiveKitMethods().schema;
-  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&,
-                                         const std::string&) -> livekit::Result<std::string, std::string> {
-    return livekit::Result<std::string, std::string>::failure("unused");
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
   };
   return livekit_methods;
 }
@@ -464,9 +457,8 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
   livekit_methods.schema = makeLiveKitMethods().schema;
-  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&,
-                                         const std::string&) -> livekit::Result<std::string, std::string> {
-    return livekit::Result<std::string, std::string>::failure("unused");
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
   };
   return livekit_methods;
 }

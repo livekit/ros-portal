@@ -45,11 +45,9 @@ std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   std::optional<std::string> schema_text;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string& text) {
     schema_text = text;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
-  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::failure("unused");
-  };
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
   SchemaManager manager(std::move(methods));
   if (!manager.ensureSchemaDefined(topic_type)) {
     return std::nullopt;
@@ -83,7 +81,7 @@ TEST_F(BridgeTestE2E, InboundTrackCreatesPublisher) {
   const auto schema_text = renderSchemaText("std_msgs/msg/String");
   ASSERT_TRUE(schema_text.has_value()) << "std_msgs/msg/String schema was unavailable";
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
+  ASSERT_TRUE(publisher->defineSchema(schema_id, *schema_text));
 
   // Publish the inbound track
   livekit::DataTrackPublishOptions options;
@@ -132,7 +130,7 @@ TEST_F(BridgeTestE2E, InboundJsonFrameCreatesTypedRosMessage) {
   const auto schema_text = renderSchemaText(kType);
   ASSERT_TRUE(schema_text.has_value()) << kType << " schema was unavailable";
   const livekit::DataTrackSchemaId schema_id{kType, livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
+  ASSERT_TRUE(publisher->defineSchema(schema_id, *schema_text));
 
   // Publish a JSON-encoded track carrying messages of the advertised type.
   livekit::DataTrackPublishOptions options;
@@ -181,7 +179,7 @@ TEST_F(BridgeTestE2E, AcceptsTrackBeforeRosSubscriber) {
   const auto schema_text = renderSchemaText("std_msgs/msg/String");
   ASSERT_TRUE(schema_text.has_value()) << "std_msgs/msg/String schema was unavailable";
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
+  ASSERT_TRUE(publisher->defineSchema(schema_id, *schema_text));
 
   // Publish the inbound track
   livekit::DataTrackPublishOptions options;
@@ -248,7 +246,7 @@ TEST_F(BridgeTestE2E, RejectsTrackSchemaMismatchNoSubscriber) {
 
   // Publish a track whose schema ID claims String but whose text defines int32.
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_NO_THROW(publisher->defineSchema(schema_id, "int32 data\n"));
+  ASSERT_TRUE(publisher->defineSchema(schema_id, "int32 data\n"));
   livekit::DataTrackPublishOptions options;
   options.name = kTopic;
   options.schema = schema_id;

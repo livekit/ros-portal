@@ -138,7 +138,10 @@ livekit::Result<livekit::DataTrackSchemaId, std::string> SchemaManager::ensureSc
 
   const auto define_result = [&]() -> livekit::Result<void, std::string> {
     try {
-      return livekit_methods_.define_schema(schema_id, schema->text);
+      if (!livekit_methods_.define_schema(schema_id, schema->text)) {
+        return livekit::Result<void, std::string>::failure("LiveKit SDK rejected the schema definition");
+      }
+      return livekit::Result<void, std::string>::success();
     } catch (const std::exception& error) {
       return livekit::Result<void, std::string>::failure(error.what());
     } catch (...) {
@@ -179,12 +182,21 @@ SchemaManager::ValidationResult SchemaManager::validateInboundSchema(const livek
     return validation;
   }
 
-  const auto remote_schema_result = livekit_methods_.get_schema(schema_id, participant_identity);
-  if (!remote_schema_result) {
-    validation.reason = "remote schema retrieval failed: " + remote_schema_result.error();
+  std::optional<std::string> remote_schema;
+  try {
+    remote_schema = livekit_methods_.get_schema(schema_id, participant_identity);
+  } catch (const std::exception& error) {
+    validation.reason = "remote schema retrieval failed: " + std::string(error.what());
+    return validation;
+  } catch (...) {
+    validation.reason = "remote schema retrieval failed with an unknown error";
     return validation;
   }
-  const auto& remote_schema_text = remote_schema_result.value();
+  if (!remote_schema.has_value()) {
+    validation.reason = "remote schema retrieval failed: schema is unavailable";
+    return validation;
+  }
+  const auto& remote_schema_text = *remote_schema;
   validation.remote_hash = hashSchemaText(remote_schema_text);
 
   const auto local_schema = render_schema_(topic_type);

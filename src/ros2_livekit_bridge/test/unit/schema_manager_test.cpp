@@ -152,12 +152,8 @@ uint32 nanosec
 
 SchemaManager::LiveKitMethods makeLiveKitMethods() {
   SchemaManager::LiveKitMethods methods;
-  methods.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<void, std::string>::success();
-  };
-  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::failure("unused");
-  };
+  methods.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return true; };
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
   return methods;
 }
 
@@ -172,7 +168,7 @@ TEST(SchemaManagerTest, RendersAndDefinesStdMsgsString) {
   methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string& text) {
     defined_id = schema_id;
     defined_text = text;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager manager(std::move(methods));
 
@@ -189,7 +185,7 @@ TEST(SchemaManagerTest, RendersNestedDependencies) {
   std::string defined_text;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string& text) {
     defined_text = text;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager manager(std::move(methods));
 
@@ -202,7 +198,7 @@ TEST(SchemaManagerTest, RendersSensorMsgsImage) {
   std::string defined_text;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string& text) {
     defined_text = text;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager manager(std::move(methods));
 
@@ -224,7 +220,7 @@ TEST(SchemaManagerTest, MapsKnownAndCustomEncodings) {
   livekit::DataTrackSchemaId defined_id;
   methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string&) {
     defined_id = schema_id;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
 
   SchemaManager manager(std::move(methods),
@@ -235,7 +231,7 @@ TEST(SchemaManagerTest, MapsKnownAndCustomEncodings) {
   auto custom_methods = makeLiveKitMethods();
   custom_methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string&) {
     defined_id = schema_id;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager custom_manager(std::move(custom_methods), [](const std::string&) {
     return std::optional<RosMessageSchema>{{"custom_encoding", "text"}};
@@ -249,7 +245,7 @@ TEST(SchemaManagerTest, DefinesAnExactSchemaOnlyOnce) {
   int define_count = 0;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
     ++define_count;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager manager(std::move(methods), [](const std::string&) {
     return std::optional<RosMessageSchema>{{"ros2msg", "exact schema"}};
@@ -273,7 +269,7 @@ TEST(SchemaManagerTest, ConcurrentCallersShareOneDefinition) {
     std::unique_lock<std::mutex> lock(gate_mutex);
     gate_cv.wait(lock, [&]() { return started_count == kCallerCount; });
     ++define_count;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   SchemaManager manager(std::move(methods), [](const std::string&) {
     return std::optional<RosMessageSchema>{{"ros2msg", "exact schema"}};
@@ -306,10 +302,7 @@ TEST(SchemaManagerTest, RetriesAfterDefinitionFailure) {
   int define_count = 0;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
     ++define_count;
-    if (define_count == 1) {
-      return livekit::Result<void, std::string>::failure("temporary failure");
-    }
-    return livekit::Result<void, std::string>::success();
+    return define_count != 1;
   };
   SchemaManager manager(std::move(methods), [](const std::string&) {
     return std::optional<RosMessageSchema>{{"ros2msg", "exact schema"}};
@@ -325,7 +318,7 @@ TEST(SchemaManagerTest, RejectsChangedTextForAnExistingSchemaId) {
   int define_count = 0;
   methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
     ++define_count;
-    return livekit::Result<void, std::string>::success();
+    return true;
   };
   int render_count = 0;
   SchemaManager manager(std::move(methods), [&](const std::string&) {
@@ -344,7 +337,7 @@ TEST(SchemaManagerTest, RejectsChangedTextForAnExistingSchemaId) {
 TEST(SchemaManagerTest, ValidatesExactInboundSchemaAndReportsStableHash) {
   auto methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success("abc");
+    return std::optional<std::string>{"abc"};
   };
   const SchemaManager manager(std::move(methods),
                               [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "abc"}}; });
@@ -380,9 +373,7 @@ TEST(SchemaManagerTest, RejectsUnsupportedEncodingAndWrongType) {
 
 TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
   auto methods = makeLiveKitMethods();
-  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::failure("not found");
-  };
+  methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
   SchemaManager manager(std::move(methods),
                         [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "local"}}; });
   const livekit::DataTrackSchemaId schema_id{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::Ros2Msg};
@@ -393,7 +384,7 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
 
   methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success("remote");
+    return std::optional<std::string>{"remote"};
   };
   SchemaManager render_failure_manager(std::move(methods),
                                        [](const std::string&) { return std::optional<RosMessageSchema>{}; });
@@ -403,7 +394,7 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
 
   methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success("same");
+    return std::optional<std::string>{"same"};
   };
   SchemaManager encoding_mismatch_manager(
       std::move(methods), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2idl", "same"}}; });
@@ -413,7 +404,7 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
 
   methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
-    return livekit::Result<std::string, std::string>::success("remote");
+    return std::optional<std::string>{"remote"};
   };
   SchemaManager text_mismatch_manager(
       std::move(methods), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "local"}}; });

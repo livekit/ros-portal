@@ -62,11 +62,9 @@ public:
   /// @brief LiveKit operations needed to store and retrieve schema definitions.
   struct LiveKitMethods {
     /// @brief Define schema text on the local LiveKit participant.
-    std::function<livekit::Result<void, std::string>(const livekit::DataTrackSchemaId&, const std::string&)>
-        define_schema;
+    std::function<bool(const livekit::DataTrackSchemaId&, const std::string&)> define_schema;
     /// @brief Retrieve schema text from a remote LiveKit participant.
-    std::function<livekit::Result<std::string, std::string>(const livekit::DataTrackSchemaId&, const std::string&)>
-        get_schema;
+    std::function<std::optional<std::string>(const livekit::DataTrackSchemaId&, const std::string&)> get_schema;
   };
 
   /// @brief Callback used to render a local ROS message definition.

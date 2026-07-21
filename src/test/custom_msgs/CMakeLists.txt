@@ -34,16 +34,4 @@ rosidl_get_typesupport_target(cpp_typesupport_target
   ${PROJECT_NAME} rosidl_typesupport_cpp)
 target_link_libraries(robot_status_publisher "${cpp_typesupport_target}")
 
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-
-  # Match the lint configuration used by the sibling packages: skip the
-  # copyright/cpplint/uncrustify linters and use the repo-wide clang-format.
-  set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_cmake_cpplint_FOUND TRUE)
-  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_uncrustify)
-  set(ament_cmake_clang_format_CONFIG_FILE "${CMAKE_SOURCE_DIR}/../../.clang-format")
-  ament_lint_auto_find_test_dependencies()
-endif()
-
 ament_auto_package()

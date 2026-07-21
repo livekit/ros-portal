@@ -16,22 +16,30 @@
 
 #include <chrono>
 #include <cmath>
-#include <custom_msgs/msg/robot_status.hpp>
 #include <memory>
+
+#include <custom_msgs/msg/robot_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/battery_state.hpp>
 
 class RobotStatusPublisher : public rclcpp::Node {
 public:
-  RobotStatusPublisher() : rclcpp::Node("robot_status_publisher"), tick_(0) {
-    status_pub_ = this->create_publisher<custom_msgs::msg::RobotStatus>("/test/robot_status", 10);
-    battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>("/test/battery_state", 10);
-    timer_ = this->create_wall_timer(std::chrono::seconds(1), std::bind(&RobotStatusPublisher::publish, this));
-    RCLCPP_INFO(this->get_logger(), "Publishing on /test/robot_status and /test/battery_state at 1 Hz");
+  RobotStatusPublisher()
+  : rclcpp::Node("robot_status_publisher"), tick_(0)
+  {
+    status_pub_ = this->create_publisher<custom_msgs::msg::RobotStatus>(
+        "/test/robot_status", 10);
+    battery_pub_ = this->create_publisher<sensor_msgs::msg::BatteryState>(
+        "/test/battery_state", 10);
+    timer_ = this->create_wall_timer(std::chrono::seconds(1),
+                                     std::bind(&RobotStatusPublisher::publish, this));
+    RCLCPP_INFO(this->get_logger(),
+                "Publishing on /test/robot_status and /test/battery_state at 1 Hz");
   }
 
 private:
-  void publish() {
+  void publish()
+  {
     const auto now = this->now();
     const double voltage = 12.6 - 0.01 * (tick_ % 100);
 
@@ -40,7 +48,10 @@ private:
     status.header.frame_id = "base_link";
     status.robot_id = "livekit-bot-01";
     status.battery_voltage = voltage;
-    status.position = {std::sin(tick_ * 0.1) * 5.0, std::cos(tick_ * 0.1) * 5.0, 0.0};
+    status.position = {
+      std::sin(tick_ * 0.1) * 5.0,
+      std::cos(tick_ * 0.1) * 5.0,
+      0.0};
     status.orientation_rpy = {0.0, 0.0, tick_ * 0.1};
     status.is_moving = (tick_ % 3 != 0);
     status.operating_mode = static_cast<uint8_t>(tick_ % 4);
@@ -56,14 +67,19 @@ private:
     battery.capacity = 5.0f;
     battery.design_capacity = 5.0f;
     battery.percentage = battery.charge / battery.capacity;
-    battery.power_supply_status = sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_DISCHARGING;
-    battery.power_supply_health = sensor_msgs::msg::BatteryState::POWER_SUPPLY_HEALTH_GOOD;
-    battery.power_supply_technology = sensor_msgs::msg::BatteryState::POWER_SUPPLY_TECHNOLOGY_LION;
+    battery.power_supply_status =
+      sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_DISCHARGING;
+    battery.power_supply_health =
+      sensor_msgs::msg::BatteryState::POWER_SUPPLY_HEALTH_GOOD;
+    battery.power_supply_technology =
+      sensor_msgs::msg::BatteryState::POWER_SUPPLY_TECHNOLOGY_LION;
     battery.present = true;
     battery_pub_->publish(battery);
 
-    RCLCPP_INFO(this->get_logger(), "tick=%lu | RobotStatus(%.2fV, moving=%s) + BatteryState(%.1f%%)",
-                static_cast<unsigned long>(tick_), voltage, status.is_moving ? "true" : "false",
+    RCLCPP_INFO(this->get_logger(),
+                "tick=%lu | RobotStatus(%.2fV, moving=%s) + BatteryState(%.1f%%)",
+                static_cast<unsigned long>(tick_), voltage,
+                status.is_moving ? "true" : "false",
                 static_cast<double>(battery.percentage * 100.0f));
     tick_++;
   }
@@ -74,7 +90,8 @@ private:
   std::uint64_t tick_;
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<RobotStatusPublisher>());
   rclcpp::shutdown();

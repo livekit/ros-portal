@@ -269,7 +269,6 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
 
   const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type);
   if (!schema_result) {
-    RCLCPP_ERROR(logger_, "Failed to define schema for '%s': %s", topic_name.c_str(), schema_result.error().c_str());
     return false;
   }
 

@@ -17,7 +17,6 @@
 #pragma once
 
 #include <livekit/data_track_schema.h>
-#include <livekit/result.h>
 
 #include <array>
 #include <condition_variable>
@@ -25,6 +24,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <rclcpp/logger.hpp>
 
 namespace ros2_livekit_bridge {
 
@@ -37,6 +37,7 @@ namespace ros2_livekit_bridge {
 /// delimiters.
 struct RosMessageSchema {
   /// @brief Definition encoding, e.g. `"ros2msg"` or `"ros2idl"`.
+  /// @note String because rosbag2 returns encoding as one.
   std::string encoding;
   /// @brief Full concatenated message definition text.
   std::string text;
@@ -94,8 +95,9 @@ public:
 
   /// @brief Ensure the local participant has defined the schema for a ROS type.
   /// @param topic_type ROS message type in `pkg/msg/Type` form.
-  /// @return The LiveKit schema ID on success, or an explanatory error.
-  livekit::Result<livekit::DataTrackSchemaId, std::string> ensureSchemaDefined(const std::string& topic_type);
+  /// @return The LiveKit schema ID on success, or `std::nullopt` after logging
+  /// the failure.
+  std::optional<livekit::DataTrackSchemaId> ensureSchemaDefined(const std::string& topic_type);
 
   /// @brief Validate a remote schema against the locally rendered ROS
   /// definition.
@@ -118,6 +120,7 @@ private:
 
   LiveKitMethods livekit_methods_;
   RenderSchemaFn render_schema_;
+  rclcpp::Logger logger_;
   std::mutex defined_schemas_mutex_;
   std::condition_variable defined_schemas_cv_;
   std::unordered_map<std::string, DefinitionState> defined_schemas_;

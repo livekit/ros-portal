@@ -21,6 +21,7 @@
 #include <array>
 #include <cstdint>
 #include <exception>
+#include <rclcpp/logging.hpp>
 #include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
 #include <stdexcept>
 #include <utility>
@@ -93,7 +94,9 @@ std::string schemaHashToHex(const SchemaHash& hash) {
 }
 
 SchemaManager::SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn render_schema)
-    : livekit_methods_(std::move(livekit_methods)), render_schema_(std::move(render_schema)) {
+    : livekit_methods_(std::move(livekit_methods)),
+      render_schema_(std::move(render_schema)),
+      logger_(rclcpp::get_logger("schema_manager")) {
   if (!livekit_methods_.define_schema || !livekit_methods_.get_schema) {
     throw std::invalid_argument("SchemaManager requires fully populated LiveKitMethods");
   }
@@ -102,15 +105,14 @@ SchemaManager::SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn rend
   }
 }
 
-livekit::Result<livekit::DataTrackSchemaId, std::string> SchemaManager::ensureSchemaDefined(
-    const std::string& topic_type) {
+std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(const std::string& topic_type) {
   const auto schema = render_schema_(topic_type);
   if (!schema) {
-    return livekit::Result<livekit::DataTrackSchemaId, std::string>::failure(
-        "unable to render required ROS schema for type '" + topic_type + "'");
+    RCLCPP_ERROR(logger_, "Unable to render required ROS schema for type '%s'", topic_type.c_str());
+    return std::nullopt;
   }
 
-  const livekit::DataTrackSchemaId schema_id{
+  livekit::DataTrackSchemaId schema_id{
       topic_type,
       schemaEncodingFromRosDefinition(schema->encoding),
   };
@@ -126,33 +128,33 @@ livekit::Result<livekit::DataTrackSchemaId, std::string> SchemaManager::ensureSc
         break;
       }
       if (existing->second.hash != schema_hash) {
-        return livekit::Result<livekit::DataTrackSchemaId, std::string>::failure(
-            "schema ID for type '" + topic_type + "' was already defined with a different hash");
+        RCLCPP_ERROR(logger_, "Schema ID for type '%s' was already defined with a different hash", topic_type.c_str());
+        return std::nullopt;
       }
       if (existing->second.defined) {
-        return livekit::Result<livekit::DataTrackSchemaId, std::string>::success(schema_id);
+        return schema_id;
       }
       defined_schemas_cv_.wait(lock);
     }
   }
 
-  const auto define_result = [&]() -> livekit::Result<void, std::string> {
-    try {
-      if (!livekit_methods_.define_schema(schema_id, schema->text)) {
-        return livekit::Result<void, std::string>::failure("LiveKit SDK rejected the schema definition");
-      }
-      return livekit::Result<void, std::string>::success();
-    } catch (const std::exception& error) {
-      return livekit::Result<void, std::string>::failure(error.what());
-    } catch (...) {
-      return livekit::Result<void, std::string>::failure("unknown schema definition error");
+  bool defined = false;
+  std::string error;
+  try {
+    defined = livekit_methods_.define_schema(schema_id, schema->text);
+    if (!defined) {
+      error = "LiveKit SDK rejected the schema definition";
     }
-  }();
+  } catch (const std::exception& exception) {
+    error = exception.what();
+  } catch (...) {
+    error = "unknown schema definition error";
+  }
 
   {
     const std::lock_guard<std::mutex> lock(defined_schemas_mutex_);
     const auto state = defined_schemas_.find(dedupe_key);
-    if (define_result) {
+    if (defined) {
       state->second.defined = true;
     } else {
       defined_schemas_.erase(state);
@@ -160,12 +162,12 @@ livekit::Result<livekit::DataTrackSchemaId, std::string> SchemaManager::ensureSc
   }
   defined_schemas_cv_.notify_all();
 
-  if (!define_result) {
-    return livekit::Result<livekit::DataTrackSchemaId, std::string>::failure(
-        "failed to define required schema for type '" + topic_type + "': " + define_result.error());
+  if (!defined) {
+    RCLCPP_ERROR(logger_, "Failed to define required schema for type '%s': %s", topic_type.c_str(), error.c_str());
+    return std::nullopt;
   }
 
-  return livekit::Result<livekit::DataTrackSchemaId, std::string>::success(schema_id);
+  return schema_id;
 }
 
 SchemaManager::ValidationResult SchemaManager::validateInboundSchema(const livekit::DataTrackSchemaId& schema_id,

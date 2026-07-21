@@ -24,6 +24,12 @@
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
+  <depend>nlohmann-json-dev</depend>
+  <depend>rclcpp</depend>
+  <depend>ros2_livekit_bridge</depend>
+  <depend>ros2_medkit_serialization</depend>
+  <depend>yaml_cpp_vendor</depend>
+
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>

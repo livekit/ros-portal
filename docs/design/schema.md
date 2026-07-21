@@ -34,343 +34,129 @@ float64 theta
 
 The LiveKit SDK / server infrastructure supports schema definitions and retrievals. This functionality is used to enable the following features in the bridge:
 
-- **Schema hash validation**: two bridge participants may have different versions of the same topic/type. Schemas are used to verify alignment before bridging topics
-- **MCAP export**: `ros2 bag record` embeds the schema text into `.mcap` files. Recording bridged ROS data out LiveKit can be written to MCAPs in conjunction with the schema to mirror ROS Bag entirely
+- **Schema hash validation**: two bridge participants may have different schema versions of the same topic/type. Schemas are used to verify alignment before bridging topics
+- **JSON to CDR**: enables translation from JSON into CDR, such as from a web participant into a ROS graph
+- **MCAP export**: natively, `ros2 bag record` embeds the schema text into `.mcap` files. Recording bridged ROS data out LiveKit can be written to MCAPs in conjunction with the schema to mirror this
 
 ## Design
 
-The bridge sends ordinary ROS 2 messages as serialized CDR bytes on LiveKit data tracks. CDR does not describe its own fields. Even with a local message receiver must know the exact ROS message definition, including nested types, before it can safely put those bytes on its local ROS graph.
-
-For every ordinary data track, the bridge therefore:
-
-1. publishes the complete ROS message definition as a LiveKit participant
-   schema blob;
-2. identifies the track's ROS type and marks its frames as CDR or JSON;
-3. compares an inbound schema with the same type installed locally; and
-4. forwards frames only after an exact match.
-
-This is automatic and has no schema-specific bridge configuration. Image topics
-sent as video tracks and topics configured as `latched` use other transports
-and do not follow this design.
-
-## End-to-end model
+Schemas protect each ordinary data track from being interpreted as the wrong
+ROS message type. The sending bridge publishes the complete ROS definition;
+the receiving bridge validates it against the same interface installed locally
+before accepting any frames.
 
 ```mermaid
 flowchart LR
-  subgraph SendingROS["Sending ROS graph"]
-    ROSPub[ROS publisher]
-  end
-  subgraph SendingBridge["Sending bridge"]
-    Out[TopicForwarder]
-    OutSchema[SchemaManager]
-  end
-  subgraph LiveKit
-    Blob[Participant schema blob]
-    Track["Data track<br/>topic name + schema ID + frame encoding"]
-  end
-  subgraph ReceivingBridge["Receiving bridge"]
-    In[TopicForwarder]
-    InSchema[SchemaManager]
-    ROSOut[Generic ROS publisher]
-  end
-  subgraph ReceivingROS["Receiving ROS graph"]
-    ROSSub[ROS subscriber]
-  end
-
-  ROSPub -->|serialized message| Out
-  Out -->|render and register| OutSchema
-  OutSchema -->|full definition| Blob
-  Out -->|publish track and push CDR| Track
-  Track -->|publication metadata| In
-  In -->|validate candidate ROS type| InSchema
-  Blob -->|retrieve remote definition| InSchema
-  InSchema -->|validation result| In
-  Track -->|subscribed frames after acceptance| In
-  In -->|pass through CDR or convert JSON| ROSOut
-  ROSOut --> ROSSub
+  A[ROS publisher] --> B[Sending bridge]
+  B -->|schema, track, frames| C[LiveKit]
+  C --> D[Receiving bridge]
+  D --> E[ROS subscriber]
 ```
 
-The schema blob and track metadata establish the type contract. Frames contain
-either serialized CDR or a JSON object; `SchemaManager` validates metadata and
-does not carry frame payloads.
+Image topics sent as video tracks and topics configured as `latched` use other
+transports and do not follow this design.
 
-## Wire contract
+### Sending
 
-A track named `/robot_pose` carrying
-`geometry_msgs/msg/PoseStamped` has:
+The sending bridge creates a LiveKit track lazily, when the first eligible ROS
+message arrives:
 
-- track name `/robot_pose`;
-- schema ID name `geometry_msgs/msg/PoseStamped`;
-- schema ID encoding `Ros2Msg` or `Ros2Idl`;
-- a participant schema blob containing the complete definition; and
-- track frame encoding `Cdr` for bridge-produced tracks.
+1. Render the ROS type's complete definition, including recursive dependencies.
+2. Hash the exact definition bytes with SHA-256.
+3. Register the full definition with LiveKit and attach its schema ID to the
+   track.
+4. Mark the track as CDR and forward the current and subsequent serialized
+   messages.
 
-An external publisher may instead set the frame encoding to `Json` and send one
-UTF-8 JSON object per frame, such as `{"data":"hello"}` for
-`std_msgs/msg/String`. It must still use the ROS schema ID and full ROS schema
-blob described above. `JsonSchema` does not replace ROS schema validation.
+The hash is process-local bookkeeping. It deduplicates concurrent schema
+definitions and detects an attempt to reuse the same schema ID with different
+text. LiveKit receives the complete definition, not the hash.
 
-The bridge obtains the definition with
-`rosbag2_cpp::LocalMessageDefinitionSource::get_full_text()`. rosbag2 reads the
-installed interface package from the local ament index and returns the root
-definition plus all recursive dependencies in MCAP message-definition format:
+If rendering, schema registration, or track publication fails, the current
+message is dropped. The next eligible message retries because no writer was
+cached.
 
-```text
-std_msgs/Header header
-Pose pose
+### Receiving
 
-================================================================================
-MSG: geometry_msgs/Pose
-Point position
-Quaternion orientation
+When a LiveKit data track is published, the receiving bridge:
 
-...remaining dependencies...
-```
-
-The bridge compares this text byte for byte. It does not remove comments,
-normalize whitespace, reorder dependencies, or substitute a digest for the
-text.
-
-Outbound encoding mapping is:
-
-- `ros2msg` to `Ros2Msg`;
-- `ros2idl` to `Ros2Idl`;
-- another non-empty rosbag2 encoding of at most 25 characters to the equivalent
-  custom LiveKit encoding; and
-- an empty or longer encoding to `Ros2Msg`.
-
-Inbound schema validation accepts only `Ros2Msg` and `Ros2Idl`. Inbound frame
-validation accepts `Cdr` and `Json`; the bridge publishes outbound frames only
-as `Cdr`. A bridge can therefore publish a custom schema encoding that another
-bridge will reject.
-
-LiveKit stores schema bodies as participant data blobs. The server must enable
-them with `enable_participant_data_blob: true` or
-`--enable_participant_data_blob`.
-
-## Sending a track
-
-The bridge polls the ROS graph and creates a generic subscription for each
-configured ordinary topic. It does not publish a LiveKit data track until that
-subscription receives its first eligible message.
+1. Resolves the expected ROS type from the local ROS graph, or uses the
+   advertised schema name when no local endpoint exists.
+2. Requires a supported schema ID and a `Cdr` or `Json` frame encoding.
+3. Retrieves the complete definition from the publishing participant.
+4. Renders the same ROS type from its locally installed interface package.
+5. Requires the schema name, encoding, SHA-256 hash, and exact definition bytes
+   to match.
+6. Creates a ROS publisher and subscribes to frames only after validation
+   succeeds.
 
 ```mermaid
-sequenceDiagram
-  participant ROS as ROS publisher
-  participant TF as TopicForwarder
-  participant SM as SchemaManager
-  participant RB as rosbag2
-  participant LK as LiveKit participant
-
-  ROS->>TF: serialized message
-  TF->>SM: ensureSchemaDefined(ROS type)
-  SM->>RB: get_full_text(ROS type)
-  RB-->>SM: encoding and complete definition
-  SM->>SM: hash exact definition bytes
-  alt schema is new
-    SM->>LK: defineSchema(schema ID, definition)
-  else the same schema is already defined
-    SM->>SM: reuse schema ID
-  else the same dedupe key has different text
-    SM->>SM: reject
-  end
-  SM-->>TF: schema ID or failure
-  alt schema ID returned
-    TF->>LK: publishDataTrack(topic, schema ID, Cdr)
-    LK-->>TF: writer or failure
-    alt writer returned
-      TF->>LK: push current and later CDR frames
-    else track publication failed
-      TF->>TF: drop current frame
-    end
-  else schema unavailable
-    TF->>TF: drop current frame
-  end
+flowchart LR
+  A[Track published] --> B[Resolve ROS type]
+  B --> C[Retrieve remote and render local schema]
+  C --> D{Exact match?}
+  D -- Yes --> E[Subscribe and forward]
+  D -- No --> F[Reject track]
 ```
 
-The `SchemaManager` deduplicates definitions by
-`rosbag2_encoding + "\n" + ROS_type`. It stores the SHA-256 hash of the exact
-text, coordinates concurrent callers so only one defines a new schema, and
-retains only successful definitions. Rendering and hashing still happen on
-each writer-creation attempt. The cache belongs to the bridge's single
-`TopicForwarder` and lasts for that forwarder's lifetime.
+The exact byte comparison is authoritative. Hashes provide a quick mismatch
+check and useful diagnostics, but they do not replace schema text.
 
-After a writer is created, it is cached by ROS topic and later messages bypass
-schema rendering. If rendering, schema definition, or track publication fails,
-the current message is dropped and no untyped fallback is created. The writer
-remains unset, so the next eligible message retries. A failed schema definition
-is also removed from the definition cache before waiting callers continue.
+### Wire contract
 
-## Receiving a track
+An ordinary data track carries:
 
-A LiveKit track publication event starts validation. The bridge first requires
-a non-empty track SID and name, normalizes the name to an absolute ROS path,
-and applies the configured incoming-topic filters.
+- a track name that maps to a ROS topic;
+- a schema ID whose name is the ROS type;
+- a `Ros2Msg` or `Ros2Idl` schema encoding;
+- the complete schema definition stored on the publishing participant; and
+- a `Cdr` or `Json` frame encoding.
 
-It then resolves a candidate ROS type:
+Bridge-produced tracks use CDR. An external publisher may use JSON, but it must
+still advertise the ROS schema ID and complete ROS definition. A JSON Schema is
+not a substitute for the ROS schema.
 
-- If the normalized topic already has a local publisher or subscriber, the
-  graph's type takes precedence.
-- If no local endpoint exists, the advertised schema name is the candidate.
-- If the graph reports several types, a type matching the schema name wins;
-  otherwise the first graph type is used and validation normally rejects the
-  conflict.
+The server must enable participant data blobs with
+`enable_participant_data_blob: true` or `--enable_participant_data_blob`.
 
-The advertised name is never trusted on its own. The bridge must render that
-type from its own installed ROS interfaces.
+### Frame handling
 
-```mermaid
-flowchart TD
-  Start[Data track publication] --> Eligible{"Valid SID and name,<br/>and topic allowed?"}
-  Eligible -- No --> Ignore[Ignore track]
-  Eligible -- Yes --> Resolve{"Resolve type from local graph<br/>or schema name?"}
-  Resolve -- No --> Reject[Reject track]
-  Resolve -- Yes --> Metadata{"Frame encoding is CDR or JSON and<br/>supported schema is present?"}
-  Metadata -- No --> Reject
-  Metadata -- Yes --> Type{"Schema name matches<br/>resolved ROS type?"}
-  Type -- No --> Reject
-  Type -- Yes --> Retrieve{"Retrieve remote definition and<br/>render local definition?"}
-  Retrieve -- No --> Reject
-  Retrieve -- Yes --> Match{"Encoding, SHA-256, and<br/>exact bytes match?"}
-  Match -- No --> Reject
-  Match -- Yes --> Publisher[Create generic ROS publisher]
-  Publisher --> Subscribe[Subscribe to LiveKit frames]
-  Subscribe --> Decode{"Frame encoding?"}
-  Decode -- CDR --> Forward[Forward serialized message]
-  Decode -- JSON --> Convert[Convert JSON object to CDR]
-  Convert --> Forward
-```
+- CDR frames are copied into `rclcpp::SerializedMessage` unchanged.
+- JSON frames are converted to CDR with runtime ROS introspection after schema
+  validation. Invalid JSON frames are dropped without closing the track.
 
-Acceptance requires all of the following:
+### Lifecycle and delivery
 
-1. Frame encoding is present and equals `Cdr` or `Json`.
-2. A schema ID is present and uses `Ros2Msg` or `Ros2Idl`.
-3. The schema name equals the resolved ROS type.
-4. The remote participant's schema blob can be retrieved.
-5. The same ROS type can be rendered locally.
-6. Remote and local encodings match.
-7. The SHA-256 hashes and exact definition bytes match.
-
-The direct byte comparison is authoritative; hashes make mismatch diagnostics
-useful. On acceptance, the bridge maps the final ROS topic name, creates a
-generic publisher with `QoS(10)`, subscribes to the LiveKit track, and starts a
-reader thread. With `preserve_id: true`, the mapped publication path includes
-the sanitized participant identity. Type resolution still uses the original
-normalized track name.
-
-CDR payloads are copied into `rclcpp::SerializedMessage` unchanged. JSON
-payloads must be non-empty JSON objects within the conversion bounds. The
-bridge uses runtime ROS introspection to serialize each object as the already
-validated ROS type. A malformed or incompatible JSON frame is dropped with a
-diagnostic; the reader remains active for later frames.
-
-Any failure rejects that publication event before the bridge creates a
-persistent publisher or subscribes to frames. Unverified payloads cannot enter
-the local ROS graph.
-
-## Lifecycle and arrival-order cases
-
-Schema availability and message retention are separate concerns. The bridge can
-discover and validate a track in several startup orders, but ordinary data
-tracks are not latched and neither side replays old frames.
-
-JSON conversion happens only after the track's ROS schema is accepted. It does
-not change any of the arrival-order behavior below.
-
-### Local ROS endpoint exists before the inbound track
-
-The bridge uses the graph's type as the expected type. Matching schema metadata
-is accepted; a conflicting schema name or definition is rejected.
-
-### Inbound track arrives before any local ROS endpoint
-
-The bridge uses the schema name as a candidate, renders that type locally, and
-validates it immediately. It then creates the ROS publisher without waiting for
-an application subscriber. This requires the interface package to already be
-installed on the receiving bridge.
-
-### ROS subscriber joins after track acceptance
-
-The existing bridge publisher is discoverable by the late subscriber, and
-future frames are forwarded. Frames received before that subscriber matches are
-not replayed because the generic publisher uses ordinary volatile `QoS(10)`.
-
-### Track exists before the receiving bridge joins LiveKit
-
-The bridge installs `TopicForwarder` before calling `Room::connect()`, so
-publication events emitted during connection for existing tracks can be
-handled. The track is validated and subscribed as usual. Frames sent before
-the subscription was established are not replayed.
-
-### Receiver has not finished validation or track subscription
-
-The sender may push a frame immediately after publishing the track. If a
-receiver has not yet retrieved and validated the schema and subscribed to the
-track, that frame may be missed. Schema blobs persist for discovery; ordinary
-data frames do not. Producers that require initial-state delivery must publish
-again or use the configured latched-topic transport.
-
-### ROS publisher appears after the sending bridge starts
-
-Periodic graph polling eventually creates the bridge subscription. Messages
-published before that subscription exists follow ROS QoS behavior and may be
-lost. Once subscribed, the first eligible message triggers schema definition
-and track creation.
-
-### Temporary outbound failure
-
-Rendering, `defineSchema()`, or `publishDataTrack()` failure drops the current
-message. The next eligible message retries because no writer was cached.
-Concurrent schema-definition callers wait for the in-progress attempt and then
-reuse its success or retry after its failure.
-
-### Temporary inbound failure or mismatch
-
-Missing metadata, schema retrieval failure, a missing local interface, or any
-mismatch rejects the track's publication event. There is no retry loop for an
-already rejected event. Validation runs again only if LiveKit delivers a new
-publication event, for example after the track is republished or rediscovered
-on a later connection.
-
-### Track is unpublished and later returns
-
-Unpublishing closes the stream, joins its reader thread, and removes the
-associated ROS publisher state. A later publication is resolved and validated
-from the beginning.
-
-These rules guarantee safe type handling across late joiners. They do not
-guarantee delivery of frames produced before both the LiveKit stream and the
-local ROS subscriber are ready.
+- A track can be validated before a matching ROS subscriber exists, provided
+  the receiving bridge has the interface package installed.
+- Existing tracks are discovered when a bridge joins LiveKit.
+- Ordinary tracks are not latched. Frames sent before the LiveKit subscription
+  or ROS subscriber is ready are not replayed.
+- A rejected inbound publication is reconsidered only after a new publication
+  event, such as republishing the track or reconnecting.
+- Unpublishing a track removes its ROS publisher and reader state. A later
+  publication is validated from the beginning.
 
 ## Compatibility
 
-Exact-text comparison is stricter than the ROS RIHS01 type hash. Comments,
-whitespace, constants, defaults, dependency order, and nested definitions all
-affect compatibility. Sender and receiver must have interface packages that
-rosbag2 renders identically.
+Compatibility requires sender and receiver to produce identical rosbag2
+definition text. Comments, whitespace, constants, defaults, dependency order,
+and nested definitions all affect the result. This is stricter than the ROS
+RIHS01 type hash.
 
-The bridge also requires the pinned schema-capable LiveKit C++ SDK (or a
-compatible local installation) and a server with participant data blobs
-enabled. Setup details are in the
+The bridge also requires the schema-capable LiveKit C++ SDK and a server with
+participant data blobs enabled. Setup details are in the
 [development guide](../development.md#livekit-sdk).
 
 ## Implementation map
 
-- Schema rendering, registration, and validation:
+- Schema rendering, registration, hashing, and validation:
   [`schema_manager.cpp`](../../src/ros2_livekit_bridge/src/schema_manager.cpp)
-  and
-  [`schema_manager.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/schema_manager.hpp)
-- Track lifecycle, CDR forwarding, and JSON conversion:
+- Track lifecycle and frame handling:
   [`topic_forwarder.cpp`](../../src/ros2_livekit_bridge/src/topic_forwarder.cpp)
-  and
-  [`topic_forwarder.hpp`](../../src/ros2_livekit_bridge/include/ros2_livekit_bridge/topic_forwarder.hpp)
-- Runtime JSON-to-CDR serialization:
+- Runtime JSON-to-CDR conversion:
   [`introspection_utils.cpp`](../../src/ros2_livekit_bridge/src/introspection/introspection_utils.cpp)
-- LiveKit SDK adapters and connection ordering:
-  [`ros2_livekit_bridge.cpp`](../../src/ros2_livekit_bridge/src/ros2_livekit_bridge.cpp)
-- Unit coverage:
-  [`schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_manager_test.cpp)
-  and
-  [`topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp)
-- LiveKit integration and late-subscriber coverage:
-  [`schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/integration/schema_manager_test.cpp)
+- Unit and integration coverage:
+  [`test/unit/schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_manager_test.cpp),
+  [`test/unit/topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp), and
+  [`test/integration/schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/integration/schema_manager_test.cpp)

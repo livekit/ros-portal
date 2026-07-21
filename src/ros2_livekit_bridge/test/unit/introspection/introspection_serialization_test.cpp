@@ -77,6 +77,20 @@ void expectAccepted(const std::string& msg_type, const std::string& payload) {
   EXPECT_TRUE(error.empty()) << error;
 }
 
+rclcpp::SerializedMessage serializeJson(const std::string& msg_type, const std::string& payload) {
+  std::string error;
+  auto serialized = introspection::serializedMessageFromJson(msg_type, payload, error);
+  EXPECT_TRUE(serialized.has_value()) << error;
+  return serialized.value_or(rclcpp::SerializedMessage{});
+}
+
+void expectJsonFailure(const std::string& msg_type, const std::string& payload) {
+  std::string error;
+  const auto serialized = introspection::serializedMessageFromJson(msg_type, payload, error);
+  EXPECT_FALSE(serialized.has_value());
+  EXPECT_FALSE(error.empty());
+}
+
 // ---------------------------------------------------------------------------
 // End-to-end coverage of serializedMessageFromYaml: each test drives a distinct
 // branch of the message-assembly machinery (scalars, nested messages, fixed and
@@ -281,6 +295,39 @@ TEST(YamlMessageTest, RejectsOversizedResizableSequence) {
 }
 
 TEST(YamlMessageTest, RejectsUnknownInterfaceType) { expectFailure("missing_msgs/msg/Nope", "{data: hello}"); }
+
+TEST(JsonMessageTest, SerializesNestedMessage) {
+  const auto serialized = serializeJson("geometry_msgs/msg/Twist",
+                                        R"({"linear":{"x":0.5,"y":0.0,"z":0.0},"angular":{"x":0.0,"y":0.0,"z":1.25}})");
+
+  const auto message = deserialize<geometry_msgs::msg::Twist>(serialized);
+  EXPECT_DOUBLE_EQ(message.linear.x, 0.5);
+  EXPECT_DOUBLE_EQ(message.angular.z, 1.25);
+}
+
+TEST(JsonMessageTest, RejectsMalformedJson) { expectJsonFailure("std_msgs/msg/String", R"({"data":)"); }
+
+TEST(JsonMessageTest, RejectsNonObjectRoot) { expectJsonFailure("std_msgs/msg/String", R"("hello")"); }
+
+TEST(JsonMessageTest, RejectsIncompatibleFieldType) {
+  expectJsonFailure("std_msgs/msg/Int32", R"({"data":"not-an-integer"})");
+}
+
+TEST(JsonMessageTest, RejectsOversizedPayload) {
+  const std::string payload(cli::kMaxYamlPayloadBytes + 1U, ' ');
+  expectJsonFailure("std_msgs/msg/String", payload);
+}
+
+TEST(JsonMessageTest, RejectsOversizedResizableSequence) {
+  std::string payload = R"({"data":[)";
+  payload.reserve((cli::kMaxResizableSequenceLength + 2U) * 2U + 16U);
+  for (std::size_t index = 0; index <= cli::kMaxResizableSequenceLength; ++index) {
+    payload += "0,";
+  }
+  payload += "0]}";
+
+  expectJsonFailure("std_msgs/msg/UInt8MultiArray", payload);
+}
 
 } // namespace
 } // namespace ros2_livekit_bridge

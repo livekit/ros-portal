@@ -75,6 +75,15 @@ std::string toYaml(const rosidl_typesupport_introspection_cpp::MessageMembers& m
 std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::string& msg_type,
                                                                    const std::string& payload, std::string& error);
 
+/// @brief Convert a JSON object to serialized ROS CDR.
+/// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
+/// @param payload JSON message object.
+/// @param error Set to a human-readable description when conversion fails.
+/// @return Serialized ROS message bytes, or `std::nullopt` when the type cannot
+///   be resolved or the payload is invalid.
+std::optional<rclcpp::SerializedMessage> serializedMessageFromJson(const std::string& msg_type,
+                                                                   const std::string& payload, std::string& error);
+
 /// @brief Populate an existing runtime message from a native YAML payload.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Request`.
 /// @param payload YAML message payload.

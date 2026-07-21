@@ -257,6 +257,8 @@ private:
     std::string ros_topic_name;
     /// @brief Resolved ROS message type for the inbound publisher.
     std::string ros_topic_type;
+    /// @brief Wire encoding used to decode each inbound frame.
+    livekit::DataTrackFrameEncoding frame_encoding{livekit::DataTrackFrameEncoding::Cdr};
     /// @brief Generic ROS publisher emitting serialized inbound frames.
     rclcpp::GenericPublisher::SharedPtr publisher;
     /// @brief LiveKit stream read by the inbound forwarding thread.

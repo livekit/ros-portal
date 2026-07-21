@@ -31,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
@@ -84,8 +85,9 @@ SchemaManager::ValidationResult TopicForwarder::validateInboundSchema(const Remo
     validation.reason = "track does not advertise a frame encoding";
     return validation;
   }
-  if (*descriptor.frame_encoding != livekit::DataTrackFrameEncoding::Cdr) {
-    validation.reason = "track frame encoding is not CDR";
+  if (*descriptor.frame_encoding != livekit::DataTrackFrameEncoding::Cdr &&
+      *descriptor.frame_encoding != livekit::DataTrackFrameEncoding::Json) {
+    validation.reason = "track frame encoding is not CDR or JSON";
     return validation;
   }
   if (!descriptor.schema.has_value()) {
@@ -481,6 +483,7 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     state->publisher_identity = descriptor.publisher_identity;
     state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
+    state->frame_encoding = *descriptor.frame_encoding; // Guaranteed to be set from validateInboundSchema() above
 
     const auto node = node_.lock();
     if (!node) {
@@ -709,21 +712,32 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
 void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state) {
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
-    rclcpp::SerializedMessage serialized_msg(frame.payload.size());
-    auto& rcl_msg = serialized_msg.get_rcl_serialized_message();
-
-    if (!frame.payload.empty()) {
-      std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
+    std::optional<rclcpp::SerializedMessage> serialized_msg;
+    if (state->frame_encoding == livekit::DataTrackFrameEncoding::Json) {
+      std::string error;
+      serialized_msg = introspection::serializedMessageFromJson(
+          state->ros_topic_type, std::string(frame.payload.begin(), frame.payload.end()), error);
+      if (!serialized_msg) {
+        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
+                             "Dropping invalid JSON frame from LiveKit data track '%s' from '%s': %s",
+                             state->track_name.c_str(), state->publisher_identity.c_str(), error.c_str());
+        continue;
+      }
     } else {
-      RCLCPP_WARN(logger_, "Received empty payload from LiveKit data track '%s' from '%s'", state->track_name.c_str(),
-                  state->publisher_identity.c_str());
-      return;
+      serialized_msg.emplace(frame.payload.size());
+      auto& rcl_msg = serialized_msg->get_rcl_serialized_message();
+      if (!frame.payload.empty()) {
+        std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
+      } else {
+        RCLCPP_WARN(logger_, "Received empty payload from LiveKit data track '%s' from '%s'", state->track_name.c_str(),
+                    state->publisher_identity.c_str());
+        return;
+      }
+      rcl_msg.buffer_length = frame.payload.size();
     }
 
-    rcl_msg.buffer_length = frame.payload.size();
-
     try {
-      state->publisher->publish(serialized_msg);
+      state->publisher->publish(*serialized_msg);
     } catch (const std::exception& e) {
       RCLCPP_WARN(logger_,
                   "Failed to publish inbound LiveKit data frame from '%s' "

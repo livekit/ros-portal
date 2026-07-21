@@ -197,6 +197,7 @@ ament_auto_add_library(introspection_lib SHARED
   src/introspection/runtime_type_support.cpp
 )
 target_link_libraries(introspection_lib
+  nlohmann_json::nlohmann_json
   yaml-cpp::yaml-cpp
 )
 ament_target_dependencies(introspection_lib

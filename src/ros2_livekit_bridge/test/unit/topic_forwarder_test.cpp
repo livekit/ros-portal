@@ -157,7 +157,7 @@ TEST_F(TopicForwarderTest, SchemaValidationAcceptsExactMatch) {
     return livekit::Result<std::string, std::string>::success(text);
   };
   const TopicForwarder forwarder(makeOptions(), node_, std::move(methods));
-  const TopicForwarder::RemoteDataTrackDescriptor descriptor{
+  TopicForwarder::RemoteDataTrackDescriptor descriptor{
       "sid",
       "/remote/data",
       "publisher",
@@ -171,6 +171,12 @@ TEST_F(TopicForwarderTest, SchemaValidationAcceptsExactMatch) {
   EXPECT_TRUE(result.accepted);
   EXPECT_TRUE(result.reason.empty());
   EXPECT_EQ(result.remote_hash, result.local_hash);
+
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  const auto json_result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
+  EXPECT_TRUE(json_result.accepted);
+  EXPECT_TRUE(json_result.reason.empty());
+  EXPECT_EQ(json_result.remote_hash, json_result.local_hash);
 }
 
 TEST_F(TopicForwarderTest, SchemaValidationRejectsMissingMetadata) {
@@ -209,10 +215,10 @@ TEST_F(TopicForwarderTest, SchemaValidationRejectsWrongTypeAndEncoding) {
   EXPECT_NE(result.reason.find("does not match local ROS type"), std::string::npos);
 
   descriptor.schema = livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Protobuf;
   result = forwarder.validateInboundSchema(descriptor, "std_msgs/msg/String");
   EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("not CDR"), std::string::npos);
+  EXPECT_NE(result.reason.find("not CDR or JSON"), std::string::npos);
 }
 
 TEST_F(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures) {

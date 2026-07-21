@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <exception>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <ros2_medkit_serialization/json_serializer.hpp>
 #include <ros2_medkit_serialization/type_cache.hpp>
@@ -30,6 +31,32 @@
 #include "ros2_livekit_bridge/cli/constants.hpp"
 
 namespace ros2_livekit_bridge::introspection {
+namespace {
+
+bool containsOversizedSequence(const nlohmann::json& value) {
+  if (value.is_array()) {
+    if (value.size() > cli::kMaxResizableSequenceLength) {
+      return true;
+    }
+    for (const auto& entry : value) {
+      if (containsOversizedSequence(entry)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (value.is_object()) {
+    for (const auto& entry : value.items()) {
+      if (containsOversizedSequence(entry.value())) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+} // namespace
 
 bool containsOversizedSequence(const YAML::Node& node) {
   if (node.IsSequence()) {
@@ -106,6 +133,43 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
     return serializer.serialize(msg_type, ros2_medkit_serialization::JsonSerializer::yaml_to_json(*root));
   } catch (const std::exception& resolve_error) {
     error = resolve_error.what();
+    return std::nullopt;
+  }
+}
+
+std::optional<rclcpp::SerializedMessage> serializedMessageFromJson(const std::string& msg_type,
+                                                                   const std::string& payload, std::string& error) {
+  error.clear();
+  if (payload.empty()) {
+    error = "payload must be non-empty";
+    return std::nullopt;
+  }
+  if (payload.size() > cli::kMaxYamlPayloadBytes) {
+    error = "payload exceeds maximum size of " + std::to_string(cli::kMaxYamlPayloadBytes) + " bytes";
+    return std::nullopt;
+  }
+
+  nlohmann::json root;
+  try {
+    root = nlohmann::json::parse(payload);
+  } catch (const nlohmann::json::exception& parse_error) {
+    error = std::string("payload is not valid JSON: ") + parse_error.what();
+    return std::nullopt;
+  }
+  if (!root.is_object()) {
+    error = "payload must be a JSON object";
+    return std::nullopt;
+  }
+  if (containsOversizedSequence(root)) {
+    error = "payload contains an array exceeding maximum length " + std::to_string(cli::kMaxResizableSequenceLength);
+    return std::nullopt;
+  }
+
+  try {
+    static const ros2_medkit_serialization::JsonSerializer serializer;
+    return serializer.serialize(msg_type, root);
+  } catch (const std::exception& conversion_error) {
+    error = conversion_error.what();
     return std::nullopt;
   }
 }

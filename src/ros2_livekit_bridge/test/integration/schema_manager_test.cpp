@@ -24,6 +24,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <geometry_msgs/msg/twist.hpp>
 #include <optional>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
@@ -93,6 +94,59 @@ TEST_F(BridgeTestE2E, InboundTrackCreatesPublisher) {
   ASSERT_TRUE(track_result);
 
   EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
+}
+
+// Case: A JSON-encoded LiveKit frame with an exact ROS schema should be
+// translated to CDR and delivered to a typed ROS subscriber.
+TEST_F(BridgeTestE2E, InboundJsonFrameCreatesTypedRosMessage) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+
+  constexpr const char* kTopic = "/bridge/json_twist";
+  constexpr const char* kType = "geometry_msgs/msg/Twist";
+  initializeInboundOnlyRuntime(kTopic);
+
+  std::atomic_bool received{false};
+  auto subscription = robotBNode()->create_subscription<geometry_msgs::msg::Twist>(
+      kTopic, 10, [&received](const geometry_msgs::msg::Twist::ConstSharedPtr& msg) {
+        if (msg->linear.x == 1.25 && msg->linear.y == -2.5 && msg->angular.z == 0.75) {
+          received.store(true);
+        }
+      });
+  ASSERT_NE(subscription, nullptr);
+
+  livekit::Room publisher_room;
+  livekit::RoomOptions room_options;
+  room_options.auto_subscribe = true;
+  ASSERT_TRUE(publisher_room.connect(liveKitUrl(), tokenA(), room_options));
+  const auto publisher = publisher_room.localParticipant().lock();
+  ASSERT_NE(publisher, nullptr);
+
+  const auto schema_text = renderSchemaText(kType);
+  if (!schema_text.has_value()) {
+    FAIL() << kType << " schema was unavailable";
+    return;
+  }
+  const livekit::DataTrackSchemaId schema_id{kType, livekit::DataTrackSchemaEncoding::Ros2Msg};
+  ASSERT_NO_THROW(publisher->defineSchema(schema_id, *schema_text));
+
+  livekit::DataTrackPublishOptions options;
+  options.name = kTopic;
+  options.schema = schema_id;
+  options.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  const auto track_result = publisher->publishDataTrack(options);
+  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(waitFor([&]() { return subscription->get_publisher_count() > 0U; }, kGraphTimeout));
+
+  const std::string json = R"({"linear":{"x":1.25,"y":-2.5,"z":0.0},"angular":{"x":0.0,"y":0.0,"z":0.75}})";
+  const std::vector<std::uint8_t> payload(json.begin(), json.end());
+  EXPECT_TRUE(waitFor(
+      [&]() {
+        if (!received.load()) {
+          (void)track_result.value()->tryPush(std::vector<std::uint8_t>(payload));
+        }
+        return received.load();
+      },
+      kMessageTimeout));
 }
 
 // Case: A receiving bridge should discover a preexisting LiveKit track and forward it when a matching ROS subscriber

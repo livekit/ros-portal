@@ -127,11 +127,11 @@ std::optional<bridge_config::BridgeConfig> parseBridgeConfig(const std::filesyst
   }
 }
 
-std::vector<std::string> outgoingTopicPatterns(const bridge_config::BridgeConfig& config) {
+std::vector<std::string> outgoingTopicPatterns(const std::vector<bridge_config::TopicConfig>& topics) {
   std::vector<std::string> patterns;
-  patterns.reserve(config.topics.size());
+  patterns.reserve(topics.size());
 
-  for (const auto& topic_config : config.topics) {
+  for (const auto& topic_config : topics) {
     if (topic_config.latched) {
       continue; // handled by LatchedTopicForwarder, not the DataTrack path
     }
@@ -144,11 +144,11 @@ std::vector<std::string> outgoingTopicPatterns(const bridge_config::BridgeConfig
   return patterns;
 }
 
-std::vector<std::string> incomingTopicPatterns(const bridge_config::BridgeConfig& config) {
+std::vector<std::string> incomingTopicPatterns(const std::vector<bridge_config::TopicConfig>& topics) {
   std::vector<std::string> patterns;
-  patterns.reserve(config.topics.size());
+  patterns.reserve(topics.size());
 
-  for (const auto& topic_config : config.topics) {
+  for (const auto& topic_config : topics) {
     if (topic_config.latched) {
       continue; // handled by LatchedTopicForwarder, not the DataTrack path
     }
@@ -161,10 +161,10 @@ std::vector<std::string> incomingTopicPatterns(const bridge_config::BridgeConfig
   return patterns;
 }
 
-std::vector<std::string> preserveIdTopicPatterns(const bridge_config::BridgeConfig& config) {
+std::vector<std::string> preserveIdTopicPatterns(const std::vector<bridge_config::TopicConfig>& topics) {
   std::vector<std::string> patterns;
 
-  for (const auto& topic_config : config.topics) {
+  for (const auto& topic_config : topics) {
     const bool inbound = topic_config.direction == bridge_config::Direction::In ||
                          topic_config.direction == bridge_config::Direction::Bidirectional;
     if (inbound && topic_config.preserve_id) {
@@ -175,10 +175,10 @@ std::vector<std::string> preserveIdTopicPatterns(const bridge_config::BridgeConf
   return patterns;
 }
 
-std::unordered_map<std::string, double> outboundRateLimits(const bridge_config::BridgeConfig& config) {
+std::unordered_map<std::string, double> outboundRateLimits(const std::vector<bridge_config::TopicConfig>& topics) {
   std::unordered_map<std::string, double> limits;
 
-  for (const auto& topic_config : config.topics) {
+  for (const auto& topic_config : topics) {
     const bool outbound = topic_config.direction == bridge_config::Direction::Out ||
                           topic_config.direction == bridge_config::Direction::Bidirectional;
     if (!outbound || !topic_config.max_rate_hz.has_value() || *topic_config.max_rate_hz <= 0.0) {
@@ -191,24 +191,24 @@ std::unordered_map<std::string, double> outboundRateLimits(const bridge_config::
   return limits;
 }
 
-std::unordered_set<std::string> latchedOutboundTopics(const bridge_config::BridgeConfig& config) {
-  std::unordered_set<std::string> topics;
+std::unordered_set<std::string> latchedOutboundTopics(const std::vector<bridge_config::TopicConfig>& topics) {
+  std::unordered_set<std::string> result;
 
-  for (const auto& topic_config : config.topics) {
+  for (const auto& topic_config : topics) {
     const bool outbound = topic_config.direction == bridge_config::Direction::Out ||
                           topic_config.direction == bridge_config::Direction::Bidirectional;
     if (outbound && topic_config.latched) {
-      topics.insert(topic_config.topic);
+      result.insert(topic_config.topic);
     }
   }
 
-  return topics;
+  return result;
 }
 
-std::unordered_set<std::string> latchedInboundTopics(const bridge_config::BridgeConfig& config) {
-  std::unordered_set<std::string> topics;
+std::unordered_set<std::string> latchedInboundTopics(const std::vector<bridge_config::TopicConfig>& topics) {
+  std::unordered_set<std::string> result;
 
-  for (const auto& topic_config : config.topics) {
+  for (const auto& topic_config : topics) {
     const bool inbound = topic_config.direction == bridge_config::Direction::In ||
                          topic_config.direction == bridge_config::Direction::Bidirectional;
     if (!inbound || !topic_config.latched) {
@@ -220,9 +220,9 @@ std::unordered_set<std::string> latchedInboundTopics(const bridge_config::Bridge
       continue;
     }
 
-    topics.insert(*normalized_topic_name);
+    result.insert(*normalized_topic_name);
   }
 
-  return topics;
+  return result;
 }
 } // namespace ros2_livekit_bridge::utils

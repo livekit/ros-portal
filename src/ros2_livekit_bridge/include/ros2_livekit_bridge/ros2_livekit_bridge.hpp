@@ -23,14 +23,12 @@
 #include <memory>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
-#include <regex>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/types.hpp"
+#include "ros2_livekit_bridge_config/config/config_parser.hpp"
 
 namespace ros2_livekit_bridge {
 
@@ -136,40 +134,30 @@ private:
   bool rpcUnregisterMethod(const std::string& method);
 
   /// @brief Create TopicForwarder after LiveKit room connection succeeds.
-  /// @param outgoing_topic_compiled_patterns Compiled ROS-to-LiveKit topic
-  /// patterns.
-  /// @param incoming_topic_compiled_patterns Compiled LiveKit-to-ROS topic
-  /// patterns.
-  /// @param preserve_id_topic_compiled_patterns Compiled topics that should be preserved with their original IDs.
-  /// @param outbound_rate_limits Rate limits for outbound topics.
+  /// @param topics Configured topics; mapped to TopicForwarder options via
+  /// config_mapping (QoS bounds and best-effort patterns come from ROS params).
   /// @return True on success, false when the topic forwarder could not be initialized.
-  bool initializeTopicForwarder(std::vector<std::regex> outgoing_topic_compiled_patterns,
-                                std::vector<std::regex> incoming_topic_compiled_patterns,
-                                std::vector<std::regex> preserve_id_topic_compiled_patterns,
-                                std::unordered_map<std::string, double> outbound_rate_limits);
+  bool initializeTopicForwarder(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
   /// @brief Create Manager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
   bool initializeCliManager();
 
   /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
-  /// @param routes Outgoing service routes derived from bridge config.
+  /// @param services Configured services; outbound routes are derived here.
   /// @return True on success, false when the service forwarder could not be initialized.
-  bool initializeServiceForwarder(std::vector<ServiceForwarder::ServiceRoute> routes);
+  bool initializeServiceForwarder(const std::vector<ros2_livekit_bridge_config::ServiceConfig>& services);
 
   /// @brief Create LatchedTopicForwarder after LiveKit room connection succeeds.
   ///
   /// Handles topics flagged `latched` (e.g. /tf_static) over a reliable RPC
   /// push-with-ack instead of DataTracks. No-op when no latched topics are
   /// configured.
-  /// @param outbound_latched_topics Literal ROS topic names forwarded outbound
-  /// as latched state.
-  /// @param inbound_latched_topics Normalized ROS topic names accepted inbound
-  /// as latched state.
+  /// @param topics Configured topics; latched outbound/inbound sets are derived
+  /// here.
   /// @return True on success (including when there is nothing to do), false when
   /// the forwarder could not be initialized.
-  bool initializeLatchedTopicForwarder(std::unordered_set<std::string> outbound_latched_topics,
-                                       std::unordered_set<std::string> inbound_latched_topics);
+  bool initializeLatchedTopicForwarder(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics);
 
   //! @brief The period for polling the topics
   int topic_polling_period_ms_;
@@ -178,8 +166,6 @@ private:
   size_t min_qos_depth_;
   //! @brief The maximum QoS depth
   size_t max_qos_depth_;
-  //! @brief The patterns for the topics that should be forced to BEST_EFFORT
-  std::vector<std::regex> best_effort_qos_topic_patterns_;
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
   int ros_threads_;

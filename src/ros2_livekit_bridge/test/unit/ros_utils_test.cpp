@@ -132,7 +132,7 @@ TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {
   bidirectional_topic.direction = bridge_config::Direction::Bidirectional;
   config.topics.push_back(bidirectional_topic);
 
-  const auto patterns = outgoingTopicPatterns(config);
+  const auto patterns = outgoingTopicPatterns(config.topics);
 
   EXPECT_EQ(patterns, (std::vector<std::string>{"/camera/image_raw", "/odom"}));
 }
@@ -250,7 +250,7 @@ TEST(RosUtilsTest, PreserveIdTopicPatternsIncludesOnlyInboundOptedInTopics) {
   out_preserve.preserve_id = true;
   config.topics.push_back(out_preserve);
 
-  const auto patterns = preserveIdTopicPatterns(config);
+  const auto patterns = preserveIdTopicPatterns(config.topics);
 
   EXPECT_EQ(patterns, (std::vector<std::string>{"/tf", "/odom"}));
 }
@@ -274,7 +274,7 @@ TEST(RosUtilsTest, IncomingTopicPatternsIncludesInAndBidirectionalTopics) {
   bidirectional_topic.direction = bridge_config::Direction::Bidirectional;
   config.topics.push_back(bidirectional_topic);
 
-  const auto patterns = incomingTopicPatterns(config);
+  const auto patterns = incomingTopicPatterns(config.topics);
 
   EXPECT_EQ(patterns, (std::vector<std::string>{"/teleop_cmd", "/odom"}));
 }
@@ -316,7 +316,7 @@ TEST(RosUtilsTest, OutboundRateLimitsMapsOutboundTopicsOnly) {
   out_zero.max_rate_hz = 0.0;
   config.topics.push_back(out_zero);
 
-  const auto limits = outboundRateLimits(config);
+  const auto limits = outboundRateLimits(config.topics);
 
   EXPECT_EQ(limits, (std::unordered_map<std::string, double>{{"/tf", 10.0}, {"/odom", 5.0}}));
 }
@@ -350,8 +350,8 @@ TEST(RosUtilsTest, LatchedTopicsAreExcludedFromDataTrackPatterns) {
 
   // Latched topics are handled by LatchedTopicForwarder, so they must not appear
   // in the DataTrack forwarding patterns.
-  EXPECT_EQ(outgoingTopicPatterns(config), (std::vector<std::string>{"/tf"}));
-  EXPECT_EQ(incomingTopicPatterns(config), (std::vector<std::string>{"/map"}));
+  EXPECT_EQ(outgoingTopicPatterns(config.topics), (std::vector<std::string>{"/tf"}));
+  EXPECT_EQ(incomingTopicPatterns(config.topics), (std::vector<std::string>{"/map"}));
 }
 
 TEST(RosUtilsTest, LatchedOutboundTopicsCollectsOutboundLatchedOnly) {
@@ -384,7 +384,7 @@ TEST(RosUtilsTest, LatchedOutboundTopicsCollectsOutboundLatchedOnly) {
   out_plain.direction = bridge_config::Direction::Out;
   config.topics.push_back(out_plain);
 
-  EXPECT_EQ(latchedOutboundTopics(config), (std::unordered_set<std::string>{"/tf_static", "/params"}));
+  EXPECT_EQ(latchedOutboundTopics(config.topics), (std::unordered_set<std::string>{"/tf_static", "/params"}));
 }
 
 TEST(RosUtilsTest, LatchedInboundTopicsNormalizesInboundLatchedOnly) {
@@ -411,7 +411,7 @@ TEST(RosUtilsTest, LatchedInboundTopicsNormalizesInboundLatchedOnly) {
   out_latched.latched = true;
   config.topics.push_back(out_latched);
 
-  EXPECT_EQ(latchedInboundTopics(config), (std::unordered_set<std::string>{"/tf_static", "/params"}));
+  EXPECT_EQ(latchedInboundTopics(config.topics), (std::unordered_set<std::string>{"/tf_static", "/params"}));
 }
 } // namespace
 } // namespace ros2_livekit_bridge::utils

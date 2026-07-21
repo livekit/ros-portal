@@ -46,8 +46,8 @@
 namespace ros2_livekit_bridge {
 namespace {
 
-TopicForwarder::TopicForwarderOptions makeOptions() {
-  TopicForwarder::TopicForwarderOptions options;
+TopicForwarder::Options makeOptions() {
+  TopicForwarder::Options options;
   options.outgoing_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/allowed/.*"});
   options.incoming_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/remote/.*"});
   options.best_effort_qos_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/best_effort"});
@@ -184,8 +184,8 @@ TEST_F(TopicForwarderTest, QoSBestEffortOverrideWins) {
 namespace {
 
 // Options with a single outbound data topic and an optional rate cap on it.
-TopicForwarder::TopicForwarderOptions makeRateCapOptions(std::optional<double> max_rate_hz) {
-  TopicForwarder::TopicForwarderOptions options;
+TopicForwarder::Options makeRateCapOptions(std::optional<double> max_rate_hz) {
+  TopicForwarder::Options options;
   options.outgoing_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/allowed/.*"});
   options.min_qos_depth = 2;
   options.max_qos_depth = 10;

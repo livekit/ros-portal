@@ -130,8 +130,6 @@ The server must enable participant data blobs with
 - A track can be validated before a matching ROS subscriber exists, provided
   the receiving bridge has the interface package installed.
 - Existing tracks are discovered when a bridge joins LiveKit.
-- Ordinary tracks are not latched. Frames sent before the LiveKit subscription
-  or ROS subscriber is ready are not replayed.
 - A rejected inbound publication is reconsidered only after a new publication
   event, such as republishing the track or reconnecting.
 - Unpublishing a track removes its ROS publisher and reader state. A later

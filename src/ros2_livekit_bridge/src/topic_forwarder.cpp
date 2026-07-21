@@ -446,6 +446,9 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
                  "(remote_schema_sha256=%s local_schema_sha256=%s)",
                  descriptor.track_name.c_str(), topic_type->c_str(), descriptor.publisher_identity.c_str(),
                  schema_validation.reason.c_str(), remote_hash.c_str(), local_hash.c_str());
+    // TODO(BOT-332): diagnostics / other error reporting for when this happens
+
+    // Return to prevent creating a publisher for the track due to invalid schema
     return;
   }
 
@@ -605,10 +608,10 @@ std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(
   const auto topic_it = topics.find(*normalized_track_name);
   if (topic_it == topics.end() || topic_it->second.empty()) {
     if (schema.has_value() && !schema->name.empty()) {
-      RCLCPP_DEBUG(logger_,
-                   "Inbound track '%s' has no local ROS endpoint yet; using advertised "
-                   "schema type '%s' for exact local validation",
-                   track_name.c_str(), schema->name.c_str());
+      RCLCPP_INFO(logger_,
+                  "Inbound track '%s' has no local ROS endpoint yet; using advertised "
+                  "schema type '%s' for exact local validation",
+                  track_name.c_str(), schema->name.c_str());
       return schema->name;
     }
     return std::nullopt;

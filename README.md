@@ -83,6 +83,7 @@ docker run --rm \
   LiveKit test environment.
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
+- [Measuring Latency](docs/latency.md): latency measurement and analysis.
 
 ## Design Reference
 

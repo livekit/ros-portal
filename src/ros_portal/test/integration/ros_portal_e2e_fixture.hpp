@@ -117,13 +117,16 @@ inline rclcpp::NodeOptions createRosPortalOptions(const rclcpp::Context::SharedP
 }
 
 inline std::string rosPortalConfigYaml(const std::string& topic_pattern, bool preserve_id = false,
-                                       const std::string& direction = "bidirectional",
-                                       const std::string& encoding = "") {
+                                       const std::string& direction = "bidirectional", const std::string& encoding = "",
+                                       bool measure_latency = false) {
   std::ostringstream stream;
   stream << "ros_portal:\n"
          << "  version: \"0.0.1\"\n"
-         << "  ros_threads: 4\n"
-         << "  topics:\n"
+         << "  ros_threads: 4\n";
+  if (measure_latency) {
+    stream << "  measure_latency: true\n";
+  }
+  stream << "  topics:\n"
          << "    - topic: \"" << topic_pattern << "\"\n"
          << "      direction: \"" << direction << "\"\n";
   if (preserve_id) {
@@ -175,14 +178,15 @@ protected:
 
   bool configured() const { return !livekit_url_.empty() && !token_a_.empty() && !token_b_.empty(); }
 
-  void initializeRuntime(const std::string& topic_pattern) {
-    initializeRuntime(topic_pattern, topic_pattern, topic_pattern, topic_pattern);
+  void initializeRuntime(const std::string& topic_pattern, bool measure_latency = false) {
+    initializeRuntime(topic_pattern, topic_pattern, topic_pattern, topic_pattern, false, false, "", "",
+                      measure_latency);
   }
 
   void initializeRuntime(const std::string& topic_pattern_a, const std::string& topic_pattern_b,
                          const std::string& publish_topic_a, const std::string& publish_topic_b,
                          bool preserve_id_a = false, bool preserve_id_b = false, const std::string& encoding_a = "",
-                         const std::string& encoding_b = "") {
+                         const std::string& encoding_b = "", bool measure_latency = false) {
     ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
     const auto [domain_id_a, domain_id_b] = testDomainIds();
@@ -193,9 +197,11 @@ protected:
                  ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
     config_file_a_ = std::make_unique<TemporaryConfigFile>(
-        rosPortalConfigYaml(topic_pattern_a, preserve_id_a, "bidirectional", encoding_a), "ros_portal_test_e2e_a_");
+        rosPortalConfigYaml(topic_pattern_a, preserve_id_a, "bidirectional", encoding_a, measure_latency),
+        "ros_portal_test_e2e_a_");
     config_file_b_ = std::make_unique<TemporaryConfigFile>(
-        rosPortalConfigYaml(topic_pattern_b, preserve_id_b, "bidirectional", encoding_b), "ros_portal_test_e2e_b_");
+        rosPortalConfigYaml(topic_pattern_b, preserve_id_b, "bidirectional", encoding_b, measure_latency),
+        "ros_portal_test_e2e_b_");
 
     ros_portal_a_ = createRosPortal(*graph_a_, "/ros_portal_a_node", token_a_, config_file_a_->path().string());
     ros_portal_b_ = createRosPortal(*graph_b_, "/ros_portal_b_node", token_b_, config_file_b_->path().string());

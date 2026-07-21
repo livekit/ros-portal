@@ -131,6 +131,7 @@ All config lives under `ros_portal`.
 | `$schema` | string | no | - | Link to JSON schema. Use `https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json` and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
+| `measure_latency` | boolean | no | `false` | Forward the typed latency probe topic (`/ros_portal/latency/timestamp`) and stamp T1-T4 into each `ros_portal_msgs/LatencyTimestamps` message as it crosses ROS Portal (see below). Off by default. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
 
@@ -337,6 +338,31 @@ Notes:
   for pure inbound (`in`) topics.
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
+## Measuring latency (`measure_latency: true`)
+
+With `measure_latency: true`, the bridge forwards a dedicated typed latency probe
+topic and stamps the T0..T5 timeline into the message itself (no data-track side
+channels):
+
+- It subscribes to `/ros_portal/latency/timestamp`
+  (`ros_portal_msgs/LatencyTimestamps`). On the **sending** bridge it
+  stamps `t1` (callback entry) and `t2` (just before the LiveKit push) into the
+  message and forwards it over a dedicated data track.
+- On the **receiving** bridge it stamps `t3` (LiveKit read) and `t4` (just before
+  the ROS publish) and republishes on `/ros_portal/latency/timestamp_rx`
+  — a distinct topic, so the outbound subscription never re-forwards a
+  republished probe (no cross-bridge loop).
+
+The external publisher sets `t0` and the subscriber sets `t5`, so the republished
+message carries the whole path. `t2→t3` is the LiveKit transport (valid only when
+both bridges share a wall clock, e.g. two bridges on one computer) and
+`(t2−t1) + (t4−t3)` is the bridge's own added latency. Off by default; enable it
+only for characterization or regression runs.
+
+For step-by-step instructions on running a latency characterization and the
+regression test, see
+[Measuring latency](../src/ros_portal/README.md#measuring-latency) in
+the package README.
 
 ### Video Options
 

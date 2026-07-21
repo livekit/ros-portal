@@ -1,0 +1,243 @@
+{
+  "configById": {
+    "Plot!hop_mean": {
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "yAxisLabel": "latency (ms)",
+      "foxglovePanelTitle": "mean: ms",
+      "lichtblickPanelTitle": "mean: ms",
+      "paths": [
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[2].mean_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t0_t1 (internal ROS)",
+          "color": "#f5774d"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[3].mean_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t1_t2 (internal bridge)",
+          "color": "#f7df71"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[4].mean_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t2_t3 (livekit transport)",
+          "color": "#cad660"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[5].mean_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t3_t4 (internal bridge)",
+          "color": "#a395e2"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[6].mean_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t4_t5 (internal ROS)",
+          "color": "#61cbff"
+        }
+      ]
+    },
+    "Plot!hop_p50": {
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "yAxisLabel": "latency (ms)",
+      "foxglovePanelTitle": "p50: ms",
+      "lichtblickPanelTitle": "p50: ms",
+      "paths": [
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[2].p50_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t0_t1 (internal ROS)",
+          "color": "#f5774d"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[3].p50_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t1_t2 (internal bridge)",
+          "color": "#f7df71"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[4].p50_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t2_t3 (livekit transport)",
+          "color": "#cad660"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[5].p50_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t3_t4 (internal bridge)",
+          "color": "#a395e2"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[6].p50_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t4_t5 (internal ROS)",
+          "color": "#61cbff"
+        }
+      ]
+    },
+    "Plot!hop_p95": {
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "yAxisLabel": "latency (ms)",
+      "foxglovePanelTitle": "p95: ms",
+      "lichtblickPanelTitle": "p95: ms",
+      "paths": [
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[2].p95_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t0_t1 (internal ROS)",
+          "color": "#f5774d"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[3].p95_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t1_t2 (internal bridge)",
+          "color": "#f7df71"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[4].p95_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t2_t3 (livekit transport)",
+          "color": "#cad660"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[5].p95_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t3_t4 (internal bridge)",
+          "color": "#a395e2"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[6].p95_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t4_t5 (internal ROS)",
+          "color": "#61cbff"
+        }
+      ]
+    },
+    "Plot!hop_max": {
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "yAxisLabel": "latency (ms)",
+      "foxglovePanelTitle": "max: ms",
+      "lichtblickPanelTitle": "max: ms",
+      "paths": [
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[2].max_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t0_t1 (internal ROS)",
+          "color": "#f5774d"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[3].max_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t1_t2 (internal bridge)",
+          "color": "#f7df71"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[4].max_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t2_t3 (livekit transport)",
+          "color": "#cad660"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[5].max_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t3_t4 (internal bridge)",
+          "color": "#a395e2"
+        },
+        {
+          "timestampMethod": "headerStamp",
+          "value": "/ros_portal/latency/stats.metrics[6].max_ms",
+          "enabled": true,
+          "showLine": true,
+          "label": "t4_t5 (internal ROS)",
+          "color": "#61cbff"
+        }
+      ]
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "first": "Plot!hop_mean",
+    "second": {
+      "first": "Plot!hop_p50",
+      "second": {
+        "first": "Plot!hop_p95",
+        "second": "Plot!hop_max",
+        "direction": "column"
+      },
+      "direction": "column"
+    },
+    "direction": "column"
+  }
+}

@@ -21,11 +21,15 @@ find_package(rosidl_default_generators REQUIRED)
 ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/LatencyTimestamps.msg"
+  "msg/LatencyMetric.msg"
+  "msg/LatencyStats.msg"
   "srv/Ros2InterfaceShow.srv"
   "srv/Ros2ServiceCall.srv"
   "srv/Ros2ServiceList.srv"
   "srv/Ros2TopicList.srv"
   "srv/Ros2TopicPub.srv"
+  DEPENDENCIES builtin_interfaces std_msgs
 )
 
 ament_auto_package()

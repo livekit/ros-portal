@@ -105,6 +105,8 @@ bool RosPortal::initialize() {
   build_info_diagnostics_.reset();
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
+  measure_latency_ = config->measure_latency;
+
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
@@ -646,6 +648,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     auto forwarder_options = utils::topicForwarderOptions(topics, min_qos_depth_, max_qos_depth_,
                                                           best_effort_qos_topics, this->get_logger());
     forwarder_options.topic_snapshot = [manager = graph_manager_.get()]() { return manager->topics(); };
+    forwarder_options.measure_latency = measure_latency_;
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
     forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {

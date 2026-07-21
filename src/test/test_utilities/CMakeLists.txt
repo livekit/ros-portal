@@ -31,6 +31,8 @@ ament_auto_find_build_dependencies()
 
 install(PROGRAMS
   scripts/depth_time_offset_node.py
+  scripts/latency_probe_publisher.py
+  scripts/latency_probe_subscriber.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

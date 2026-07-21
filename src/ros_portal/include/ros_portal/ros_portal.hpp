@@ -267,6 +267,9 @@ private:
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
   int ros_threads_{0};
+  //! @brief When true, forward the typed latency probe topic and stamp T1-T4
+  //! into each LatencyTimestamps message (see the 'measure_latency' config key).
+  bool measure_latency_{false};
   //! @brief Tracks whether ROS Portal initialization has completed.
   std::atomic_bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.

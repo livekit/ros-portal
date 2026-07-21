@@ -51,17 +51,14 @@ std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_
   }
 }
 
-livekit::DataTrackSchemaEncoding schemaEncodingFromRosDefinition(const std::string& encoding) {
+std::optional<livekit::DataTrackSchemaEncoding> schemaEncodingFromRosDefinition(const std::string& encoding) {
   if (encoding == "ros2idl") {
     return livekit::DataTrackSchemaEncoding::Ros2Idl;
   }
   if (encoding == "ros2msg") {
     return livekit::DataTrackSchemaEncoding::Ros2Msg;
   }
-  if (!encoding.empty() && encoding.size() <= 25U) {
-    return livekit::DataTrackSchemaEncoding::custom(encoding);
-  }
-  return livekit::DataTrackSchemaEncoding::Ros2Msg;
+  return std::nullopt;
 }
 
 std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding) {
@@ -112,9 +109,16 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
     return std::nullopt;
   }
 
+  const auto schema_encoding = schemaEncodingFromRosDefinition(schema->encoding);
+  if (!schema_encoding.has_value()) {
+    RCLCPP_ERROR(logger_, "Unsupported ROS schema encoding '%s' for type '%s'", schema->encoding.c_str(),
+                 topic_type.c_str());
+    return std::nullopt;
+  }
+
   livekit::DataTrackSchemaId schema_id{
       topic_type,
-      schemaEncodingFromRosDefinition(schema->encoding),
+      *schema_encoding,
   };
   const auto dedupe_key = schemaDedupeKey(topic_type, schema->encoding);
   const auto schema_hash = hashSchemaText(schema->text);

@@ -214,7 +214,7 @@ TEST(SchemaManagerTest, ReturnsFailureForUnknownType) {
   EXPECT_FALSE(result);
 }
 
-TEST(SchemaManagerTest, MapsKnownAndCustomEncodings) {
+TEST(SchemaManagerTest, MapsKnownAndRejectsUnsupportedEncodings) {
   auto methods = makeLiveKitMethods();
   livekit::DataTrackSchemaId defined_id;
   methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string&) {
@@ -227,16 +227,26 @@ TEST(SchemaManagerTest, MapsKnownAndCustomEncodings) {
   ASSERT_TRUE(manager.ensureSchemaDefined("example_msgs/msg/Example"));
   EXPECT_EQ(defined_id.encoding, livekit::DataTrackSchemaEncoding::Ros2Idl);
 
-  auto custom_methods = makeLiveKitMethods();
-  custom_methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string&) {
-    defined_id = schema_id;
+  int rejected_define_count = 0;
+  auto unsupported_methods = makeLiveKitMethods();
+  unsupported_methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
+    ++rejected_define_count;
     return true;
   };
-  SchemaManager custom_manager(std::move(custom_methods), [](const std::string&) {
+  SchemaManager unsupported_manager(std::move(unsupported_methods), [](const std::string&) {
     return std::optional<RosMessageSchema>{{"custom_encoding", "text"}};
   });
-  ASSERT_TRUE(custom_manager.ensureSchemaDefined("example_msgs/msg/Custom"));
-  EXPECT_EQ(defined_id.encoding, livekit::DataTrackSchemaEncoding::custom("custom_encoding"));
+  EXPECT_FALSE(unsupported_manager.ensureSchemaDefined("example_msgs/msg/Custom"));
+
+  auto empty_methods = makeLiveKitMethods();
+  empty_methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
+    ++rejected_define_count;
+    return true;
+  };
+  SchemaManager empty_manager(std::move(empty_methods),
+                              [](const std::string&) { return std::optional<RosMessageSchema>{{"", "text"}}; });
+  EXPECT_FALSE(empty_manager.ensureSchemaDefined("example_msgs/msg/Empty"));
+  EXPECT_EQ(rejected_define_count, 0);
 }
 
 TEST(SchemaManagerTest, DefinesAnExactSchemaOnlyOnce) {

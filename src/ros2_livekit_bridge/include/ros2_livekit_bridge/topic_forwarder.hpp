@@ -155,11 +155,6 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSUsesReliableTransientLocalWhenAllPublishersMatch);
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
-  FRIEND_TEST(TopicForwarderTest, SchemaValidationAcceptsExactMatch);
-  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsMissingMetadata);
-  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsWrongTypeAndEncoding);
-  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsRetrievalAndRenderFailures);
-  FRIEND_TEST(TopicForwarderTest, SchemaValidationRejectsRootAndNestedMismatches);
   FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
 #endif
 
@@ -215,10 +210,6 @@ private:
 
   /// @brief Build a descriptor from a remote LiveKit data track.
   static RemoteDataTrackDescriptor createRemoteDataTrackDescriptor(std::shared_ptr<livekit::RemoteDataTrack> track);
-
-  /// @brief Validate a remote track's schema against the local ROS definition.
-  SchemaManager::ValidationResult validateInboundSchema(const RemoteDataTrackDescriptor& descriptor,
-                                                        const std::string& topic_type) const;
 
   /// @brief Per-topic state for outbound ROS image forwarding.
   struct ImageTopicState {

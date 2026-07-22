@@ -125,9 +125,7 @@ bool Ros2LiveKitBridge::initialize() {
   // Room::connect() may emit events for data tracks that were already
   // published. Install the forwarder first so those events are not dropped
   // while the receiver joins the room.
-  if (!initializeTopicForwarder(std::move(outgoing_topic_compiled_patterns),
-                                std::move(incoming_topic_compiled_patterns),
-                                std::move(preserve_id_topic_compiled_patterns), std::move(outbound_rate_limits))) {
+  if (!initializeTopicForwarder(config->topics)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }

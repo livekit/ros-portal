@@ -77,26 +77,6 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
   };
 }
 
-SchemaManager::ValidationResult TopicForwarder::validateInboundSchema(const RemoteDataTrackDescriptor& descriptor,
-                                                                      const std::string& topic_type) const {
-  SchemaManager::ValidationResult validation;
-
-  if (!descriptor.frame_encoding.has_value()) {
-    validation.reason = "track does not advertise a frame encoding";
-    return validation;
-  }
-  if (*descriptor.frame_encoding != livekit::DataTrackFrameEncoding::Cdr &&
-      *descriptor.frame_encoding != livekit::DataTrackFrameEncoding::Json) {
-    validation.reason = "track frame encoding is not CDR or JSON";
-    return validation;
-  }
-  if (!descriptor.schema.has_value()) {
-    validation.reason = "track does not advertise a schema";
-    return validation;
-  }
-  return schema_manager_.validateInboundSchema(*descriptor.schema, descriptor.publisher_identity, topic_type);
-}
-
 TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods)
     : options_(std::move(options)),
       node_(std::move(node)),
@@ -435,17 +415,13 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     return;
   }
 
-  const auto schema_validation = validateInboundSchema(descriptor, *topic_type);
-  if (!schema_validation.accepted) {
-    const std::string remote_hash =
-        schema_validation.remote_hash ? schemaHashToHex(*schema_validation.remote_hash) : "unavailable";
-    const std::string local_hash =
-        schema_validation.local_hash ? schemaHashToHex(*schema_validation.local_hash) : "unavailable";
-    RCLCPP_ERROR(logger_,
-                 "Rejecting LiveKit data track '%s' [%s] from '%s': %s "
-                 "(remote_schema_sha256=%s local_schema_sha256=%s)",
-                 descriptor.track_name.c_str(), topic_type->c_str(), descriptor.publisher_identity.c_str(),
-                 schema_validation.reason.c_str(), remote_hash.c_str(), local_hash.c_str());
+  if (!schema_manager_.validateInboundSchema({
+          descriptor.track_name,
+          descriptor.publisher_identity,
+          *topic_type,
+          descriptor.schema,
+          descriptor.frame_encoding,
+      })) {
     // TODO(BOT-332): diagnostics / other error reporting for when this happens
 
     // Return to prevent creating a publisher for the track due to invalid schema
@@ -485,7 +461,8 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     state->publisher_identity = descriptor.publisher_identity;
     state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
-    state->frame_encoding = *descriptor.frame_encoding; // Guaranteed to be set from validateInboundSchema() above
+    // descriptor.frame_encoding guaranteed to be set by SchemaManager::validateInboundSchema()
+    state->frame_encoding = *descriptor.frame_encoding;
 
     const auto node = node_.lock();
     if (!node) {

@@ -157,6 +157,57 @@ SchemaManager::LiveKitMethods makeLiveKitMethods() {
   return methods;
 }
 
+SchemaManager::InboundSchemaContext makeInboundSchemaContext() {
+  return {
+      "/remote/data",
+      "participant",
+      "example_msgs/msg/Example",
+      livekit::DataTrackSchemaId{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::Ros2Msg},
+      livekit::DataTrackFrameEncoding::Cdr,
+  };
+}
+
+} // namespace
+
+TEST(SchemaManagerTest, RenderRosMessageSchema) {
+  const auto schema = SchemaManager::renderRosMessageSchema("std_msgs/msg/String");
+  ASSERT_TRUE(schema.has_value());
+  EXPECT_EQ(schema->encoding, "ros2msg");
+  EXPECT_EQ(schema->text, kStdMsgsStringSchemaText);
+
+  EXPECT_FALSE(SchemaManager::renderRosMessageSchema("").has_value());
+  EXPECT_FALSE(SchemaManager::renderRosMessageSchema("nonexistent_pkg/msg/DoesNotExist").has_value());
+}
+
+TEST(SchemaManagerTest, SchemaEncodingFromRosDefinition) {
+  EXPECT_EQ(SchemaManager::schemaEncodingFromRosDefinition("ros2msg"), livekit::DataTrackSchemaEncoding::Ros2Msg);
+  EXPECT_EQ(SchemaManager::schemaEncodingFromRosDefinition("ros2idl"), livekit::DataTrackSchemaEncoding::Ros2Idl);
+  EXPECT_FALSE(SchemaManager::schemaEncodingFromRosDefinition("jsonschema").has_value());
+}
+
+TEST(SchemaManagerTest, SchemaDedupeKey) {
+  EXPECT_EQ(SchemaManager::schemaDedupeKey("example_msgs/msg/Example", "ros2msg"), "ros2msg\nexample_msgs/msg/Example");
+}
+
+TEST(SchemaManagerTest, HashSchemaText) {
+  const SchemaHash expected{
+      0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+      0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+  };
+  EXPECT_EQ(SchemaManager::hashSchemaText("abc"), expected);
+}
+
+TEST(SchemaManagerTest, SchemaHashToHex) {
+  SchemaHash hash{};
+  hash.front() = 0xab;
+  hash.back() = 0xcd;
+  std::string expected(64U, '0');
+  expected.replace(0U, 2U, "ab");
+  expected.replace(62U, 2U, "cd");
+
+  EXPECT_EQ(SchemaManager::schemaHashToHex(hash), expected);
+}
+
 TEST(SchemaManagerTest, ConstructorRejectsMissingLiveKitMethods) {
   EXPECT_THROW(SchemaManager(SchemaManager::LiveKitMethods{}), std::invalid_argument);
 }
@@ -342,7 +393,7 @@ TEST(SchemaManagerTest, RejectsChangedTextForAnExistingSchemaId) {
   EXPECT_EQ(define_count, 1);
 }
 
-TEST(SchemaManagerTest, ValidatesExactInboundSchemaAndReportsStableHash) {
+TEST(SchemaManagerTest, ValidatesExactInboundSchema) {
   auto methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
     return std::optional<std::string>{"abc"};
@@ -350,33 +401,39 @@ TEST(SchemaManagerTest, ValidatesExactInboundSchemaAndReportsStableHash) {
   const SchemaManager manager(std::move(methods),
                               [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "abc"}}; });
 
-  const auto result =
-      manager.validateInboundSchema({"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::Ros2Msg},
-                                    "participant", "example_msgs/msg/Example");
+  auto context = makeInboundSchemaContext();
+  EXPECT_TRUE(manager.validateInboundSchema(context));
 
-  EXPECT_TRUE(result.accepted);
-  ASSERT_TRUE(result.remote_hash.has_value());
-  const auto remote_hash_hex = schemaHashToHex(*result.remote_hash);
-  EXPECT_EQ(remote_hash_hex,
-            "ba7816bf8f01cfea414140de5dae2223"
-            "b00361a396177a9cb410ff61f20015ad");
-  EXPECT_EQ(result.remote_hash, result.local_hash);
+  context.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  EXPECT_TRUE(manager.validateInboundSchema(context));
+}
+
+TEST(SchemaManagerTest, RejectsMissingAndUnsupportedInboundMetadata) {
+  const SchemaManager manager(
+      makeLiveKitMethods(), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "schema"}}; });
+  auto context = makeInboundSchemaContext();
+
+  context.frame_encoding = std::nullopt;
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context.frame_encoding = livekit::DataTrackFrameEncoding::Protobuf;
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+  context.schema = std::nullopt;
+  EXPECT_FALSE(manager.validateInboundSchema(context));
 }
 
 TEST(SchemaManagerTest, RejectsUnsupportedEncodingAndWrongType) {
   const SchemaManager manager(
       makeLiveKitMethods(), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "schema"}}; });
 
-  auto result =
-      manager.validateInboundSchema({"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::JsonSchema},
-                                    "participant", "example_msgs/msg/Example");
-  EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("encoding"), std::string::npos);
+  auto context = makeInboundSchemaContext();
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::JsonSchema};
+  EXPECT_FALSE(manager.validateInboundSchema(context));
 
-  result = manager.validateInboundSchema({"example_msgs/msg/Other", livekit::DataTrackSchemaEncoding::Ros2Msg},
-                                         "participant", "example_msgs/msg/Example");
-  EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("does not match"), std::string::npos);
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Other", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  EXPECT_FALSE(manager.validateInboundSchema(context));
 }
 
 TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
@@ -384,11 +441,9 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
   SchemaManager manager(std::move(methods),
                         [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "local"}}; });
-  const livekit::DataTrackSchemaId schema_id{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  const auto context = makeInboundSchemaContext();
 
-  auto result = manager.validateInboundSchema(schema_id, "participant", "example_msgs/msg/Example");
-  EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("retrieval failed"), std::string::npos);
+  EXPECT_FALSE(manager.validateInboundSchema(context));
 
   methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
@@ -396,9 +451,7 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
   };
   SchemaManager render_failure_manager(std::move(methods),
                                        [](const std::string&) { return std::optional<RosMessageSchema>{}; });
-  result = render_failure_manager.validateInboundSchema(schema_id, "participant", "example_msgs/msg/Example");
-  EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("could not be rendered"), std::string::npos);
+  EXPECT_FALSE(render_failure_manager.validateInboundSchema(context));
 
   methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
@@ -406,9 +459,7 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
   };
   SchemaManager encoding_mismatch_manager(
       std::move(methods), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2idl", "same"}}; });
-  result = encoding_mismatch_manager.validateInboundSchema(schema_id, "participant", "example_msgs/msg/Example");
-  EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("encodings differ"), std::string::npos);
+  EXPECT_FALSE(encoding_mismatch_manager.validateInboundSchema(context));
 
   methods = makeLiveKitMethods();
   methods.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
@@ -416,11 +467,7 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
   };
   SchemaManager text_mismatch_manager(
       std::move(methods), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "local"}}; });
-  result = text_mismatch_manager.validateInboundSchema(schema_id, "participant", "example_msgs/msg/Example");
-  EXPECT_FALSE(result.accepted);
-  EXPECT_NE(result.reason.find("definitions differ"), std::string::npos);
-  EXPECT_NE(result.remote_hash, result.local_hash);
+  EXPECT_FALSE(text_mismatch_manager.validateInboundSchema(context));
 }
 
-} // namespace
 } // namespace ros2_livekit_bridge

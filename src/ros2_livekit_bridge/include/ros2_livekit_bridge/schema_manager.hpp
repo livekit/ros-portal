@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <livekit/data_track_frame.h>
 #include <livekit/data_track_schema.h>
 
 #include <array>
@@ -25,6 +26,12 @@
 #include <mutex>
 #include <optional>
 #include <rclcpp/logger.hpp>
+#include <string>
+#include <unordered_map>
+
+#ifdef BUILD_TESTING
+#include <gtest/gtest_prod.h>
+#endif
 
 namespace ros2_livekit_bridge {
 
@@ -47,11 +54,6 @@ struct RosMessageSchema {
 /// @note The hash is intentionally a fixed-size array of 32 bytes and strings are only rendered for diagnostics.
 using SchemaHash = std::array<std::uint8_t, 32U>;
 
-/// @brief Format a binary schema hash for diagnostics.
-/// @param hash Binary SHA-256 schema digest.
-/// @return Lowercase hexadecimal text.
-std::string schemaHashToHex(const SchemaHash& hash);
-
 /// @brief Renders, registers, and validates ROS message schemas for LiveKit data
 /// tracks.
 ///
@@ -71,18 +73,19 @@ public:
   /// @brief Callback used to render a local ROS message definition.
   using RenderSchemaFn = std::function<std::optional<RosMessageSchema>(const std::string&)>;
 
-  /// @brief Result of validating remote schema metadata against local text.
-  struct ValidationResult {
-    /// @brief Whether the remote schema is safe to use.
-    bool accepted{false};
-    /// @brief Human-readable rejection reason.
-    std::string reason;
-    /// @brief Binary SHA-256 digest of the retrieved remote schema, when
-    /// available.
-    std::optional<SchemaHash> remote_hash;
-    /// @brief Binary SHA-256 digest of the rendered local schema, when
-    /// available.
-    std::optional<SchemaHash> local_hash;
+  /// @brief Metadata needed to validate an inbound LiveKit data track's ROS
+  /// schema.
+  struct InboundSchemaContext {
+    /// @brief LiveKit track name used in rejection diagnostics.
+    std::string track_name;
+    /// @brief Identity used to retrieve the remote schema.
+    std::string participant_identity;
+    /// @brief Locally resolved ROS message type.
+    std::string topic_type;
+    /// @brief Schema metadata advertised by the remote data track.
+    std::optional<livekit::DataTrackSchemaId> schema;
+    /// @brief Wire encoding advertised by the remote data track.
+    std::optional<livekit::DataTrackFrameEncoding> frame_encoding;
   };
 
   /// @brief Construct a schema manager.
@@ -99,16 +102,36 @@ public:
   /// the failure.
   std::optional<livekit::DataTrackSchemaId> ensureSchemaDefined(const std::string& topic_type);
 
-  /// @brief Validate a remote schema against the locally rendered ROS
-  /// definition.
-  /// @param schema_id Schema metadata advertised by the remote data track.
-  /// @param participant_identity Identity used to retrieve the remote schema.
-  /// @param topic_type Locally resolved ROS message type.
-  /// @return Validation result including exact-text hashes.
-  ValidationResult validateInboundSchema(const livekit::DataTrackSchemaId& schema_id,
-                                         const std::string& participant_identity, const std::string& topic_type) const;
+  /// @brief Validate and log an inbound track's schema against the locally
+  /// rendered ROS definition.
+  /// @param context Track, participant, schema, and frame-encoding metadata.
+  /// @return True when the track metadata and exact schema text are compatible.
+  bool validateInboundSchema(const InboundSchemaContext& context) const;
 
 private:
+#ifdef BUILD_TESTING
+  FRIEND_TEST(SchemaManagerTest, RenderRosMessageSchema);
+  FRIEND_TEST(SchemaManagerTest, SchemaEncodingFromRosDefinition);
+  FRIEND_TEST(SchemaManagerTest, SchemaDedupeKey);
+  FRIEND_TEST(SchemaManagerTest, HashSchemaText);
+  FRIEND_TEST(SchemaManagerTest, SchemaHashToHex);
+#endif
+
+  /// @brief Render a local ROS message definition and its dependencies.
+  static std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type);
+
+  /// @brief Map a rosbag2 schema encoding to the LiveKit equivalent.
+  static std::optional<livekit::DataTrackSchemaEncoding> schemaEncodingFromRosDefinition(const std::string& encoding);
+
+  /// @brief Build the cache key for a ROS type and schema encoding.
+  static std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding);
+
+  /// @brief Compute the binary SHA-256 digest of exact schema bytes.
+  static SchemaHash hashSchemaText(const std::string& schema_text);
+
+  /// @brief Format a binary schema hash as lowercase hexadecimal text.
+  static std::string schemaHashToHex(const SchemaHash& hash);
+
   // Tracks one schema definition across concurrent ensureSchemaDefined calls.
   struct DefinitionState {
     // Binary SHA-256 digest of the exact schema text reserved for this schema

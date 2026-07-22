@@ -27,9 +27,8 @@
 #include <utility>
 
 namespace ros2_livekit_bridge {
-namespace {
 
-std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type) {
+std::optional<RosMessageSchema> SchemaManager::renderRosMessageSchema(const std::string& topic_type) {
   if (topic_type.empty()) {
     return std::nullopt;
   }
@@ -51,7 +50,8 @@ std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_
   }
 }
 
-std::optional<livekit::DataTrackSchemaEncoding> schemaEncodingFromRosDefinition(const std::string& encoding) {
+std::optional<livekit::DataTrackSchemaEncoding> SchemaManager::schemaEncodingFromRosDefinition(
+    const std::string& encoding) {
   if (encoding == "ros2idl") {
     return livekit::DataTrackSchemaEncoding::Ros2Idl;
   }
@@ -61,12 +61,11 @@ std::optional<livekit::DataTrackSchemaEncoding> schemaEncodingFromRosDefinition(
   return std::nullopt;
 }
 
-std::string schemaDedupeKey(const std::string& topic_type, const std::string& encoding) {
+std::string SchemaManager::schemaDedupeKey(const std::string& topic_type, const std::string& encoding) {
   return encoding + "\n" + topic_type;
 }
 
-/// @brief Compute the binary SHA-256 digest of exact schema bytes.
-SchemaHash hashSchemaText(const std::string& schema_text) {
+SchemaHash SchemaManager::hashSchemaText(const std::string& schema_text) {
   static_assert(SchemaHash{}.size() == RCUTILS_SHA256_BLOCK_SIZE);
 
   rcutils_sha256_ctx_t context;
@@ -78,9 +77,7 @@ SchemaHash hashSchemaText(const std::string& schema_text) {
   return hash;
 }
 
-} // namespace
-
-std::string schemaHashToHex(const SchemaHash& hash) {
+std::string SchemaManager::schemaHashToHex(const SchemaHash& hash) {
   constexpr char kHexDigits[] = "0123456789abcdef";
   std::string hex(hash.size() * 2U, '0');
   for (std::size_t index = 0; index < hash.size(); ++index) {
@@ -174,58 +171,72 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
   return schema_id;
 }
 
-SchemaManager::ValidationResult SchemaManager::validateInboundSchema(const livekit::DataTrackSchemaId& schema_id,
-                                                                     const std::string& participant_identity,
-                                                                     const std::string& topic_type) const {
-  ValidationResult validation;
+bool SchemaManager::validateInboundSchema(const InboundSchemaContext& context) const {
+  std::optional<SchemaHash> remote_hash;
+  std::optional<SchemaHash> local_hash;
+  const auto reject = [&](const std::string& reason) {
+    const std::string remote_hash_text = remote_hash ? schemaHashToHex(*remote_hash) : "unavailable";
+    const std::string local_hash_text = local_hash ? schemaHashToHex(*local_hash) : "unavailable";
+    RCLCPP_ERROR(logger_,
+                 "Rejecting LiveKit data track '%s' [%s] from '%s': %s "
+                 "(remote_schema_sha256=%s local_schema_sha256=%s)",
+                 context.track_name.c_str(), context.topic_type.c_str(), context.participant_identity.c_str(),
+                 reason.c_str(), remote_hash_text.c_str(), local_hash_text.c_str());
+    return false;
+  };
+
+  if (!context.frame_encoding.has_value()) {
+    return reject("track does not advertise a frame encoding");
+  }
+  if (*context.frame_encoding != livekit::DataTrackFrameEncoding::Cdr &&
+      *context.frame_encoding != livekit::DataTrackFrameEncoding::Json) {
+    return reject("track frame encoding is not CDR or JSON");
+  }
+  if (!context.schema.has_value()) {
+    return reject("track does not advertise a schema");
+  }
+
+  const auto& schema_id = *context.schema;
   if (schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Msg &&
       schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Idl) {
-    validation.reason = "track schema encoding is not ros2msg or ros2idl";
-    return validation;
+    return reject("track schema encoding is not ros2msg or ros2idl");
   }
-  if (schema_id.name != topic_type) {
-    validation.reason = "track schema name '" + schema_id.name + "' does not match local ROS type '" + topic_type + "'";
-    return validation;
+  if (schema_id.name != context.topic_type) {
+    return reject("track schema name '" + schema_id.name + "' does not match local ROS type '" + context.topic_type +
+                  "'");
   }
 
   std::optional<std::string> remote_schema;
   try {
-    remote_schema = livekit_methods_.get_schema(schema_id, participant_identity);
+    remote_schema = livekit_methods_.get_schema(schema_id, context.participant_identity);
   } catch (const std::exception& error) {
-    validation.reason = "remote schema retrieval failed: " + std::string(error.what());
-    return validation;
+    return reject("remote schema retrieval failed: " + std::string(error.what()));
   } catch (...) {
-    validation.reason = "remote schema retrieval failed with an unknown error";
-    return validation;
+    return reject("remote schema retrieval failed with an unknown error");
   }
   if (!remote_schema.has_value()) {
-    validation.reason = "remote schema retrieval failed: schema is unavailable";
-    return validation;
+    return reject("remote schema retrieval failed: schema is unavailable");
   }
   const auto& remote_schema_text = *remote_schema;
-  validation.remote_hash = hashSchemaText(remote_schema_text);
+  remote_hash = hashSchemaText(remote_schema_text);
 
-  const auto local_schema = render_schema_(topic_type);
+  const auto local_schema = render_schema_(context.topic_type);
   if (!local_schema) {
-    validation.reason = "local ROS schema could not be rendered";
-    return validation;
+    return reject("local ROS schema could not be rendered");
   }
-  validation.local_hash = hashSchemaText(local_schema->text);
+  local_hash = hashSchemaText(local_schema->text);
 
   const bool encoding_matches =
       (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Msg && local_schema->encoding == "ros2msg") ||
       (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Idl && local_schema->encoding == "ros2idl");
   if (!encoding_matches) {
-    validation.reason = "remote and local schema encodings differ";
-    return validation;
+    return reject("remote and local schema encodings differ");
   }
-  if (validation.remote_hash != validation.local_hash || remote_schema_text != local_schema->text) {
-    validation.reason = "remote and local schema definitions differ";
-    return validation;
+  if (remote_hash != local_hash || remote_schema_text != local_schema->text) {
+    return reject("remote and local schema definitions differ");
   }
 
-  validation.accepted = true;
-  return validation;
+  return true;
 }
 
 } // namespace ros2_livekit_bridge

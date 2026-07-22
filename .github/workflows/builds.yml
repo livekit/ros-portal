@@ -78,7 +78,7 @@ jobs:
               colcon build --packages-up-to ros2_livekit_bridge test_utilities custom_msgs waveshare_launch
             '
 
-      - name: Run unit tests
+      - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         with:
           configFile: .devcontainer/devcontainer.json
@@ -90,8 +90,18 @@ jobs:
               source install/setup.bash
               set -u
 
-              test -x build/ros2_livekit_bridge/test/ros2_livekit_bridge_unit_tests
-              GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_unit_tests
+              # --event-handlers console_direct+ streams test output live
+              # --ctest-args -R ros2_livekit_bridge_unit_tests runs only the unit tests
+              test_exit=0
+              GTEST_COLOR=1 colcon test \
+                --packages-up-to ros2_livekit_bridge test_utilities custom_msgs waveshare_launch \
+                --packages-skip ros2_medkit_serialization \
+                --event-handlers console_direct+ \
+                --return-code-on-test-failure \
+                --ctest-args -R ros2_livekit_bridge_unit_tests \
+                || test_exit=$?
+              colcon test-result --verbose --all
+              exit $test_exit
             '
 
       - name: Start livekit-server
@@ -109,7 +119,7 @@ jobs:
           curl -sSL https://get.livekit.io/cli | bash
           lk --version
 
-      - name: Run integration tests
+      - name: "colcon test: integration"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
           CI: true
@@ -127,8 +137,18 @@ jobs:
               set -u
 
               source .token_helpers/set_test_tokens.bash
-              test -x build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests
-              GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests
+
+              # --event-handlers console_direct+ streams test output live
+              # -R selects only the integration test
+              test_exit=0
+              GTEST_COLOR=1 colcon test \
+                --packages-select ros2_livekit_bridge \
+                --event-handlers console_direct+ \
+                --return-code-on-test-failure \
+                --ctest-args -R ros2_livekit_bridge_integration_tests \
+                || test_exit=$?
+              colcon test-result --verbose --all
+              exit $test_exit
             '
 
       - name: Dump LiveKit server log on failure

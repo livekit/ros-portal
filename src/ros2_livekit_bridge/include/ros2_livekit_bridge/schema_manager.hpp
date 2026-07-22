@@ -105,7 +105,11 @@ public:
   /// @brief Validate and log an inbound track's schema against the locally
   /// rendered ROS definition.
   /// @param context Track, participant, schema, and frame-encoding metadata.
-  /// @return True when the track metadata and exact schema text are compatible.
+  /// @return True when the track metadata is compatible. `Ros2Msg` and
+  /// `Ros2Idl` schemas require an exact local definition match. `JsonSchema`
+  /// tracks are accepted when frame encoding is JSON, the schema name matches
+  /// the resolved ROS type, and the local schema can be rendered; frame
+  /// conversion uses local introspection only.
   bool validateInboundSchema(const InboundSchemaContext& context) const;
 
 private:

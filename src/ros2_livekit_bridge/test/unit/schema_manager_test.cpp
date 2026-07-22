@@ -424,15 +424,53 @@ TEST(SchemaManagerTest, RejectsMissingAndUnsupportedInboundMetadata) {
   EXPECT_FALSE(manager.validateInboundSchema(context));
 }
 
-TEST(SchemaManagerTest, RejectsUnsupportedEncodingAndWrongType) {
+TEST(SchemaManagerTest, AcceptsJsonSchemaInteropWhenFrameEncodingIsJson) {
+  int get_schema_count = 0;
+  auto methods = makeLiveKitMethods();
+  methods.get_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
+    ++get_schema_count;
+    return std::optional<std::string>{"should not be fetched"};
+  };
+
+  int render_schema_count = 0;
+  const SchemaManager manager(std::move(methods), [&](const std::string&) {
+    ++render_schema_count;
+    return std::optional<RosMessageSchema>{{"ros2msg", "schema"}};
+  });
+
+  auto context = makeInboundSchemaContext();
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::JsonSchema};
+  context.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+
+  EXPECT_TRUE(manager.validateInboundSchema(context));
+  EXPECT_EQ(get_schema_count, 0);
+  EXPECT_EQ(render_schema_count, 1);
+}
+
+TEST(SchemaManagerTest, RejectsJsonSchemaWhenFrameEncodingIsNotJson) {
   const SchemaManager manager(
       makeLiveKitMethods(), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "schema"}}; });
 
   auto context = makeInboundSchemaContext();
   context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::JsonSchema};
+  context.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+}
+
+TEST(SchemaManagerTest, RejectsUnsupportedEncodingAndWrongType) {
+  const SchemaManager manager(
+      makeLiveKitMethods(), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "schema"}}; });
+
+  auto context = makeInboundSchemaContext();
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::Protobuf};
   EXPECT_FALSE(manager.validateInboundSchema(context));
 
   context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Other", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Other", livekit::DataTrackSchemaEncoding::JsonSchema};
+  context.frame_encoding = livekit::DataTrackFrameEncoding::Json;
   EXPECT_FALSE(manager.validateInboundSchema(context));
 }
 

@@ -31,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
@@ -44,6 +45,8 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
       info.sid,
       info.name,
       track->publisherIdentity(),
+      info.schema,
+      info.frame_encoding,
       [track =
            std::move(track)]() -> livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>, std::string> {
         const auto subscribe_result = track->subscribe();
@@ -77,6 +80,7 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
 TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods)
     : options_(std::move(options)),
       node_(std::move(node)),
+      schema_manager_(std::move(livekit_methods.schema)),
       livekit_methods_(std::move(livekit_methods)),
       logger_(rclcpp::get_logger("topic_forwarder")) {
   const auto locked_node = node_.lock();
@@ -157,7 +161,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  auto callback = [this, topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg) {
     auto& rcl_msg = msg->get_rcl_serialized_message();
 
     std::shared_ptr<DataTrackWriter> writer;
@@ -188,7 +192,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
         state.last_forward_time = now;
       }
 
-      if (!ensureWriterLocked(topic_name, state)) {
+      if (!ensureWriterLocked(topic_name, topic_type, state)) {
         return;
       }
       writer = state.writer;
@@ -237,12 +241,18 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (CDR)", topic_name.c_str(), topic_type.c_str());
 }
 
-bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, DataTopicState& state) {
+bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std::string& topic_type,
+                                        DataTopicState& state) {
   if (state.writer) {
     return true;
   }
 
-  const auto writer_result = livekit_methods_.publish_data_track(topic_name);
+  const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type);
+  if (!schema_result) {
+    return false;
+  }
+
+  const auto writer_result = livekit_methods_.publish_data_track(topic_name, schema_result.value());
   if (!writer_result) {
     RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
                  writer_result.error().c_str());
@@ -396,12 +406,25 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     return;
   }
 
-  const auto topic_type = liveKitToRosTopicType(descriptor.track_name);
+  const auto topic_type = resolveInboundRosTopicType(descriptor.track_name, descriptor.schema);
   if (!topic_type) {
     RCLCPP_WARN(logger_,
-                "Ignoring LiveKit data track '%s' from '%s' because no configured type "
-                "rule or ROS graph lookup resolved its ROS message type",
+                "Ignoring LiveKit data track '%s' from '%s' because neither its schema "
+                "nor the ROS graph resolved its ROS message type",
                 descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return;
+  }
+
+  if (!schema_manager_.validateInboundSchema({
+          descriptor.track_name,
+          descriptor.publisher_identity,
+          *topic_type,
+          descriptor.schema,
+          descriptor.frame_encoding,
+      })) {
+    // TODO(BOT-332): diagnostics / other error reporting for when this happens
+
+    // Return to prevent creating a publisher for the track due to invalid schema
     return;
   }
 
@@ -438,6 +461,8 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     state->publisher_identity = descriptor.publisher_identity;
     state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
+    // descriptor.frame_encoding guaranteed to be set by SchemaManager::validateInboundSchema()
+    state->frame_encoding = *descriptor.frame_encoding;
 
     const auto node = node_.lock();
     if (!node) {
@@ -541,7 +566,8 @@ bool TopicForwarder::isIncomingTopicAllowed(const std::string& topic_name) const
   return utils::matchesAnyPattern(topic_name, options_.incoming_topic_patterns);
 }
 
-std::optional<std::string> TopicForwarder::liveKitToRosTopicType(const std::string& track_name) const {
+std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(
+    const std::string& track_name, const std::optional<livekit::DataTrackSchemaId>& schema) const {
   const auto normalized_track_name = utils::normalizeTrackTopicName(track_name);
   if (!normalized_track_name.has_value()) {
     return std::nullopt;
@@ -558,10 +584,25 @@ std::optional<std::string> TopicForwarder::liveKitToRosTopicType(const std::stri
 
   const auto topic_it = topics.find(*normalized_track_name);
   if (topic_it == topics.end() || topic_it->second.empty()) {
+    if (schema.has_value() && !schema->name.empty()) {
+      RCLCPP_INFO(logger_,
+                  "Inbound track '%s' has no local ROS endpoint yet; using advertised "
+                  "schema type '%s' for exact local validation",
+                  track_name.c_str(), schema->name.c_str());
+      return schema->name;
+    }
     return std::nullopt;
   }
 
   if (topic_it->second.size() > 1U) {
+    if (schema.has_value() &&
+        std::find(topic_it->second.begin(), topic_it->second.end(), schema->name) != topic_it->second.end()) {
+      RCLCPP_WARN(logger_,
+                  "Inbound track '%s' matched topic '%s' with multiple ROS types; using "
+                  "advertised schema type '%s'.",
+                  track_name.c_str(), normalized_track_name->c_str(), schema->name.c_str());
+      return schema->name;
+    }
     RCLCPP_WARN(logger_,
                 "Inbound track '%s' matched topic '%s' with multiple ROS types; using "
                 "first discovered type '%s'.",
@@ -650,21 +691,32 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
 void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state) {
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
-    rclcpp::SerializedMessage serialized_msg(frame.payload.size());
-    auto& rcl_msg = serialized_msg.get_rcl_serialized_message();
-
-    if (!frame.payload.empty()) {
-      std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
+    std::optional<rclcpp::SerializedMessage> serialized_msg;
+    if (state->frame_encoding == livekit::DataTrackFrameEncoding::Json) {
+      std::string error;
+      serialized_msg = introspection::serializedMessageFromJson(
+          state->ros_topic_type, std::string(frame.payload.begin(), frame.payload.end()), error);
+      if (!serialized_msg) {
+        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
+                             "Dropping invalid JSON frame from LiveKit data track '%s' from '%s': %s",
+                             state->track_name.c_str(), state->publisher_identity.c_str(), error.c_str());
+        continue;
+      }
     } else {
-      RCLCPP_WARN(logger_, "Received empty payload from LiveKit data track '%s' from '%s'", state->track_name.c_str(),
-                  state->publisher_identity.c_str());
-      return;
+      serialized_msg.emplace(frame.payload.size());
+      auto& rcl_msg = serialized_msg->get_rcl_serialized_message();
+      if (!frame.payload.empty()) {
+        std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
+      } else {
+        RCLCPP_WARN(logger_, "Received empty payload from LiveKit data track '%s' from '%s'", state->track_name.c_str(),
+                    state->publisher_identity.c_str());
+        return;
+      }
+      rcl_msg.buffer_length = frame.payload.size();
     }
 
-    rcl_msg.buffer_length = frame.payload.size();
-
     try {
-      state->publisher->publish(serialized_msg);
+      state->publisher->publish(*serialized_msg);
     } catch (const std::exception& e) {
       RCLCPP_WARN(logger_,
                   "Failed to publish inbound LiveKit data frame from '%s' "

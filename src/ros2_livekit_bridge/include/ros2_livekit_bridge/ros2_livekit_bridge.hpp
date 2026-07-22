@@ -24,6 +24,7 @@
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"

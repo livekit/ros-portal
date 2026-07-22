@@ -16,6 +16,8 @@
 
 #include "ros2_livekit_bridge/ros2_livekit_bridge.hpp"
 
+#include <livekit/data_track_options.h>
+#include <livekit/data_track_schema.h>
 #include <livekit/data_track_stream.h>
 #include <livekit/livekit.h>
 #include <livekit/local_data_track.h>
@@ -28,6 +30,7 @@
 #include <livekit/video_source.h>
 
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <utility>
 #include <vector>
@@ -119,6 +122,14 @@ bool Ros2LiveKitBridge::initialize() {
   // Warning: avoid doing ROS operations in delegate callbacks
   room_->setDelegate(this);
 
+  // Room::connect() may emit events for data tracks that were already
+  // published. Install the forwarder first so those events are not dropped
+  // while the receiver joins the room.
+  if (!initializeTopicForwarder(config->topics)) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
+    return false;
+  }
+
   if (!room_->connect(livekit_url, livekit_token, room_options)) {
     connection_diagnostics_->markDisconnected();
     room_.reset();
@@ -133,11 +144,6 @@ bool Ros2LiveKitBridge::initialize() {
                 lp->identity().c_str());
   } else {
     RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
-    return false;
-  }
-
-  if (!initializeTopicForwarder(config->topics)) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
   }
 
@@ -282,7 +288,8 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
                                                           best_effort_qos_topics, this->get_logger());
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
-    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name)
+    forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name,
+                                                     const livekit::DataTrackSchemaId& schema_id)
         -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
@@ -290,7 +297,11 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
             "local participant is unavailable");
       }
 
-      const auto publish_result = participant->publishDataTrack(topic_name);
+      livekit::DataTrackPublishOptions options;
+      options.name = topic_name;
+      options.schema = schema_id;
+      options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+      const auto publish_result = participant->publishDataTrack(options);
       if (!publish_result) {
         const auto& error = publish_result.error();
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
@@ -314,6 +325,25 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
         return livekit::Result<void, std::string>::success();
       };
       return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
+    };
+
+    forwarder_lk_methods.schema.define_schema = [this](const livekit::DataTrackSchemaId& schema_id,
+                                                       const std::string& schema_text) {
+      const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
+      if (!participant) {
+        return false;
+      }
+      return participant->defineSchema(schema_id, schema_text);
+    };
+
+    forwarder_lk_methods.schema.get_schema =
+        [this](const livekit::DataTrackSchemaId& schema_id,
+               const std::string& participant_identity) -> std::optional<std::string> {
+      const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
+      if (!participant) {
+        return std::nullopt;
+      }
+      return participant->getSchema(schema_id, participant_identity);
     };
 
     forwarder_lk_methods.publish_video_track =

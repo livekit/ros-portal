@@ -35,6 +35,7 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/schema_manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
@@ -60,14 +61,18 @@ TopicForwarder::Options makeOptions() {
 // construct; these tests never publish to a LiveKit track.
 TopicForwarder::LiveKitMethods makeLiveKitMethods() {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [](const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [](const std::string&, const livekit::DataTrackSchemaId&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure("unused");
   };
   livekit_methods.publish_video_track =
       [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
+  };
+  livekit_methods.schema.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return true; };
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
   };
   return livekit_methods;
 }
@@ -121,6 +126,31 @@ TEST_F(TopicForwarderTest, IncomingTopicAllowedUsesConfiguredPatterns) {
 
   EXPECT_TRUE(forwarder.isIncomingTopicAllowed("/remote/cmd"));
   EXPECT_FALSE(forwarder.isIncomingTopicAllowed("/blocked/cmd"));
+}
+
+TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears) {
+  const auto forwarder = makeForwarder();
+  const livekit::DataTrackSchemaId string_schema{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
+
+  // A track may arrive before any application node advertises its ROS topic.
+  // Its schema name is a candidate type, but SchemaManager still has to render
+  // and compare the exact local definition before a publisher is made.
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", string_schema), "std_msgs/msg/String");
+
+  auto subscription = node_->create_subscription<std_msgs::msg::String>(
+      "/remote/late", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
+  ASSERT_NE(subscription, nullptr);
+  ASSERT_TRUE(spinUntil([&]() {
+    const auto topics = node_->get_topic_names_and_types();
+    return topics.count("/remote/late") > 0U;
+  }));
+
+  // Once an endpoint exists, the graph agrees with the schema regardless of
+  // arrival order. Conflicting remote metadata cannot override that graph type.
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", string_schema), "std_msgs/msg/String");
+  const livekit::DataTrackSchemaId conflicting_schema{"geometry_msgs/msg/Pose",
+                                                      livekit::DataTrackSchemaEncoding::Ros2Msg};
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", conflicting_schema), "std_msgs/msg/String");
 }
 
 TEST_F(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile) {
@@ -198,9 +228,8 @@ TopicForwarder::Options makeRateCapOptions(std::optional<double> max_rate_hz) {
 // LiveKit callbacks whose data-track writer counts every forwarded payload.
 TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count) {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [push_count](
-          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [push_count](const std::string&, const livekit::DataTrackSchemaId&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count](std::vector<std::uint8_t>) {
       push_count->fetch_add(1);
@@ -213,15 +242,19 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
+  livekit_methods.schema = makeLiveKitMethods().schema;
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
+  };
   return livekit_methods;
 }
 
 TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count,
                                                        std::shared_ptr<std::atomic<int>> remaining_failures) {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [push_count, remaining_failures](
-          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [push_count, remaining_failures](const std::string&,
+                                                                        const livekit::DataTrackSchemaId&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count, remaining_failures](std::vector<std::uint8_t>) {
       if (remaining_failures->fetch_sub(1) > 0) {
@@ -237,6 +270,10 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
   };
+  livekit_methods.schema = makeLiveKitMethods().schema;
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
+  };
   return livekit_methods;
 }
 
@@ -246,9 +283,8 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
 TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count,
                                                            std::shared_ptr<std::vector<std::uint8_t>> last_payload) {
   TopicForwarder::LiveKitMethods livekit_methods;
-  livekit_methods.publish_data_track =
-      [push_count, last_payload](
-          const std::string&) -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+  livekit_methods.publish_data_track = [push_count, last_payload](const std::string&, const livekit::DataTrackSchemaId&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
     writer->try_push = [push_count, last_payload](std::vector<std::uint8_t> payload) {
       *last_payload = std::move(payload);
@@ -261,6 +297,10 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
       [](const std::string&, int,
          int) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure("unused");
+  };
+  livekit_methods.schema = makeLiveKitMethods().schema;
+  livekit_methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) {
+    return std::nullopt;
   };
   return livekit_methods;
 }
@@ -406,6 +446,30 @@ TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   // The push fails once; with no new samples and no retry, nothing is forwarded.
   spinUntil([]() { return false; }, 150ms);
   EXPECT_EQ(push_count->load(), 0);
+}
+
+TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
+  auto publish_attempts = std::make_shared<std::atomic<int>>(0);
+  auto methods = makeLiveKitMethods();
+  methods.publish_data_track = [publish_attempts](const std::string&, const livekit::DataTrackSchemaId&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+    publish_attempts->fetch_add(1);
+    return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
+        "required schema unavailable");
+  };
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods));
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  std_msgs::msg::String msg;
+  msg.data = "must not be forwarded";
+  publisher->publish(msg);
+
+  ASSERT_TRUE(spinUntil([&]() { return publish_attempts->load() >= 1; }));
+  EXPECT_EQ(publish_attempts->load(), 1);
 }
 
 // Without a configured cap, every delivered sample is forwarded. Publishing one

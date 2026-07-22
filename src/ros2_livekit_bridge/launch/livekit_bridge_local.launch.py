@@ -93,6 +93,7 @@ def _launch_setup(context, *args, **kwargs):
     )
 
     return [
+        SetEnvironmentVariable('RUST_LOG', 'info'),
         SetEnvironmentVariable('LIVEKIT_URL', livekit_url),
         SetEnvironmentVariable('LIVEKIT_TOKEN', token),
         bridge_node,

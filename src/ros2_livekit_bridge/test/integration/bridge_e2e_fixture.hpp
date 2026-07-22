@@ -116,7 +116,8 @@ inline rclcpp::NodeOptions createBridgeOptions(const rclcpp::Context::SharedPtr&
       });
 }
 
-inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool preserve_id = false) {
+inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool preserve_id = false,
+                                    const std::string& direction = "bidirectional") {
   std::ostringstream stream;
   stream << "ros2_livekit_bridge:\n"
          << "  version: \"0.0.1\"\n"
@@ -124,7 +125,7 @@ inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool prese
          << "  ros_threads: 4\n"
          << "  topics:\n"
          << "    - topic: \"" << topic_pattern << "\"\n"
-         << "      direction: \"bidirectional\"\n";
+         << "      direction: \"" << direction << "\"\n";
   if (preserve_id) {
     stream << "      preserve_id: true\n";
   }
@@ -238,6 +239,33 @@ protected:
         waitFor([&]() { return bridge_a_->hasParticipant(identity_b_) && bridge_b_->hasParticipant(identity_a_); },
                 kGraphTimeout))
         << "Bridges did not discover each other in the LiveKit room";
+  }
+
+  void initializeInboundOnlyRuntime(const std::string& topic_pattern) {
+    ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+
+    const auto [domain_id_a, domain_id_b] = testDomainIds();
+    ASSERT_NE(domain_id_a, domain_id_b);
+    graph_b_ = std::make_unique<ScopedRosGraph>(domain_id_b);
+    SCOPED_TRACE("ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
+
+    config_file_b_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern, false, "in"),
+                                                           "ros2_livekit_bridge_schema_test_b_");
+    bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());
+    ASSERT_NE(bridge_b_, nullptr);
+
+    robot_b_node_ =
+        std::make_shared<rclcpp::Node>("schema_validation_robot_b", rclcpp::NodeOptions().context(graph_b_->context()));
+    graph_b_executor_ =
+        std::make_unique<rclcpp::executors::MultiThreadedExecutor>(executorOptions(graph_b_->context()), 2);
+    graph_b_executor_->add_node(bridge_b_);
+    graph_b_executor_->add_node(robot_b_node_);
+
+    graph_b_spinning_.store(true);
+    graph_b_spin_thread_ = std::thread([this]() {
+      graph_b_executor_->spin();
+      graph_b_spinning_.store(false);
+    });
   }
 
   bool verifyDirection(const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>& publisher,
@@ -490,6 +518,15 @@ protected:
   std::shared_ptr<rclcpp::Node> robotBNode() const { return robot_b_node_; }
   const std::string& identityA() const { return identity_a_; }
   const std::string& identityB() const { return identity_b_; }
+  const std::string& liveKitUrl() const { return livekit_url_; }
+  const std::string& tokenA() const { return token_a_; }
+
+  void shutdownBridgeB() {
+    if (graph_b_executor_ && bridge_b_) {
+      graph_b_executor_->remove_node(bridge_b_);
+    }
+    bridge_b_.reset();
+  }
 
 private:
   static std_msgs::msg::String makeMessage(const std::string& data) {

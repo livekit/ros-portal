@@ -17,6 +17,7 @@
 #pragma once
 
 #include <livekit/data_track_frame.h>
+#include <livekit/data_track_schema.h>
 #include <livekit/result.h>
 #include <livekit/video_frame.h>
 
@@ -40,6 +41,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include "ros2_livekit_bridge/schema_manager.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -111,12 +114,15 @@ public:
   /// @brief LiveKit-facing callbacks needed by the forwarder.
   struct LiveKitMethods {
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
-    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&)>
+    std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&,
+                                                                                 const livekit::DataTrackSchemaId&)>
         publish_data_track;
     /// @brief Create or reuse an outbound LiveKit video track for a ROS image
     /// topic.
     std::function<livekit::Result<std::shared_ptr<VideoTrackSink>, std::string>(const std::string&, int, int)>
         publish_video_track;
+    /// @brief LiveKit schema operations owned by the embedded schema manager.
+    SchemaManager::LiveKitMethods schema;
   };
 
   /// @brief Construct a topic forwarder.
@@ -149,10 +155,22 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSUsesReliableTransientLocalWhenAllPublishersMatch);
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
+  FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
-  std::optional<std::string> liveKitToRosTopicType(const std::string& track_name) const;
+  ///
+  /// An existing local graph type takes precedence so conflicting remote
+  /// metadata is rejected during schema validation. When no local endpoint has
+  /// advertised the topic yet, the schema name supplies the candidate type;
+  /// validation still requires its exact definition to render locally.
+  ///
+  /// @param track_name LiveKit track name mapped to the local ROS topic.
+  /// @param schema Schema metadata advertised by the remote track, if any.
+  /// @return Candidate ROS message type, or std::nullopt when neither the graph
+  /// nor the schema supplies one.
+  std::optional<std::string> resolveInboundRosTopicType(const std::string& track_name,
+                                                        const std::optional<livekit::DataTrackSchemaId>& schema) const;
 
   /// @brief Determine subscription QoS for a ROS topic.
   rclcpp::QoS determineQoS(const std::string& topic_name) const;
@@ -182,6 +200,10 @@ private:
     std::string track_name;
     /// @brief LiveKit participant identity of the remote publisher.
     std::string publisher_identity;
+    /// @brief Schema ID advertised on the remote data track.
+    std::optional<livekit::DataTrackSchemaId> schema;
+    /// @brief Frame encoding advertised on the remote data track.
+    std::optional<livekit::DataTrackFrameEncoding> frame_encoding;
     /// @brief Subscribe to the remote track and return a readable stream.
     std::function<livekit::Result<std::shared_ptr<RemoteDataTrackStream>, std::string>()> subscribe;
   };
@@ -226,6 +248,8 @@ private:
     std::string ros_topic_name;
     /// @brief Resolved ROS message type for the inbound publisher.
     std::string ros_topic_type;
+    /// @brief Wire encoding used to decode each inbound frame.
+    livekit::DataTrackFrameEncoding frame_encoding{livekit::DataTrackFrameEncoding::Cdr};
     /// @brief Generic ROS publisher emitting serialized inbound frames.
     rclcpp::GenericPublisher::SharedPtr publisher;
     /// @brief LiveKit stream read by the inbound forwarding thread.
@@ -240,8 +264,11 @@ private:
   /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,
   /// creating it lazily on first use. Must be called with @ref
   /// outbound_topics_mutex_ held.
+  /// @param topic_name ROS topic name used for the LiveKit track.
+  /// @param topic_type ROS message type used for schema metadata.
+  /// @param state Per-topic state that stores the lazily created writer.
   /// @return true if a valid writer is available on @p state.
-  bool ensureWriterLocked(const std::string& topic_name, DataTopicState& state);
+  bool ensureWriterLocked(const std::string& topic_name, const std::string& topic_type, DataTopicState& state);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
   void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);
@@ -253,6 +280,8 @@ private:
   /// @brief Non-owning handle to the ROS node used to create subscriptions and
   /// publishers. Locked per operation so the node lifecycle stays at the edge.
   rclcpp::Node::WeakPtr node_;
+  /// @brief Stateful ROS/LiveKit schema registration and validation component.
+  SchemaManager schema_manager_;
   /// @brief LiveKit publish callbacks supplied by the bridge.
   LiveKitMethods livekit_methods_;
   /// @brief Reentrant callback group for outbound ROS subscriptions.

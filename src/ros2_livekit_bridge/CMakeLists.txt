@@ -32,7 +32,10 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
+  rcutils
   ros2_medkit_serialization
+  rosbag2_cpp
+  rosbag2_storage
   ros2_livekit_bridge_config
   ros2_livekit_bridge_msgs
   rosidl_typesupport_cpp
@@ -60,8 +63,11 @@ ament_auto_find_build_dependencies(REQUIRED
 #   colcon build --packages-select ros2_livekit_bridge \
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
+# If you build the SDK locally for use here, build the SDK itself with
+# -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
+# affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "1.1.1" CACHE STRING
+set(LIVEKIT_SDK_VERSION "1.5.0-rc2" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
   "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
@@ -181,11 +187,7 @@ else()
 endif()
 
 message(STATUS "LiveKit core target   : ${LIVEKIT_CORE_TARGET}")
-if(LIVEKIT_LOCAL_SDK_DIR)
-  message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_LOCAL_SDK_DIR}")
-else()
-  message(STATUS "LiveKit SDK version   : ${LIVEKIT_SDK_VERSION}")
-endif()
+message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_LOCAL_SDK_DIR}")
 
 # ---------------------------------------------------------------------------
 # Introspection library
@@ -195,6 +197,7 @@ ament_auto_add_library(introspection_lib SHARED
   src/introspection/runtime_type_support.cpp
 )
 target_link_libraries(introspection_lib
+  nlohmann_json::nlohmann_json
   yaml-cpp::yaml-cpp
 )
 ament_target_dependencies(introspection_lib
@@ -229,6 +232,7 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
   src/ros2_livekit_bridge.cpp
+  src/schema_manager.cpp
   src/service_forwarder.cpp
   src/topic_forwarder.cpp
   src/utils/base64.cpp

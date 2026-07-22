@@ -62,6 +62,8 @@ The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants
   [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
   [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), message paths, and
   QoS selection.
+- [Data-track schemas](docs/design/schema.md): ROS message schema transport,
+  registration, validation, and failure behavior.
 
 ## Packages of Interest
 
@@ -108,8 +110,7 @@ Optionally, you can pass `config_path`, `id`, and other args for customization. 
 to see all the available options.
 
 Bridge routes are configured through the YAML file passed by the node's
-`config_path` ROS parameter. See [Configuration](configuration.md) for the
+`config_path` ROS parameter. See [Configuration](docs/configuration.md) for the
 supported schema.
 
-See the [configuration guide](docs/configuration.md) for route configuration.
 To get familiar with using the bridge, you can follow the [tutorials](docs/tutorials.md).

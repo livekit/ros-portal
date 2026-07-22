@@ -62,6 +62,7 @@ rosbag*
 # Local SDK scratch/checkouts
 client-sdk-cpp-*/
 local-sdk-*/
+.cache/livekit-sdk/
 
 # Machine-specific devcontainer settings (e.g. macOS SSH agent path)
 .devcontainer/.env

@@ -197,13 +197,26 @@ bool SchemaManager::validateInboundSchema(const InboundSchemaContext& context) c
   }
 
   const auto& schema_id = *context.schema;
-  if (schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Msg &&
-      schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Idl) {
-    return reject("track schema encoding is not ros2msg or ros2idl");
-  }
   if (schema_id.name != context.topic_type) {
     return reject("track schema name '" + schema_id.name + "' does not match local ROS type '" + context.topic_type +
                   "'");
+  }
+
+  if (schema_id.encoding == livekit::DataTrackSchemaEncoding::JsonSchema) {
+    if (*context.frame_encoding != livekit::DataTrackFrameEncoding::Json) {
+      return reject("JsonSchema tracks require JSON frame encoding");
+    }
+    if (!render_schema_(context.topic_type)) {
+      return reject("local ROS schema could not be rendered");
+    }
+    RCLCPP_INFO(logger_, "Accepting LiveKit data track '%s' [%s] from '%s' via JsonSchema.", context.track_name.c_str(),
+                context.topic_type.c_str(), context.participant_identity.c_str());
+    return true;
+  }
+
+  if (schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Msg &&
+      schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Idl) {
+    return reject("track schema encoding is not ros2msg or ros2idl");
   }
 
   std::optional<std::string> remote_schema;

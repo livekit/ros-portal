@@ -78,9 +78,15 @@ endif()
 # ---------------------------------------------------------------------------
 set(LIVEKIT_SDK_VERSION "1.5.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
+set(_livekit_build_sdk_from_source_default OFF)
+if(DEFINED ENV{BUILD_LIVEKIT_SDK_FROM_SOURCE})
+  set(_livekit_build_sdk_from_source_default
+    "$ENV{BUILD_LIVEKIT_SDK_FROM_SOURCE}")
+endif()
 option(LIVEKIT_BUILD_SDK_FROM_SOURCE
   "Build the pinned client-sdk-cpp checkout instead of downloading an SDK archive"
-  OFF)
+  "${_livekit_build_sdk_from_source_default}")
+unset(_livekit_build_sdk_from_source_default)
 set(LIVEKIT_SDK_SOURCE_DIR
   "${CMAKE_CURRENT_SOURCE_DIR}/../externals/client-sdk-cpp" CACHE PATH
   "Path to a client-sdk-cpp source checkout")

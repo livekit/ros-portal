@@ -123,7 +123,12 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
 
   /// @brief Executor callback: run the forwarding handler on the request, then send the response
   ///   (ServiceBase override).
+#ifdef ROS_DISTRO_LYRICAL
+  void handle_request(const std::shared_ptr<rmw_request_id_t>& request_header,
+                      const std::shared_ptr<void>& request) override {
+#else
   void handle_request(std::shared_ptr<rmw_request_id_t> request_header, std::shared_ptr<void> request) override {
+#endif
     // Zero-initialized response storage for the handler to populate.
     introspection::DynamicMessage response(support->response.members, rosidl_runtime_cpp::MessageInitialization::ZERO);
 

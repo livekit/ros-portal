@@ -21,6 +21,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -33,6 +35,7 @@
 #include "ros2_livekit_bridge/cli/constants.hpp"
 #include "ros2_livekit_bridge/cli/json_converters.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {
@@ -63,6 +66,10 @@ public:
   std::vector<std::string> unregistered_methods;
   bool register_succeeds{true};
   bool unregister_succeeds{true};
+  // Specific RPC methods whose registration should fail (in addition to the
+  // blanket register_succeeds flag). Used to exercise partial-registration
+  // diagnostics.
+  std::vector<std::string> failing_methods;
 
   // Safe to capture `this`: the fixture owns this recorder past the manager's
   // lifetime (the manager is reset before rpc_client in TearDown).
@@ -86,7 +93,8 @@ public:
     };
 
     livekit_methods.register_rpc_method = [this](const std::string& method, RpcHandler handler) {
-      if (!register_succeeds) {
+      if (!register_succeeds ||
+          std::find(failing_methods.begin(), failing_methods.end(), method) != failing_methods.end()) {
         return false;
       }
       registered_methods.push_back(method);
@@ -206,14 +214,17 @@ TEST(ManagerUtilityTest, ServiceCallRpcTimeoutAddsMargin) {
             cli::kDefaultTimeoutSec + cli::kServiceCallRpcTimeoutMarginSec);
 }
 
-TEST(ManagerRpcRegistrationTest, RegistrationFailureThrows) {
+TEST(ManagerRpcRegistrationTest, RegistrationFailureDegradesWithoutThrowing) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_rpc_registration_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   FakeRpcClient rpc_client;
   rpc_client.register_succeeds = false;
 
-  EXPECT_THROW(std::make_unique<cli::Manager>(*node, callback_group, rpc_client.makeLiveKitMethods()),
-               std::runtime_error);
+  // RPC registration failures no longer abort construction: the manager stays
+  // alive in a degraded state and surfaces the failure via its diagnostic task.
+  std::unique_ptr<cli::Manager> manager;
+  EXPECT_NO_THROW(manager = std::make_unique<cli::Manager>(*node, callback_group, rpc_client.makeLiveKitMethods()));
+  EXPECT_NE(manager, nullptr);
   EXPECT_TRUE(rpc_client.registered_methods.empty());
 }
 
@@ -798,3 +809,54 @@ TEST_F(ManagerTest, DestructorUnregistersRpcMethods) {
 
 } // namespace
 } // namespace ros2_livekit_bridge
+
+// These tests live directly in ros2_livekit_bridge::cli (not an anonymous
+// sub-namespace) so the FRIEND_TEST grants in Manager, which name classes in
+// ros2_livekit_bridge::cli, match the generated test classes and grant access
+// to the private Manager::populateStatus. (An elaborated friend declaration
+// does not resolve through an anonymous namespace's using-directive.)
+namespace ros2_livekit_bridge::cli {
+
+static std::optional<std::string> diagnosticValueFor(const diagnostic_updater::DiagnosticStatusWrapper& status,
+                                                     const std::string& key) {
+  for (const auto& value : status.values) {
+    if (value.key == key) {
+      return value.value;
+    }
+  }
+  return std::nullopt;
+}
+
+TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
+  auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_ok_test");
+  const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeRpcClient rpc_client;
+  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods());
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  manager.populateStatus(status);
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(diagnosticValueFor(status, "command_pairs_ok"), "5/5");
+  EXPECT_EQ(diagnosticValueFor(status, kServiceCallRpcMethod), "ok");
+  EXPECT_EQ(diagnosticValueFor(status, kTopicListRpcMethod), "ok");
+}
+
+TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails) {
+  auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_error_test");
+  const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeRpcClient rpc_client;
+  rpc_client.failing_methods = {kServiceCallRpcMethod};
+  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods());
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  manager.populateStatus(status);
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(diagnosticValueFor(status, "command_pairs_ok"), "4/5");
+  // The service half exists but its RPC method failed to register.
+  EXPECT_EQ(diagnosticValueFor(status, kServiceCallRpcMethod), "rpc missing");
+  EXPECT_EQ(diagnosticValueFor(status, kTopicListRpcMethod), "ok");
+}
+
+} // namespace ros2_livekit_bridge::cli

@@ -76,6 +76,7 @@ bool Ros2LiveKitBridge::initialize() {
 
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
+  topic_forwarder_.reset();
   connection_diagnostics_.reset();
   diagnostics_ = std::make_unique<diagnostics::DiagnosticsManager>(this);
   connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(*diagnostics_);
@@ -392,7 +393,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
     topic_forwarder_ = std::make_unique<TopicForwarder>(std::move(forwarder_options),
                                                         this->weak_from_this(), // weak_from_this() MUST be called after
                                                                                 // constructor
-                                                        std::move(forwarder_lk_methods));
+                                                        std::move(forwarder_lk_methods), diagnostics_.get());
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder, unknown exception");
     return false;
@@ -414,7 +415,7 @@ bool Ros2LiveKitBridge::initializeCliManager() {
       return topic_forwarder_ && topic_forwarder_->isIncomingTopicAllowed(topic_name);
     };
     cli_manager_ = std::make_unique<cli::Manager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
-                                                  std::move(topic_publish_allowed));
+                                                  std::move(topic_publish_allowed), diagnostics_.get());
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");
     return false;

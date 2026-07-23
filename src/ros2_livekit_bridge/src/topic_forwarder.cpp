@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <map>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -31,12 +32,20 @@
 #include <utility>
 #include <vector>
 
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
+
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 namespace ros2_livekit_bridge {
+
+namespace {
+constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
+} // namespace
 
 TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackDescriptor(
     std::shared_ptr<livekit::RemoteDataTrack> track) {
@@ -77,11 +86,13 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
   };
 }
 
-TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods)
+TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+                               diagnostics::DiagnosticsManager* diagnostics)
     : options_(std::move(options)),
       node_(std::move(node)),
       schema_manager_(std::move(livekit_methods.schema)),
       livekit_methods_(std::move(livekit_methods)),
+      diagnostics_(diagnostics),
       logger_(rclcpp::get_logger("topic_forwarder")) {
   const auto locked_node = node_.lock();
   if (!locked_node) {
@@ -95,9 +106,16 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
   logger_ = locked_node->get_logger().get_child("topic_forwarder");
   clock_ = locked_node->get_clock();
   callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  if (diagnostics_) {
+    diagnostics_->add(kTopicForwarderDiagnosticTaskName,
+                      std::bind(&TopicForwarder::populateStatus, this, std::placeholders::_1));
+  }
 }
 
 TopicForwarder::~TopicForwarder() {
+  if (diagnostics_) {
+    diagnostics_->remove(kTopicForwarderDiagnosticTaskName);
+  }
   stopAllInboundDataTracks();
   std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
   subscriptions_.clear();
@@ -407,8 +425,10 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
     return;
   }
 
-  const auto descriptor = createRemoteDataTrackDescriptor(std::move(track));
+  onDataTrackPublished(createRemoteDataTrackDescriptor(std::move(track)));
+}
 
+void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) {
   if (descriptor.sid.empty()) {
     RCLCPP_WARN(logger_, "Ignoring LiveKit data track with empty SID");
     return;
@@ -445,8 +465,7 @@ void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTra
           descriptor.schema,
           descriptor.frame_encoding,
       })) {
-    // TODO(BOT-332): diagnostics / other error reporting for when this happens
-
+    inbound_schemas_incorrect_.fetch_add(1, std::memory_order_relaxed);
     // Return to prevent creating a publisher for the track due to invalid schema
     return;
   }
@@ -772,6 +791,16 @@ void TopicForwarder::stopAllInboundDataTracks() {
   for (const auto& sid : inbound_sids) {
     onDataTrackUnpublished(sid);
   }
+}
+
+void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
+  const auto inbound_schemas_incorrect = inbound_schemas_incorrect_.load(std::memory_order_relaxed);
+  if (inbound_schemas_incorrect > 0U) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Inbound schema validation failures detected");
+  } else {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Inbound schemas valid");
+  }
+  status.add("inbound_schemas_incorrect", inbound_schemas_incorrect);
 }
 
 } // namespace ros2_livekit_bridge

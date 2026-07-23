@@ -17,7 +17,11 @@
 #include "ros2_livekit_bridge/cli/manager.hpp"
 
 #include <algorithm>
+#include <array>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -29,14 +33,40 @@
 #include "ros2_livekit_bridge/cli/service_list.hpp"
 #include "ros2_livekit_bridge/cli/topic_list.hpp"
 #include "ros2_livekit_bridge/cli/utils.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 
 namespace ros2_livekit_bridge::cli {
 
+namespace {
+
+/// Diagnostic task name for the CLI manager status.
+constexpr char kCliManagerDiagnosticTaskName[] = "cli_manager";
+
+/// Create a ROS service, returning nullptr (and logging) instead of throwing so
+/// a single failed service does not abort manager construction.
+template <typename SrvT, typename CallbackT>
+typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeInterfaces& node_interfaces,
+                                                           const char* service_name, CallbackT callback,
+                                                           const rclcpp::CallbackGroup::SharedPtr& callback_group) {
+  try {
+    return rclcpp::create_service<SrvT>(node_interfaces.node_base, node_interfaces.node_services, service_name,
+                                        std::move(callback), rclcpp::ServicesQoS(), callback_group);
+  } catch (const std::exception& error) {
+    RCLCPP_ERROR(node_interfaces.node_logging->get_logger(), "Failed to create ROS service '%s': %s", service_name,
+                 error.what());
+    return nullptr;
+  }
+}
+
+} // namespace
+
 Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
-                 LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed)
+                 LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
+                 diagnostics::DiagnosticsManager* diagnostics)
     : node_interfaces_(std::move(node_interfaces)),
       livekit_methods_(std::move(livekit_methods)),
-      topic_publish_allowed_(std::move(topic_publish_allowed)) {
+      topic_publish_allowed_(std::move(topic_publish_allowed)),
+      diagnostics_(diagnostics) {
   if (!node_interfaces_.node_base || !node_interfaces_.node_services || !node_interfaces_.node_graph ||
       !node_interfaces_.node_topics || !node_interfaces_.node_logging) {
     throw std::invalid_argument("Manager requires fully populated NodeInterfaces");
@@ -56,49 +86,49 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   service_caller_ = std::make_unique<ServiceCall>(node_interfaces_.node_base, node_interfaces_.node_graph,
                                                   node_interfaces_.node_logging->get_logger());
 
-  topic_list_service_ = rclcpp::create_service<TopicListSrv>(
-      node_interfaces_.node_base, node_interfaces_.node_services, kTopicListServiceName,
+  // Service and RPC creation are best-effort: on failure we log and continue so
+  // the bridge stays up in a degraded state, and the diagnostic task reports
+  // which command pairs are incomplete.
+  topic_list_service_ = tryCreateService<TopicListSrv>(
+      node_interfaces_, kTopicListServiceName,
       [this](const std::shared_ptr<TopicListSrv::Request> request, std::shared_ptr<TopicListSrv::Response> response) {
         handleTopicListRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  topic_pub_service_ = rclcpp::create_service<TopicPubSrv>(
-      node_interfaces_.node_base, node_interfaces_.node_services, kTopicPubServiceName,
+  topic_pub_service_ = tryCreateService<TopicPubSrv>(
+      node_interfaces_, kTopicPubServiceName,
       [this](const std::shared_ptr<TopicPubSrv::Request> request, std::shared_ptr<TopicPubSrv::Response> response) {
         handleTopicPubRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  service_list_service_ = rclcpp::create_service<ServiceListSrv>(
-      node_interfaces_.node_base, node_interfaces_.node_services, kServiceListServiceName,
+  service_list_service_ = tryCreateService<ServiceListSrv>(
+      node_interfaces_, kServiceListServiceName,
       [this](const std::shared_ptr<ServiceListSrv::Request> request,
              std::shared_ptr<ServiceListSrv::Response> response) { handleServiceListRosService(request, response); },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  service_call_service_ = rclcpp::create_service<ServiceCallSrv>(
-      node_interfaces_.node_base, node_interfaces_.node_services, kServiceCallServiceName,
+  service_call_service_ = tryCreateService<ServiceCallSrv>(
+      node_interfaces_, kServiceCallServiceName,
       [this](const std::shared_ptr<ServiceCallSrv::Request> request,
              std::shared_ptr<ServiceCallSrv::Response> response) { handleServiceCallRosService(request, response); },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  interface_show_service_ = rclcpp::create_service<InterfaceShowSrv>(
-      node_interfaces_.node_base, node_interfaces_.node_services, kInterfaceShowServiceName,
+  interface_show_service_ = tryCreateService<InterfaceShowSrv>(
+      node_interfaces_, kInterfaceShowServiceName,
       [this](const std::shared_ptr<InterfaceShowSrv::Request> request,
              std::shared_ptr<InterfaceShowSrv::Response> response) {
         handleInterfaceShowRosService(request, response);
       },
-      rclcpp::ServicesQoS(), callback_group);
+      callback_group);
 
-  std::vector<const char*> registered_rpc_methods;
-  const auto register_rpc = [&](const char* method, auto handler) {
-    if (!livekit_methods_.register_rpc_method(method, std::move(handler))) {
-      for (auto it = registered_rpc_methods.rbegin(); it != registered_rpc_methods.rend(); ++it) {
-        livekit_methods_.unregister_rpc_method(*it);
-      }
-      throw std::runtime_error(std::string("Failed to register LiveKit RPC method '") + method + "'");
+  const auto register_rpc = [this](const char* method, auto handler) {
+    if (livekit_methods_.register_rpc_method(method, std::move(handler))) {
+      registered_rpc_methods_.emplace_back(method);
+    } else {
+      RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to register LiveKit RPC method '%s'", method);
     }
-    registered_rpc_methods.push_back(method);
   };
 
   register_rpc(kTopicListRpcMethod, [this](const std::string& payload) { return handleTopicListRpc(payload); });
@@ -108,17 +138,18 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   register_rpc(kInterfaceShowRpcMethod, [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
 
   RCLCPP_INFO(node_interfaces_.node_logging->get_logger(),
-              "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s", kTopicListServiceName,
-              kTopicPubServiceName, kServiceListServiceName, kServiceCallServiceName, kInterfaceShowServiceName);
-  RCLCPP_INFO(node_interfaces_.node_logging->get_logger(),
-              "Registered LiveKit RPC methods:\n   - %s\n   - %s\n   - %s\n   - %s\n"
-              "   - %s",
-              kTopicListRpcMethod, kTopicPubRpcMethod, kServiceListRpcMethod, kServiceCallRpcMethod,
-              kInterfaceShowRpcMethod);
+              "CLI manager initialized: %d/5 ROS services, %zu/5 RPC methods",
+              (topic_list_service_ != nullptr) + (topic_pub_service_ != nullptr) + (service_list_service_ != nullptr) +
+                  (service_call_service_ != nullptr) + (interface_show_service_ != nullptr),
+              registered_rpc_methods_.size());
+
+  if (diagnostics_ != nullptr) {
+    diagnostics_->add(kCliManagerDiagnosticTaskName, std::bind(&Manager::populateStatus, this, std::placeholders::_1));
+  }
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
-                 TopicPublishAllowed topic_publish_allowed)
+                 TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManager* diagnostics)
     : Manager(
           NodeInterfaces{
               node.get_node_base_interface(),
@@ -127,15 +158,61 @@ Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_g
               node.get_node_topics_interface(),
               node.get_node_logging_interface(),
           },
-          callback_group, std::move(livekit_methods), std::move(topic_publish_allowed)) {}
+          callback_group, std::move(livekit_methods), std::move(topic_publish_allowed), diagnostics) {}
 
 Manager::~Manager() {
+  // Deregister the diagnostic task before the state it reads is torn down.
+  if (diagnostics_ != nullptr) {
+    diagnostics_->remove(kCliManagerDiagnosticTaskName);
+  }
   if (livekit_methods_.unregister_rpc_method) {
-    livekit_methods_.unregister_rpc_method(kTopicListRpcMethod);
-    livekit_methods_.unregister_rpc_method(kTopicPubRpcMethod);
-    livekit_methods_.unregister_rpc_method(kServiceListRpcMethod);
-    livekit_methods_.unregister_rpc_method(kServiceCallRpcMethod);
-    livekit_methods_.unregister_rpc_method(kInterfaceShowRpcMethod);
+    for (const auto& method : registered_rpc_methods_) {
+      livekit_methods_.unregister_rpc_method(method);
+    }
+  }
+}
+
+bool Manager::rpcRegistered(const std::string& rpc_method) const {
+  return std::find(registered_rpc_methods_.begin(), registered_rpc_methods_.end(), rpc_method) !=
+         registered_rpc_methods_.end();
+}
+
+void Manager::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) const {
+  struct CommandStatus {
+    const char* key;
+    bool service_created;
+    bool rpc_registered;
+  };
+
+  const std::array<CommandStatus, 5> commands{{
+      {kTopicListRpcMethod, topic_list_service_ != nullptr, rpcRegistered(kTopicListRpcMethod)},
+      {kTopicPubRpcMethod, topic_pub_service_ != nullptr, rpcRegistered(kTopicPubRpcMethod)},
+      {kServiceListRpcMethod, service_list_service_ != nullptr, rpcRegistered(kServiceListRpcMethod)},
+      {kServiceCallRpcMethod, service_call_service_ != nullptr, rpcRegistered(kServiceCallRpcMethod)},
+      {kInterfaceShowRpcMethod, interface_show_service_ != nullptr, rpcRegistered(kInterfaceShowRpcMethod)},
+  }};
+
+  std::size_t complete_pairs = 0;
+  for (const auto& command : commands) {
+    const bool complete = command.service_created && command.rpc_registered;
+    const char* detail = nullptr;
+    if (complete) {
+      ++complete_pairs;
+      detail = "ok";
+    } else if (!command.service_created && !command.rpc_registered) {
+      detail = "service and rpc missing";
+    } else if (!command.service_created) {
+      detail = "service missing";
+    } else {
+      detail = "rpc missing";
+    }
+    status.add(command.key, detail);
+  }
+
+  if (complete_pairs == commands.size()) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "All CLI command pairs registered");
+  } else {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "One or more CLI command pairs failed to register");
   }
 }
 

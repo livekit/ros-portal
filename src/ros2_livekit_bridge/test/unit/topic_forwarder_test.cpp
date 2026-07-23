@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
@@ -34,6 +35,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 
 #include "ros2_livekit_bridge/schema_manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
@@ -46,6 +50,15 @@
 // integration tests.
 namespace ros2_livekit_bridge {
 namespace {
+
+std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key) {
+  for (const auto& value : status.values) {
+    if (value.key == key) {
+      return value.value;
+    }
+  }
+  return std::nullopt;
+}
 
 TopicForwarder::Options makeOptions() {
   TopicForwarder::Options options;
@@ -151,6 +164,36 @@ TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears
   const livekit::DataTrackSchemaId conflicting_schema{"geometry_msgs/msg/Pose",
                                                       livekit::DataTrackSchemaEncoding::Ros2Msg};
   EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", conflicting_schema), "std_msgs/msg/String");
+}
+
+TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) {
+  auto subscription = node_->create_subscription<std_msgs::msg::String>(
+      "/remote/schema_mismatch", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
+  ASSERT_NE(subscription, nullptr);
+  ASSERT_TRUE(spinUntil([&]() {
+    const auto topics = node_->get_topic_names_and_types();
+    return topics.count("/remote/schema_mismatch") > 0U;
+  }));
+
+  auto forwarder = makeForwarder();
+  diagnostic_updater::DiagnosticStatusWrapper ok_status;
+  forwarder.populateStatus(ok_status);
+  EXPECT_EQ(ok_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(valueFor(ok_status, "inbound_schemas_incorrect"), "0");
+
+  TopicForwarder::RemoteDataTrackDescriptor descriptor;
+  descriptor.sid = "schema-mismatch-sid";
+  descriptor.track_name = "/remote/schema_mismatch";
+  descriptor.publisher_identity = "remote_robot";
+  descriptor.schema = livekit::DataTrackSchemaId{"geometry_msgs/msg/Pose", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+
+  forwarder.onDataTrackPublished(std::move(descriptor));
+
+  diagnostic_updater::DiagnosticStatusWrapper warn_status;
+  forwarder.populateStatus(warn_status);
+  EXPECT_EQ(warn_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(warn_status, "inbound_schemas_incorrect"), "1");
 }
 
 TEST_F(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile) {

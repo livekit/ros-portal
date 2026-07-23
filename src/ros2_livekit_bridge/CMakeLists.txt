@@ -32,7 +32,6 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
-  rcutils
   ros2_medkit_serialization
   rosbag2_cpp
   rosbag2_storage
@@ -69,10 +68,28 @@ ament_auto_find_build_dependencies(REQUIRED
 # ---------------------------------------------------------------------------
 set(LIVEKIT_SDK_VERSION "1.5.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
+set(LIVEKIT_SDK_SHA256 "" CACHE STRING
+  "Optional SHA-256 checksum for the LiveKit C++ SDK archive")
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
   "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
 set(LIVEKIT_LOCAL_SDK_DIR "$ENV{LIVEKIT_LOCAL_SDK_DIR}" CACHE PATH
   "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}.")
+
+if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.5.0-rc2")
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _livekit_target_processor)
+  if(APPLE AND _livekit_target_processor MATCHES "^(arm64|aarch64)$")
+    set(LIVEKIT_SDK_SHA256 "610bbf9bb45bf7d99272a5b2acf9585defb9d46c454ef966e31ef573261da3f7")
+  elseif(APPLE AND _livekit_target_processor MATCHES "^(x86_64|amd64)$")
+    set(LIVEKIT_SDK_SHA256 "ef1d242174063ce52bbe1de8b464cf301fb54bcb79cc52b1c6cdde481c888998")
+  elseif(UNIX AND _livekit_target_processor MATCHES "^(arm64|aarch64)$")
+    set(LIVEKIT_SDK_SHA256 "dcacee92e9fba3d6546af1bd7b284b8672e879a6f74ab13ebf7945a2595f5a8b")
+  elseif(UNIX AND _livekit_target_processor MATCHES "^(x86_64|amd64)$")
+    set(LIVEKIT_SDK_SHA256 "55c79218b2dff12fd8ea3e78ffd28d07e0fab6d26ac151a907a33e08407bf039")
+  elseif(WIN32 AND _livekit_target_processor MATCHES "^(x86_64|amd64)$")
+    set(LIVEKIT_SDK_SHA256 "62928a72a8fe0e3b2899cd0233d301bee5bf4e5146cd17bf2fe97e81a31cd5d4")
+  endif()
+  unset(_livekit_target_processor)
+endif()
 
 if(LIVEKIT_SDK_DIR AND NOT LIVEKIT_LOCAL_SDK_DIR)
   message(STATUS
@@ -91,16 +108,24 @@ if(LIVEKIT_LOCAL_SDK_DIR)
   list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
 else()
   include(LiveKitSDK)
-  livekit_sdk_setup(
+  set(_livekit_sdk_setup_args
     VERSION "${LIVEKIT_SDK_VERSION}"
     SDK_DIR "${CMAKE_BINARY_DIR}/_deps/livekit-sdk"
     GITHUB_TOKEN "$ENV{GITHUB_TOKEN}"
   )
+  if(LIVEKIT_SDK_SHA256)
+    list(APPEND _livekit_sdk_setup_args SHA256 "${LIVEKIT_SDK_SHA256}")
+  endif()
+  livekit_sdk_setup(${_livekit_sdk_setup_args})
+  unset(_livekit_sdk_setup_args)
 endif()
 
 find_package(LiveKit CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(yaml-cpp REQUIRED)
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+find_package(ros2_medkit_cmake REQUIRED)
+include(ROS2MedkitCompat)
+medkit_find_yaml_cpp()
 
 if(TARGET LiveKit::livekit)
   set(LIVEKIT_CORE_TARGET LiveKit::livekit)
@@ -116,10 +141,12 @@ set(LIVEKIT_RUNTIME_LIBRARY_DIR "$<TARGET_FILE_DIR:${LIVEKIT_CORE_TARGET}>")
 # Point a target's RPATH at the LiveKit SDK so its shared library is resolved at
 # both build and install time. Shared by the targets here and under test/.
 function(livekit_set_runtime_rpath target)
-  set_target_properties(${target} PROPERTIES
-    BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-  )
+  set_target_properties(${target} PROPERTIES BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}")
+  if(APPLE)
+    set_target_properties(${target} PROPERTIES INSTALL_RPATH "@loader_path;@loader_path/..")
+  elseif(UNIX)
+    set_target_properties(${target} PROPERTIES INSTALL_RPATH "$ORIGIN;$ORIGIN/..")
+  endif()
 endfunction()
 
 if(LIVEKIT_LOCAL_SDK_DIR)
@@ -196,11 +223,15 @@ ament_auto_add_library(introspection_lib SHARED
   src/introspection/introspection_utils.cpp
   src/introspection/runtime_type_support.cpp
 )
+if(rclcpp_VERSION VERSION_LESS "21.0.0")
+  target_compile_definitions(introspection_lib PRIVATE
+    ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP)
+endif()
 target_link_libraries(introspection_lib
   nlohmann_json::nlohmann_json
   yaml-cpp::yaml-cpp
 )
-ament_target_dependencies(introspection_lib
+medkit_target_dependencies(introspection_lib
   ros2_medkit_serialization
 )
 
@@ -217,6 +248,10 @@ ament_auto_add_library(ros2_cli_lib SHARED
   src/cli/utils.cpp
   src/cli/manager.cpp
 )
+if(rclcpp_VERSION VERSION_LESS "21.0.0")
+  target_compile_definitions(ros2_cli_lib PRIVATE
+    ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP)
+endif()
 target_link_libraries(ros2_cli_lib
   introspection_lib
   "${LIVEKIT_CORE_TARGET}"
@@ -241,11 +276,16 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
+if(rclcpp_VERSION VERSION_LESS "21.0.0")
+  target_compile_definitions(ros2_livekit_bridge_lib PRIVATE
+    ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP)
+endif()
 target_link_libraries(ros2_livekit_bridge_lib
   introspection_lib
   ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
   nlohmann_json::nlohmann_json
+  OpenSSL::Crypto
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros2_livekit_bridge_lib)
@@ -260,6 +300,26 @@ target_link_libraries(ros2_livekit_bridge_node
   ros2_livekit_bridge_lib
 )
 livekit_set_runtime_rpath(ros2_livekit_bridge_node)
+
+if(LIVEKIT_LOCAL_SDK_DIR)
+  set(LIVEKIT_SDK_INSTALL_ROOT "${LIVEKIT_LOCAL_SDK_DIR}")
+else()
+  set(LIVEKIT_SDK_INSTALL_ROOT "${LIVEKIT_SDK_EXTRACTED_ROOT}")
+endif()
+
+if(APPLE)
+  install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"
+    DESTINATION lib
+    FILES_MATCHING PATTERN "*.dylib")
+elseif(UNIX)
+  install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"
+    DESTINATION lib
+    FILES_MATCHING PATTERN "*.so" PATTERN "*.so.*")
+elseif(WIN32)
+  install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/bin/"
+    DESTINATION bin
+    FILES_MATCHING PATTERN "*.dll")
+endif()
 
 if(BUILD_TESTING)
   target_compile_definitions(ros2_cli_lib PRIVATE BUILD_TESTING=1)

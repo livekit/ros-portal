@@ -21,6 +21,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -150,6 +151,25 @@ int32 sec
 uint32 nanosec
 )";
 
+std::string canonicalSchemaFields(const std::string& schema) {
+  std::istringstream stream(schema);
+  std::string canonical;
+  for (std::string line; std::getline(stream, line);) {
+    const auto comment = line.find('#');
+    if (comment != std::string::npos) {
+      line.erase(comment);
+    }
+    const auto first = line.find_first_not_of(" \t\r");
+    if (first == std::string::npos) {
+      continue;
+    }
+    const auto last = line.find_last_not_of(" \t\r");
+    canonical.append(line, first, last - first + 1U);
+    canonical.push_back('\n');
+  }
+  return canonical;
+}
+
 SchemaManager::LiveKitMethods makeLiveKitMethods() {
   SchemaManager::LiveKitMethods methods;
   methods.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return true; };
@@ -173,7 +193,7 @@ TEST(SchemaManagerTest, RenderRosMessageSchema) {
   const auto schema = SchemaManager::renderRosMessageSchema("std_msgs/msg/String");
   ASSERT_TRUE(schema.has_value());
   EXPECT_EQ(schema->encoding, "ros2msg");
-  EXPECT_EQ(schema->text, kStdMsgsStringSchemaText);
+  EXPECT_EQ(canonicalSchemaFields(schema->text), canonicalSchemaFields(kStdMsgsStringSchemaText));
 
   EXPECT_FALSE(SchemaManager::renderRosMessageSchema("").has_value());
   EXPECT_FALSE(SchemaManager::renderRosMessageSchema("nonexistent_pkg/msg/DoesNotExist").has_value());
@@ -228,7 +248,7 @@ TEST(SchemaManagerTest, RendersAndDefinesStdMsgsString) {
   ASSERT_TRUE(result);
   EXPECT_EQ(defined_id.name, "std_msgs/msg/String");
   EXPECT_EQ(defined_id.encoding, livekit::DataTrackSchemaEncoding::Ros2Msg);
-  EXPECT_EQ(defined_text, kStdMsgsStringSchemaText);
+  EXPECT_EQ(canonicalSchemaFields(defined_text), canonicalSchemaFields(kStdMsgsStringSchemaText));
 }
 
 TEST(SchemaManagerTest, RendersNestedDependencies) {
@@ -241,7 +261,7 @@ TEST(SchemaManagerTest, RendersNestedDependencies) {
   SchemaManager manager(std::move(methods));
 
   ASSERT_TRUE(manager.ensureSchemaDefined("geometry_msgs/msg/PoseStamped"));
-  EXPECT_EQ(defined_text, kGeometryMsgsPoseStampedSchemaText);
+  EXPECT_EQ(canonicalSchemaFields(defined_text), canonicalSchemaFields(kGeometryMsgsPoseStampedSchemaText));
 }
 
 TEST(SchemaManagerTest, RendersSensorMsgsImage) {
@@ -254,7 +274,7 @@ TEST(SchemaManagerTest, RendersSensorMsgsImage) {
   SchemaManager manager(std::move(methods));
 
   ASSERT_TRUE(manager.ensureSchemaDefined("sensor_msgs/msg/Image"));
-  EXPECT_EQ(defined_text, kSensorMsgsImageSchemaText);
+  EXPECT_EQ(canonicalSchemaFields(defined_text), canonicalSchemaFields(kSensorMsgsImageSchemaText));
 }
 
 TEST(SchemaManagerTest, ReturnsFailureForUnknownType) {

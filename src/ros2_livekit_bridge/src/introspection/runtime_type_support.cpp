@@ -32,6 +32,16 @@ namespace {
 constexpr char kServiceTypeSupportSymbolPrefix[] = "__get_service_type_support_handle__";
 constexpr char kRequestMessageTypeSuffix[] = "_Request";
 constexpr char kResponseMessageTypeSuffix[] = "_Response";
+
+const rosidl_message_type_support_t* messageTypeSupportHandle(const std::string& type,
+                                                              const std::string& typesupport_identifier,
+                                                              rcpputils::SharedLibrary& library) {
+#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+  return rclcpp::get_typesupport_handle(type, typesupport_identifier, library);
+#else
+  return rclcpp::get_message_typesupport_handle(type, typesupport_identifier, library);
+#endif
+}
 } // namespace
 
 std::string serviceTypeSupportSymbol(const std::string& type, const std::string& typesupport_identifier) {
@@ -63,9 +73,9 @@ RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string& type)
     : serialization_library(rclcpp::get_typesupport_library(type, rosidl_typesupport_cpp::typesupport_identifier)),
       introspection_library(
           rclcpp::get_typesupport_library(type, rosidl_typesupport_introspection_cpp::typesupport_identifier)),
-      serialization_handle(rclcpp::get_message_typesupport_handle(type, rosidl_typesupport_cpp::typesupport_identifier,
-                                                                  *serialization_library)),
-      introspection_handle(rclcpp::get_message_typesupport_handle(
+      serialization_handle(
+          messageTypeSupportHandle(type, rosidl_typesupport_cpp::typesupport_identifier, *serialization_library)),
+      introspection_handle(messageTypeSupportHandle(
           type, rosidl_typesupport_introspection_cpp::typesupport_identifier, *introspection_library)),
       members(requireMembers(introspection_handle)),
       serializer(serialization_handle) {}

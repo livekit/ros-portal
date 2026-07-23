@@ -12,28 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: CI
+name: Debian Release
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Attach packages to the selected version tag's GitHub prerelease
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: debian-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  cpp-tools:
-    name: C++ Tools
-    uses: ./.github/workflows/cpp-tools.yml
-
-  build-and-test:
+  build:
+    name: Package (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -78,16 +78,13 @@ jobs:
             ros_distro: lyrical
             ros_image_digest: 728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f
             ros_image_tag: lyrical-ros-base-resolute
-
-    name: Build and Tests (${{ matrix.ros_distro }}, ${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
     env:
       BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ matrix.ros_distro == 'humble' && 'true' || 'false' }}
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
       LIVEKIT_LOCAL_SDK_DIR: ${{ matrix.ros_distro == 'humble' && '/opt/livekit-sdk' || '' }}
       ROS_DISTRO: ${{ matrix.ros_distro }}
+      ROS_IMAGE: ros:${{ matrix.ros_image_tag }}@sha256:${{ matrix.ros_image_digest }}
       ROS_IMAGE_DIGEST: ${{ matrix.ros_image_digest }}
       ROS_IMAGE_REPOSITORY: ros
       ROS_IMAGE_TAG: ${{ matrix.ros_image_tag }}
@@ -99,7 +96,7 @@ jobs:
       - name: Prepare devcontainer SSH agent mount
         run: touch /tmp/devcontainer-empty-ssh-agent
 
-      - name: Setup devcontainer environment
+      - name: Set up packaging environment
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -107,7 +104,7 @@ jobs:
           configFile: .devcontainer/devcontainer.json
           push: never
 
-      - name: Build packages
+      - name: Build Debian package
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
           DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
@@ -115,86 +112,84 @@ jobs:
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
-          runCmd: |
-            bash -lc '
-              set -eo pipefail
-              source "/opt/ros/${ROS_DISTRO}/setup.bash"
-              set -u
-              colcon build --packages-up-to ros2_livekit_bridge
-            '
+          runCmd: ./scripts/build-deb.sh
 
-      - name: "colcon test: unit"
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
-        with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-          runCmd: |
-            bash -lc '
-              set -eo pipefail
-              source "/opt/ros/${ROS_DISTRO}/setup.bash"
-              source install/setup.bash
-              set -u
-
-              # --event-handlers console_direct+ streams test output live
-              # --ctest-args -R ros2_livekit_bridge_unit_tests runs only the unit tests
-              test_exit=0
-              GTEST_COLOR=1 colcon test \
-                --packages-select ros2_livekit_bridge \
-                --event-handlers console_direct+ \
-                --return-code-on-test-failure \
-                --ctest-args -R ros2_livekit_bridge_unit_tests \
-                || test_exit=$?
-              colcon test-result --verbose --all
-              exit $test_exit
-            '
-
-      - name: Start livekit-server
-        id: livekit_server
-        uses: livekit/dev-server-action@6562d7d9343e46c26ead1223151f64f00e4fc37f # v1.1.0
-        with:
-          github-token: ${{ github.token }}
-          version: v1.13.3
-          config: |
-            enable_participant_data_blob: true
-
-      - name: Install livekit-cli
+      - name: Smoke-test clean installation
+        shell: bash
         run: |
-          set -euxo pipefail
-          curl -sSL https://get.livekit.io/cli | bash
-          lk --version
+          set -euo pipefail
+          deb_path="$(compgen -G 'artifacts/debian/*.deb')"
+          docker run --rm \
+            --env "ROS_DISTRO=${ROS_DISTRO}" \
+            --volume "${PWD}/artifacts/debian:/packages:ro" \
+            --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" \
+            "${ROS_IMAGE}" \
+            bash -lc "/smoke-test-deb.sh /packages/$(basename "${deb_path}")"
 
-      - name: "colcon test: integration"
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
-        env:
-          CI: true
-          GITHUB_TOKEN: ${{ github.token }}
-          LIVEKIT_URL: ws://127.0.0.1:7880
-          LIVEKIT_ROOM: ros2_livekit_bridge_test_room
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-          runCmd: |
-            bash -lc '
-              set -eo pipefail
-              source "/opt/ros/${ROS_DISTRO}/setup.bash"
-              source install/setup.bash
-              set -u
+          name: deb-${{ matrix.ros_distro }}-${{ matrix.arch }}
+          path: |
+            artifacts/debian/*.deb
+            artifacts/debian/*.sha256
+          if-no-files-found: error
 
-              source .token_helpers/set_test_tokens.bash
+  publish:
+    name: Publish GitHub prerelease
+    if: ${{ inputs.publish }}
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
 
-              # --event-handlers console_direct+ streams test output live
-              # -R selects only the integration test
-              test_exit=0
-              GTEST_COLOR=1 colcon test \
-                --packages-select ros2_livekit_bridge \
-                --event-handlers console_direct+ \
-                --return-code-on-test-failure \
-                --ctest-args -R ros2_livekit_bridge_integration_tests \
-                || test_exit=$?
-              colcon test-result --verbose --all
-              exit $test_exit
-            '
+    steps:
+      - name: Check out selected ref
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
 
-      - name: Dump LiveKit server log on failure
-        if: failure()
-        run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
+      - name: Download packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: deb-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate release tag and packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(
+            python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          print(ET.parse("src/ros2_livekit_bridge/package.xml").getroot().findtext("version"))
+          PY
+          )"
+          if [[ "${GITHUB_REF}" != "refs/tags/v${version}" ]]; then
+            echo "Publishing requires selecting the existing v${version} tag, got ${GITHUB_REF}" >&2
+            exit 1
+          fi
+          cd release-assets
+          for checksum in ./*.sha256; do
+            sha256sum --check "${checksum}"
+          done
+          sha256sum ./*.deb >SHA256SUMS
+
+      - name: Create or update GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              release-assets/*.deb release-assets/SHA256SUMS --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              release-assets/*.deb release-assets/SHA256SUMS \
+              --generate-notes \
+              --prerelease \
+              --title "ROS LiveKit Bridge ${GITHUB_REF_NAME}" \
+              --verify-tag
+          fi

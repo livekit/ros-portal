@@ -33,6 +33,8 @@ To get familiar with using the bridge, you can follow the [tutorials](docs/tutor
 
 ## User Guides
 
+- [Installing Debian packages](docs/installation.md): supported ROS and Ubuntu
+  versions, local package installation, and the installed overlay.
 - [Running](docs/running.md): launch commands, credentials, local development launch,
   and simulation examples.
 - [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,
@@ -49,6 +51,8 @@ To get familiar with using the bridge, you can follow the [tutorials](docs/tutor
   LiveKit test environment.
 - [Development environment](docs/development.md): devcontainer layout, SSH agent
   forwarding, Docker image caching, and C++ tooling.
+- [Debian releases](docs/releasing.md): non-publishing package builds, guarded
+  GitHub prereleases, and future APT repository options.
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
 

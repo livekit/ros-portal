@@ -16,13 +16,23 @@
 
 #include "ros2_livekit_bridge/schema_manager.hpp"
 
-#include <rcutils/sha256.h>
+#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+#include <ament_index_cpp/get_resource.hpp>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <regex>
+#include <set>
+#include <sstream>
+#include <unordered_set>
+#else
+#include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
+#endif
 
 #include <array>
-#include <cstdint>
 #include <exception>
+#include <openssl/sha.h>
 #include <rclcpp/logging.hpp>
-#include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -30,12 +40,128 @@
 
 namespace ros2_livekit_bridge {
 
+#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+namespace {
+
+enum class DefinitionFormat { kMsg, kIdl };
+
+constexpr std::size_t kMaxDefinitionDepth = 50;
+const std::regex kPackageTypeRegex{
+    R"(^([a-zA-Z0-9_]+)(?:/[a-zA-Z0-9_]+)*/(?:msg/|srv/)?([a-zA-Z0-9_]+)$)"};
+const std::regex kMsgFieldTypeRegex{R"((?:^|\n)\s*([a-zA-Z0-9_/]+)(?:\[[^\]]*\])?\s+)"};
+const std::regex kIdlFieldTypeRegex{R"((?:^|\n)#include\s+(?:"|<)([a-zA-Z0-9_/]+)\.idl(?:"|>))"};
+const std::unordered_set<std::string> kPrimitiveTypes{
+    "bool",  "byte",   "char",  "float32", "float64", "int8",   "uint8",
+    "int16", "uint16", "int32", "uint32",  "int64",   "uint64", "string",
+};
+
+struct DefinitionSpec {
+  std::string package_name;
+  std::string text;
+};
+
+std::string definitionExtension(DefinitionFormat format) {
+  return format == DefinitionFormat::kMsg ? ".msg" : ".idl";
+}
+
+std::string definitionDelimiter(DefinitionFormat format, const std::string& type) {
+  return "================================================================================\n" +
+         std::string(format == DefinitionFormat::kMsg ? "MSG: " : "IDL: ") + type + "\n";
+}
+
+DefinitionSpec loadDefinition(const std::string& type, DefinitionFormat format) {
+  std::smatch match;
+  if (!std::regex_match(type, match, kPackageTypeRegex) || match.size() < 3) {
+    throw std::runtime_error("Message type name is not understood: " + type);
+  }
+
+  const std::string package_name = match[1].str();
+  const std::string file_name = match[2].str() + definitionExtension(format);
+  std::string resource_content;
+  std::string resource_prefix;
+  if (!ament_index_cpp::get_resource("rosidl_interfaces", package_name, resource_content, &resource_prefix)) {
+    throw std::runtime_error("Message package is not in the ament index: " + package_name);
+  }
+
+  std::istringstream resources(resource_content);
+  std::string relative_path;
+  for (std::string line; std::getline(resources, line);) {
+    if (!line.empty() && std::filesystem::path(line).filename() == file_name) {
+      relative_path = std::move(line);
+      break;
+    }
+  }
+  if (relative_path.empty()) {
+    throw std::runtime_error("Message definition not found: " + type + definitionExtension(format));
+  }
+
+  const auto path = std::filesystem::path(resource_prefix) / "share" / package_name / relative_path;
+  std::ifstream definition(path);
+  if (!definition.good()) {
+    throw std::runtime_error("Unable to read message definition: " + path.string());
+  }
+  return DefinitionSpec{package_name, std::string(std::istreambuf_iterator<char>(definition), {})};
+}
+
+std::set<std::string> definitionDependencies(const DefinitionSpec& spec, DefinitionFormat format) {
+  std::set<std::string> dependencies;
+  const std::regex& pattern = format == DefinitionFormat::kMsg ? kMsgFieldTypeRegex : kIdlFieldTypeRegex;
+  for (std::sregex_iterator iterator(spec.text.begin(), spec.text.end(), pattern);
+       iterator != std::sregex_iterator(); ++iterator) {
+    std::string type = (*iterator)[1].str();
+    if (format == DefinitionFormat::kMsg && kPrimitiveTypes.count(type) != 0U) {
+      continue;
+    }
+    if (format == DefinitionFormat::kMsg && type.find('/') == std::string::npos) {
+      type = spec.package_name + "/" + type;
+    }
+    dependencies.insert(std::move(type));
+  }
+  return dependencies;
+}
+
+std::string appendDefinition(const std::string& type, DefinitionFormat format,
+                             std::unordered_set<std::string>& seen, std::size_t depth) {
+  if (depth == 0U) {
+    throw std::runtime_error("Message definition exceeded maximum dependency depth: " + type);
+  }
+
+  const DefinitionSpec spec = loadDefinition(type, format);
+  std::string result = spec.text;
+  for (const auto& dependency : definitionDependencies(spec, format)) {
+    if (seen.insert(dependency).second) {
+      result += "\n" + definitionDelimiter(format, dependency) +
+                appendDefinition(dependency, format, seen, depth - 1U);
+    }
+  }
+  return result;
+}
+
+RosMessageSchema renderLegacyRosMessageSchema(const std::string& topic_type) {
+  try {
+    std::unordered_set<std::string> seen{topic_type};
+    return RosMessageSchema{"ros2msg",
+                            appendDefinition(topic_type, DefinitionFormat::kMsg, seen, kMaxDefinitionDepth)};
+  } catch (const std::runtime_error&) {
+    std::unordered_set<std::string> seen{topic_type};
+    return RosMessageSchema{
+        "ros2idl", definitionDelimiter(DefinitionFormat::kIdl, topic_type) +
+                       appendDefinition(topic_type, DefinitionFormat::kIdl, seen, kMaxDefinitionDepth)};
+  }
+}
+
+} // namespace
+#endif
+
 std::optional<RosMessageSchema> SchemaManager::renderRosMessageSchema(const std::string& topic_type) {
   if (topic_type.empty()) {
     return std::nullopt;
   }
 
   try {
+#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+    return renderLegacyRosMessageSchema(topic_type);
+#else
     rosbag2_cpp::LocalMessageDefinitionSource source;
     const rosbag2_storage::MessageDefinition definition = source.get_full_text(topic_type);
 
@@ -47,6 +173,7 @@ std::optional<RosMessageSchema> SchemaManager::renderRosMessageSchema(const std:
         definition.encoding,
         definition.encoded_message_definition,
     };
+#endif
   } catch (const std::exception&) {
     return std::nullopt;
   }
@@ -76,14 +203,10 @@ std::string SchemaManager::schemaDedupeKey(const std::string& topic_type, const 
 }
 
 SchemaHash SchemaManager::hashSchemaText(const std::string& schema_text) {
-  static_assert(SchemaHash{}.size() == RCUTILS_SHA256_BLOCK_SIZE);
-
-  rcutils_sha256_ctx_t context;
-  rcutils_sha256_init(&context);
-  rcutils_sha256_update(&context, reinterpret_cast<const std::uint8_t*>(schema_text.data()), schema_text.size());
+  static_assert(SchemaHash{}.size() == SHA256_DIGEST_LENGTH);
 
   SchemaHash hash{};
-  rcutils_sha256_final(&context, hash.data());
+  SHA256(reinterpret_cast<const unsigned char*>(schema_text.data()), schema_text.size(), hash.data());
   return hash;
 }
 

@@ -12,15 +12,42 @@ External repositories are tracked in `external.repos` using `vcstool`.
 
 __NOTE:__ Git Authentication From The Devcontainer is currently not supported.
 
-## CI Docker Image Cache
+## ROS Distribution
 
-CI tags Docker build images from an md5 hash of the repository files that
-directly affect the image, currently `Dockerfile` and `setup-shell-env.sh`. If
-an image with that tag already exists, CI reuses it instead of rebuilding.
+The devcontainer defaults to ROS 2 Jazzy. Its Docker build accepts
+`ROS_DISTRO`, `ROS_IMAGE_TAG`, and `ROS_IMAGE_DIGEST`, which CI uses to build
+Humble, Jazzy, Kilted, and Lyrical from the same configuration.
 
-This cache key does not include upstream changes to the `ros:jazzy` base image
-or apt repositories. If those upstream inputs need to be refreshed, change one
-of the image input files or rebuild the cached image explicitly.
+To open a minimal non-Jazzy container with the Dev Container CLI, pass matching
+values from the host:
+
+```bash
+ROS_DISTRO=humble \
+ROS_IMAGE_TAG=humble-ros-base-jammy \
+ROS_IMAGE_DIGEST=afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16 \
+BUILD_LIVEKIT_SDK_FROM_SOURCE=true \
+LIVEKIT_LOCAL_SDK_DIR=/opt/livekit-sdk \
+INSTALL_CPP_TOOLS=false \
+INSTALL_SIMULATION_DEPS=false \
+devcontainer up --workspace-folder .
+```
+
+Use `jazzy-ros-base-noble`, `kilted-ros-base-noble`, or
+`lyrical-ros-base-resolute` for the other supported distributions. CI pins
+these image tags by digest in `.github/workflows/builds.yml` and
+`.github/workflows/release.yml`.
+
+`INSTALL_SIMULATION_DEPS` defaults to `true` for the interactive Jazzy
+devcontainer. Core CI disables it so optional Gazebo, Nav2, Foxglove, and robot
+demo packages do not determine whether the bridge supports a ROS distribution.
+`INSTALL_CPP_TOOLS` similarly keeps the exact formatter and static-analysis
+toolchain in the default development image while matrix builds use the
+dedicated C++ tools workflow.
+
+Humble must build the pinned LiveKit SDK from source because the generic Linux
+release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04
+provides. CI enables `BUILD_LIVEKIT_SDK_FROM_SOURCE` and sets
+`LIVEKIT_LOCAL_SDK_DIR=/opt/livekit-sdk` for Humble automatically.
 
 ## Shell Helpers
 

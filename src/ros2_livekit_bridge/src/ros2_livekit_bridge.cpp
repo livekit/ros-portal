@@ -38,6 +38,7 @@
 #include "ros2_livekit_bridge/cli/manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
+#include "ros2_livekit_bridge/room_connection_manager.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
 #include "ros2_livekit_bridge/utils/config_mapping.hpp"
@@ -80,6 +81,7 @@ bool Ros2LiveKitBridge::initialize() {
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
+  topics_ = config->topics;
 
   RCLCPP_INFO(this->get_logger(), "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu]",
               topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_);
@@ -94,11 +96,6 @@ bool Ros2LiveKitBridge::initialize() {
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s", url_source.c_str());
   RCLCPP_INFO(this->get_logger(), "LiveKit token resolved from %s", token_source.c_str());
 
-  RCLCPP_INFO(this->get_logger(), "Creating default room options");
-  livekit::RoomOptions room_options;
-  room_options.auto_subscribe = true;
-  room_options.dynacast = true;
-
   if (livekit_url.empty() || livekit_token.empty()) {
     RCLCPP_WARN(this->get_logger(),
                 "LiveKit credentials not fully provided — bridge will not connect.\n"
@@ -111,7 +108,6 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  RCLCPP_INFO(this->get_logger(), "Valid credentials found. Connecting to %s ...", livekit_url.c_str());
   // The LiveKit SDK lifecycle (livekit::initialize()/shutdown()) is owned by
   // the process entry point (the node main() or the test harness)
   room_ = std::make_unique<livekit::Room>();
@@ -122,33 +118,26 @@ bool Ros2LiveKitBridge::initialize() {
   // Warning: avoid doing ROS operations in delegate callbacks
   room_->setDelegate(this);
 
+  livekit::RoomOptions room_options;
+  room_options.auto_subscribe = true;
+  room_options.dynacast = true;
+  // The bridge owns retry cadence. Disable the Rust SDK's immediate inner join
+  // retries so each 1 Hz manager tick represents one connection attempt.
+  room_options.join_retries = 0U;
+
+  RoomConnectionManager::Methods connection_methods;
+  connection_methods.try_connect = [this, livekit_url, livekit_token, room_options]() {
+    return room_ && room_->connect(livekit_url, livekit_token, room_options);
+  };
+  room_connection_manager_ = std::make_unique<RoomConnectionManager>(std::move(connection_methods),
+                                                                     this->get_logger().get_child("connection"));
+  connection_diagnostics_->markDisconnected();
+
   // Room::connect() may emit events for data tracks that were already
-  // published. Install the forwarder first so those events are not dropped
-  // while the receiver joins the room.
-  if (!initializeTopicForwarder(config->topics)) {
+  // published. Install the forwarder before the first connection attempt so
+  // those events are not dropped while the receiver joins the room.
+  if (!initializeTopicForwarder(topics_)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
-    return false;
-  }
-
-  if (!room_->connect(livekit_url, livekit_token, room_options)) {
-    connection_diagnostics_->markDisconnected();
-    room_.reset();
-    RCLCPP_FATAL(this->get_logger(), "Failed to connect to LiveKit room.");
-    return false;
-  }
-
-  connection_diagnostics_->markConnected(*room_);
-
-  if (auto lp = room_->localParticipant().lock()) {
-    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
-                lp->identity().c_str());
-  } else {
-    RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
-    return false;
-  }
-
-  if (!initializeCliManager()) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
     return false;
   }
 
@@ -157,43 +146,115 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
 
-  if (!initializeLatchedTopicForwarder(config->topics)) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder");
-    return false;
-  }
-
   RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
 
-  poll_timer_ = this->create_wall_timer(std::chrono::milliseconds(topic_polling_period_ms_),
-                                        std::bind(&Ros2LiveKitBridge::pollTopics, this), reentrant_callback_group_);
-  connection_stats_timer_ = this->create_wall_timer(
-      std::chrono::seconds(1), std::bind(&Ros2LiveKitBridge::pollConnectionStats, this), reentrant_callback_group_);
+  poll_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(topic_polling_period_ms_), [this]() { pollTopics(); }, reentrant_callback_group_);
+  room_connection_timer_ = this->create_wall_timer(
+      RoomConnectionManager::kRetryInterval, [this]() { pollRoomConnection(); }, reentrant_callback_group_);
+  connection_stats_timer_ =
+      this->create_wall_timer(std::chrono::seconds(1), [this]() { pollConnectionStats(); }, reentrant_callback_group_);
 
-  // The bridge is considered initialized only once it is connected to a room
-  // (room_ is left null when credentials are absent or connection failed).
-  initialized_ = (room_ != nullptr);
-  return initialized_;
+  RCLCPP_INFO(this->get_logger(), "Bridge initialized; attempting LiveKit room connection at 1 Hz");
+  initialized_ = true;
+  return true;
 }
 
 Ros2LiveKitBridge::~Ros2LiveKitBridge() {
+  poll_timer_.reset();
+  room_connection_timer_.reset();
+  connection_stats_timer_.reset();
+  if (room_connection_manager_) {
+    room_connection_manager_->stop();
+  }
   service_forwarder_.reset();
-  cli_manager_.reset();
-  // Reset before room_ so the forwarder can unregister its RPC handler and stop
-  // its push worker (which reads the room roster) while the room is still alive.
-  latched_topic_forwarder_.reset();
-  topic_forwarder_.reset();
+  stopRoomComponents();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
+    room_->setDelegate(nullptr);
     room_.reset();
   }
+  room_connection_manager_.reset();
   // Note: livekit::shutdown() is intentionally NOT called here — the SDK
   // lifecycle is owned by the process entry point (see initialize()).
+}
+
+void Ros2LiveKitBridge::pollRoomConnection() {
+  if (!initialized_ || !room_connection_manager_) {
+    return;
+  }
+
+  if (room_session_ended_.exchange(false)) {
+    const std::lock_guard<std::mutex> lock(room_components_mutex_);
+    stopRoomComponents();
+  }
+
+  if (!room_connection_manager_->isConnected()) {
+    const std::lock_guard<std::mutex> lock(room_components_mutex_);
+    if (!topic_forwarder_ && !initializeTopicForwarder(topics_)) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to initialize topic forwarder before room connection; retrying");
+      return;
+    }
+  }
+
+  const bool was_connected = room_connection_manager_->isConnected();
+  room_connection_manager_->poll();
+  if (!room_connection_manager_->isConnected()) {
+    return;
+  }
+
+  if (!was_connected && connection_diagnostics_ && room_) {
+    connection_diagnostics_->markConnected(*room_);
+  }
+
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  if (!startRoomComponents()) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to start room-bound bridge components; retrying");
+  }
+}
+
+bool Ros2LiveKitBridge::startRoomComponents() {
+  if (room_components_started_) {
+    return true;
+  }
+
+  if (!topic_forwarder_ && !initializeTopicForwarder(topics_)) {
+    stopRoomComponents();
+    return false;
+  }
+  if (!initializeCliManager()) {
+    stopRoomComponents();
+    return false;
+  }
+  if (!initializeLatchedTopicForwarder(topics_)) {
+    stopRoomComponents();
+    return false;
+  }
+
+  room_components_started_ = true;
+  return true;
+}
+
+void Ros2LiveKitBridge::stopRoomComponents() {
+  // Reset before room_ so RPC handlers and workers can release room state.
+  cli_manager_.reset();
+  latched_topic_forwarder_.reset();
+  topic_forwarder_.reset();
+  room_components_started_ = false;
 }
 
 void Ros2LiveKitBridge::pollTopics() {
   if (!initialized_) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                          "Polling topics while bridge is not initialized, skipping...");
+    return;
+  }
+  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+    return;
+  }
+
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  if (!room_components_started_) {
     return;
   }
 
@@ -207,7 +268,7 @@ void Ros2LiveKitBridge::pollTopics() {
 }
 
 void Ros2LiveKitBridge::pollConnectionStats() {
-  if (room_ && connection_diagnostics_) {
+  if (room_connection_manager_ && room_connection_manager_->isConnected() && room_ && connection_diagnostics_) {
     connection_diagnostics_->pollStats(*room_);
   }
 }
@@ -218,12 +279,14 @@ void Ros2LiveKitBridge::onDataTrackPublished(livekit::Room&, const livekit::Data
     return;
   }
 
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
   if (topic_forwarder_) {
     topic_forwarder_->onDataTrackPublished(event.track);
   }
 }
 
 void Ros2LiveKitBridge::onDataTrackUnpublished(livekit::Room&, const livekit::DataTrackUnpublishedEvent& event) {
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
   if (topic_forwarder_) {
     topic_forwarder_->onDataTrackUnpublished(event.sid);
   }
@@ -250,18 +313,34 @@ void Ros2LiveKitBridge::onConnectionStateChanged(livekit::Room& room,
 }
 
 void Ros2LiveKitBridge::onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event) {
+  if (room_connection_manager_) {
+    room_connection_manager_->onDisconnected(static_cast<std::uint32_t>(event.reason));
+  }
   if (connection_diagnostics_) {
     connection_diagnostics_->onDisconnected(room, event);
   }
 }
 
+void Ros2LiveKitBridge::onRoomEos(livekit::Room&, const livekit::RoomEosEvent&) {
+  room_session_ended_.store(true);
+  if (room_connection_manager_) {
+    room_connection_manager_->onRoomEos();
+  }
+}
+
 void Ros2LiveKitBridge::onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event) {
+  if (room_connection_manager_) {
+    room_connection_manager_->onReconnecting();
+  }
   if (connection_diagnostics_) {
     connection_diagnostics_->onReconnecting(room, event);
   }
 }
 
 void Ros2LiveKitBridge::onReconnected(livekit::Room& room, const livekit::ReconnectedEvent& event) {
+  if (room_connection_manager_) {
+    room_connection_manager_->onReconnected();
+  }
   if (connection_diagnostics_) {
     connection_diagnostics_->onReconnected(room, event);
   }
@@ -315,7 +394,10 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
       }
 
       auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-      writer->try_push = [track = std::move(track)](std::vector<std::uint8_t> payload) {
+      writer->try_push = [this, track = std::move(track)](std::vector<std::uint8_t> payload) {
+        if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+          return livekit::Result<void, std::string>::success();
+        }
         const auto push_result = track->tryPush(std::move(payload));
         if (!push_result) {
           const auto& error = push_result.error();
@@ -365,8 +447,11 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
         auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
         sink->width = width;
         sink->height = height;
-        sink->capture_frame = [source = std::move(source), track = std::move(track)](const livekit::VideoFrame& frame,
-                                                                                     std::int64_t timestamp_us) {
+        sink->capture_frame = [this, source = std::move(source), track = std::move(track)](
+                                  const livekit::VideoFrame& frame, std::int64_t timestamp_us) {
+          if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+            return;
+          }
           (void)track;
           source->captureFrame(frame, timestamp_us);
         };
@@ -389,7 +474,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
 
 bool Ros2LiveKitBridge::initializeCliManager() {
   try {
-    const cli::Manager::LiveKitMethods cli_lk_methods{
+    cli::Manager::LiveKitMethods cli_lk_methods{
         [this](const std::string& id) { return hasParticipant(id); },
         [this](const std::string& id, const std::string& method, const std::string& payload, std::uint8_t timeout_sec) {
           return rpcPerform(id, method, payload, timeout_sec);
@@ -450,7 +535,7 @@ bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(
                                  std::uint8_t timeout_sec) { return rpcPerform(id, method, payload, timeout_sec); };
     methods.list_remote_identities = [this]() {
       std::vector<std::string> identities;
-      if (!room_) {
+      if (!room_connection_manager_ || !room_connection_manager_->isConnected() || !room_) {
         return identities;
       }
       for (const auto& weak_participant : room_->remoteParticipants()) {
@@ -477,6 +562,9 @@ bool Ros2LiveKitBridge::initializeLatchedTopicForwarder(
 }
 
 bool Ros2LiveKitBridge::hasParticipant(const std::string& participant_id) const {
+  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+    return false;
+  }
   if (!room_) {
     RCLCPP_ERROR(this->get_logger(), "Room is not available, cannot check for participant '%s'",
                  participant_id.c_str());
@@ -487,6 +575,9 @@ bool Ros2LiveKitBridge::hasParticipant(const std::string& participant_id) const 
 
 std::optional<std::string> Ros2LiveKitBridge::rpcPerform(const std::string& participant_id, const std::string& method,
                                                          const std::string& payload, std::uint8_t timeout_sec) {
+  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+    return std::nullopt;
+  }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
     RCLCPP_ERROR(this->get_logger(),
@@ -506,6 +597,9 @@ std::optional<std::string> Ros2LiveKitBridge::rpcPerform(const std::string& part
 }
 
 bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
+  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+    return false;
+  }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
     RCLCPP_WARN(this->get_logger(),
@@ -529,6 +623,9 @@ bool Ros2LiveKitBridge::rpcRegisterMethod(const std::string& method, RpcHandler 
 }
 
 bool Ros2LiveKitBridge::rpcUnregisterMethod(const std::string& method) {
+  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+    return false;
+  }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
     RCLCPP_WARN(this->get_logger(),

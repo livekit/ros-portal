@@ -19,12 +19,13 @@
 #include <livekit/room.h>
 #include <livekit/room_delegate.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "ros2_livekit_bridge/service_forwarder.hpp"
@@ -39,6 +40,7 @@ class ConnectionHealthDiagnostics;
 namespace cli {
 class Manager;
 } // namespace cli
+class RoomConnectionManager;
 class TopicForwarder;
 class LatchedTopicForwarder;
 
@@ -55,7 +57,8 @@ public:
   explicit Ros2LiveKitBridge(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   ~Ros2LiveKitBridge() override;
 
-  /// @brief Initialize bridge configuration, LiveKit connection, and polling.
+  /// @brief Initialize bridge configuration, LiveKit connection management,
+  /// and polling.
   /// @return True if initialization completed, false for expected startup
   /// failures that have already been logged.
   bool initialize();
@@ -78,6 +81,18 @@ private:
   /// @brief Poll LiveKit stats used by connection-health diagnostics.
   void pollConnectionStats();
 
+  /// @brief Run one manager-driven room connection attempt when needed.
+  void pollRoomConnection();
+
+  /// @brief Create components whose LiveKit state belongs to the current room
+  /// session.
+  /// @return True when all room-bound components are ready.
+  bool startRoomComponents();
+
+  /// @brief Destroy components whose LiveKit state belonged to the previous
+  /// room session.
+  void stopRoomComponents();
+
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
 
@@ -85,7 +100,7 @@ private:
   void onDataTrackUnpublished(livekit::Room& room, const livekit::DataTrackUnpublishedEvent& event) override;
 
   // The LiveKit room exposes a single delegate, so the bridge owns it and
-  // forwards connection-health events to the diagnostics helper below.
+  // forwards lifecycle events to the connection manager and diagnostics.
 
   /// @brief Forward participant-connected events to connection diagnostics.
   void onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event) override;
@@ -98,6 +113,9 @@ private:
 
   /// @brief Forward terminal disconnect events to connection diagnostics.
   void onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event) override;
+
+  /// @brief Report when the LiveKit room session reaches end-of-stream.
+  void onRoomEos(livekit::Room& room, const livekit::RoomEosEvent& event) override;
 
   /// @brief Forward reconnecting events to connection diagnostics.
   void onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event) override;
@@ -144,7 +162,7 @@ private:
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
   bool initializeCliManager();
 
-  /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
+  /// @brief Create ServiceForwarder independently of LiveKit room availability.
   /// @param services Configured services; outbound routes are derived here.
   /// @return True on success, false when the service forwarder could not be initialized.
   bool initializeServiceForwarder(const std::vector<ros2_livekit_bridge_config::ServiceConfig>& services);
@@ -176,9 +194,21 @@ private:
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics
   rclcpp::TimerBase::SharedPtr poll_timer_;
+  //! @brief Timer driving room connection attempts at 1 Hz.
+  rclcpp::TimerBase::SharedPtr room_connection_timer_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
+  //! @brief Room connection lifecycle and retry state.
+  std::unique_ptr<RoomConnectionManager> room_connection_manager_;
+  //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
+  std::atomic_bool room_session_ended_{false};
+  //! @brief Whether room-session-bound forwarding components are active.
+  bool room_components_started_{false};
+  //! @brief Serializes room component start, stop, polling, and delegate access.
+  std::mutex room_components_mutex_;
+  //! @brief Stored topic configuration used to recreate components after reconnect.
+  std::vector<ros2_livekit_bridge_config::TopicConfig> topics_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.
   std::unique_ptr<TopicForwarder> topic_forwarder_;
   //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.

@@ -46,7 +46,6 @@ ros2_livekit_bridge:
   EXPECT_EQ(config.version, "0.0.1");
   EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
-  EXPECT_FALSE(config.room_options.join_retries.has_value());
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());
 }
@@ -58,8 +57,6 @@ ros2_livekit_bridge:
   version: "0.0.1"
   topic_polling_period_ms: 500
   ros_threads: 4
-  room_options:
-    join_retries: 3
   services:
     - service: "/go_to_pose"
       direction: "out"
@@ -85,9 +82,6 @@ ros2_livekit_bridge:
 
   EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
-
-  ASSERT_TRUE(config.room_options.join_retries.has_value());
-  EXPECT_EQ(*config.room_options.join_retries, 3);
 
   ASSERT_EQ(config.services.size(), 2u);
   EXPECT_EQ(config.services[0].service, "/go_to_pose");
@@ -181,17 +175,6 @@ ros2_livekit_bridge:
     direction: "out"
 )",
       "expected sequence");
-}
-
-TEST(ConfigParserTest, RejectsWrongMapType) {
-  expectInvalid(
-      R"(
-ros2_livekit_bridge:
-  version: "0.0.1"
-  room_options:
-    - join_retries
-)",
-      "expected map");
 }
 
 TEST(ConfigParserTest, RejectsInvalidServiceDirection) {
@@ -293,17 +276,6 @@ ros2_livekit_bridge:
       direction: "out"
 )",
       "expected nonempty string");
-}
-
-TEST(ConfigParserTest, RejectsInvalidJoinRetries) {
-  expectInvalid(
-      R"(
-ros2_livekit_bridge:
-  version: "0.0.1"
-  room_options:
-    join_retries: 0
-)",
-      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsInvalidVideoBitrate) {
@@ -450,8 +422,7 @@ TEST(ConfigParserTest, RejectsMissingVersion) {
   expectInvalid(
       R"(
 ros2_livekit_bridge:
-  room_options:
-    join_retries: 3
+  ros_threads: 4
 )",
       "missing required field");
 }
@@ -464,6 +435,17 @@ ros2_livekit_bridge:
   room_name: "robo_room"
 )",
       "unknown field 'room_name'");
+}
+
+TEST(ConfigParserTest, RejectsRemovedRoomOptionsField) {
+  expectInvalid(
+      R"(
+ros2_livekit_bridge:
+  version: "0.0.1"
+  room_options:
+    join_retries: 3
+)",
+      "unknown field 'room_options'");
 }
 
 TEST(ConfigParserTest, RejectsMissingServiceDirection) {
@@ -513,17 +495,6 @@ ros2_livekit_bridge:
       participant: ""
 )",
       "expected nonempty string");
-}
-
-TEST(ConfigParserTest, RejectsNonIntegerJoinRetries) {
-  expectInvalid(
-      R"(
-ros2_livekit_bridge:
-  version: "0.0.1"
-  room_options:
-    join_retries: "three"
-)",
-      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {

@@ -95,10 +95,10 @@ constexpr const char* kGoodConfig =
 )";
 
 TEST_F(BridgeConfigPathTest, InitializeReadsConfigPathParameter) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
-  TemporaryConfigFile config{kGoodConfig};
+  const TemporaryConfigFile config{kGoodConfig};
 
   rclcpp::NodeOptions options;
   options.parameter_overrides({
@@ -111,9 +111,27 @@ TEST_F(BridgeConfigPathTest, InitializeReadsConfigPathParameter) {
   EXPECT_EQ(bridge->ros_threads(), 3);
 }
 
+TEST_F(BridgeConfigPathTest, InitializeDoesNotRequireReachableSfu) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
+  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-until-connection-timer-runs", 1), 0);
+  const TemporaryConfigFile config{kGoodConfig};
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+      rclcpp::Parameter("config_path", config.path().string()),
+  });
+
+  auto bridge = std::make_shared<Ros2LiveKitBridge>(options);
+
+  EXPECT_TRUE(bridge->initialize());
+  EXPECT_EQ(bridge->ros_threads(), 3);
+}
+
 TEST_F(BridgeConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
   const auto missing_path =
       std::filesystem::temp_directory_path() / "ros2_livekit_bridge_config_path_test_missing.yaml";

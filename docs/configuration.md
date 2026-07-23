@@ -29,15 +29,14 @@ All config lives under `ros2_livekit_bridge`.
 | `version` | string | yes | - | Must be `"0.0.1"`. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
 | `ros_threads` | integer | no | `4` | ROS executor thread count. Use `0` for the rclcpp default. Keep this greater than `1` when using remote CLI services so a pending LiveKit RPC does not occupy the only executor thread. |
-| `room_options` | map | no | `{}` | LiveKit room connection options. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
 
-## Room Options
+## Connection Lifecycle
 
-| Field | Type | Required | Description |
-|---|---:|---:|---|
-| `join_retries` | integer | no | Number of join retries. Must be positive. |
+`LIVEKIT_URL` and `LIVEKIT_TOKEN` must be present at startup, but the SFU may
+start before or after the bridge. The bridge attempts to join once per second
+until connected and resumes that loop after a terminal disconnect.
 
 ## Services
 

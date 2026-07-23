@@ -231,6 +231,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
+  src/room_connection_manager.cpp
   src/ros2_livekit_bridge.cpp
   src/schema_manager.cpp
   src/service_forwarder.cpp

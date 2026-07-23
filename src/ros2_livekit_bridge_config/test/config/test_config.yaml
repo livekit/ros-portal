@@ -18,9 +18,6 @@ ros2_livekit_bridge:
   topic_polling_period_ms: 500
   ros_threads: 4
 
-  room_options:
-    join_retries: 3
-
   services:
     # Services only support "direction: out". Each route creates a local ROS
     # service server that forwards calls to the configured LiveKit participant.

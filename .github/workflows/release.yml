@@ -80,9 +80,9 @@ jobs:
             ros_image_tag: lyrical-ros-base-resolute
     env:
       BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ matrix.ros_distro == 'humble' && 'true' || 'false' }}
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
-      LIVEKIT_LOCAL_SDK_DIR: ${{ matrix.ros_distro == 'humble' && '/opt/livekit-sdk' || '' }}
       ROS_DISTRO: ${{ matrix.ros_distro }}
       ROS_IMAGE: ros:${{ matrix.ros_image_tag }}@sha256:${{ matrix.ros_image_digest }}
       ROS_IMAGE_DIGEST: ${{ matrix.ros_image_digest }}

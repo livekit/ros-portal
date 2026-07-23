@@ -26,7 +26,6 @@ ROS_DISTRO=humble \
 ROS_IMAGE_TAG=humble-ros-base-jammy \
 ROS_IMAGE_DIGEST=afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16 \
 BUILD_LIVEKIT_SDK_FROM_SOURCE=true \
-LIVEKIT_LOCAL_SDK_DIR=/opt/livekit-sdk \
 INSTALL_CPP_TOOLS=false \
 INSTALL_SIMULATION_DEPS=false \
 devcontainer up --workspace-folder .
@@ -34,7 +33,7 @@ devcontainer up --workspace-folder .
 
 Use `jazzy-ros-base-noble`, `kilted-ros-base-noble`, or
 `lyrical-ros-base-resolute` for the other supported distributions. CI pins
-these image tags by digest in `.github/workflows/builds.yml` and
+these image tags by digest in `.github/workflows/distros.yml` and
 `.github/workflows/release.yml`.
 
 `INSTALL_SIMULATION_DEPS` defaults to `true` for the interactive Jazzy
@@ -46,8 +45,8 @@ dedicated C++ tools workflow.
 
 Humble must build the pinned LiveKit SDK from source because the generic Linux
 release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04
-provides. CI enables `BUILD_LIVEKIT_SDK_FROM_SOURCE` and sets
-`LIVEKIT_LOCAL_SDK_DIR=/opt/livekit-sdk` for Humble automatically.
+provides. CI installs the source-build toolchain in the Humble image and asks
+the bridge CMake configuration to build the SDK checkout from `external.repos`.
 
 ## Shell Helpers
 
@@ -100,6 +99,25 @@ The default build downloads the pinned LiveKit SDK release during CMake
 configure. The pinned version lives in `src/ros2_livekit_bridge/colcon.pkg` and
 as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable in
 `src/ros2_livekit_bridge/CMakeLists.txt`. Bump both together when upgrading.
+
+Initialize the pinned SDK source checkout with the other external repositories:
+
+```bash
+mkdir -p src/externals
+vcs import --recursive src/externals < external.repos
+```
+
+To compile the SDK from that checkout and build the bridge against the
+resulting package:
+
+```bash
+colcon build --packages-select ros2_livekit_bridge \
+  --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
+```
+
+The SDK uses isolated build and install directories under the bridge package's
+colcon build directory. Its source build defaults to two parallel jobs. Set
+`CMAKE_BUILD_PARALLEL_LEVEL` or `LIVEKIT_SDK_BUILD_JOBS` to override that bound.
 
 ### One-Off SDK Version Override
 

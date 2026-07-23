@@ -16,7 +16,7 @@
 
 #include "ros2_livekit_bridge/schema_manager.hpp"
 
-#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+#ifdef ROS_DISTRO_HUMBLE
 #include <ament_index_cpp/get_resource.hpp>
 #include <filesystem>
 #include <fstream>
@@ -29,9 +29,10 @@
 #include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
 #endif
 
+#include <openssl/sha.h>
+
 #include <array>
 #include <exception>
-#include <openssl/sha.h>
 #include <rclcpp/logging.hpp>
 #include <stdexcept>
 #include <utility>
@@ -40,14 +41,13 @@
 
 namespace ros2_livekit_bridge {
 
-#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+#ifdef ROS_DISTRO_HUMBLE
 namespace {
 
 enum class DefinitionFormat { kMsg, kIdl };
 
 constexpr std::size_t kMaxDefinitionDepth = 50;
-const std::regex kPackageTypeRegex{
-    R"(^([a-zA-Z0-9_]+)(?:/[a-zA-Z0-9_]+)*/(?:msg/|srv/)?([a-zA-Z0-9_]+)$)"};
+const std::regex kPackageTypeRegex{R"(^([a-zA-Z0-9_]+)(?:/[a-zA-Z0-9_]+)*/(?:msg/|srv/)?([a-zA-Z0-9_]+)$)"};
 const std::regex kMsgFieldTypeRegex{R"((?:^|\n)\s*([a-zA-Z0-9_/]+)(?:\[[^\]]*\])?\s+)"};
 const std::regex kIdlFieldTypeRegex{R"((?:^|\n)#include\s+(?:"|<)([a-zA-Z0-9_/]+)\.idl(?:"|>))"};
 const std::unordered_set<std::string> kPrimitiveTypes{
@@ -60,9 +60,7 @@ struct DefinitionSpec {
   std::string text;
 };
 
-std::string definitionExtension(DefinitionFormat format) {
-  return format == DefinitionFormat::kMsg ? ".msg" : ".idl";
-}
+std::string definitionExtension(DefinitionFormat format) { return format == DefinitionFormat::kMsg ? ".msg" : ".idl"; }
 
 std::string definitionDelimiter(DefinitionFormat format, const std::string& type) {
   return "================================================================================\n" +
@@ -106,8 +104,8 @@ DefinitionSpec loadDefinition(const std::string& type, DefinitionFormat format) 
 std::set<std::string> definitionDependencies(const DefinitionSpec& spec, DefinitionFormat format) {
   std::set<std::string> dependencies;
   const std::regex& pattern = format == DefinitionFormat::kMsg ? kMsgFieldTypeRegex : kIdlFieldTypeRegex;
-  for (std::sregex_iterator iterator(spec.text.begin(), spec.text.end(), pattern);
-       iterator != std::sregex_iterator(); ++iterator) {
+  for (std::sregex_iterator iterator(spec.text.begin(), spec.text.end(), pattern); iterator != std::sregex_iterator();
+       ++iterator) {
     std::string type = (*iterator)[1].str();
     if (format == DefinitionFormat::kMsg && kPrimitiveTypes.count(type) != 0U) {
       continue;
@@ -120,8 +118,8 @@ std::set<std::string> definitionDependencies(const DefinitionSpec& spec, Definit
   return dependencies;
 }
 
-std::string appendDefinition(const std::string& type, DefinitionFormat format,
-                             std::unordered_set<std::string>& seen, std::size_t depth) {
+std::string appendDefinition(const std::string& type, DefinitionFormat format, std::unordered_set<std::string>& seen,
+                             std::size_t depth) {
   if (depth == 0U) {
     throw std::runtime_error("Message definition exceeded maximum dependency depth: " + type);
   }
@@ -130,8 +128,7 @@ std::string appendDefinition(const std::string& type, DefinitionFormat format,
   std::string result = spec.text;
   for (const auto& dependency : definitionDependencies(spec, format)) {
     if (seen.insert(dependency).second) {
-      result += "\n" + definitionDelimiter(format, dependency) +
-                appendDefinition(dependency, format, seen, depth - 1U);
+      result += "\n" + definitionDelimiter(format, dependency) + appendDefinition(dependency, format, seen, depth - 1U);
     }
   }
   return result;
@@ -140,13 +137,12 @@ std::string appendDefinition(const std::string& type, DefinitionFormat format,
 RosMessageSchema renderLegacyRosMessageSchema(const std::string& topic_type) {
   try {
     std::unordered_set<std::string> seen{topic_type};
-    return RosMessageSchema{"ros2msg",
-                            appendDefinition(topic_type, DefinitionFormat::kMsg, seen, kMaxDefinitionDepth)};
+    return RosMessageSchema{"ros2msg", appendDefinition(topic_type, DefinitionFormat::kMsg, seen, kMaxDefinitionDepth)};
   } catch (const std::runtime_error&) {
     std::unordered_set<std::string> seen{topic_type};
-    return RosMessageSchema{
-        "ros2idl", definitionDelimiter(DefinitionFormat::kIdl, topic_type) +
-                       appendDefinition(topic_type, DefinitionFormat::kIdl, seen, kMaxDefinitionDepth)};
+    return RosMessageSchema{"ros2idl",
+                            definitionDelimiter(DefinitionFormat::kIdl, topic_type) +
+                                appendDefinition(topic_type, DefinitionFormat::kIdl, seen, kMaxDefinitionDepth)};
   }
 }
 
@@ -159,7 +155,7 @@ std::optional<RosMessageSchema> SchemaManager::renderRosMessageSchema(const std:
   }
 
   try {
-#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+#ifdef ROS_DISTRO_HUMBLE
     return renderLegacyRosMessageSchema(topic_type);
 #else
     rosbag2_cpp::LocalMessageDefinitionSource source;

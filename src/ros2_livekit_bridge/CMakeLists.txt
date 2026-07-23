@@ -43,17 +43,30 @@ ament_auto_find_build_dependencies(REQUIRED
   std_msgs
   yaml_cpp_vendor)
 
+set(_ros_distro "$ENV{ROS_DISTRO}")
+if(_ros_distro)
+  string(TOUPPER "${_ros_distro}" _ros_distro_upper)
+  string(REGEX REPLACE "[^A-Z0-9_]" "_" _ros_distro_upper
+    "${_ros_distro_upper}")
+  add_compile_definitions("ROS_DISTRO_${_ros_distro_upper}=1")
+  message(STATUS "ROS distribution      : ${_ros_distro} (ROS_DISTRO_${_ros_distro_upper})")
+else()
+  message(WARNING
+    "ROS_DISTRO is not set; no ROS_DISTRO_<NAME> compatibility macro will be defined")
+endif()
+
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
 #
-# Use a local install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release
-# asset from GitHub. By default, a pinned SDK version is downloaded (see
-# LIVEKIT_SDK_VERSION below). The same pin is mirrored in this package's
-# colcon.pkg so that a bare `colcon build` is reproducible without the pin
-# leaking into other packages' CMake invocations.
+# Build the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE, use a local
+# install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release asset from
+# GitHub. The same version pin is mirrored in this package's colcon.pkg.
 #
 # Examples:
 #   colcon build --packages-select ros2_livekit_bridge
+#
+#   colcon build --packages-select ros2_livekit_bridge \
+#     --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
 #
 #   export LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk
 #   colcon build --packages-select ros2_livekit_bridge
@@ -62,12 +75,23 @@ ament_auto_find_build_dependencies(REQUIRED
 #   colcon build --packages-select ros2_livekit_bridge \
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
-# If you build the SDK locally for use here, build the SDK itself with
-# -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
-# affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
 set(LIVEKIT_SDK_VERSION "1.5.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
+option(LIVEKIT_BUILD_SDK_FROM_SOURCE
+  "Build the pinned client-sdk-cpp checkout instead of downloading an SDK archive"
+  OFF)
+set(LIVEKIT_SDK_SOURCE_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/../externals/client-sdk-cpp" CACHE PATH
+  "Path to a client-sdk-cpp source checkout")
+set(_livekit_sdk_default_build_jobs 2)
+if(DEFINED ENV{CMAKE_BUILD_PARALLEL_LEVEL}
+    AND NOT "$ENV{CMAKE_BUILD_PARALLEL_LEVEL}" STREQUAL "")
+  set(_livekit_sdk_default_build_jobs "$ENV{CMAKE_BUILD_PARALLEL_LEVEL}")
+endif()
+set(LIVEKIT_SDK_BUILD_JOBS "${_livekit_sdk_default_build_jobs}" CACHE STRING
+  "Maximum parallel jobs for a LiveKit SDK source build")
+unset(_livekit_sdk_default_build_jobs)
 set(LIVEKIT_SDK_SHA256 "" CACHE STRING
   "Optional SHA-256 checksum for the LiveKit C++ SDK archive")
 set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
@@ -97,6 +121,30 @@ if(LIVEKIT_SDK_DIR AND NOT LIVEKIT_LOCAL_SDK_DIR)
   set(LIVEKIT_LOCAL_SDK_DIR "${LIVEKIT_SDK_DIR}" CACHE PATH
     "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}."
     FORCE)
+endif()
+
+if(LIVEKIT_BUILD_SDK_FROM_SOURCE AND LIVEKIT_LOCAL_SDK_DIR)
+  message(FATAL_ERROR
+    "LIVEKIT_BUILD_SDK_FROM_SOURCE and LIVEKIT_LOCAL_SDK_DIR are mutually exclusive")
+endif()
+
+if(LIVEKIT_BUILD_SDK_FROM_SOURCE)
+  if(NOT LIVEKIT_SDK_BUILD_JOBS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR
+      "LIVEKIT_SDK_BUILD_JOBS must be a positive integer, got: ${LIVEKIT_SDK_BUILD_JOBS}")
+  endif()
+  include(BuildLiveKitSDK)
+  set(_livekit_source_install_dir
+    "${CMAKE_BINARY_DIR}/_deps/livekit-sdk-source-install")
+  livekit_build_sdk_from_source(
+    SOURCE_DIR "${LIVEKIT_SDK_SOURCE_DIR}"
+    BUILD_DIR "${CMAKE_BINARY_DIR}/_deps/livekit-sdk-source-build"
+    INSTALL_DIR "${_livekit_source_install_dir}"
+    JOBS "${LIVEKIT_SDK_BUILD_JOBS}"
+    VERSION "${LIVEKIT_SDK_VERSION}"
+  )
+  set(LIVEKIT_LOCAL_SDK_DIR "${_livekit_source_install_dir}")
+  unset(_livekit_source_install_dir)
 endif()
 
 if(LIVEKIT_LOCAL_SDK_DIR)
@@ -223,10 +271,6 @@ ament_auto_add_library(introspection_lib SHARED
   src/introspection/introspection_utils.cpp
   src/introspection/runtime_type_support.cpp
 )
-if(rclcpp_VERSION VERSION_LESS "21.0.0")
-  target_compile_definitions(introspection_lib PRIVATE
-    ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP)
-endif()
 target_link_libraries(introspection_lib
   nlohmann_json::nlohmann_json
   yaml-cpp::yaml-cpp
@@ -248,10 +292,6 @@ ament_auto_add_library(ros2_cli_lib SHARED
   src/cli/utils.cpp
   src/cli/manager.cpp
 )
-if(rclcpp_VERSION VERSION_LESS "21.0.0")
-  target_compile_definitions(ros2_cli_lib PRIVATE
-    ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP)
-endif()
 target_link_libraries(ros2_cli_lib
   introspection_lib
   "${LIVEKIT_CORE_TARGET}"
@@ -276,10 +316,6 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
-if(rclcpp_VERSION VERSION_LESS "21.0.0")
-  target_compile_definitions(ros2_livekit_bridge_lib PRIVATE
-    ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP)
-endif()
 target_link_libraries(ros2_livekit_bridge_lib
   introspection_lib
   ros2_cli_lib

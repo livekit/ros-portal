@@ -77,6 +77,11 @@ set -u
 rm -rf "${work_root}" "${install_prefix}"
 mkdir -p "${build_base}" "${log_base}" "${output_dir}"
 
+declare -a cmake_args=(-DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release)
+if [[ "${BUILD_LIVEKIT_SDK_FROM_SOURCE:-false}" == "true" ]]; then
+  cmake_args+=(-DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON)
+fi
+
 colcon --log-base "${log_base}" build \
   --base-paths \
     "${repo_root}/src/ros2_livekit_bridge" \
@@ -88,7 +93,7 @@ colcon --log-base "${log_base}" build \
   --install-base "${install_prefix}" \
   --merge-install \
   --packages-up-to ros2_livekit_bridge \
-  --cmake-args -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+  --cmake-args "${cmake_args[@]}"
 
 mkdir -p "${package_root}${install_prefix}" "${package_root}/usr/bin"
 cp -a "${install_prefix}/." "${package_root}${install_prefix}/"

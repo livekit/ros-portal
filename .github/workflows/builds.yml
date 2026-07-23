@@ -33,64 +33,22 @@ jobs:
     name: C++ Tools
     uses: ./.github/workflows/cpp-tools.yml
 
+  ros-distros:
+    name: ROS Distributions
+    uses: ./.github/workflows/distros.yml
+
   build-and-test:
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: humble
-            ros_image_digest: afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16
-            ros_image_tag: humble-ros-base-jammy
+            name: linux-x64
           - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: humble
-            ros_image_digest: afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16
-            ros_image_tag: humble-ros-base-jammy
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: jazzy
-            ros_image_digest: 31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f
-            ros_image_tag: jazzy-ros-base-noble
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: jazzy
-            ros_image_digest: 31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f
-            ros_image_tag: jazzy-ros-base-noble
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: kilted
-            ros_image_digest: 5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702
-            ros_image_tag: kilted-ros-base-noble
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: kilted
-            ros_image_digest: 5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702
-            ros_image_tag: kilted-ros-base-noble
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: lyrical
-            ros_image_digest: 728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f
-            ros_image_tag: lyrical-ros-base-resolute
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: lyrical
-            ros_image_digest: 728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f
-            ros_image_tag: lyrical-ros-base-resolute
+            name: linux-arm64
 
-    name: Build and Tests (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    name: Build and Tests (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    env:
-      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ matrix.ros_distro == 'humble' && 'true' || 'false' }}
-      INSTALL_CPP_TOOLS: "false"
-      INSTALL_SIMULATION_DEPS: "false"
-      LIVEKIT_LOCAL_SDK_DIR: ${{ matrix.ros_distro == 'humble' && '/opt/livekit-sdk' || '' }}
-      ROS_DISTRO: ${{ matrix.ros_distro }}
-      ROS_IMAGE_DIGEST: ${{ matrix.ros_image_digest }}
-      ROS_IMAGE_REPOSITORY: ros
-      ROS_IMAGE_TAG: ${{ matrix.ros_image_tag }}
 
     steps:
       - name: Check out repository
@@ -118,9 +76,10 @@ jobs:
           runCmd: |
             bash -lc '
               set -eo pipefail
-              source "/opt/ros/${ROS_DISTRO}/setup.bash"
+              source /opt/ros/jazzy/setup.bash
               set -u
-              colcon build --packages-up-to ros2_livekit_bridge
+              # target specific packages to avoid unneeded/wanted dependencies
+              colcon build --packages-up-to ros2_livekit_bridge test_utilities custom_msgs waveshare_launch
             '
 
       - name: "colcon test: unit"
@@ -131,7 +90,7 @@ jobs:
           runCmd: |
             bash -lc '
               set -eo pipefail
-              source "/opt/ros/${ROS_DISTRO}/setup.bash"
+              source /opt/ros/jazzy/setup.bash
               source install/setup.bash
               set -u
 
@@ -139,7 +98,8 @@ jobs:
               # --ctest-args -R ros2_livekit_bridge_unit_tests runs only the unit tests
               test_exit=0
               GTEST_COLOR=1 colcon test \
-                --packages-select ros2_livekit_bridge \
+                --packages-up-to ros2_livekit_bridge test_utilities custom_msgs waveshare_launch \
+                --packages-skip ros2_medkit_serialization \
                 --event-handlers console_direct+ \
                 --return-code-on-test-failure \
                 --ctest-args -R ros2_livekit_bridge_unit_tests \
@@ -176,7 +136,7 @@ jobs:
           runCmd: |
             bash -lc '
               set -eo pipefail
-              source "/opt/ros/${ROS_DISTRO}/setup.bash"
+              source /opt/ros/jazzy/setup.bash
               source install/setup.bash
               set -u
 

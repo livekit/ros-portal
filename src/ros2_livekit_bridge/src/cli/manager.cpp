@@ -47,7 +47,7 @@ typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeIn
                                                            const char* service_name, CallbackT callback,
                                                            const rclcpp::CallbackGroup::SharedPtr& callback_group) {
   try {
-#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+#ifdef ROS_DISTRO_HUMBLE
     const auto services_qos = rmw_qos_profile_services_default;
 #else
     const auto services_qos = rclcpp::ServicesQoS();

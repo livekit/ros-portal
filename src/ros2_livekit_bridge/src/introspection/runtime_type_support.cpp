@@ -36,7 +36,7 @@ constexpr char kResponseMessageTypeSuffix[] = "_Response";
 const rosidl_message_type_support_t* messageTypeSupportHandle(const std::string& type,
                                                               const std::string& typesupport_identifier,
                                                               rcpputils::SharedLibrary& library) {
-#ifdef ROS2_LIVEKIT_BRIDGE_LEGACY_RCLCPP
+#ifdef ROS_DISTRO_HUMBLE
   return rclcpp::get_typesupport_handle(type, typesupport_identifier, library);
 #else
   return rclcpp::get_message_typesupport_handle(type, typesupport_identifier, library);
@@ -75,8 +75,8 @@ RuntimeMessageTypeSupport::RuntimeMessageTypeSupport(const std::string& type)
           rclcpp::get_typesupport_library(type, rosidl_typesupport_introspection_cpp::typesupport_identifier)),
       serialization_handle(
           messageTypeSupportHandle(type, rosidl_typesupport_cpp::typesupport_identifier, *serialization_library)),
-      introspection_handle(messageTypeSupportHandle(
-          type, rosidl_typesupport_introspection_cpp::typesupport_identifier, *introspection_library)),
+      introspection_handle(messageTypeSupportHandle(type, rosidl_typesupport_introspection_cpp::typesupport_identifier,
+                                                    *introspection_library)),
       members(requireMembers(introspection_handle)),
       serializer(serialization_handle) {}
 

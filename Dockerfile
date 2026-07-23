@@ -24,6 +24,7 @@ ARG LIVEKIT_LOCAL_SDK_DIR=
 ARG ROS_DISTRO=jazzy
 ARG WS_ROS
 ENV DEBIAN_FRONTEND=noninteractive
+ENV BUILD_LIVEKIT_SDK_FROM_SOURCE=${BUILD_LIVEKIT_SDK_FROM_SOURCE}
 ENV LIVEKIT_LOCAL_SDK_DIR=${LIVEKIT_LOCAL_SDK_DIR}
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENV USER=root
@@ -91,7 +92,8 @@ RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-teleop-twist-keyboard
 
 # Humble's Ubuntu 22.04 runtime is older than the generic LiveKit SDK release
-# artifacts. Build the pinned SDK source in that image to preserve its ABI.
+# artifacts. Install the toolchain needed for the colcon build to compile the
+# pinned SDK vcstool checkout in that image.
 RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \
@@ -118,20 +120,7 @@ RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
        rm -rf /var/lib/apt/lists/*; \
      fi
 
-RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
-      git clone --recurse-submodules https://github.com/livekit/client-sdk-cpp.git \
-        /tmp/client-sdk-cpp && \
-      git -C /tmp/client-sdk-cpp checkout 4c62bfef2c081ff59d462ce56389642ee2c90703 && \
-      git -C /tmp/client-sdk-cpp submodule update --init --recursive && \
-      cd /tmp/client-sdk-cpp && \
-      PATH="/root/.cargo/bin:${PATH}" \
-      CMAKE_BUILD_PARALLEL_LEVEL=2 \
-        ./build.sh release \
-          --bundle \
-          --prefix "${LIVEKIT_LOCAL_SDK_DIR}" \
-          --version 1.5.0-rc2 && \
-      rm -rf /tmp/client-sdk-cpp /root/.cargo/registry; \
-    fi
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Optional demo and simulation dependencies. Core CI disables these because
 # their release cadence is independent of the bridge and ROS distribution.

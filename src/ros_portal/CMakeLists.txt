@@ -221,11 +221,12 @@ target_link_libraries(ros2_cli_lib
 livekit_set_runtime_rpath(ros2_cli_lib)
 
 # ---------------------------------------------------------------------------
-# ROS Portal library
+# Bridge library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros_portal_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
+  src/room_connection_manager.cpp
   src/ros_portal.cpp
   src/schema/manager.cpp
   src/schema/renderer.cpp
@@ -251,7 +252,7 @@ target_link_libraries(ros_portal_lib
 livekit_set_runtime_rpath(ros_portal_lib)
 
 # ---------------------------------------------------------------------------
-# Main ROS Portal node
+# Main bridge node
 # ---------------------------------------------------------------------------
 ament_auto_add_executable(ros_portal_node
   src/ros_portal_node.cpp

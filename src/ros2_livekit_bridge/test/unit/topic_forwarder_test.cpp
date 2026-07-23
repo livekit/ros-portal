@@ -22,6 +22,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -35,9 +37,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <diagnostic_msgs/msg/diagnostic_status.hpp>
-#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 
 #include "ros2_livekit_bridge/schema_manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"

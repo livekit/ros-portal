@@ -153,14 +153,14 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
 /// publish diagnostics directly from SDK threads.
 class ConnectionHealthDiagnostics final {
 public:
-  /// Register the connection health task with the shared bridge diagnostics hub.
+  /// Register the connection health task with the shared diagnostics manager.
   ///
-  /// @param hub Shared diagnostics hub that owns the updater and publisher.
-  explicit ConnectionHealthDiagnostics(DiagnosticsManager& hub);
+  /// @param diagnostics Shared diagnostics manager that owns the updater and publisher.
+  explicit ConnectionHealthDiagnostics(DiagnosticsManager& diagnostics);
 
-  /// Remove the registered connection health task from the shared hub.
+  /// Remove the registered connection health task from the shared manager.
   ///
-  /// The hub must outlive this helper because its timer owns the registered
+  /// The diagnostics manager must outlive this helper because its timer owns the registered
   /// callback until this destructor deregisters it.
   ~ConnectionHealthDiagnostics();
 
@@ -223,8 +223,8 @@ private:
   /// Latest connection state and RTC summary rendered by the diagnostic task.
   ConnectionHealthState state_;
 
-  /// Shared diagnostics hub that owns the registered `connection_health` task.
-  DiagnosticsManager* hub_;
+  /// Shared diagnostics manager that owns the registered `connection_health` task.
+  DiagnosticsManager* diagnostics_;
 
   /// In-flight asynchronous LiveKit stats request, if one is outstanding.
   std::optional<std::future<livekit::SessionStats>> pending_stats_;

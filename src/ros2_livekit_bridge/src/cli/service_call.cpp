@@ -117,6 +117,11 @@ ServiceCall::ServiceCall(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr b
 
 ServiceCall::~ServiceCall() = default;
 
+CacheStats ServiceCall::cacheStats() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return CacheStats{clients_.size(), kMaxCachedServiceClients, cache_full_rejections_};
+}
+
 ServiceCallSrv::Response ServiceCall::call(ServiceCallOptions options) {
   std::string resolved_service;
   try {
@@ -186,6 +191,7 @@ std::optional<ServiceCall::ClientPtr> ServiceCall::getClient(const std::string& 
     return existing->second;
   }
   if (clients_.size() >= kMaxCachedServiceClients) {
+    ++cache_full_rejections_;
     error = "service client cache limit reached";
     return std::nullopt;
   }

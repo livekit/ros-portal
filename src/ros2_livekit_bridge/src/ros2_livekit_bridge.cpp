@@ -36,8 +36,8 @@
 #include <vector>
 
 #include "ros2_livekit_bridge/cli/manager.hpp"
-#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
@@ -186,10 +186,10 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   // its push worker (which reads the room roster) while the room is still alive.
   latched_topic_forwarder_.reset();
   topic_forwarder_.reset();
-  // Reset task owners before the diagnostics hub so updater callbacks are
-  // deregistered while the shared updater is still alive.
   connection_stats_timer_.reset();
   connection_diagnostics_.reset();
+
+  // reset diagnostics_ after all its users are gone
   diagnostics_.reset();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");

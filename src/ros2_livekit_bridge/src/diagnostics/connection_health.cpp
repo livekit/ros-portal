@@ -23,7 +23,6 @@
 #include <cstdint>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <exception>
-#include <functional>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -371,15 +370,13 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
   }
 }
 
-ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManager& hub)
-    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt}, hub_(&hub) {
-  hub.add(kConnectionHealthTaskName,
-          std::bind(&ConnectionHealthDiagnostics::populateStatus, this, std::placeholders::_1));
+ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManager& diagnostics)
+    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt}, diagnostics_(&diagnostics) {
+  diagnostics.add(kConnectionHealthTaskName,
+                  [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 }
 
-ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() {
-  hub_->remove(kConnectionHealthTaskName);
-}
+ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() { diagnostics_->remove(kConnectionHealthTaskName); }
 
 void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
   {

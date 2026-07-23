@@ -21,8 +21,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
-#include <functional>
 #include <map>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -31,9 +32,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <diagnostic_msgs/msg/diagnostic_status.hpp>
-#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 
 #include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
@@ -108,7 +106,7 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
   callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   if (diagnostics_) {
     diagnostics_->add(kTopicForwarderDiagnosticTaskName,
-                      std::bind(&TopicForwarder::populateStatus, this, std::placeholders::_1));
+                      [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
   }
 }
 

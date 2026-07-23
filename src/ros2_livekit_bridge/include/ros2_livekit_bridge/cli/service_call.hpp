@@ -74,6 +74,10 @@ public:
   ///   response conversion fails.
   ServiceCallSrv::Response call(ServiceCallOptions options);
 
+  /// @brief Snapshot the runtime service-client cache utilization.
+  /// @return Current size, capacity, and cumulative cache-full rejection count.
+  CacheStats cacheStats() const;
+
 private:
   /// @brief Runtime service client for an arbitrary service type.
   ///
@@ -106,9 +110,11 @@ private:
   /// @brief Logger used for service-call diagnostics.
   rclcpp::Logger logger_;
   /// @brief Guards the runtime service client cache.
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   /// @brief Bounded service client cache keyed by resolved service and type.
   std::unordered_map<std::string, ClientPtr> clients_;
+  /// @brief Cumulative count of calls rejected because the cache was full.
+  std::uint64_t cache_full_rejections_{0};
 };
 
 } // namespace ros2_livekit_bridge::cli

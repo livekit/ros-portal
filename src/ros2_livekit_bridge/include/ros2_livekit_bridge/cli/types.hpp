@@ -141,4 +141,14 @@ struct ServiceInfo {
   std::vector<std::string> types;
 };
 
+/// @brief Bounded-cache utilization snapshot used for cache-pressure diagnostics.
+struct CacheStats {
+  //! @brief Number of entries currently held in the cache.
+  std::size_t size{0};
+  //! @brief Maximum number of entries the cache may hold.
+  std::size_t capacity{0};
+  //! @brief Cumulative count of requests rejected because the cache was full.
+  std::uint64_t cache_full_rejections{0};
+};
+
 } // namespace ros2_livekit_bridge::cli

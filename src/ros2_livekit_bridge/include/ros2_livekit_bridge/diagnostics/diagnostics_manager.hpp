@@ -17,7 +17,6 @@
 #pragma once
 
 #include <diagnostic_updater/diagnostic_updater.hpp>
-
 #include <functional>
 #include <string>
 #include <utility>
@@ -48,8 +47,7 @@ public:
   ///
   /// @param name Diagnostic task name.
   /// @param callback Function that populates one diagnostic status.
-  void add(const std::string& name,
-           std::function<void(diagnostic_updater::DiagnosticStatusWrapper&)> callback) {
+  void add(const std::string& name, std::function<void(diagnostic_updater::DiagnosticStatusWrapper&)> callback) {
     updater_.removeByName(name);
     updater_.add(name, std::move(callback));
   }

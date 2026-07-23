@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -89,9 +90,7 @@ public:
   /// @brief Construct the manager, create the ROS services, and register RPC.
   ///
   /// Service creation and RPC registration are best-effort: a failure of either
-  /// half of a command is logged and recorded rather than thrown, so the bridge
-  /// stays up in a degraded state and the optional diagnostic task reports the
-  /// per-command status (OK when both halves exist, ERROR when either is
+  /// is logged and recorded (OK when both halves exist, ERROR when either is
   /// missing).
   /// @param node_interfaces Node interfaces for service hosting, graph queries,
   /// and logs.
@@ -198,6 +197,7 @@ private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered);
   FRIEND_TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails);
+  FRIEND_TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures);
 #endif
 
   /// @brief Service callback that maps a ROS request into a service response.
@@ -274,6 +274,14 @@ private:
   std::vector<std::string> registered_rpc_methods_;
   /// Optional shared diagnostics hub that owns the registered cli-manager task.
   diagnostics::DiagnosticsManager* diagnostics_;
+  /// Count of remote calls rejected because the target participant was absent.
+  /// Mutable/atomic: incremented from const request handlers on executor and RPC
+  /// threads and read from the diagnostic timer thread.
+  mutable std::atomic<std::uint64_t> remote_participant_not_found_{0};
+  /// Count of remote RPCs that failed at the LiveKit transport layer.
+  mutable std::atomic<std::uint64_t> remote_transport_failures_{0};
+  /// Count of remote RPC responses that failed to parse as valid JSON.
+  mutable std::atomic<std::uint64_t> remote_malformed_responses_{0};
 };
 
 } // namespace ros2_livekit_bridge::cli

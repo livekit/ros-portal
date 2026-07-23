@@ -23,8 +23,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
-#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
 namespace {
@@ -139,11 +139,11 @@ livekit::SessionStats makeSessionStats(std::uint64_t bytes_sent = 1200, std::uin
 
 TEST(ConnectionHealthDiagnosticsTest, RegistersAndRemovesTaskWithSharedHub) {
   auto node = std::make_shared<rclcpp::Node>("connection_health_diagnostics_unit_test");
-  DiagnosticsManager hub(node);
+  DiagnosticsManager diagnostics(node);
 
   {
-    ConnectionHealthDiagnostics diagnostics(hub);
-    EXPECT_EQ(diagnostics.snapshot().kind, ConnectionHealthStateKind::Disconnected);
+    ConnectionHealthDiagnostics connection_health(diagnostics);
+    EXPECT_EQ(connection_health.snapshot().kind, ConnectionHealthStateKind::Disconnected);
   }
 }
 

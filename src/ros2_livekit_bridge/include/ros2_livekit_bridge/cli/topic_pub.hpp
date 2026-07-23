@@ -68,6 +68,10 @@ public:
   ///   validation, conversion, publisher creation, or publish fails.
   TopicPubSrv::Response publish(TopicPubOptions options);
 
+  /// @brief Snapshot the generic-publisher cache utilization.
+  /// @return Current size, capacity, and cumulative cache-full rejection count.
+  CacheStats cacheStats() const;
+
 private:
   /// @brief Cached publisher and the interface type it was created with.
   struct Entry {
@@ -84,9 +88,11 @@ private:
   /// @brief Predicate enforcing whether a resolved topic may be published.
   TopicPublishAllowed topic_publish_allowed_;
   /// @brief Guards access to the generic publisher cache.
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   /// @brief Bounded cache of generic publishers keyed by resolved topic name.
   std::unordered_map<std::string, Entry> publishers_;
+  /// @brief Cumulative count of publishes rejected because the cache was full.
+  std::uint64_t cache_full_rejections_{0};
 };
 
 } // namespace ros2_livekit_bridge::cli

@@ -837,9 +837,50 @@ TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
   manager.populateStatus(status);
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(diagnosticValueFor(status, "command_pairs_ok"), "5/5");
   EXPECT_EQ(diagnosticValueFor(status, kServiceCallRpcMethod), "ok");
   EXPECT_EQ(diagnosticValueFor(status, kTopicListRpcMethod), "ok");
+
+  // Cache-pressure and remote-failure fields start empty on a fresh manager.
+  EXPECT_EQ(diagnosticValueFor(status, "topic_pub_cache"), "0/" + std::to_string(kMaxCachedTopicPublishers));
+  EXPECT_EQ(diagnosticValueFor(status, "service_call_cache"), "0/" + std::to_string(kMaxCachedServiceClients));
+  EXPECT_EQ(diagnosticValueFor(status, "topic_pub_cache_full_rejections"), "0");
+  EXPECT_EQ(diagnosticValueFor(status, "service_call_cache_full_rejections"), "0");
+  EXPECT_EQ(diagnosticValueFor(status, "remote_participant_not_found"), "0");
+  EXPECT_EQ(diagnosticValueFor(status, "remote_transport_failures"), "0");
+  EXPECT_EQ(diagnosticValueFor(status, "remote_malformed_responses"), "0");
+}
+
+TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
+  auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_remote_test");
+  const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeRpcClient rpc_client;
+  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods());
+
+  TopicListSrv::Request request;
+  request.participant_id = "robot-b";
+
+  // participant-not-found: the target participant is absent.
+  rpc_client.has_participant = false;
+  manager.callRemoteTopicList(request);
+
+  // transport failure: perform_rpc yields no response.
+  rpc_client.has_participant = true;
+  rpc_client.runtime_error = std::runtime_error("transport down");
+  manager.callRemoteTopicList(request);
+  rpc_client.runtime_error.reset();
+
+  // malformed JSON: perform_rpc returns an unparseable payload.
+  rpc_client.response_json = "{not valid json";
+  manager.callRemoteTopicList(request);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  manager.populateStatus(status);
+
+  // Command pairs are all fine, so the breakdown does not change the level.
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(diagnosticValueFor(status, "remote_participant_not_found"), "1");
+  EXPECT_EQ(diagnosticValueFor(status, "remote_transport_failures"), "1");
+  EXPECT_EQ(diagnosticValueFor(status, "remote_malformed_responses"), "1");
 }
 
 TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails) {
@@ -853,7 +894,6 @@ TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails) {
   manager.populateStatus(status);
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
-  EXPECT_EQ(diagnosticValueFor(status, "command_pairs_ok"), "4/5");
   // The service half exists but its RPC method failed to register.
   EXPECT_EQ(diagnosticValueFor(status, kServiceCallRpcMethod), "rpc missing");
   EXPECT_EQ(diagnosticValueFor(status, kTopicListRpcMethod), "ok");

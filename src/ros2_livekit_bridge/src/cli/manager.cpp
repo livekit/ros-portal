@@ -21,7 +21,6 @@
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
-#include <functional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -144,7 +143,8 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
               registered_rpc_methods_.size());
 
   if (diagnostics_ != nullptr) {
-    diagnostics_->add(kCliManagerDiagnosticTaskName, std::bind(&Manager::populateStatus, this, std::placeholders::_1));
+    diagnostics_->add(kCliManagerDiagnosticTaskName,
+                      [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
   }
 }
 
@@ -209,10 +209,33 @@ void Manager::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status
     status.add(command.key, detail);
   }
 
-  if (complete_pairs == commands.size()) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "All CLI command pairs registered");
-  } else {
+  // Cache pressure: the bounded generic-publisher and service-client caches
+  // reject (they do not evict) new entries once full, so a nonzero rejection
+  // count means requests were dropped for lack of a cache slot.
+  const CacheStats topic_pub_cache = topic_publisher_ ? topic_publisher_->cacheStats() : CacheStats{};
+  const CacheStats service_call_cache = service_caller_ ? service_caller_->cacheStats() : CacheStats{};
+  status.add("topic_pub_cache", std::to_string(topic_pub_cache.size) + "/" + std::to_string(topic_pub_cache.capacity));
+  status.add("topic_pub_cache_full_rejections", std::to_string(topic_pub_cache.cache_full_rejections));
+  status.add("service_call_cache",
+             std::to_string(service_call_cache.size) + "/" + std::to_string(service_call_cache.capacity));
+  status.add("service_call_cache_full_rejections", std::to_string(service_call_cache.cache_full_rejections));
+
+  // Remote-call failure breakdown (cumulative). Informational: these reflect
+  // per-request outcomes (e.g. a caller passing a bad participant id), not
+  // manager health, so they do not by themselves change the diagnostic level.
+  status.add("remote_participant_not_found", std::to_string(remote_participant_not_found_.load()));
+  status.add("remote_transport_failures", std::to_string(remote_transport_failures_.load()));
+  status.add("remote_malformed_responses", std::to_string(remote_malformed_responses_.load()));
+
+  const bool cache_pressure = topic_pub_cache.cache_full_rejections > 0 || service_call_cache.cache_full_rejections > 0;
+
+  if (complete_pairs != commands.size()) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "One or more CLI command pairs failed to register");
+  } else if (cache_pressure) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN,
+                   "CLI command pairs registered; publisher/client cache is dropping requests");
+  } else {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "All CLI command pairs registered");
   }
 }
 
@@ -246,6 +269,7 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
                                     const std::string& request_payload, std::uint8_t timeout_sec) const {
   const auto rpc_response = livekit_methods_.perform_rpc(participant_id, rpc_method, request_payload, timeout_sec);
   if (!rpc_response) {
+    ++remote_transport_failures_;
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "LiveKit RPC '%s' to participant '%s' failed", rpc_method,
                  participant_id.c_str());
     return makeCliResponse<ResponseT>(false, std::string("remote ") + rpc_method + " RPC failed");
@@ -254,6 +278,7 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
   std::string parse_error;
   auto response = cliResponseFromJson<ResponseT>(*rpc_response, parse_error);
   if (!response) {
+    ++remote_malformed_responses_;
     RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
                  "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s", rpc_method,
                  participant_id.c_str(), parse_error.c_str());
@@ -268,6 +293,7 @@ TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request&
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
+    ++remote_participant_not_found_;
     return makeCliResponse<TopicListSrv::Response>(
         false, "LiveKit participant '" + request.participant_id + "' was not found");
   }
@@ -283,6 +309,7 @@ TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& re
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
+    ++remote_participant_not_found_;
     return makeCliResponse<TopicPubSrv::Response>(false,
                                                   "LiveKit participant '" + request.participant_id + "' was not found");
   }
@@ -304,6 +331,7 @@ ServiceListSrv::Response Manager::callRemoteServiceList(const ServiceListSrv::Re
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
+    ++remote_participant_not_found_;
     return makeCliResponse<ServiceListSrv::Response>(
         false, "LiveKit participant '" + request.participant_id + "' was not found");
   }
@@ -332,6 +360,7 @@ ServiceCallSrv::Response Manager::callRemoteServiceCall(const ServiceCallSrv::Re
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
+    ++remote_participant_not_found_;
     return makeCliResponse<ServiceCallSrv::Response>(
         false, "LiveKit participant '" + request.participant_id + "' was not found");
   }
@@ -354,6 +383,7 @@ InterfaceShowSrv::Response Manager::callRemoteInterfaceShow(const InterfaceShowS
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
+    ++remote_participant_not_found_;
     return makeCliResponse<InterfaceShowSrv::Response>(
         false, "LiveKit participant '" + request.participant_id + "' was not found");
   }

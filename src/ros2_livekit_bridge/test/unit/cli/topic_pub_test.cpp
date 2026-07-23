@@ -182,11 +182,22 @@ TEST_F(TopicPubTest, EnforcesPublisherCacheLimit) {
     ASSERT_TRUE(response.success) << response.err_msg;
   }
 
+  // Cache is full but nothing has been rejected yet.
+  auto stats = publisher.cacheStats();
+  EXPECT_EQ(stats.size, cli::kMaxCachedTopicPublishers);
+  EXPECT_EQ(stats.capacity, cli::kMaxCachedTopicPublishers);
+  EXPECT_EQ(stats.cache_full_rejections, 0U);
+
   const auto response =
       publisher.publish(makePublishOptions("/topic_pub/cache_overflow", "std_msgs/msg/String", "{data: value}"));
 
   EXPECT_FALSE(response.success);
   EXPECT_EQ(response.err_msg, "topic publisher cache limit reached");
+
+  // The rejected publish is counted for cache-pressure diagnostics.
+  stats = publisher.cacheStats();
+  EXPECT_EQ(stats.size, cli::kMaxCachedTopicPublishers);
+  EXPECT_EQ(stats.cache_full_rejections, 1U);
 }
 
 TEST(TopicPubStandaloneTest, ConstructorRequiresNodeInterfaces) {

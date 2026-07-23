@@ -34,6 +34,7 @@
 namespace ros2_livekit_bridge {
 
 namespace diagnostics {
+class DiagnosticsManager;
 class ConnectionHealthDiagnostics;
 } // namespace diagnostics
 namespace cli {
@@ -179,6 +180,8 @@ private:
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
+  //! @brief Shared diagnostics updater hub for all bridge diagnostic tasks.
+  std::unique_ptr<diagnostics::DiagnosticsManager> diagnostics_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.
   std::unique_ptr<TopicForwarder> topic_forwarder_;
   //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.
@@ -187,7 +190,7 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
-  //! @brief LiveKit connection health diagnostics publisher.
+  //! @brief LiveKit connection health diagnostic task owner.
   std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.
   rclcpp::TimerBase::SharedPtr connection_stats_timer_;

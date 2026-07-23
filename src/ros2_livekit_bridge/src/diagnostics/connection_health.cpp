@@ -23,19 +23,21 @@
 #include <cstdint>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <exception>
+#include <functional>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <type_traits>
-#include <utility>
 #include <variant>
 #include <vector>
+
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
 
 namespace {
 
-constexpr double kDefaultDiagnosticPeriodSec = 1.0;
+constexpr char kConnectionHealthTaskName[] = "connection_health";
 constexpr double kSecondsToMilliseconds = 1000.0;
 constexpr double kMillisecondsPerSecond = 1000.0;
 constexpr double kBitsPerByte = 8.0;
@@ -369,19 +371,14 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
   }
 }
 
-ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(
-    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base_interface,
-    rclcpp::node_interfaces::NodeClockInterface::SharedPtr clock_interface,
-    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr logging_interface,
-    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr parameters_interface,
-    rclcpp::node_interfaces::NodeTimersInterface::SharedPtr timers_interface,
-    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface)
-    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt},
-      updater_(std::move(base_interface), std::move(clock_interface), std::move(logging_interface),
-               std::move(parameters_interface), std::move(timers_interface), std::move(topics_interface),
-               kDefaultDiagnosticPeriodSec) {
-  updater_.setHardwareID("ros2_livekit_bridge");
-  updater_.add("connection_health", this, &ConnectionHealthDiagnostics::populateStatus);
+ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManager& hub)
+    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt}, hub_(&hub) {
+  hub.add(kConnectionHealthTaskName,
+          std::bind(&ConnectionHealthDiagnostics::populateStatus, this, std::placeholders::_1));
+}
+
+ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() {
+  hub_->remove(kConnectionHealthTaskName);
 }
 
 void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {

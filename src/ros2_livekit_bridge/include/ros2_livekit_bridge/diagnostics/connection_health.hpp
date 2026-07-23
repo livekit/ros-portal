@@ -21,14 +21,15 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <diagnostic_updater/diagnostic_updater.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <future>
 #include <mutex>
 #include <optional>
-#include <rclcpp/rclcpp.hpp>
 #include <string>
 
 namespace ros2_livekit_bridge::diagnostics {
+
+class DiagnosticsManager;
 
 /// High-level LiveKit connection state used by the connection health diagnostic.
 enum class ConnectionHealthStateKind {
@@ -152,38 +153,16 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
 /// publish diagnostics directly from SDK threads.
 class ConnectionHealthDiagnostics final {
 public:
-  /// Create the diagnostic updater task from the ROS interfaces it requires.
+  /// Register the connection health task with the shared bridge diagnostics hub.
   ///
-  /// Only the node interfaces needed by `diagnostic_updater::Updater` are taken
-  /// so the helper stays decoupled from any concrete node type.
-  ///
-  /// @param base_interface Node base interface for the diagnostic updater.
-  /// @param clock_interface Node clock interface for the diagnostic updater.
-  /// @param logging_interface Node logging interface for the diagnostic updater.
-  /// @param parameters_interface Node parameters interface for the updater.
-  /// @param timers_interface Node timers interface for the diagnostic updater.
-  /// @param topics_interface Node topics interface for the diagnostic updater.
-  ConnectionHealthDiagnostics(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base_interface,
-                              rclcpp::node_interfaces::NodeClockInterface::SharedPtr clock_interface,
-                              rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr logging_interface,
-                              rclcpp::node_interfaces::NodeParametersInterface::SharedPtr parameters_interface,
-                              rclcpp::node_interfaces::NodeTimersInterface::SharedPtr timers_interface,
-                              rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface);
+  /// @param hub Shared diagnostics hub that owns the updater and publisher.
+  explicit ConnectionHealthDiagnostics(DiagnosticsManager& hub);
 
-  /// Convenience constructor that extracts the required interfaces from a node.
+  /// Remove the registered connection health task from the shared hub.
   ///
-  /// The node is used only to obtain the interfaces the diagnostic updater needs;
-  /// no reference to the node is retained. This keeps instantiation clean while
-  /// the implementation stays decoupled from any concrete node type.
-  ///
-  /// @tparam NodeT Node-like type exposing the standard `get_node_*_interface`
-  ///   accessors (e.g. `rclcpp::Node *` or an `rclcpp::Node::SharedPtr`).
-  /// @param node Node to source the diagnostic updater interfaces from.
-  template <typename NodeT>
-  explicit ConnectionHealthDiagnostics(NodeT&& node)
-      : ConnectionHealthDiagnostics(node->get_node_base_interface(), node->get_node_clock_interface(),
-                                    node->get_node_logging_interface(), node->get_node_parameters_interface(),
-                                    node->get_node_timers_interface(), node->get_node_topics_interface()) {}
+  /// The hub must outlive this helper because its timer owns the registered
+  /// callback until this destructor deregisters it.
+  ~ConnectionHealthDiagnostics();
 
   /// Mark the bridge connected, capture the LiveKit room name, and refresh peers.
   void markConnected(livekit::Room& room);
@@ -244,8 +223,8 @@ private:
   /// Latest connection state and RTC summary rendered by the diagnostic task.
   ConnectionHealthState state_;
 
-  /// ROS diagnostic updater that publishes the `connection_health` task.
-  diagnostic_updater::Updater updater_;
+  /// Shared diagnostics hub that owns the registered `connection_health` task.
+  DiagnosticsManager* hub_;
 
   /// In-flight asynchronous LiveKit stats request, if one is outstanding.
   std::optional<std::future<livekit::SessionStats>> pending_stats_;

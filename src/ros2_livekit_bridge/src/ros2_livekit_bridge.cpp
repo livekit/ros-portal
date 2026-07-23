@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "ros2_livekit_bridge/cli/manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
@@ -75,7 +76,9 @@ bool Ros2LiveKitBridge::initialize() {
 
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
-  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(this);
+  connection_diagnostics_.reset();
+  diagnostics_ = std::make_unique<diagnostics::DiagnosticsManager>(this);
+  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(*diagnostics_);
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
@@ -182,6 +185,11 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   // its push worker (which reads the room roster) while the room is still alive.
   latched_topic_forwarder_.reset();
   topic_forwarder_.reset();
+  // Reset task owners before the diagnostics hub so updater callbacks are
+  // deregistered while the shared updater is still alive.
+  connection_stats_timer_.reset();
+  connection_diagnostics_.reset();
+  diagnostics_.reset();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
     room_.reset();

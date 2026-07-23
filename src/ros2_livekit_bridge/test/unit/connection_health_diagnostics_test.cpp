@@ -18,9 +18,12 @@
 
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
+#include <memory>
 #include <optional>
+#include <rclcpp/rclcpp.hpp>
 #include <string>
 
+#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
@@ -132,6 +135,16 @@ livekit::SessionStats makeSessionStats(std::uint64_t bytes_sent = 1200, std::uin
                            makeDataChannelStats(livekit::DataChannelState::Closed)};
   stats.subscriber_stats = {makeInboundRtpStats(2, 0.007), makeInboundRtpStats(3, 0.011)};
   return stats;
+}
+
+TEST(ConnectionHealthDiagnosticsTest, RegistersAndRemovesTaskWithSharedHub) {
+  auto node = std::make_shared<rclcpp::Node>("connection_health_diagnostics_unit_test");
+  DiagnosticsManager hub(node);
+
+  {
+    ConnectionHealthDiagnostics diagnostics(hub);
+    EXPECT_EQ(diagnostics.snapshot().kind, ConnectionHealthStateKind::Disconnected);
+  }
 }
 
 TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {

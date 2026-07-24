@@ -17,13 +17,18 @@ name: Debian Release
 on:
   workflow_dispatch:
     inputs:
+      source_run_id:
+        description: Successful CI run ID containing the Debian package artifacts
+        required: true
+        type: string
       publish:
-        description: Attach packages to the selected version tag's GitHub prerelease
+        description: Publish the CI packages to the selected version tag's GitHub prerelease
         required: true
         type: boolean
         default: false
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -31,116 +36,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Package (${{ matrix.ros_distro }}, ${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: humble
-            ros_image_digest: afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16
-            ros_image_tag: humble-ros-base-jammy
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: humble
-            ros_image_digest: afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16
-            ros_image_tag: humble-ros-base-jammy
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: jazzy
-            ros_image_digest: 31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f
-            ros_image_tag: jazzy-ros-base-noble
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: jazzy
-            ros_image_digest: 31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f
-            ros_image_tag: jazzy-ros-base-noble
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: kilted
-            ros_image_digest: 5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702
-            ros_image_tag: kilted-ros-base-noble
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: kilted
-            ros_image_digest: 5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702
-            ros_image_tag: kilted-ros-base-noble
-          - os: ubuntu-24.04
-            arch: amd64
-            ros_distro: lyrical
-            ros_image_digest: 728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f
-            ros_image_tag: lyrical-ros-base-resolute
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            ros_distro: lyrical
-            ros_image_digest: 728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f
-            ros_image_tag: lyrical-ros-base-resolute
-    env:
-      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ matrix.ros_distro == 'humble' && 'true' || 'false' }}
-      CMAKE_BUILD_PARALLEL_LEVEL: 2
-      INSTALL_CPP_TOOLS: "false"
-      INSTALL_SIMULATION_DEPS: "false"
-      ROS_DISTRO: ${{ matrix.ros_distro }}
-      ROS_IMAGE: ros:${{ matrix.ros_image_tag }}@sha256:${{ matrix.ros_image_digest }}
-      ROS_IMAGE_DIGEST: ${{ matrix.ros_image_digest }}
-      ROS_IMAGE_REPOSITORY: ros
-      ROS_IMAGE_TAG: ${{ matrix.ros_image_tag }}
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-
-      - name: Prepare devcontainer SSH agent mount
-        run: touch /tmp/devcontainer-empty-ssh-agent
-
-      - name: Set up packaging environment
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-
-      - name: Build Debian package
-        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
-        env:
-          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-          runCmd: ./scripts/build-deb.sh
-
-      - name: Smoke-test clean installation
-        shell: bash
-        run: |
-          set -euo pipefail
-          deb_path="$(compgen -G 'artifacts/debian/*.deb')"
-          docker run --rm \
-            --env "ROS_DISTRO=${ROS_DISTRO}" \
-            --volume "${PWD}/artifacts/debian:/packages:ro" \
-            --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" \
-            "${ROS_IMAGE}" \
-            bash -lc "/smoke-test-deb.sh /packages/$(basename "${deb_path}")"
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: deb-${{ matrix.ros_distro }}-${{ matrix.arch }}
-          path: |
-            artifacts/debian/*.deb
-            artifacts/debian/*.sha256
-          if-no-files-found: error
-
   publish:
     name: Publish GitHub prerelease
     if: ${{ inputs.publish }}
-    needs: build
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -149,12 +50,40 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate source CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")"
+          workflow_path="$(jq -r '.path' <<<"${run_json}")"
+          conclusion="$(jq -r '.conclusion' <<<"${run_json}")"
+          head_sha="$(jq -r '.head_sha' <<<"${run_json}")"
+
+          if [[ "${workflow_path}" != ".github/workflows/builds.yml" ]]; then
+            echo "Run ${SOURCE_RUN_ID} belongs to ${workflow_path}, not CI" >&2
+            exit 1
+          fi
+          if [[ "${conclusion}" != "success" ]]; then
+            echo "CI run ${SOURCE_RUN_ID} concluded with ${conclusion}, not success" >&2
+            exit 1
+          fi
+          if [[ "${head_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "CI run ${SOURCE_RUN_ID} built ${head_sha}, not selected tag commit ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
       - name: Download packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: deb-*
           path: release-assets
           merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
 
       - name: Validate release tag and packages
         shell: bash

@@ -88,6 +88,7 @@ jobs:
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
       ROS_DISTRO: ${{ matrix.ros_distro }}
+      ROS_IMAGE: ros:${{ matrix.ros_image_tag }}@sha256:${{ matrix.ros_image_digest }}
       ROS_IMAGE_DIGEST: ${{ matrix.ros_image_digest }}
       ROS_IMAGE_REPOSITORY: ros
       ROS_IMAGE_TAG: ${{ matrix.ros_image_tag }}
@@ -199,3 +200,34 @@ jobs:
       - name: Dump LiveKit server log on failure
         if: failure()
         run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
+
+      - name: Build Debian package
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: ./scripts/build-deb.sh
+
+      - name: Smoke-test clean installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb_path="$(compgen -G 'artifacts/debian/*.deb')"
+          docker run --rm \
+            --env "ROS_DISTRO=${ROS_DISTRO}" \
+            --volume "${PWD}/artifacts/debian:/packages:ro" \
+            --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" \
+            "${ROS_IMAGE}" \
+            bash -lc "/smoke-test-deb.sh /packages/$(basename "${deb_path}")"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deb-${{ matrix.ros_distro }}-${{ matrix.arch }}
+          path: |
+            artifacts/debian/*.deb
+            artifacts/debian/*.sha256
+          if-no-files-found: error

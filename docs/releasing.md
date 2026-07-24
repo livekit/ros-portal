@@ -1,19 +1,20 @@
 # Debian Releases
 
-The `Debian Release` GitHub Actions workflow builds packages for every supported
-ROS distribution and architecture. It is manual and does not publish by
-default.
+The `CI` GitHub Actions workflow builds and clean-container tests packages for
+every supported ROS distribution and architecture. Pull requests, pushes to
+`main`, and manual CI runs store each `.deb` and checksum as a workflow
+artifact. They do not create a tag, GitHub Release, APT repository, or any
+public package.
 
-## Build Without Publishing
+## Review CI Packages
 
-1. Open **Actions > Debian Release > Run workflow**.
-2. Select the branch or commit to package.
-3. Leave `publish` disabled.
-4. Run the workflow.
+1. Open the pull request's successful `CI` workflow run.
+2. Find the `Artifacts` section on the workflow summary.
+3. Download the `deb-<ros-distro>-<architecture>` artifact to review or test.
 
-The workflow builds and clean-container tests eight packages, then stores each
-`.deb` and checksum as a workflow artifact. It does not create a tag, GitHub
-Release, APT repository, or any public package.
+Each CI run produces eight artifacts. Package building and installation smoke
+testing are part of the corresponding distribution and architecture matrix
+job, so a successful CI run verifies the complete package set.
 
 ## Publish A Prerelease
 
@@ -21,6 +22,8 @@ Publishing is intentionally guarded by all of the following:
 
 - The `publish` workflow input must be explicitly enabled.
 - The workflow must be run from an existing `v<version>` tag.
+- `source_run_id` must identify a successful `CI` run for the exact commit
+  selected by that tag.
 - The tag version must exactly match
   `src/ros2_livekit_bridge/package.xml`.
 - All three first-party `package.xml` files must have the same version.
@@ -29,6 +32,18 @@ Publishing is intentionally guarded by all of the following:
 
 When these conditions pass, the workflow creates or updates a GitHub
 prerelease and uploads all `.deb` files plus `SHA256SUMS`.
+
+To publish:
+
+1. Find the successful `CI` run for the tagged commit, normally the run from
+   the corresponding push to `main`, and copy its numeric run ID from the URL.
+2. Open **Actions > Debian Release > Run workflow**.
+3. Select the existing version tag.
+4. Enter the CI run ID and enable `publish`.
+5. Run the workflow.
+
+Pull-request artifacts are suitable for review. Publication only accepts them
+when the pull-request run and selected tag resolve to the same commit.
 
 The workflow never creates or pushes a tag. Prepare and review the version
 change and tag separately before enabling publication.

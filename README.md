@@ -51,8 +51,8 @@ To get familiar with using the bridge, you can follow the [tutorials](docs/tutor
   LiveKit test environment.
 - [Development environment](docs/development.md): devcontainer layout, SSH agent
   forwarding, Docker image caching, and C++ tooling.
-- [Debian releases](docs/releasing.md): non-publishing package builds, guarded
-  GitHub prereleases, and future APT repository options.
+- [Debian releases](docs/releasing.md): CI package artifacts, guarded GitHub
+  prereleases, and future APT repository options.
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
 

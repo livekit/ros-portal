@@ -15,7 +15,7 @@ installing the bridge. The bridge package uses that source to install its ROS
 runtime dependencies.
 
 Download the `.deb` matching the machine's ROS distribution and architecture
-from a GitHub Release or a non-publishing release workflow artifact. Then run:
+from a GitHub Release or a CI workflow artifact. Then run:
 
 ```bash
 sudo apt update

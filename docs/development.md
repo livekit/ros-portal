@@ -33,8 +33,7 @@ devcontainer up --workspace-folder .
 
 Use `jazzy-ros-base-noble`, `kilted-ros-base-noble`, or
 `lyrical-ros-base-resolute` for the other supported distributions. CI pins
-these image tags by digest in `.github/workflows/builds.yml` and
-`.github/workflows/release.yml`.
+these image tags by digest in `.github/workflows/builds.yml`.
 
 `INSTALL_SIMULATION_DEPS` defaults to `true` for the interactive Jazzy
 devcontainer. Core CI disables it so optional Gazebo, Nav2, Foxglove, and robot

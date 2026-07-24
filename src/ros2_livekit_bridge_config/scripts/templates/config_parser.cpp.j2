@@ -277,7 +277,7 @@ bool parseBooleanValue(const YAML::Node & node, const std::string & path)
   utils::fail(path, node, expectedStringValues(allowed), "found '" + value + "'");
 }
 
-{{ enum.cpp_name }} required{{ enum.cpp_name }}(
+[[maybe_unused]] {{ enum.cpp_name }} required{{ enum.cpp_name }}(
   const YAML::Node & node,
   const std::string & path,
   std::initializer_list<std::string_view> allowed)

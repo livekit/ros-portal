@@ -174,6 +174,30 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromJson(const std::st
   }
 }
 
+std::optional<std::string> jsonFromSerializedMessage(const std::string& msg_type,
+                                                     const rclcpp::SerializedMessage& serialized_msg,
+                                                     std::string& error) {
+  error.clear();
+  try {
+    static const ros2_medkit_serialization::JsonSerializer serializer;
+    return serializer.deserialize(msg_type, serialized_msg).dump();
+  } catch (const std::exception& conversion_error) {
+    error = conversion_error.what();
+    return std::nullopt;
+  }
+}
+
+std::optional<std::string> renderJsonSchema(const std::string& msg_type, std::string& error) {
+  error.clear();
+  try {
+    static const ros2_medkit_serialization::JsonSerializer serializer;
+    return serializer.get_schema(msg_type).dump();
+  } catch (const std::exception& schema_error) {
+    error = schema_error.what();
+    return std::nullopt;
+  }
+}
+
 bool populateMessageFromYaml(const std::string& msg_type, const std::string& payload, void* message,
                              std::string& error) {
   if (message == nullptr) {

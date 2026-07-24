@@ -109,6 +109,11 @@ public:
     /// timer forwards it at `max_rate_hz` (zero-order hold), dropping intermediate
     /// samples (config `max_rate_hz`).
     std::unordered_map<std::string, double> outbound_rate_limits;
+    /// @brief Per-topic outbound wire/schema encoding, keyed by ROS topic name
+    /// (config `encoding`). Topics absent from the map default to
+    /// @ref OutboundEncoding::Ros2Msg. Only outbound/bidirectional topics
+    /// contribute entries.
+    std::unordered_map<std::string, OutboundEncoding> outbound_encodings;
   };
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
@@ -223,6 +228,8 @@ private:
   struct DataTopicState {
     /// @brief LiveKit data writer lazily created on the first forwarded sample.
     std::shared_ptr<DataTrackWriter> writer;
+    /// @brief Outbound wire/schema encoding for this topic (config `encoding`).
+    OutboundEncoding encoding{OutboundEncoding::Ros2Msg};
     /// @brief Optional outbound forward-rate cap (Hz) from config `max_rate_hz`.
     /// When set, samples arriving faster than the cap are dropped on arrival,
     /// mirroring ros-tooling/topic_tools `throttle messages`.

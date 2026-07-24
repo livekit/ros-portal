@@ -78,6 +78,8 @@ function(livekit_build_sdk_from_source)
   )
   _livekit_run_source_build_step(
     "LiveKit SDK build"
+    "${CMAKE_COMMAND}" -E env
+    "CARGO_BUILD_JOBS=${LIVEKIT_SOURCE_JOBS}"
     "${CMAKE_COMMAND}" --build "${LIVEKIT_SOURCE_BUILD_DIR}"
     --parallel "${LIVEKIT_SOURCE_JOBS}"
   )

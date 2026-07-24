@@ -50,7 +50,16 @@ the bridge CMake configuration to build the SDK checkout from `external.repos`.
 ## Shell Helpers
 
 See `setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
-`cbpu` / `cbps`.
+`cbpu` / `cbps`. `sros` validates that the workspace overlay was built against
+the container's `ROS_DISTRO` before sourcing it. Colcon overlays are not
+portable across ROS distributions; move or delete `build`, `install`, and
+`log`, then rebuild after switching containers.
+
+Pass an alternate install prefix when keeping distro-specific build trees:
+
+```bash
+sros /livekit_ws/install-humble
+```
 
 ## C++ Tools
 
@@ -122,7 +131,9 @@ colcon build --packages-select ros2_livekit_bridge \
 
 The SDK uses isolated build and install directories under the bridge package's
 colcon build directory. Its source build defaults to two parallel jobs. Set
-`CMAKE_BUILD_PARALLEL_LEVEL` or `LIVEKIT_SDK_BUILD_JOBS` to override that bound.
+`CMAKE_BUILD_PARALLEL_LEVEL` or `LIVEKIT_SDK_BUILD_JOBS` to override that bound;
+the same limit is applied to both the CMake and Rust/Cargo build steps. Use one
+SDK job when building in a memory-constrained Docker Desktop VM.
 
 ### One-Off SDK Version Override
 

@@ -84,6 +84,23 @@ std::optional<rclcpp::SerializedMessage> serializedMessageFromYaml(const std::st
 std::optional<rclcpp::SerializedMessage> serializedMessageFromJson(const std::string& msg_type,
                                                                    const std::string& payload, std::string& error);
 
+/// @brief Convert a serialized ROS CDR message to a JSON string.
+/// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
+/// @param serialized_msg Serialized ROS message bytes (CDR).
+/// @param error Set to a human-readable description when conversion fails.
+/// @return Compact JSON rendering of @p serialized_msg, or `std::nullopt` when
+///   the type cannot be resolved or the bytes cannot be deserialized.
+std::optional<std::string> jsonFromSerializedMessage(const std::string& msg_type,
+                                                     const rclcpp::SerializedMessage& serialized_msg,
+                                                     std::string& error);
+
+/// @brief Generate a JSON Schema describing a ROS message type.
+/// @param msg_type ROS interface type, such as `std_msgs/msg/String`.
+/// @param error Set to a human-readable description when generation fails.
+/// @return Compact JSON Schema document, or `std::nullopt` when the type cannot
+///   be resolved.
+std::optional<std::string> renderJsonSchema(const std::string& msg_type, std::string& error);
+
 /// @brief Populate an existing runtime message from a native YAML payload.
 /// @param msg_type ROS interface type, such as `std_srvs/srv/SetBool_Request`.
 /// @param payload YAML message payload.

@@ -54,6 +54,20 @@ struct RosMessageSchema {
 /// @note The hash is intentionally a fixed-size array of 32 bytes and strings are only rendered for diagnostics.
 using SchemaHash = std::array<std::uint8_t, 32U>;
 
+/// @brief Wire and schema encoding selected for an outbound data track.
+///
+/// Chosen per topic via config `encoding`. @ref Ros2Msg and @ref Ros2Idl send
+/// raw ROS CDR frames described by the matching schema encoding; @ref JsonSchema
+/// sends JSON frames described by a generated JSON Schema.
+enum class OutboundEncoding {
+  /// @brief CDR frames described by a Ros2Msg schema (default).
+  Ros2Msg,
+  /// @brief CDR frames described by a Ros2Idl schema.
+  Ros2Idl,
+  /// @brief JSON frames described by a generated JSON Schema.
+  JsonSchema,
+};
+
 /// @brief Renders, registers, and validates ROS message schemas for LiveKit data
 /// tracks.
 ///
@@ -72,6 +86,11 @@ public:
 
   /// @brief Callback used to render a local ROS message definition.
   using RenderSchemaFn = std::function<std::optional<RosMessageSchema>(const std::string&)>;
+
+  /// @brief Callback used to render a JSON Schema for a local ROS type. Returns
+  /// the schema document text, or `std::nullopt` when the type cannot be
+  /// resolved.
+  using RenderJsonSchemaFn = std::function<std::optional<std::string>(const std::string&)>;
 
   /// @brief Metadata needed to validate an inbound LiveKit data track's ROS
   /// schema.
@@ -93,14 +112,22 @@ public:
   /// @param render_schema Optional renderer override for deterministic tests.
   /// When unset, rosbag2 is used to render definitions from the local ament
   /// index.
+  /// @param render_json_schema Optional JSON Schema renderer override for
+  /// deterministic tests. When unset, ROS introspection is used to generate the
+  /// schema from the local ament index.
   /// @throws std::invalid_argument when either LiveKit callback is unset.
-  explicit SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn render_schema = {});
+  explicit SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn render_schema = {},
+                         RenderJsonSchemaFn render_json_schema = {});
 
   /// @brief Ensure the local participant has defined the schema for a ROS type.
   /// @param topic_type ROS message type in `pkg/msg/Type` form.
+  /// @param encoding Outbound encoding selecting which schema to render and
+  /// define. `Ros2Idl` requires the local definition to render as ROS 2 IDL and
+  /// fails otherwise; `JsonSchema` generates a JSON Schema via introspection.
   /// @return The LiveKit schema ID on success, or `std::nullopt` after logging
   /// the failure.
-  std::optional<livekit::DataTrackSchemaId> ensureSchemaDefined(const std::string& topic_type);
+  std::optional<livekit::DataTrackSchemaId> ensureSchemaDefined(const std::string& topic_type,
+                                                                OutboundEncoding encoding = OutboundEncoding::Ros2Msg);
 
   /// @brief Validate and log an inbound track's schema against the locally
   /// rendered ROS definition.
@@ -123,6 +150,9 @@ private:
 
   /// @brief Render a local ROS message definition and its dependencies.
   static std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type);
+
+  /// @brief Generate a JSON Schema for a local ROS message type.
+  static std::optional<std::string> renderJsonSchema(const std::string& topic_type);
 
   /// @brief Map a rosbag2 schema encoding to the LiveKit equivalent.
   static std::optional<livekit::DataTrackSchemaEncoding> schemaEncodingFromRosDefinition(const std::string& encoding);
@@ -147,6 +177,7 @@ private:
 
   LiveKitMethods livekit_methods_;
   RenderSchemaFn render_schema_;
+  RenderJsonSchemaFn render_json_schema_;
   rclcpp::Logger logger_;
   std::mutex defined_schemas_mutex_;
   std::condition_variable defined_schemas_cv_;

@@ -137,6 +137,31 @@ TEST_F(BridgeTestE2E, RepublishesRosMessagesBothWays) {
       verifyDirection(publisherB(), robotANode(), kBidirectionalTopic, kBidirectionalTopic, "message from bridge b"));
 }
 
+// End-to-end encoding check: bridge A forwards a ROS message with a configured
+// outbound `encoding`, and bridge B (default config) receives, decodes, and
+// republishes it on its ROS graph with identical data. Covers the round trip
+// for CDR (`ros2msg`) and JSON (`jsonschema`) frames.
+//
+// `ros2idl` is not exercised here: std_msgs/String renders as ros2msg locally,
+// so an explicit ros2idl request is intentionally skipped by the bridge (see
+// SchemaManagerTest.SkipsRos2IdlWhenLocalDefinitionIsNotIdl and
+// DefinesRos2IdlWhenRequestedAndAvailable for that coverage).
+class EncodingE2E : public BridgeTestE2E, public ::testing::WithParamInterface<std::string> {};
+
+TEST_P(EncodingE2E, ForwardsAndDecodesWithConfiguredEncoding) {
+  const std::string encoding = GetParam();
+  // Only bridge A (the sender) sets the encoding; bridge B stays on the default
+  // and auto-detects the inbound frame encoding.
+  initializeRuntime(kBidirectionalTopic, kBidirectionalTopic, kBidirectionalTopic, kBidirectionalTopic,
+                    /*preserve_id_a=*/false, /*preserve_id_b=*/false, /*encoding_a=*/encoding, /*encoding_b=*/"");
+
+  EXPECT_TRUE(
+      verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic, "message via " + encoding));
+}
+
+INSTANTIATE_TEST_SUITE_P(Encodings, EncodingE2E, ::testing::Values("ros2msg", "jsonschema"),
+                         [](const ::testing::TestParamInfo<std::string>& info) { return info.param; });
+
 // With preserve_id enabled on the receiver, an inbound data track is
 // republished under a topic prefixed with the publishing participant's
 // sanitized identity, e.g. /bridge/out from participant bridge-test-a becomes

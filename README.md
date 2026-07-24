@@ -42,7 +42,8 @@ The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants
   and simulation examples.
 - [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,
   throttling, latched topics (via
-  [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/)), and video options.
+  [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/)), data track encoding
+  (`ros2msg` / `ros2idl` / `jsonschema` for non-ROS consumers), and video options.
 - [Remote ROS2 CLI calls](docs/ros2_cli_calls.md): remote `ros2` command services
   backed by [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/).
 - [Diagnostics](docs/diagnostics.md): `/diagnostics` fields and aggregator setup.

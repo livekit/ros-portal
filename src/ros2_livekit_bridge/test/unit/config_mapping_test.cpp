@@ -67,6 +67,36 @@ TEST(ConfigMappingTest, TopicForwarderOptionsCompilesPatternsAndWiresQos) {
   EXPECT_DOUBLE_EQ(options.outbound_rate_limits.at("/odom"), 10.0);
 }
 
+TEST(ConfigMappingTest, TopicForwarderOptionsMapsOutboundEncodings) {
+  std::vector<bc::TopicConfig> topics;
+
+  // Default encoding (ros2msg) for an outbound topic.
+  topics.push_back(makeTopic("/odom", bc::Direction::Out));
+
+  bc::TopicConfig json_topic = makeTopic("/diagnostics", bc::Direction::Out);
+  json_topic.encoding = bc::Encoding::Jsonschema;
+  topics.push_back(json_topic);
+
+  bc::TopicConfig idl_topic = makeTopic("/state", bc::Direction::Bidirectional);
+  idl_topic.encoding = bc::Encoding::Ros2idl;
+  topics.push_back(idl_topic);
+
+  // Inbound-only topics do not contribute an outbound encoding.
+  bc::TopicConfig inbound = makeTopic("/teleop", bc::Direction::In);
+  inbound.encoding = bc::Encoding::Jsonschema;
+  topics.push_back(inbound);
+
+  const auto options = topicForwarderOptions(topics, 1, 10, {}, testLogger());
+
+  ASSERT_EQ(options.outbound_encodings.count("/odom"), 1U);
+  EXPECT_EQ(options.outbound_encodings.at("/odom"), OutboundEncoding::Ros2Msg);
+  ASSERT_EQ(options.outbound_encodings.count("/diagnostics"), 1U);
+  EXPECT_EQ(options.outbound_encodings.at("/diagnostics"), OutboundEncoding::JsonSchema);
+  ASSERT_EQ(options.outbound_encodings.count("/state"), 1U);
+  EXPECT_EQ(options.outbound_encodings.at("/state"), OutboundEncoding::Ros2Idl);
+  EXPECT_EQ(options.outbound_encodings.count("/teleop"), 0U);
+}
+
 TEST(ConfigMappingTest, TopicForwarderOptionsRoutesPreserveId) {
   bc::TopicConfig topic = makeTopic("/remote/state", bc::Direction::In);
   topic.preserve_id = true;

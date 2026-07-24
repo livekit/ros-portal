@@ -33,6 +33,35 @@ std::vector<std::regex> compileAndLog(const std::vector<std::string>& patterns, 
   return compiled;
 }
 
+/// @brief Map a config encoding onto the forwarder's outbound encoding enum.
+OutboundEncoding toOutboundEncoding(ros2_livekit_bridge_config::Encoding encoding) {
+  switch (encoding) {
+    case ros2_livekit_bridge_config::Encoding::Ros2idl:
+      return OutboundEncoding::Ros2Idl;
+    case ros2_livekit_bridge_config::Encoding::Jsonschema:
+      return OutboundEncoding::JsonSchema;
+    case ros2_livekit_bridge_config::Encoding::Ros2msg:
+    default:
+      return OutboundEncoding::Ros2Msg;
+  }
+}
+
+/// @brief Collect per-topic outbound encodings for outbound/bidirectional
+/// topics, keyed by literal ROS topic name (mirrors config `encoding`).
+std::unordered_map<std::string, OutboundEncoding> outboundEncodings(
+    const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics) {
+  std::unordered_map<std::string, OutboundEncoding> encodings;
+  for (const auto& topic_config : topics) {
+    const bool outbound = topic_config.direction == ros2_livekit_bridge_config::Direction::Out ||
+                          topic_config.direction == ros2_livekit_bridge_config::Direction::Bidirectional;
+    if (!outbound) {
+      continue;
+    }
+    encodings.emplace(topic_config.topic, toOutboundEncoding(topic_config.encoding));
+  }
+  return encodings;
+}
+
 } // namespace
 
 TopicForwarder::Options topicForwarderOptions(const std::vector<ros2_livekit_bridge_config::TopicConfig>& topics,
@@ -47,6 +76,7 @@ TopicForwarder::Options topicForwarderOptions(const std::vector<ros2_livekit_bri
   options.min_qos_depth = min_qos_depth;
   options.max_qos_depth = max_qos_depth;
   options.outbound_rate_limits = outboundRateLimits(topics);
+  options.outbound_encodings = outboundEncodings(topics);
   return options;
 }
 

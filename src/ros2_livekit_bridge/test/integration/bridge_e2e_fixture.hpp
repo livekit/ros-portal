@@ -117,7 +117,7 @@ inline rclcpp::NodeOptions createBridgeOptions(const rclcpp::Context::SharedPtr&
 }
 
 inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool preserve_id = false,
-                                    const std::string& direction = "bidirectional") {
+                                    const std::string& direction = "bidirectional", const std::string& encoding = "") {
   std::ostringstream stream;
   stream << "ros2_livekit_bridge:\n"
          << "  version: \"0.0.1\"\n"
@@ -128,6 +128,9 @@ inline std::string bridgeConfigYaml(const std::string& topic_pattern, bool prese
          << "      direction: \"" << direction << "\"\n";
   if (preserve_id) {
     stream << "      preserve_id: true\n";
+  }
+  if (!encoding.empty()) {
+    stream << "      encoding: \"" << encoding << "\"\n";
   }
   return stream.str();
 }
@@ -178,7 +181,8 @@ protected:
 
   void initializeRuntime(const std::string& topic_pattern_a, const std::string& topic_pattern_b,
                          const std::string& publish_topic_a, const std::string& publish_topic_b,
-                         bool preserve_id_a = false, bool preserve_id_b = false) {
+                         bool preserve_id_a = false, bool preserve_id_b = false, const std::string& encoding_a = "",
+                         const std::string& encoding_b = "") {
     ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
     const auto [domain_id_a, domain_id_b] = testDomainIds();
@@ -188,10 +192,12 @@ protected:
     SCOPED_TRACE("ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()) +
                  ", ROS graph B domain_id=" + std::to_string(graph_b_->domain_id()));
 
-    config_file_a_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern_a, preserve_id_a),
-                                                           "ros2_livekit_bridge_bridge_test_e2e_a_");
-    config_file_b_ = std::make_unique<TemporaryConfigFile>(bridgeConfigYaml(topic_pattern_b, preserve_id_b),
-                                                           "ros2_livekit_bridge_bridge_test_e2e_b_");
+    config_file_a_ = std::make_unique<TemporaryConfigFile>(
+        bridgeConfigYaml(topic_pattern_a, preserve_id_a, "bidirectional", encoding_a),
+        "ros2_livekit_bridge_bridge_test_e2e_a_");
+    config_file_b_ = std::make_unique<TemporaryConfigFile>(
+        bridgeConfigYaml(topic_pattern_b, preserve_id_b, "bidirectional", encoding_b),
+        "ros2_livekit_bridge_bridge_test_e2e_b_");
 
     bridge_a_ = createBridge(*graph_a_, "/bridge_a_node", token_a_, config_file_a_->path().string());
     bridge_b_ = createBridge(*graph_b_, "/bridge_b_node", token_b_, config_file_b_->path().string());

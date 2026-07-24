@@ -300,7 +300,12 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
       livekit::DataTrackPublishOptions options;
       options.name = topic_name;
       options.schema = schema_id;
-      options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+      // The schema encoding dictates the wire format: a JsonSchema schema
+      // describes self-describing JSON frames; every other supported schema
+      // (Ros2Msg, Ros2Idl) describes raw ROS CDR frames.
+      options.frame_encoding = schema_id.encoding == livekit::DataTrackSchemaEncoding::JsonSchema
+                                   ? livekit::DataTrackFrameEncoding::Json
+                                   : livekit::DataTrackFrameEncoding::Cdr;
       const auto publish_result = participant->publishDataTrack(options);
       if (!publish_result) {
         const auto& error = publish_result.error();

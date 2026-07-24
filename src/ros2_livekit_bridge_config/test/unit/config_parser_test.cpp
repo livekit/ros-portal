@@ -78,6 +78,7 @@ ros2_livekit_bridge:
         codec: "h264"
     - topic: "/odom"
       direction: "bidirectional"
+      encoding: "jsonschema"
     - topic: "/teleop_cmd"
       direction: "in"
       preserve_id: true
@@ -108,11 +109,42 @@ ros2_livekit_bridge:
   EXPECT_FALSE(config.topics[0].preserve_id);
   ASSERT_TRUE(config.topics[0].max_rate_hz.has_value());
   EXPECT_DOUBLE_EQ(*config.topics[0].max_rate_hz, 15.0);
+  EXPECT_EQ(config.topics[0].encoding, Encoding::Ros2msg); // default
   EXPECT_EQ(config.topics[1].direction, Direction::Bidirectional);
   EXPECT_FALSE(config.topics[1].preserve_id);
   EXPECT_FALSE(config.topics[1].max_rate_hz.has_value());
+  EXPECT_EQ(config.topics[1].encoding, Encoding::Jsonschema);
   EXPECT_EQ(config.topics[2].direction, Direction::In);
   EXPECT_TRUE(config.topics[2].preserve_id);
+  EXPECT_EQ(config.topics[2].encoding, Encoding::Ros2msg); // default
+}
+
+TEST(ConfigParserTest, ParsesRos2IdlEncoding) {
+  const auto config = parse(
+      R"(
+ros2_livekit_bridge:
+  version: "0.0.1"
+  topics:
+    - topic: "/state"
+      direction: "out"
+      encoding: "ros2idl"
+)");
+
+  ASSERT_EQ(config.topics.size(), 1u);
+  EXPECT_EQ(config.topics[0].encoding, Encoding::Ros2idl);
+}
+
+TEST(ConfigParserTest, RejectsInvalidTopicEncoding) {
+  expectInvalid(
+      R"(
+ros2_livekit_bridge:
+  version: "0.0.1"
+  topics:
+    - topic: "/state"
+      direction: "out"
+      encoding: "protobuf"
+)",
+      "expected 'ros2msg', 'ros2idl', or 'jsonschema'");
 }
 
 TEST(ConfigParserTest, RejectsNonNumericMaxRateHz) {

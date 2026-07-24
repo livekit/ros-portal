@@ -47,6 +47,9 @@
     "serviceDirection": {
       "enum": ["out"]
     },
+    "encoding": {
+      "enum": ["ros2msg", "ros2idl", "jsonschema"]
+    },
     "nonemptyString": {
       "type": "string",
       "minLength": 1
@@ -124,6 +127,11 @@
           "description": "When true, this topic is treated as latched (ROS RELIABLE + TRANSIENT_LOCAL durability, e.g. /tf_static). LiveKit DataTracks are not latched, so latched topics are routed off the DataTrack path and onto a reliable RPC push-with-ack mechanism instead. Outbound: the bridge subscribes with TRANSIENT_LOCAL (capturing state published before it started), stores the topic's messages, and pushes them to every peer bridge that joins the room, so state published before a peer connected is still delivered. Inbound: the bridge republishes received messages via a TRANSIENT_LOCAL publisher so ROS subscribers that start after the bridge still receive them; the ROS message type travels in the RPC payload, so 'msg_type' is not required for a latched inbound topic. Matched by literal topic name, not regex. Intended for small whole-state latched topics; a single message exceeding the LiveKit RPC payload limit (15 KiB) is skipped with a warning.",
           "type": "boolean",
           "default": false
+        },
+        "encoding": {
+          "description": "Outbound topics only. Selects how this bridge encodes and sends the topic's data on the LiveKit DataTrack, and the schema encoding it advertises to subscribers. 'ros2msg' (default) and 'ros2idl' send raw ROS CDR frames described by a Ros2Msg or Ros2Idl schema; 'jsonschema' deserializes each ROS message and sends a JSON frame described by a generated JSON Schema, easing communication with non-ROS systems. 'ros2idl' requires the local ROS type definition to be renderable as ROS 2 IDL; a topic requesting an encoding whose schema cannot be rendered is skipped with an error. Inbound decoding is unaffected: it is auto-detected from the remote track's advertised frame encoding, so this field is ignored for pure inbound topics. Matched by literal topic name, not regex.",
+          "$ref": "#/$defs/encoding",
+          "default": "ros2msg"
         },
         "video_options": {
           "$ref": "#/$defs/videoOptions"

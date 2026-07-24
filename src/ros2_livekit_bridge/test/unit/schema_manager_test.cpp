@@ -300,6 +300,82 @@ TEST(SchemaManagerTest, MapsKnownAndRejectsUnsupportedEncodings) {
   EXPECT_EQ(rejected_define_count, 0);
 }
 
+TEST(SchemaManagerTest, RendersAndDefinesJsonSchema) {
+  auto methods = makeLiveKitMethods();
+  livekit::DataTrackSchemaId defined_id;
+  std::string defined_text;
+  methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string& text) {
+    defined_id = schema_id;
+    defined_text = text;
+    return true;
+  };
+
+  int render_ros_count = 0;
+  int render_json_count = 0;
+  SchemaManager manager(
+      std::move(methods),
+      [&](const std::string&) {
+        ++render_ros_count;
+        return std::optional<RosMessageSchema>{{"ros2msg", "should not be used"}};
+      },
+      [&](const std::string&) {
+        ++render_json_count;
+        return std::optional<std::string>{R"({"type":"object"})"};
+      });
+
+  const auto result = manager.ensureSchemaDefined("example_msgs/msg/Example", OutboundEncoding::JsonSchema);
+
+  ASSERT_TRUE(result);
+  EXPECT_EQ(defined_id.name, "example_msgs/msg/Example");
+  EXPECT_EQ(defined_id.encoding, livekit::DataTrackSchemaEncoding::JsonSchema);
+  EXPECT_EQ(defined_text, R"({"type":"object"})");
+  EXPECT_EQ(render_json_count, 1);
+  EXPECT_EQ(render_ros_count, 0);
+}
+
+TEST(SchemaManagerTest, FailsWhenJsonSchemaCannotBeRendered) {
+  int define_count = 0;
+  auto methods = makeLiveKitMethods();
+  methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
+    ++define_count;
+    return true;
+  };
+  SchemaManager manager(
+      std::move(methods), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "text"}}; },
+      [](const std::string&) { return std::optional<std::string>{}; });
+
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/Example", OutboundEncoding::JsonSchema));
+  EXPECT_EQ(define_count, 0);
+}
+
+TEST(SchemaManagerTest, DefinesRos2IdlWhenRequestedAndAvailable) {
+  auto methods = makeLiveKitMethods();
+  livekit::DataTrackSchemaId defined_id;
+  methods.define_schema = [&](const livekit::DataTrackSchemaId& schema_id, const std::string&) {
+    defined_id = schema_id;
+    return true;
+  };
+  SchemaManager manager(std::move(methods),
+                        [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2idl", "idl text"}}; });
+
+  ASSERT_TRUE(manager.ensureSchemaDefined("example_msgs/msg/Example", OutboundEncoding::Ros2Idl));
+  EXPECT_EQ(defined_id.encoding, livekit::DataTrackSchemaEncoding::Ros2Idl);
+}
+
+TEST(SchemaManagerTest, SkipsRos2IdlWhenLocalDefinitionIsNotIdl) {
+  int define_count = 0;
+  auto methods = makeLiveKitMethods();
+  methods.define_schema = [&](const livekit::DataTrackSchemaId&, const std::string&) {
+    ++define_count;
+    return true;
+  };
+  SchemaManager manager(std::move(methods),
+                        [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "msg text"}}; });
+
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/Example", OutboundEncoding::Ros2Idl));
+  EXPECT_EQ(define_count, 0);
+}
+
 TEST(SchemaManagerTest, DefinesAnExactSchemaOnlyOnce) {
   auto methods = makeLiveKitMethods();
   int define_count = 0;

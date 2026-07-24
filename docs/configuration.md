@@ -62,11 +62,12 @@ used to limit which streams cross the bridge for bandwidth reasons.
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
-| `topic` | string | yes | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz` and `latched`. |
+| `topic` | string | yes | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz`, `latched`, and `encoding`. |
 | `direction` | string | yes | `in`, `out`, or `bidirectional`. |
 | `preserve_id` | boolean | no | Default `false`. Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
 | `max_rate_hz` | number | no | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
 | `latched` | boolean | no | Default `false`. Treat the topic as latched (see below). Literal topic names only. |
+| `encoding` | string | no | Default `ros2msg`. Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
 | `video_options` | map | no | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
@@ -204,6 +205,41 @@ topics:
     direction: "in"
     latched: true
 ```
+
+### Data track encoding (`encoding`)
+
+`encoding` applies only to outbound (`out` / `bidirectional`) topics and selects
+how this bridge encodes the topic's messages on the LiveKit DataTrack, along
+with the schema it advertises to subscribers:
+
+| Value | Frame format | Advertised schema | Use case |
+|---|---|---|---|
+| `ros2msg` (default) | ROS CDR | ROS 2 Message | ROS-to-ROS forwarding; no conversion cost. |
+| `ros2idl` | ROS CDR | ROS 2 IDL | ROS-to-ROS forwarding where consumers expect an IDL schema. |
+| `jsonschema` | JSON | generated JSON Schema | Communicating with **non-ROS** systems that read JSON directly. |
+
+```yaml
+topics:
+  # Publish /diagnostics as JSON so a non-ROS dashboard can consume it directly.
+  - topic: "/diagnostics"
+    direction: "out"
+    encoding: "jsonschema"
+```
+
+Notes:
+
+- `jsonschema` deserializes each ROS message and sends a JSON frame described by
+  a JSON Schema generated from the ROS type. A peer bridge receiving the track
+  transparently converts the JSON back into the ROS message before republishing,
+  so ROS-to-ROS forwarding still works with any encoding.
+- `ros2idl` requires the local ROS type definition to be renderable as ROS 2
+  IDL. A topic requesting an encoding whose schema cannot be rendered is skipped
+  with an error.
+- Inbound decoding is independent of this setting: it is auto-detected from the
+  remote track's advertised frame encoding (CDR or JSON). `encoding` is ignored
+  for pure inbound (`in`) topics.
+- Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
+  name**, not regex.
 
 ## Video Options
 

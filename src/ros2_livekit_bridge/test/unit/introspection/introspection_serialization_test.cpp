@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <nlohmann/json.hpp>
 #include <rclcpp/serialization.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -327,6 +328,55 @@ TEST(JsonMessageTest, RejectsOversizedResizableSequence) {
   payload += "0]}";
 
   expectJsonFailure("std_msgs/msg/UInt8MultiArray", payload);
+}
+
+// ---------------------------------------------------------------------------
+// Outbound helpers: jsonFromSerializedMessage (CDR -> JSON) and renderJsonSchema.
+// ---------------------------------------------------------------------------
+
+TEST(JsonOutboundTest, RoundTripsThroughJsonAndBack) {
+  // Serialize a message to CDR, convert the CDR to JSON, then feed that JSON
+  // back through the inbound path and confirm the original fields survive.
+  const auto cdr = serializeJson("geometry_msgs/msg/Twist",
+                                 R"({"linear":{"x":0.5,"y":0.0,"z":0.0},"angular":{"x":0.0,"y":0.0,"z":1.25}})");
+
+  std::string error;
+  const auto json = introspection::jsonFromSerializedMessage("geometry_msgs/msg/Twist", cdr, error);
+  ASSERT_TRUE(json.has_value()) << error;
+  EXPECT_TRUE(error.empty()) << error;
+
+  const auto reserialized = serializeJson("geometry_msgs/msg/Twist", *json);
+  const auto message = deserialize<geometry_msgs::msg::Twist>(reserialized);
+  EXPECT_DOUBLE_EQ(message.linear.x, 0.5);
+  EXPECT_DOUBLE_EQ(message.angular.z, 1.25);
+}
+
+TEST(JsonOutboundTest, JsonConversionFailsForUnknownType) {
+  std::string error;
+  const auto json =
+      introspection::jsonFromSerializedMessage("missing_msgs/msg/Nope", rclcpp::SerializedMessage{}, error);
+  EXPECT_FALSE(json.has_value());
+  EXPECT_FALSE(error.empty());
+}
+
+TEST(JsonOutboundTest, RendersJsonSchemaForKnownType) {
+  std::string error;
+  const auto schema = introspection::renderJsonSchema("std_msgs/msg/String", error);
+  ASSERT_TRUE(schema.has_value()) << error;
+  EXPECT_TRUE(error.empty()) << error;
+
+  const auto parsed = nlohmann::json::parse(*schema);
+  EXPECT_EQ(parsed.at("type"), "object");
+  ASSERT_TRUE(parsed.contains("properties"));
+  ASSERT_TRUE(parsed.at("properties").contains("data"));
+  EXPECT_EQ(parsed.at("properties").at("data").at("type"), "string");
+}
+
+TEST(JsonOutboundTest, RenderJsonSchemaFailsForUnknownType) {
+  std::string error;
+  const auto schema = introspection::renderJsonSchema("missing_msgs/msg/Nope", error);
+  EXPECT_FALSE(schema.has_value());
+  EXPECT_FALSE(error.empty());
 }
 
 } // namespace

@@ -165,6 +165,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     auto& rcl_msg = msg->get_rcl_serialized_message();
 
     std::shared_ptr<DataTrackWriter> writer;
+    OutboundEncoding encoding = OutboundEncoding::Ros2Msg;
     {
       std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
       const auto state_it = data_topic_states_.find(topic_name);
@@ -196,10 +197,24 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
         return;
       }
       writer = state.writer;
+      encoding = state.encoding;
     }
 
-    auto push_result =
-        writer->try_push(std::vector<std::uint8_t>(rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length));
+    std::vector<std::uint8_t> payload;
+    if (encoding == OutboundEncoding::JsonSchema) {
+      std::string error;
+      const auto json = introspection::jsonFromSerializedMessage(topic_type, *msg, error);
+      if (!json) {
+        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Dropping frame for '%s'; JSON conversion failed: %s",
+                             topic_name.c_str(), error.c_str());
+        return;
+      }
+      payload.assign(json->begin(), json->end());
+    } else {
+      payload.assign(rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length);
+    }
+
+    auto push_result = writer->try_push(std::move(payload));
     if (!push_result) {
       RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Failed to push data frame for '%s': %s", topic_name.c_str(),
                            push_result.error().c_str());
@@ -218,6 +233,10 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     state.min_period = rclcpp::Duration::from_seconds(1.0 / rate_it->second);
     RCLCPP_INFO(logger_, "Outbound topic '%s' rate-capped at %.3g Hz", topic_name.c_str(), rate_it->second);
   }
+  if (const auto enc_it = options_.outbound_encodings.find(topic_name); enc_it != options_.outbound_encodings.end()) {
+    state.encoding = enc_it->second;
+  }
+  const auto encoding = state.encoding;
   data_topic_states_[topic_name] = std::move(state);
 
   try {
@@ -238,7 +257,11 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (CDR)", topic_name.c_str(), topic_type.c_str());
+  const char* encoding_label = encoding == OutboundEncoding::JsonSchema ? "JSON/JsonSchema"
+                               : encoding == OutboundEncoding::Ros2Idl  ? "CDR/Ros2Idl"
+                                                                        : "CDR/Ros2Msg";
+  RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (%s)", topic_name.c_str(), topic_type.c_str(),
+              encoding_label);
 }
 
 bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std::string& topic_type,
@@ -247,7 +270,7 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
     return true;
   }
 
-  const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type);
+  const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type, state.encoding);
   if (!schema_result) {
     return false;
   }

@@ -257,9 +257,9 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  const char* encoding_label = encoding == OutboundEncoding::JsonSchema ? "JSON/JsonSchema"
-                               : encoding == OutboundEncoding::Ros2Idl  ? "CDR/Ros2Idl"
-                                                                        : "CDR/Ros2Msg";
+  const char* encoding_label = encoding == OutboundEncoding::JsonSchema ? "JSON (requested jsonschema)"
+                               : encoding == OutboundEncoding::Ros2Idl  ? "CDR (requested ros2idl)"
+                                                                        : "CDR (requested ros2msg)";
   RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (%s)", topic_name.c_str(), topic_type.c_str(),
               encoding_label);
 }

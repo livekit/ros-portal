@@ -22,7 +22,10 @@ find_package(ament_cmake_auto REQUIRED)
 # CMake configs reference (yaml-cpp::yaml-cpp, nlohmann_json::nlohmann_json)
 # before ament_auto_find_build_dependencies resolves those packages.
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(yaml-cpp REQUIRED)
+find_package(yaml_cpp_vendor REQUIRED)
+find_package(ros2_medkit_cmake REQUIRED)
+include(ROS2MedkitCompat)
+medkit_find_yaml_cpp()
 
 ament_auto_find_build_dependencies()
 

@@ -38,6 +38,8 @@ if [[ ! -f "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_serialization
   exit 2
 fi
 
+"${repo_root}/scripts/apply-external-patches.sh"
+
 mapfile -t package_versions < <(
   python3 - \
     "${repo_root}/src/ros2_livekit_bridge/package.xml" \

@@ -64,8 +64,13 @@ links after cloning outside the devcontainer:
 ```bash
 mkdir -p src/externals
 vcs import --recursive src/externals < external.repos
+./scripts/apply-external-patches.sh
 ./src/externals/cpp-tools/install.sh --repo-root .
 ```
+
+The patch script verifies the pinned external revision and applies the
+repository-owned compatibility patches idempotently. The devcontainer runs it
+automatically after importing the external repositories.
 
 Run the formatter locally with:
 
@@ -105,6 +110,7 @@ Initialize the pinned SDK source checkout with the other external repositories:
 ```bash
 mkdir -p src/externals
 vcs import --recursive src/externals < external.repos
+./scripts/apply-external-patches.sh
 ```
 
 To compile the SDK from that checkout and build the bridge against the

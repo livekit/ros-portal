@@ -120,7 +120,7 @@ jobs:
               set -eo pipefail
               source "/opt/ros/${ROS_DISTRO}/setup.bash"
               set -u
-              colcon build --packages-up-to ros2_livekit_bridge
+              colcon build --packages-up-to ros2_livekit_bridge test_utilities custom_msgs
             '
 
       - name: "colcon test: unit"
@@ -139,7 +139,7 @@ jobs:
               # --ctest-args -R ros2_livekit_bridge_unit_tests runs only the unit tests
               test_exit=0
               GTEST_COLOR=1 colcon test \
-                --packages-up-to ros2_livekit_bridge \
+                --packages-up-to ros2_livekit_bridge test_utilities custom_msgs \
                 --packages-skip ros2_medkit_serialization \
                 --event-handlers console_direct+ \
                 --return-code-on-test-failure \

@@ -42,25 +42,18 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 #include "ros2_livekit_bridge/schema_manager.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
 
-namespace diagnostic_updater {
-class DiagnosticStatusWrapper;
-} // namespace diagnostic_updater
-
 namespace livekit {
 class RemoteDataTrack;
 } // namespace livekit
 
 namespace ros2_livekit_bridge {
-
-namespace diagnostics {
-class DiagnosticsManager;
-} // namespace diagnostics
 
 /// @brief ROS type string for sensor image topics forwarded as video tracks.
 inline constexpr const char* kImageMsgType = "sensor_msgs/msg/Image";
@@ -142,12 +135,13 @@ public:
   /// @param node Non-owning handle to the ROS node the forwarder creates its
   /// subscriptions and publishers on. The forwarder locks the handle for each
   /// ROS operation; operations become no-ops once the node is destroyed.
-  /// @param diagnostics Optional shared diagnostics manager used to register
-  /// the topic-forwarder diagnostic task.
+  /// @param diagnostics Optional bridge-owned diagnostics functions used to
+  /// register the topic-forwarder diagnostic task. Empty functions disable
+  /// diagnostics.
   /// @throws std::invalid_argument when the node has already expired or any
   /// required LiveKit callback is unset.
   TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
-                 diagnostics::DiagnosticsManager* diagnostics = nullptr);
+                 diagnostics::DiagnosticsManagerFns diagnostics = {});
 
   /// @brief Stop inbound streams before destruction.
   ~TopicForwarder();
@@ -308,8 +302,8 @@ private:
   SchemaManager schema_manager_;
   /// @brief LiveKit publish callbacks supplied by the bridge.
   LiveKitMethods livekit_methods_;
-  /// @brief Shared diagnostics manager that owns the registered task.
-  diagnostics::DiagnosticsManager* diagnostics_;
+  /// @brief Bridge-owned diagnostics functions used to (de)register the task.
+  diagnostics::DiagnosticsManagerFns diagnostics_;
   /// @brief Reentrant callback group for outbound ROS subscriptions.
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   /// @brief Logger borrowed from the ROS node.

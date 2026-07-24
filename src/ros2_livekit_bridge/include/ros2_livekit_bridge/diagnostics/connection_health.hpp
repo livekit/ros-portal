@@ -27,9 +27,9 @@
 #include <optional>
 #include <string>
 
-namespace ros2_livekit_bridge::diagnostics {
+#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 
-class DiagnosticsManager;
+namespace ros2_livekit_bridge::diagnostics {
 
 /// High-level LiveKit connection state used by the connection health diagnostic.
 enum class ConnectionHealthStateKind {
@@ -153,10 +153,11 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
 /// publish diagnostics directly from SDK threads.
 class ConnectionHealthDiagnostics final {
 public:
-  /// Register the connection health task with the shared diagnostics manager.
+  /// Register the connection health task through the bridge-owned diagnostics functions.
   ///
-  /// @param diagnostics Shared diagnostics manager that owns the updater and publisher.
-  explicit ConnectionHealthDiagnostics(DiagnosticsManager& diagnostics);
+  /// @param diagnostics Bridge-owned diagnostics functions wrapping the shared
+  /// manager. Empty functions disable diagnostics.
+  explicit ConnectionHealthDiagnostics(DiagnosticsManagerFns diagnostics);
 
   /// Remove the registered connection health task from the shared manager.
   ///
@@ -223,8 +224,8 @@ private:
   /// Latest connection state and RTC summary rendered by the diagnostic task.
   ConnectionHealthState state_;
 
-  /// Shared diagnostics manager that owns the registered `connection_health` task.
-  DiagnosticsManager* diagnostics_;
+  /// Bridge-owned diagnostics functions used to (de)register the `connection_health` task.
+  DiagnosticsManagerFns diagnostics_;
 
   /// In-flight asynchronous LiveKit stats request, if one is outstanding.
   std::optional<std::future<livekit::SessionStats>> pending_stats_;

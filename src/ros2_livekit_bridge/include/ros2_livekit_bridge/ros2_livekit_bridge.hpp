@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
@@ -144,6 +145,13 @@ private:
   /// @brief Create Manager after LiveKit room connection succeeds.
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
   bool initializeCliManager();
+
+  /// @brief Build the diagnostics registration functions handed to components.
+  ///
+  /// The returned wrappers close over this node and validate `diagnostics_`
+  /// before forwarding, logging FATAL if a component registers or deregisters
+  /// a task while the shared manager does not exist.
+  diagnostics::DiagnosticsManagerFns makeDiagnosticsFns();
 
   /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
   /// @param services Configured services; outbound routes are derived here.

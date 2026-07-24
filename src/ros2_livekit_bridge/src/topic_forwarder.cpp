@@ -33,7 +33,6 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
 #include "ros2_livekit_bridge/utils/image_conversion.hpp"
 #include "ros2_livekit_bridge/utils/ros_utils.hpp"
@@ -85,12 +84,12 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
 }
 
 TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
-                               diagnostics::DiagnosticsManager* diagnostics)
+                               diagnostics::DiagnosticsManagerFns diagnostics)
     : options_(std::move(options)),
       node_(std::move(node)),
       schema_manager_(std::move(livekit_methods.schema)),
       livekit_methods_(std::move(livekit_methods)),
-      diagnostics_(diagnostics),
+      diagnostics_(std::move(diagnostics)),
       logger_(rclcpp::get_logger("topic_forwarder")) {
   const auto locked_node = node_.lock();
   if (!locked_node) {
@@ -104,15 +103,15 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
   logger_ = locked_node->get_logger().get_child("topic_forwarder");
   clock_ = locked_node->get_clock();
   callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  if (diagnostics_) {
-    diagnostics_->add(kTopicForwarderDiagnosticTaskName,
-                      [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+  if (diagnostics_.add) {
+    diagnostics_.add(kTopicForwarderDiagnosticTaskName,
+                     [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
   }
 }
 
 TopicForwarder::~TopicForwarder() {
-  if (diagnostics_) {
-    diagnostics_->remove(kTopicForwarderDiagnosticTaskName);
+  if (diagnostics_.remove) {
+    diagnostics_.remove(kTopicForwarderDiagnosticTaskName);
   }
   stopAllInboundDataTracks();
   std::lock_guard<std::mutex> lock(outbound_topics_mutex_);

@@ -32,7 +32,6 @@
 #include "ros2_livekit_bridge/cli/service_list.hpp"
 #include "ros2_livekit_bridge/cli/topic_list.hpp"
 #include "ros2_livekit_bridge/cli/utils.hpp"
-#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
 
 namespace ros2_livekit_bridge::cli {
 
@@ -61,11 +60,11 @@ typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeIn
 
 Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
                  LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
-                 diagnostics::DiagnosticsManager* diagnostics)
+                 diagnostics::DiagnosticsManagerFns diagnostics)
     : node_interfaces_(std::move(node_interfaces)),
       livekit_methods_(std::move(livekit_methods)),
       topic_publish_allowed_(std::move(topic_publish_allowed)),
-      diagnostics_(diagnostics) {
+      diagnostics_(std::move(diagnostics)) {
   if (!node_interfaces_.node_base || !node_interfaces_.node_services || !node_interfaces_.node_graph ||
       !node_interfaces_.node_topics || !node_interfaces_.node_logging) {
     throw std::invalid_argument("Manager requires fully populated NodeInterfaces");
@@ -142,14 +141,14 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
                   (service_call_service_ != nullptr) + (interface_show_service_ != nullptr),
               registered_rpc_methods_.size());
 
-  if (diagnostics_ != nullptr) {
-    diagnostics_->add(kCliManagerDiagnosticTaskName,
-                      [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+  if (diagnostics_.add) {
+    diagnostics_.add(kCliManagerDiagnosticTaskName,
+                     [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
   }
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
-                 TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManager* diagnostics)
+                 TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManagerFns diagnostics)
     : Manager(
           NodeInterfaces{
               node.get_node_base_interface(),
@@ -158,12 +157,12 @@ Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_g
               node.get_node_topics_interface(),
               node.get_node_logging_interface(),
           },
-          callback_group, std::move(livekit_methods), std::move(topic_publish_allowed), diagnostics) {}
+          callback_group, std::move(livekit_methods), std::move(topic_publish_allowed), std::move(diagnostics)) {}
 
 Manager::~Manager() {
   // Deregister the diagnostic task before the state it reads is torn down.
-  if (diagnostics_ != nullptr) {
-    diagnostics_->remove(kCliManagerDiagnosticTaskName);
+  if (diagnostics_.remove) {
+    diagnostics_.remove(kCliManagerDiagnosticTaskName);
   }
   if (livekit_methods_.unregister_rpc_method) {
     for (const auto& method : registered_rpc_methods_) {

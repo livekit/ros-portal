@@ -35,7 +35,7 @@
 #include "ros2_livekit_bridge/cli/constants.hpp"
 #include "ros2_livekit_bridge/cli/json_converters.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
-#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {

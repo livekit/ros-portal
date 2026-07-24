@@ -30,8 +30,6 @@
 #include <variant>
 #include <vector>
 
-#include "ros2_livekit_bridge/diagnostics/diagnostics_manager.hpp"
-
 namespace ros2_livekit_bridge::diagnostics {
 
 namespace {
@@ -370,13 +368,20 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
   }
 }
 
-ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManager& diagnostics)
-    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt}, diagnostics_(&diagnostics) {
-  diagnostics.add(kConnectionHealthTaskName,
-                  [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManagerFns diagnostics)
+    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt},
+      diagnostics_(std::move(diagnostics)) {
+  if (diagnostics_.add) {
+    diagnostics_.add(kConnectionHealthTaskName,
+                     [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+  }
 }
 
-ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() { diagnostics_->remove(kConnectionHealthTaskName); }
+ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() {
+  if (diagnostics_.remove) {
+    diagnostics_.remove(kConnectionHealthTaskName);
+  }
+}
 
 void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
   {

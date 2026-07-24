@@ -33,19 +33,12 @@
 #include "ros2_livekit_bridge/cli/service_call.hpp"
 #include "ros2_livekit_bridge/cli/topic_pub.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
+#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
-
-namespace diagnostic_updater {
-class DiagnosticStatusWrapper;
-} // namespace diagnostic_updater
-
-namespace ros2_livekit_bridge::diagnostics {
-class DiagnosticsManager;
-} // namespace ros2_livekit_bridge::diagnostics
 
 namespace ros2_livekit_bridge::cli {
 /// @brief Hosts ROS CLI-like introspection services over ROS and LiveKit RPC.
@@ -96,13 +89,14 @@ public:
   /// and logs.
   /// @param callback_group Callback group used by the ROS service.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  /// @param diagnostics Optional shared diagnostics manager used to register the
-  /// cli-manager diagnostic task.
+  /// @param diagnostics Optional bridge-owned diagnostics functions used to
+  /// register the cli-manager diagnostic task. Empty functions disable
+  /// diagnostics.
   /// @throws std::invalid_argument when any interface or @p livekit_methods
   /// callback is unset.
   Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
           LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed = {},
-          diagnostics::DiagnosticsManager* diagnostics = nullptr);
+          diagnostics::DiagnosticsManagerFns diagnostics = {});
 
   /// @brief Construct the manager from a bridge node.
   ///
@@ -111,12 +105,13 @@ public:
   /// @param node Bridge node used for service hosting, graph queries, and logs.
   /// @param callback_group Callback group used by the ROS service.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  /// @param diagnostics Optional shared diagnostics manager used to register the
-  /// cli-manager diagnostic task.
+  /// @param diagnostics Optional bridge-owned diagnostics functions used to
+  /// register the cli-manager diagnostic task. Empty functions disable
+  /// diagnostics.
   /// @throws std::invalid_argument when any extracted interface or @p
   /// livekit_methods callback is unset.
   Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
-          TopicPublishAllowed topic_publish_allowed = {}, diagnostics::DiagnosticsManager* diagnostics = nullptr);
+          TopicPublishAllowed topic_publish_allowed = {}, diagnostics::DiagnosticsManagerFns diagnostics = {});
 
   /// @brief Unregister the LiveKit RPC method before destruction.
   ~Manager();
@@ -272,8 +267,8 @@ private:
   /// LiveKit RPC method names successfully registered at construction. Used to
   /// unregister exactly those methods on teardown and to render diagnostics.
   std::vector<std::string> registered_rpc_methods_;
-  /// Optional shared diagnostics hub that owns the registered cli-manager task.
-  diagnostics::DiagnosticsManager* diagnostics_;
+  /// Bridge-owned diagnostics functions used to (de)register the cli-manager task.
+  diagnostics::DiagnosticsManagerFns diagnostics_;
   /// Count of remote calls rejected because the target participant was absent.
   /// Mutable/atomic: incremented from const request handlers on executor and RPC
   /// threads and read from the diagnostic timer thread.

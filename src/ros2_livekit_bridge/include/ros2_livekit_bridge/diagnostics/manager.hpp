@@ -23,6 +23,25 @@
 
 namespace ros2_livekit_bridge::diagnostics {
 
+/// Diagnostics registration functions handed to bridge components.
+///
+/// The bridge owns the `DiagnosticsManager` and passes components this bundle
+/// of wrapper functions instead of a raw manager pointer. The bridge-owned
+/// wrappers validate the manager before forwarding, so components never touch
+/// a dangling pointer. A default-constructed bundle (empty functions) means
+/// diagnostics are disabled; components must check each function before
+/// calling it.
+struct DiagnosticsManagerFns {
+  /// Task callback that populates one diagnostic status.
+  using TaskCallback = std::function<void(diagnostic_updater::DiagnosticStatusWrapper&)>;
+
+  /// Register a diagnostic task callback under a stable name.
+  std::function<void(const std::string& name, TaskCallback callback)> add;
+
+  /// Deregister a diagnostic task by name.
+  std::function<void(const std::string& name)> remove;
+};
+
 /// Shared diagnostics updater for all bridge diagnostic tasks.
 ///
 /// The bridge node owns one hub so all diagnostics publish through a single
@@ -47,15 +66,12 @@ public:
   ///
   /// @param name Diagnostic task name.
   /// @param callback Function that populates one diagnostic status.
-  void add(const std::string& name, std::function<void(diagnostic_updater::DiagnosticStatusWrapper&)> callback) {
-    updater_.removeByName(name);
-    updater_.add(name, std::move(callback));
-  }
+  void add(const std::string& name, std::function<void(diagnostic_updater::DiagnosticStatusWrapper&)> callback);
 
   /// Deregister a diagnostic task by name.
   ///
   /// @param name Diagnostic task name previously passed to `add`.
-  void remove(const std::string& name) { updater_.removeByName(name); }
+  void remove(const std::string& name);
 
 private:
   diagnostic_updater::Updater updater_;

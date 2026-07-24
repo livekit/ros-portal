@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=../../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# Copyright 2026 LiveKit
+
+ros2_livekit_bridge:
+  version: "0.0.1"
+  topic_polling_period_ms: 500
+  ros_threads: 0
+
+  services:
+    - service: "/slam_toolbox/reset"
+      direction: "out"
+      participant: "waver_controller"
+      msg_type: "slam_toolbox/srv/Reset"
+
+  topics:
+    # Commands received from the controller (LiveKit -> ROS).
+    - topic: "/cmd_vel"
+      direction: "in"
+
+    - topic: "/goal_pose"
+      direction: "in"
+
+    - topic: "/initialpose"
+      direction: "in"
+
+    - topic: "/clicked_point"
+      direction: "in"
+
+    # Telemetry / sensor / nav streams sent out to LiveKit (ROS -> LiveKit)
+    - topic: "/map"
+      direction: "out"
+
+    - topic: "/plan"
+      direction: "out"
+
+    - topic: "/robot_description"
+      direction: "out"
+
+    - topic: "/scan"
+      direction: "out"
+
+    - topic: "/camera/image_raw"
+      direction: "out"
+
+    - topic: "/pose"
+      direction: "out"
+
+    - topic: "/slam_toolbox/graph_visualization"
+      direction: "out"
+
+    - topic: "/global_costmap/published_footprint"
+      direction: "out"
+
+    - topic: "/imu/data_raw"
+      max_rate_hz: 20
+      direction: "out"
+    
+    - topic: "/odom"
+      direction: "out"
+      encoding: "jsonschema"
+
+    - topic: "/battery_state"
+      direction: "out"
+      encoding: "jsonschema"
+
+    # Transform tree — required so the controller's Foxglove 3D panel has a
+    # valid fixed frame (without it the click-to-publish tool is hidden).

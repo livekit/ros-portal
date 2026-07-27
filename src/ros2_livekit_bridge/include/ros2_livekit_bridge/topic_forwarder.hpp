@@ -42,6 +42,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/schema_manager.hpp"
 
 #ifdef BUILD_TESTING
@@ -134,9 +135,12 @@ public:
   /// @param node Non-owning handle to the ROS node the forwarder creates its
   /// subscriptions and publishers on. The forwarder locks the handle for each
   /// ROS operation; operations become no-ops once the node is destroyed.
-  /// @throws std::invalid_argument when the node has already expired or any
-  /// required LiveKit callback is unset.
-  TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods);
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// topic-forwarder diagnostic task.
+  /// @throws std::invalid_argument when the node has already expired, any
+  /// required LiveKit callback is unset, or @p diagnostics is incomplete.
+  TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+                 diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop inbound streams before destruction.
   ~TopicForwarder();
@@ -161,6 +165,7 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
   FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
+  FRIEND_TEST(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
@@ -215,6 +220,9 @@ private:
 
   /// @brief Build a descriptor from a remote LiveKit data track.
   static RemoteDataTrackDescriptor createRemoteDataTrackDescriptor(std::shared_ptr<livekit::RemoteDataTrack> track);
+
+  /// @brief Handle an inbound LiveKit data track descriptor.
+  void onDataTrackPublished(RemoteDataTrackDescriptor descriptor);
 
   /// @brief Per-topic state for outbound ROS image forwarding.
   struct ImageTopicState {
@@ -281,6 +289,8 @@ private:
   void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);
   /// @brief Stop and join all active inbound LiveKit data track readers.
   void stopAllInboundDataTracks();
+  /// @brief Populate the topic-forwarder diagnostic status.
+  void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
   /// @brief Forwarding configuration supplied at construction.
   Options options_;
@@ -291,6 +301,8 @@ private:
   SchemaManager schema_manager_;
   /// @brief LiveKit publish callbacks supplied by the bridge.
   LiveKitMethods livekit_methods_;
+  /// @brief Bridge-owned diagnostics functions used to (de)register the task.
+  diagnostics::DiagnosticsManagerFns diagnostics_;
   /// @brief Reentrant callback group for outbound ROS subscriptions.
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   /// @brief Logger borrowed from the ROS node.
@@ -312,6 +324,8 @@ private:
   std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>> inbound_data_track_states_;
   /// @brief ROS topic names reserved by inbound LiveKit data tracks.
   std::unordered_set<std::string> inbound_ros_topic_names_;
+  /// @brief Count of inbound LiveKit tracks rejected due to invalid schemas.
+  std::atomic<std::uint64_t> inbound_schemas_incorrect_{0};
 };
 
 } // namespace ros2_livekit_bridge

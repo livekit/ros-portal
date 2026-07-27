@@ -18,10 +18,15 @@
 
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
+#include <memory>
 #include <optional>
+#include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <utility>
 
+#include "diagnostics_test_utils.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
 namespace {
@@ -132,6 +137,22 @@ livekit::SessionStats makeSessionStats(std::uint64_t bytes_sent = 1200, std::uin
                            makeDataChannelStats(livekit::DataChannelState::Closed)};
   stats.subscriber_stats = {makeInboundRtpStats(2, 0.007), makeInboundRtpStats(3, 0.011)};
   return stats;
+}
+
+TEST(ConnectionHealthDiagnosticsTest, RegistersAndRemovesTaskWithSharedHub) {
+  auto node = std::make_shared<rclcpp::Node>("connection_health_diagnostics_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+  const auto fns = test::makeDiagnosticsFns(diagnostics_updater);
+
+  {
+    ConnectionHealthDiagnostics connection_health(fns);
+    EXPECT_EQ(connection_health.snapshot().kind, ConnectionHealthStateKind::Disconnected);
+  }
+}
+
+TEST(ConnectionHealthDiagnosticsTest, RejectsMissingDiagnostics) {
+  EXPECT_THROW(ConnectionHealthDiagnostics({}), std::invalid_argument);
 }
 
 TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {

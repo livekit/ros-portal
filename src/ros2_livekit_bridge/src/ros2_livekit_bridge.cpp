@@ -37,6 +37,7 @@
 
 #include "ros2_livekit_bridge/cli/manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
@@ -75,7 +76,11 @@ bool Ros2LiveKitBridge::initialize() {
 
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
-  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(this);
+  topic_forwarder_.reset();
+  connection_diagnostics_.reset();
+  diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
+  diagnostics_updater_->setHardwareID("ros2_livekit_bridge");
+  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(makeDiagnosticsFns());
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
@@ -182,12 +187,41 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   // its push worker (which reads the room roster) while the room is still alive.
   latched_topic_forwarder_.reset();
   topic_forwarder_.reset();
+  connection_stats_timer_.reset();
+  connection_diagnostics_.reset();
+
+  // Reset diagnostics_updater_ after all its task owners are gone.
+  diagnostics_updater_.reset();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
     room_.reset();
   }
   // Note: livekit::shutdown() is intentionally NOT called here — the SDK
   // lifecycle is owned by the process entry point (see initialize()).
+}
+
+diagnostics::DiagnosticsManagerFns Ros2LiveKitBridge::makeDiagnosticsFns() {
+  // Components are owned by this node and destroyed before it, so capturing
+  // `this` is safe for the lifetime of every wrapper handed out here.
+  diagnostics::DiagnosticsManagerFns fns;
+  fns.add = [this](const std::string& name, diagnostics::DiagnosticsManagerFns::TaskCallback callback) {
+    if (diagnostics_updater_ == nullptr) {
+      RCLCPP_FATAL(this->get_logger(), "Cannot register diagnostic task '%s': diagnostics updater does not exist",
+                   name.c_str());
+      return;
+    }
+    diagnostics_updater_->removeByName(name);
+    diagnostics_updater_->add(name, std::move(callback));
+  };
+  fns.remove = [this](const std::string& name) {
+    if (diagnostics_updater_ == nullptr) {
+      RCLCPP_FATAL(this->get_logger(), "Cannot deregister diagnostic task '%s': diagnostics updater does not exist",
+                   name.c_str());
+      return;
+    }
+    diagnostics_updater_->removeByName(name);
+  };
+  return fns;
 }
 
 void Ros2LiveKitBridge::pollTopics() {
@@ -384,7 +418,7 @@ bool Ros2LiveKitBridge::initializeTopicForwarder(const std::vector<ros2_livekit_
     topic_forwarder_ = std::make_unique<TopicForwarder>(std::move(forwarder_options),
                                                         this->weak_from_this(), // weak_from_this() MUST be called after
                                                                                 // constructor
-                                                        std::move(forwarder_lk_methods));
+                                                        std::move(forwarder_lk_methods), makeDiagnosticsFns());
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder, unknown exception");
     return false;
@@ -406,7 +440,7 @@ bool Ros2LiveKitBridge::initializeCliManager() {
       return topic_forwarder_ && topic_forwarder_->isIncomingTopicAllowed(topic_name);
     };
     cli_manager_ = std::make_unique<cli::Manager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
-                                                  std::move(topic_publish_allowed));
+                                                  std::move(topic_publish_allowed), makeDiagnosticsFns());
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");
     return false;

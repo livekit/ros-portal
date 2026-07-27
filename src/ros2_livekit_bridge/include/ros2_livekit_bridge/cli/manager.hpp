@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -32,7 +33,12 @@
 #include "ros2_livekit_bridge/cli/service_call.hpp"
 #include "ros2_livekit_bridge/cli/topic_pub.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/types.hpp"
+
+#ifdef BUILD_TESTING
+#include <gtest/gtest_prod.h>
+#endif
 
 namespace ros2_livekit_bridge::cli {
 /// @brief Hosts ROS CLI-like introspection services over ROS and LiveKit RPC.
@@ -74,17 +80,22 @@ public:
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
   };
 
-  /// @brief Construct the manager, create the ROS service, and register RPC.
+  /// @brief Construct the manager, create the ROS services, and register RPC.
+  ///
+  /// Service creation and RPC registration are best-effort: a failure of either
+  /// is logged and recorded (OK when both halves exist, ERROR when either is
+  /// missing).
   /// @param node_interfaces Node interfaces for service hosting, graph queries,
   /// and logs.
   /// @param callback_group Callback group used by the ROS service.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  /// @throws std::invalid_argument when any interface or @p livekit_methods
-  /// callback is
-  /// unset.
-  /// @throws std::exception when RPC registration fails.
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// cli-manager diagnostic task.
+  /// @throws std::invalid_argument when any interface, @p livekit_methods
+  /// callback, or @p diagnostics is unset.
   Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
-          LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed = {});
+          LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
+          diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Construct the manager from a bridge node.
   ///
@@ -93,11 +104,12 @@ public:
   /// @param node Bridge node used for service hosting, graph queries, and logs.
   /// @param callback_group Callback group used by the ROS service.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  /// @throws std::invalid_argument when any extracted interface or @p
-  /// livekit_methods callback is unset.
-  /// @throws std::exception when RPC registration fails.
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// cli-manager diagnostic task.
+  /// @throws std::invalid_argument when any extracted interface, @p
+  /// livekit_methods callback, or @p diagnostics is unset.
   Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
-          TopicPublishAllowed topic_publish_allowed = {});
+          TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Unregister the LiveKit RPC method before destruction.
   ~Manager();
@@ -175,6 +187,12 @@ public:
   static std::uint8_t serviceCallRpcTimeout(std::uint8_t service_timeout_sec);
 
 private:
+#ifdef BUILD_TESTING
+  FRIEND_TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered);
+  FRIEND_TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails);
+  FRIEND_TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures);
+#endif
+
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
@@ -220,6 +238,18 @@ private:
   ResponseT performRemoteRpc(const std::string& participant_id, const char* rpc_method,
                              const std::string& request_payload, std::uint8_t timeout_sec) const;
 
+  /// @brief Populate the cli-manager diagnostic status from creation state.
+  ///
+  /// Reports OK when every CLI command has both its ROS service and its LiveKit
+  /// RPC method registered, and ERROR when either half of any command is
+  /// missing. Emits one key/value per command describing which half, if any,
+  /// failed.
+  /// @param status Diagnostic status wrapper to populate.
+  void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) const;
+
+  /// @brief Whether @p rpc_method was successfully registered at construction.
+  bool rpcRegistered(const std::string& rpc_method) const;
+
   NodeInterfaces node_interfaces_;
   LiveKitMethods livekit_methods_;
   /// Use a function rather than a static list to account for a dynamic set of
@@ -232,6 +262,19 @@ private:
   rclcpp::Service<ServiceListSrv>::SharedPtr service_list_service_;
   rclcpp::Service<ServiceCallSrv>::SharedPtr service_call_service_;
   rclcpp::Service<InterfaceShowSrv>::SharedPtr interface_show_service_;
+  /// LiveKit RPC method names successfully registered at construction. Used to
+  /// unregister exactly those methods on teardown and to render diagnostics.
+  std::vector<std::string> registered_rpc_methods_;
+  /// Bridge-owned diagnostics functions used to (de)register the cli-manager task.
+  diagnostics::DiagnosticsManagerFns diagnostics_;
+  /// Count of remote calls rejected because the target participant was absent.
+  /// Mutable/atomic: incremented from const request handlers on executor and RPC
+  /// threads and read from the diagnostic timer thread.
+  mutable std::atomic<std::uint64_t> remote_participant_not_found_{0};
+  /// Count of remote RPCs that failed at the LiveKit transport layer.
+  mutable std::atomic<std::uint64_t> remote_transport_failures_{0};
+  /// Count of remote RPC responses that failed to parse as valid JSON.
+  mutable std::atomic<std::uint64_t> remote_malformed_responses_{0};
 };
 
 } // namespace ros2_livekit_bridge::cli

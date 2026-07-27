@@ -22,8 +22,11 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
@@ -35,6 +38,8 @@
 #include <utility>
 #include <vector>
 
+#include "diagnostics_test_utils.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/schema_manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
@@ -46,6 +51,15 @@
 // integration tests.
 namespace ros2_livekit_bridge {
 namespace {
+
+std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key) {
+  for (const auto& value : status.values) {
+    if (value.key == key) {
+      return value.value;
+    }
+  }
+  return std::nullopt;
+}
 
 TopicForwarder::Options makeOptions() {
   TopicForwarder::Options options;
@@ -83,11 +97,22 @@ using namespace std::chrono_literals;
 
 class TopicForwarderTest : public ::testing::Test {
 protected:
-  void SetUp() override { node_ = std::make_shared<rclcpp::Node>("topic_forwarder_unit_test"); }
+  void SetUp() override {
+    node_ = std::make_shared<rclcpp::Node>("topic_forwarder_unit_test");
+    diagnostics_updater_ = std::make_shared<diagnostic_updater::Updater>(node_);
+    diagnostics_updater_->setHardwareID("ros2_livekit_bridge");
+    diagnostics_fns_ = test::makeDiagnosticsFns(diagnostics_updater_);
+  }
 
-  void TearDown() override { node_.reset(); }
+  void TearDown() override {
+    diagnostics_fns_ = {};
+    diagnostics_updater_.reset();
+    node_.reset();
+  }
 
-  TopicForwarder makeForwarder() { return TopicForwarder(makeOptions(), node_, makeLiveKitMethods()); }
+  TopicForwarder makeForwarder() {
+    return TopicForwarder(makeOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  }
 
   // Spins the node until the ROS graph reflects a predicate (e.g. a freshly
   // created publisher has been discovered) or the timeout elapses.
@@ -111,14 +136,22 @@ protected:
   }
 
   std::shared_ptr<rclcpp::Node> node_;
+  std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater_;
+  diagnostics::DiagnosticsManagerFns diagnostics_fns_;
 };
 
 TEST_F(TopicForwarderTest, ConstructorRejectsExpiredNode) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeLiveKitMethods()), std::invalid_argument);
+  EXPECT_THROW(TopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeLiveKitMethods(), diagnostics_fns_),
+               std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, ConstructorRejectsMissingLiveKitMethods) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), node_, TopicForwarder::LiveKitMethods{}), std::invalid_argument);
+  EXPECT_THROW(TopicForwarder(makeOptions(), node_, TopicForwarder::LiveKitMethods{}, diagnostics_fns_),
+               std::invalid_argument);
+}
+
+TEST_F(TopicForwarderTest, ConstructorRejectsMissingDiagnostics) {
+  EXPECT_THROW(TopicForwarder(makeOptions(), node_, makeLiveKitMethods(), {}), std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, IncomingTopicAllowedUsesConfiguredPatterns) {
@@ -151,6 +184,36 @@ TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears
   const livekit::DataTrackSchemaId conflicting_schema{"geometry_msgs/msg/Pose",
                                                       livekit::DataTrackSchemaEncoding::Ros2Msg};
   EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", conflicting_schema), "std_msgs/msg/String");
+}
+
+TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) {
+  auto subscription = node_->create_subscription<std_msgs::msg::String>(
+      "/remote/schema_mismatch", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
+  ASSERT_NE(subscription, nullptr);
+  ASSERT_TRUE(spinUntil([&]() {
+    const auto topics = node_->get_topic_names_and_types();
+    return topics.count("/remote/schema_mismatch") > 0U;
+  }));
+
+  auto forwarder = makeForwarder();
+  diagnostic_updater::DiagnosticStatusWrapper ok_status;
+  forwarder.populateStatus(ok_status);
+  EXPECT_EQ(ok_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(valueFor(ok_status, "inbound_schemas_incorrect"), "0");
+
+  TopicForwarder::RemoteDataTrackDescriptor descriptor;
+  descriptor.sid = "schema-mismatch-sid";
+  descriptor.track_name = "/remote/schema_mismatch";
+  descriptor.publisher_identity = "remote_robot";
+  descriptor.schema = livekit::DataTrackSchemaId{"geometry_msgs/msg/Pose", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
+
+  forwarder.onDataTrackPublished(std::move(descriptor));
+
+  diagnostic_updater::DiagnosticStatusWrapper warn_status;
+  forwarder.populateStatus(warn_status);
+  EXPECT_EQ(warn_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(warn_status, "inbound_schemas_incorrect"), "1");
 }
 
 TEST_F(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile) {
@@ -314,7 +377,7 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
 TEST_F(TopicForwarderTest, RateCapDropsSamplesWithinPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   // 20 Hz cap -> one sample every 50 ms at most.
-  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count));
+  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(50)};
   pub_qos.reliable();
@@ -349,7 +412,8 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto last_payload = std::make_shared<std::vector<std::uint8_t>>();
   // 5 Hz cap -> 200 ms period, ample room to send the later samples in-period.
-  TopicForwarder forwarder(makeRateCapOptions(5.0), node_, makeRecordingLiveKitMethods(push_count, last_payload));
+  TopicForwarder forwarder(makeRateCapOptions(5.0), node_, makeRecordingLiveKitMethods(push_count, last_payload),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -397,7 +461,7 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
 TEST_F(TopicForwarderTest, RateCapForwardsAgainAfterPeriodElapses) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   // 20 Hz cap -> 50 ms period.
-  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count));
+  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -429,7 +493,8 @@ TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto remaining_failures = std::make_shared<std::atomic<int>>(1);
   // 50 Hz -> 20 ms period; the single sample is passed through immediately.
-  TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeFlakyLiveKitMethods(push_count, remaining_failures));
+  TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeFlakyLiveKitMethods(push_count, remaining_failures),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -457,7 +522,7 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
         "required schema unavailable");
   };
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods));
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods), diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
@@ -477,7 +542,8 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
 // the reader's KEEP_LAST queue, isolating the "no throttling" behaviour under test.
 TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, makeCountingLiveKitMethods(push_count));
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, makeCountingLiveKitMethods(push_count),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();

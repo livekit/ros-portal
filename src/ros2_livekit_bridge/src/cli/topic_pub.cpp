@@ -71,6 +71,7 @@ TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
       publisher = cached->second.publisher;
       was_cached = true;
     } else if (publishers_.size() >= kMaxCachedTopicPublishers) {
+      ++cache_full_rejections_;
       return makeCliResponse<TopicPubSrv::Response>(false, "topic publisher cache limit reached");
     }
   }
@@ -116,6 +117,11 @@ TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
   }
 
   return makeCliResponse<TopicPubSrv::Response>(true, "", "");
+}
+
+CacheStats TopicPub::cacheStats() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return CacheStats{publishers_.size(), kMaxCachedTopicPublishers, cache_full_rejections_};
 }
 
 } // namespace ros2_livekit_bridge::cli

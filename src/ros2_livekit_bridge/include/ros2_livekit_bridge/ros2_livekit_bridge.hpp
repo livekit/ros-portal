@@ -20,6 +20,7 @@
 #include <livekit/room_delegate.h>
 
 #include <cstdint>
+#include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
@@ -27,6 +28,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 #include "ros2_livekit_bridge_config/config/config_parser.hpp"
@@ -144,6 +146,13 @@ private:
   /// @return True on success, false when the ROS2 CLI manager could not be initialized.
   bool initializeCliManager();
 
+  /// @brief Build the diagnostics registration functions handed to components.
+  ///
+  /// The returned wrappers close over this node and validate `diagnostics_updater_`
+  /// before forwarding, logging FATAL if a component registers or deregisters
+  /// a task while the shared updater does not exist.
+  diagnostics::DiagnosticsManagerFns makeDiagnosticsFns();
+
   /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
   /// @param services Configured services; outbound routes are derived here.
   /// @return True on success, false when the service forwarder could not be initialized.
@@ -179,6 +188,8 @@ private:
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
+  //! @brief Shared diagnostics updater for all bridge diagnostic tasks.
+  std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.
   std::unique_ptr<TopicForwarder> topic_forwarder_;
   //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.
@@ -187,7 +198,7 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
-  //! @brief LiveKit connection health diagnostics publisher.
+  //! @brief LiveKit connection health diagnostic task owner.
   std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.
   rclcpp::TimerBase::SharedPtr connection_stats_timer_;

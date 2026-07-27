@@ -1,20 +1,27 @@
 # Debian Releases
 
 The `CI` GitHub Actions workflow builds and clean-container tests packages for
-every supported ROS distribution and architecture. Pull requests, pushes to
-`main`, and manual CI runs store each `.deb` and checksum as a workflow
-artifact. They do not create a tag, GitHub Release, APT repository, or any
-public package.
+every supported ROS distribution and architecture. Pushes to `main` and manual
+CI runs store each `.deb` and checksum as a workflow artifact. They do not
+create a tag, GitHub Release, APT repository, or any public package.
+
+Pull request runs skip packaging. `scripts/build-deb.sh` builds into a clean
+tree, which on Humble means compiling the LiveKit SDK a second time in the same
+job, and that dominated pull request feedback time. Everything a pull request
+needs to be reviewable — the workspace build, unit tests, and integration tests
+— still runs on every distribution and architecture.
 
 ## Review CI Packages
 
-1. Open the pull request's successful `CI` workflow run.
+1. Open a successful `CI` workflow run from a push to `main`. To get packages
+   for an unmerged branch, open **Actions > CI > Run workflow** and select that
+   branch; manual runs package like `main` runs do.
 2. Find the `Artifacts` section on the workflow summary.
 3. Download the `deb-<ros-distro>-<architecture>` artifact to review or test.
 
-Each CI run produces eight artifacts. Package building and installation smoke
-testing are part of the corresponding distribution and architecture matrix
-job, so a successful CI run verifies the complete package set.
+Each packaging CI run produces eight artifacts. Package building and
+installation smoke testing are part of the corresponding distribution and
+architecture matrix job, so such a run verifies the complete package set.
 
 ## Publish A Prerelease
 
@@ -42,8 +49,9 @@ To publish:
 4. Enter the CI run ID and enable `publish`.
 5. Run the workflow.
 
-Pull-request artifacts are suitable for review. Publication only accepts them
-when the pull-request run and selected tag resolve to the same commit.
+Because pull request runs do not package, they cannot be used as a publication
+source. Use the push-to-`main` run for the tagged commit, or a manual CI run on
+that commit.
 
 The workflow never creates or pushes a tag. Prepare and review the version
 change and tag separately before enabling publication.

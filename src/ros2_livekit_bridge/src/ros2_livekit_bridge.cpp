@@ -53,7 +53,8 @@ Ros2LiveKitBridge::Ros2LiveKitBridge(const rclcpp::NodeOptions& options)
       min_qos_depth_(0),
       max_qos_depth_(0),
       ros_threads_(0),
-      initialized_(false) {
+      initialized_(false),
+      shutting_down_(false) {
   this->declare_parameter<std::string>("config_path", "");
   const std::vector<std::string> kEmptyStringVec{};
   this->declare_parameter<int>("min_qos_depth", static_cast<int>(kDefaultMinQosDepth));
@@ -125,6 +126,10 @@ bool Ros2LiveKitBridge::initialize() {
     return false;
   }
   // Warning: avoid doing ROS operations in delegate callbacks
+  {
+    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
+    shutting_down_ = false;
+  }
   room_->setDelegate(this);
 
   // Room::connect() may emit events for data tracks that were already
@@ -180,22 +185,63 @@ bool Ros2LiveKitBridge::initialize() {
   return initialized_;
 }
 
-Ros2LiveKitBridge::~Ros2LiveKitBridge() {
+Ros2LiveKitBridge::~Ros2LiveKitBridge() { shutdown(); }
+
+void Ros2LiveKitBridge::shutdown() {
+  const std::lock_guard<std::mutex> shutdown_lock(shutdown_mutex_);
+
+  // Stop ROS callbacks before dismantling the objects they access.
+  if (poll_timer_) {
+    poll_timer_->cancel();
+    poll_timer_.reset();
+  }
+  if (connection_stats_timer_) {
+    connection_stats_timer_->cancel();
+    connection_stats_timer_.reset();
+  }
+
+  // The SDK stores a raw delegate pointer. Detach it before disconnecting so
+  // teardown events cannot call back into a partially destroyed bridge.
+  if (room_) {
+    room_->setDelegate(nullptr);
+  }
+
+  // Let an in-flight data-track publication finish while the room is usable.
+  // A callback captured just before setDelegate(nullptr) observes the shutdown
+  // flag and returns without touching the topic forwarder.
+  {
+    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
+    shutting_down_ = true;
+  }
+
+  // These components own RPC handlers rather than RoomDelegate callbacks.
+  // Release them while the local participant is still available so they can
+  // unregister cleanly.
   service_forwarder_.reset();
   cli_manager_.reset();
-  // Reset before room_ so the forwarder can unregister its RPC handler and stop
-  // its push worker (which reads the room roster) while the room is still alive.
   latched_topic_forwarder_.reset();
+
+  // Disconnect before destroying delegate targets. Room::disconnect() removes
+  // its listener only after in-flight callbacks complete.
+  if (room_) {
+    RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
+    try {
+      (void)(room_->disconnect());
+    } catch (const std::exception& error) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to disconnect LiveKit room during shutdown: %s", error.what());
+    } catch (...) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to disconnect LiveKit room during shutdown");
+    }
+  }
+
   topic_forwarder_.reset();
-  connection_stats_timer_.reset();
   connection_diagnostics_.reset();
 
   // Reset diagnostics_updater_ after all its task owners are gone.
   diagnostics_updater_.reset();
-  if (room_) {
-    RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
-    room_.reset();
-  }
+  room_.reset();
+  initialized_ = false;
+
   // Note: livekit::shutdown() is intentionally NOT called here — the SDK
   // lifecycle is owned by the process entry point (see initialize()).
 }
@@ -247,6 +293,10 @@ void Ros2LiveKitBridge::pollConnectionStats() {
 }
 
 void Ros2LiveKitBridge::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
+  const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
+  if (shutting_down_) {
+    return;
+  }
   if (!event.track) {
     RCLCPP_ERROR(this->get_logger(), "Ignoring data track published event with null track pointer");
     return;

@@ -156,6 +156,28 @@ protected:
     if (thread_b_.joinable()) {
       thread_b_.join();
     }
+    if (executor_a_) {
+      if (robot_a_node_) {
+        executor_a_->remove_node(robot_a_node_);
+      }
+      if (bridge_a_) {
+        executor_a_->remove_node(bridge_a_);
+      }
+    }
+    if (executor_b_) {
+      if (robot_b_node_) {
+        executor_b_->remove_node(robot_b_node_);
+      }
+      if (bridge_b_) {
+        executor_b_->remove_node(bridge_b_);
+      }
+    }
+    if (bridge_a_) {
+      bridge_a_->shutdown();
+    }
+    if (bridge_b_) {
+      bridge_b_->shutdown();
+    }
     publisher_a_.reset();
     bridge_a_.reset();
     bridge_b_.reset();

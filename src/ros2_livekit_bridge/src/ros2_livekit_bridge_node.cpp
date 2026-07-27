@@ -45,6 +45,7 @@ int main(int argc, char* argv[]) {
       executor.add_node(node);
       executor.spin();
     }
+    node->shutdown();
   } catch (const std::exception& e) {
     RCLCPP_FATAL(logger, "Unhandled exception in ROS2 LiveKit bridge: %s", e.what());
     exit_code = EXIT_FAILURE;

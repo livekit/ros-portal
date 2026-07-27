@@ -487,6 +487,18 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     return;
   }
 
+  // Pin the owning bridge before any lock: this may be the last reference, and
+  // releasing it under inbound_data_track_states_mutex_ deadlocks in
+  // ~TopicForwarder -> stopAllInboundDataTracks().
+  const auto node = node_.lock();
+  if (!node) {
+    RCLCPP_WARN(logger_,
+                "Cannot create ROS publisher for LiveKit data track '%s' from '%s'; "
+                "ROS node has been destroyed",
+                descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return;
+  }
+
   std::shared_ptr<InboundDataTrackState> state;
   {
     std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
@@ -502,15 +514,6 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     state->ros_topic_type = *topic_type;
     // descriptor.frame_encoding guaranteed to be set by SchemaManager::validateInboundSchema()
     state->frame_encoding = *descriptor.frame_encoding;
-
-    const auto node = node_.lock();
-    if (!node) {
-      RCLCPP_WARN(logger_,
-                  "Cannot create ROS publisher for LiveKit data track '%s' from '%s'; "
-                  "ROS node has been destroyed",
-                  descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
-      return;
-    }
 
     try {
       state->publisher = node->create_generic_publisher(*ros_topic_name, *topic_type, rclcpp::QoS(10));

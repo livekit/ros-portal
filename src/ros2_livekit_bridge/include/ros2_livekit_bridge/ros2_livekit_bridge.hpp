@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
@@ -61,6 +62,12 @@ public:
   /// @return True if initialization completed, false for expected startup
   /// failures that have already been logged.
   bool initialize();
+
+  /// @brief Disconnect LiveKit and release bridge resources.
+  ///
+  /// Call this before releasing the final shared owner. The LiveKit SDK must
+  /// not disconnect a room from one of its delegate callbacks.
+  void shutdown();
 
   int ros_threads() const { return ros_threads_; }
 
@@ -181,6 +188,12 @@ private:
   int ros_threads_;
   //! @brief Tracks whether bridge initialization has completed.
   bool initialized_;
+  //! @brief Serializes explicit shutdown with the destructor fallback.
+  std::mutex shutdown_mutex_;
+  //! @brief Quiesces data-track publication callbacks before room disconnect.
+  std::mutex data_track_callback_mutex_;
+  //! @brief Prevents snapshotted publication callbacks from entering during shutdown.
+  bool shutting_down_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics

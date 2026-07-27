@@ -26,6 +26,7 @@
 
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
 #include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "diagnostics_test_utils.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
 namespace {
@@ -140,17 +141,17 @@ livekit::SessionStats makeSessionStats(std::uint64_t bytes_sent = 1200, std::uin
 
 TEST(ConnectionHealthDiagnosticsTest, RegistersAndRemovesTaskWithSharedHub) {
   auto node = std::make_shared<rclcpp::Node>("connection_health_diagnostics_unit_test");
-  DiagnosticsManager diagnostics(node);
-  DiagnosticsManagerFns fns;
-  fns.add = [&diagnostics](const std::string& name, DiagnosticsManagerFns::TaskCallback callback) {
-    diagnostics.add(name, std::move(callback));
-  };
-  fns.remove = [&diagnostics](const std::string& name) { diagnostics.remove(name); };
+  const auto diagnostics = std::make_shared<DiagnosticsManager>(node);
+  const auto fns = test::makeDiagnosticsManagerFns(diagnostics);
 
   {
     ConnectionHealthDiagnostics connection_health(fns);
     EXPECT_EQ(connection_health.snapshot().kind, ConnectionHealthStateKind::Disconnected);
   }
+}
+
+TEST(ConnectionHealthDiagnosticsTest, RejectsMissingDiagnostics) {
+  EXPECT_THROW(ConnectionHealthDiagnostics({}), std::invalid_argument);
 }
 
 TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {

@@ -100,19 +100,19 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
     throw std::invalid_argument("TopicForwarder requires fully populated LiveKitMethods");
   }
 
+  if (!diagnostics_.add || !diagnostics_.remove) {
+    throw std::invalid_argument("TopicForwarder requires fully populated DiagnosticsManagerFns");
+  }
+
   logger_ = locked_node->get_logger().get_child("topic_forwarder");
   clock_ = locked_node->get_clock();
   callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  if (diagnostics_.add) {
-    diagnostics_.add(kTopicForwarderDiagnosticTaskName,
-                     [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
-  }
+  diagnostics_.add(kTopicForwarderDiagnosticTaskName,
+                   [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 }
 
 TopicForwarder::~TopicForwarder() {
-  if (diagnostics_.remove) {
-    diagnostics_.remove(kTopicForwarderDiagnosticTaskName);
-  }
+  diagnostics_.remove(kTopicForwarderDiagnosticTaskName);
   stopAllInboundDataTracks();
   std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
   subscriptions_.clear();

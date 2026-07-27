@@ -156,7 +156,8 @@ public:
   /// Register the connection health task through the bridge-owned diagnostics functions.
   ///
   /// @param diagnostics Bridge-owned diagnostics functions wrapping the shared
-  /// manager. Empty functions disable diagnostics.
+  /// manager.
+  /// @throws std::invalid_argument when @p diagnostics is incomplete.
   explicit ConnectionHealthDiagnostics(DiagnosticsManagerFns diagnostics);
 
   /// Remove the registered connection health task from the shared manager.

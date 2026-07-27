@@ -371,17 +371,15 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
 ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManagerFns diagnostics)
     : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt},
       diagnostics_(std::move(diagnostics)) {
-  if (diagnostics_.add) {
-    diagnostics_.add(kConnectionHealthTaskName,
-                     [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+  if (!diagnostics_.add || !diagnostics_.remove) {
+    throw std::invalid_argument("ConnectionHealthDiagnostics requires fully populated DiagnosticsManagerFns");
   }
+
+  diagnostics_.add(kConnectionHealthTaskName,
+                   [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 }
 
-ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() {
-  if (diagnostics_.remove) {
-    diagnostics_.remove(kConnectionHealthTaskName);
-  }
-}
+ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() { diagnostics_.remove(kConnectionHealthTaskName); }
 
 void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
   {

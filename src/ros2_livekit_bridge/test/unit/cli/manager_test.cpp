@@ -36,6 +36,7 @@
 #include "ros2_livekit_bridge/cli/json_converters.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
 #include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "diagnostics_test_utils.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {
@@ -120,12 +121,16 @@ protected:
     node = std::make_shared<rclcpp::Node>("cli_manager_unit_test");
     callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     rpc_client = std::make_shared<FakeRpcClient>();
+    diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
+    diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
     makeManager();
   }
 
   void TearDown() override {
     manager.reset();
     rpc_client.reset();
+    diagnostics_fns = {};
+    diagnostics_manager.reset();
     callback_group.reset();
     node.reset();
   }
@@ -145,7 +150,7 @@ protected:
 
   void makeManager(cli::TopicPublishAllowed topic_publish_allowed = {}) {
     manager = std::make_unique<cli::Manager>(*node, callback_group, rpc_client->makeLiveKitMethods(),
-                                             std::move(topic_publish_allowed));
+                                             std::move(topic_publish_allowed), diagnostics_fns);
   }
 
   ServiceListSrv::Request makeServiceRequest(std::string participant_id = "robot-b", std::uint8_t timeout_sec = 0,
@@ -200,6 +205,8 @@ protected:
   std::shared_ptr<rclcpp::Node> node;
   rclcpp::CallbackGroup::SharedPtr callback_group;
   std::shared_ptr<FakeRpcClient> rpc_client;
+  std::shared_ptr<diagnostics::DiagnosticsManager> diagnostics_manager;
+  diagnostics::DiagnosticsManagerFns diagnostics_fns;
   std::unique_ptr<cli::Manager> manager;
 };
 
@@ -217,15 +224,27 @@ TEST(ManagerUtilityTest, ServiceCallRpcTimeoutAddsMargin) {
 TEST(ManagerRpcRegistrationTest, RegistrationFailureDegradesWithoutThrowing) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_rpc_registration_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
+  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
   FakeRpcClient rpc_client;
   rpc_client.register_succeeds = false;
 
   // RPC registration failures no longer abort construction: the manager stays
   // alive in a degraded state and surfaces the failure via its diagnostic task.
   std::unique_ptr<cli::Manager> manager;
-  EXPECT_NO_THROW(manager = std::make_unique<cli::Manager>(*node, callback_group, rpc_client.makeLiveKitMethods()));
+  EXPECT_NO_THROW(manager = std::make_unique<cli::Manager>(*node, callback_group, rpc_client.makeLiveKitMethods(),
+                                                           cli::TopicPublishAllowed{}, diagnostics_fns));
   EXPECT_NE(manager, nullptr);
   EXPECT_TRUE(rpc_client.registered_methods.empty());
+}
+
+TEST(ManagerConstructionTest, RejectsMissingDiagnostics) {
+  auto node = std::make_shared<rclcpp::Node>("cli_manager_missing_diagnostics_test");
+  const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeRpcClient rpc_client;
+
+  EXPECT_THROW(cli::Manager(*node, callback_group, rpc_client.makeLiveKitMethods(), cli::TopicPublishAllowed{}, {}),
+               std::invalid_argument);
 }
 
 TEST_F(ManagerTest, EmptyParticipantFails) {
@@ -830,8 +849,10 @@ static std::optional<std::string> diagnosticValueFor(const diagnostic_updater::D
 TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_ok_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
+  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
   FakeRpcClient rpc_client;
-  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods());
+  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods(), {}, diagnostics_fns);
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   manager.populateStatus(status);
@@ -853,8 +874,10 @@ TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
 TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_remote_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
+  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
   FakeRpcClient rpc_client;
-  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods());
+  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods(), {}, diagnostics_fns);
 
   TopicListSrv::Request request;
   request.participant_id = "robot-b";
@@ -886,9 +909,11 @@ TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
 TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_error_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
+  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
   FakeRpcClient rpc_client;
   rpc_client.failing_methods = {kServiceCallRpcMethod};
-  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods());
+  Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods(), {}, diagnostics_fns);
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   manager.populateStatus(status);

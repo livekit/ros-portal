@@ -38,8 +38,10 @@
 #include <utility>
 #include <vector>
 
+#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 #include "ros2_livekit_bridge/schema_manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
+#include "diagnostics_test_utils.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
 // ROS node it is given, so these unit tests cover only the node-independent
@@ -95,11 +97,21 @@ using namespace std::chrono_literals;
 
 class TopicForwarderTest : public ::testing::Test {
 protected:
-  void SetUp() override { node_ = std::make_shared<rclcpp::Node>("topic_forwarder_unit_test"); }
+  void SetUp() override {
+    node_ = std::make_shared<rclcpp::Node>("topic_forwarder_unit_test");
+    diagnostics_manager_ = std::make_shared<diagnostics::DiagnosticsManager>(node_);
+    diagnostics_fns_ = test::makeDiagnosticsManagerFns(diagnostics_manager_);
+  }
 
-  void TearDown() override { node_.reset(); }
+  void TearDown() override {
+    diagnostics_fns_ = {};
+    diagnostics_manager_.reset();
+    node_.reset();
+  }
 
-  TopicForwarder makeForwarder() { return TopicForwarder(makeOptions(), node_, makeLiveKitMethods()); }
+  TopicForwarder makeForwarder() {
+    return TopicForwarder(makeOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  }
 
   // Spins the node until the ROS graph reflects a predicate (e.g. a freshly
   // created publisher has been discovered) or the timeout elapses.
@@ -123,14 +135,22 @@ protected:
   }
 
   std::shared_ptr<rclcpp::Node> node_;
+  std::shared_ptr<diagnostics::DiagnosticsManager> diagnostics_manager_;
+  diagnostics::DiagnosticsManagerFns diagnostics_fns_;
 };
 
 TEST_F(TopicForwarderTest, ConstructorRejectsExpiredNode) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeLiveKitMethods()), std::invalid_argument);
+  EXPECT_THROW(TopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeLiveKitMethods(), diagnostics_fns_),
+               std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, ConstructorRejectsMissingLiveKitMethods) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), node_, TopicForwarder::LiveKitMethods{}), std::invalid_argument);
+  EXPECT_THROW(TopicForwarder(makeOptions(), node_, TopicForwarder::LiveKitMethods{}, diagnostics_fns_),
+               std::invalid_argument);
+}
+
+TEST_F(TopicForwarderTest, ConstructorRejectsMissingDiagnostics) {
+  EXPECT_THROW(TopicForwarder(makeOptions(), node_, makeLiveKitMethods(), {}), std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, IncomingTopicAllowedUsesConfiguredPatterns) {
@@ -356,7 +376,7 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
 TEST_F(TopicForwarderTest, RateCapDropsSamplesWithinPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   // 20 Hz cap -> one sample every 50 ms at most.
-  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count));
+  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(50)};
   pub_qos.reliable();
@@ -391,7 +411,8 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto last_payload = std::make_shared<std::vector<std::uint8_t>>();
   // 5 Hz cap -> 200 ms period, ample room to send the later samples in-period.
-  TopicForwarder forwarder(makeRateCapOptions(5.0), node_, makeRecordingLiveKitMethods(push_count, last_payload));
+  TopicForwarder forwarder(makeRateCapOptions(5.0), node_, makeRecordingLiveKitMethods(push_count, last_payload),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -439,7 +460,7 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
 TEST_F(TopicForwarderTest, RateCapForwardsAgainAfterPeriodElapses) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   // 20 Hz cap -> 50 ms period.
-  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count));
+  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -471,7 +492,8 @@ TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto remaining_failures = std::make_shared<std::atomic<int>>(1);
   // 50 Hz -> 20 ms period; the single sample is passed through immediately.
-  TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeFlakyLiveKitMethods(push_count, remaining_failures));
+  TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeFlakyLiveKitMethods(push_count, remaining_failures),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -499,7 +521,7 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
         "required schema unavailable");
   };
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods));
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods), diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
@@ -519,7 +541,8 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
 // the reader's KEEP_LAST queue, isolating the "no throttling" behaviour under test.
 TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, makeCountingLiveKitMethods(push_count));
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, makeCountingLiveKitMethods(push_count),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();

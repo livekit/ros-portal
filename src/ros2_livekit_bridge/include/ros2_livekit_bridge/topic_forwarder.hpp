@@ -135,13 +135,12 @@ public:
   /// @param node Non-owning handle to the ROS node the forwarder creates its
   /// subscriptions and publishers on. The forwarder locks the handle for each
   /// ROS operation; operations become no-ops once the node is destroyed.
-  /// @param diagnostics Optional bridge-owned diagnostics functions used to
-  /// register the topic-forwarder diagnostic task. Empty functions disable
-  /// diagnostics.
-  /// @throws std::invalid_argument when the node has already expired or any
-  /// required LiveKit callback is unset.
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// topic-forwarder diagnostic task.
+  /// @throws std::invalid_argument when the node has already expired, any
+  /// required LiveKit callback is unset, or @p diagnostics is incomplete.
   TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
-                 diagnostics::DiagnosticsManagerFns diagnostics = {});
+                 diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop inbound streams before destruction.
   ~TopicForwarder();

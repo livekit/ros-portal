@@ -26,11 +26,7 @@ namespace ros2_livekit_bridge::diagnostics {
 /// Diagnostics registration functions handed to bridge components.
 ///
 /// The bridge owns the `DiagnosticsManager` and passes components this bundle
-/// of wrapper functions instead of a raw manager pointer. The bridge-owned
-/// wrappers validate the manager before forwarding, so components never touch
-/// a dangling pointer. A default-constructed bundle (empty functions) means
-/// diagnostics are disabled; components must check each function before
-/// calling it.
+/// of wrapper functions. The bridge-owned wrappers validate the manager before forwarding.
 struct DiagnosticsManagerFns {
   /// Task callback that populates one diagnostic status.
   using TaskCallback = std::function<void(diagnostic_updater::DiagnosticStatusWrapper&)>;

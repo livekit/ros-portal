@@ -89,14 +89,13 @@ public:
   /// and logs.
   /// @param callback_group Callback group used by the ROS service.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  /// @param diagnostics Optional bridge-owned diagnostics functions used to
-  /// register the cli-manager diagnostic task. Empty functions disable
-  /// diagnostics.
-  /// @throws std::invalid_argument when any interface or @p livekit_methods
-  /// callback is unset.
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// cli-manager diagnostic task.
+  /// @throws std::invalid_argument when any interface, @p livekit_methods
+  /// callback, or @p diagnostics is unset.
   Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
-          LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed = {},
-          diagnostics::DiagnosticsManagerFns diagnostics = {});
+          LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
+          diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Construct the manager from a bridge node.
   ///
@@ -105,13 +104,12 @@ public:
   /// @param node Bridge node used for service hosting, graph queries, and logs.
   /// @param callback_group Callback group used by the ROS service.
   /// @param livekit_methods LiveKit methods supplied by the bridge.
-  /// @param diagnostics Optional bridge-owned diagnostics functions used to
-  /// register the cli-manager diagnostic task. Empty functions disable
-  /// diagnostics.
-  /// @throws std::invalid_argument when any extracted interface or @p
-  /// livekit_methods callback is unset.
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// cli-manager diagnostic task.
+  /// @throws std::invalid_argument when any extracted interface, @p
+  /// livekit_methods callback, or @p diagnostics is unset.
   Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
-          TopicPublishAllowed topic_publish_allowed = {}, diagnostics::DiagnosticsManagerFns diagnostics = {});
+          TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Unregister the LiveKit RPC method before destruction.
   ~Manager();

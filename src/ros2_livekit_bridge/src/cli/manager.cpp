@@ -75,6 +75,10 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
     throw std::invalid_argument("Manager requires fully populated LiveKitMethods");
   }
 
+  if (!diagnostics_.add || !diagnostics_.remove) {
+    throw std::invalid_argument("Manager requires fully populated DiagnosticsManagerFns");
+  }
+
   if (!topic_publish_allowed_) {
     topic_publish_allowed_ = [](const std::string&) { return true; };
   }
@@ -141,10 +145,8 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
                   (service_call_service_ != nullptr) + (interface_show_service_ != nullptr),
               registered_rpc_methods_.size());
 
-  if (diagnostics_.add) {
-    diagnostics_.add(kCliManagerDiagnosticTaskName,
-                     [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
-  }
+  diagnostics_.add(kCliManagerDiagnosticTaskName,
+                   [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
@@ -161,9 +163,7 @@ Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_g
 
 Manager::~Manager() {
   // Deregister the diagnostic task before the state it reads is torn down.
-  if (diagnostics_.remove) {
-    diagnostics_.remove(kCliManagerDiagnosticTaskName);
-  }
+  diagnostics_.remove(kCliManagerDiagnosticTaskName);
   if (livekit_methods_.unregister_rpc_method) {
     for (const auto& method : registered_rpc_methods_) {
       livekit_methods_.unregister_rpc_method(method);

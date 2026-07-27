@@ -159,11 +159,10 @@ jobs:
           config: |
             enable_participant_data_blob: true
 
-      - name: Install livekit-cli
-        run: |
-          set -euxo pipefail
-          curl -sSL https://get.livekit.io/cli | bash
-          lk --version
+      # Note: livekit-cli is not installed on the runner. The integration step
+      # mints its tokens with `lk` from inside the devcontainer, where the image
+      # already provides it, so installing it here only added a network
+      # dependency that could fail the job (get.livekit.io has returned 403).
 
       - name: "colcon test: integration"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3

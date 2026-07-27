@@ -15,6 +15,28 @@
 No ROS2 message type is currently mapped to a LiveKit audio track. Candidate
 types include `audio_common_msgs/msg/AudioData` and raw PCM topics.
 
+## ROS Distributions
+
+- On Humble, do not destroy the bridge node while an executor it was added to is
+  still spinning. Humble's executor keeps referring to a removed node's rmw
+  entities and notify guard condition, so a concurrent `rcl_wait` can crash and a
+  later wait-set rebuild throws `guard condition implementation is invalid`.
+  Cancel the executor and join its spin thread first; if the executor also hosts
+  nodes that must keep running, replace it rather than resume it. Jazzy and newer
+  are unaffected — their executors take shared ownership of what they wait on.
+- Humble renders message schemas from a bundled reimplementation of
+  `rosbag2_cpp`'s definition source, because the `MessageDefinition` API it needs
+  does not exist there. The reimplementation is faithful: it emits the same
+  concatenation format and the same dependency ordering as `rosbag2_cpp`.
+- Schema identity is a SHA-256 over the rendered definition text, and that text
+  is the `.msg` files as shipped, comments included. Distributions do not ship
+  byte-identical `.msg` files — `builtin_interfaces/msg/Time.msg`, for example,
+  has a trailing space on one comment line in Jazzy that Humble does not have —
+  so bridges on different distributions can compute different schema hashes for
+  the same message type and reject each other's data tracks. This is inherent to
+  hashing the definition text and is not specific to the Humble path; keep both
+  ends of a session on the same distribution.
+
 ## General
 
 - Once a subscription is created, it is never removed, even if the publisher

@@ -135,6 +135,21 @@ colcon build directory. Its source build defaults to two parallel jobs. Set
 the same limit is applied to both the CMake and Rust/Cargo build steps. Use one
 SDK job when building in a memory-constrained Docker Desktop VM.
 
+A source build is expensive, so both halves of its output are reusable and CI
+caches them:
+
+- `src/externals/client-sdk-cpp/client-sdk-rust/target` — Rust artifacts and the
+  vendored WebRTC the build scripts unpack. This is the bulk of both the time and
+  the ~3.4 GB on disk. It lives in the source tree, so it is shared by every
+  colcon build base, including the one `scripts/build-deb.sh` creates.
+- `<build-base>/ros2_livekit_bridge/_deps` — the SDK's own CMake tree and install
+  prefix, roughly 250 MB. This is per build base, so a packaging build rebuilds
+  it even when the Rust half is warm.
+
+Deleting either forces that half to be rebuilt. With both warm, a full CMake
+reconfigure plus SDK build and install finishes in well under a minute; from
+scratch it is tens of minutes.
+
 ### One-Off SDK Version Override
 
 To override the pin for one build, or to track upstream with `latest`:

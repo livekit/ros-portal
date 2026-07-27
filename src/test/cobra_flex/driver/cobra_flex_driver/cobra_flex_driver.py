@@ -161,6 +161,8 @@ class CobraFlexDriver(Node):
 
         self._sub = self.create_subscription(Twist, 'cmd_vel', self._on_cmd_vel, 10)
         # Watchdog runs at a few Hz; it only emits a single stop frame per lapse.
+        if self._cmd_timeout <= 0.0:
+            raise ValueError('cmd_timeout must be > 0')
         self._watchdog = self.create_timer(self._cmd_timeout / 2.0, self._on_watchdog)
         control_dt = 1.0 / self._control_rate if self._control_rate > 0.0 else 0.05
         self._control_timer = self.create_timer(control_dt, self._on_control_tick)

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/schema_manager.hpp"
+#include "ros2_livekit_bridge/schema/manager.hpp"
 
 #include <openssl/sha.h>
 
@@ -25,12 +25,9 @@
 #include <utility>
 
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+#include "ros2_livekit_bridge/schema/renderer.hpp"
 
 namespace ros2_livekit_bridge {
-
-std::optional<RosMessageSchema> SchemaManager::renderRosMessageSchema(const std::string& topic_type) {
-  return schema::renderDefinition(topic_type);
-}
 
 std::optional<std::string> SchemaManager::renderJsonSchema(const std::string& topic_type) {
   if (topic_type.empty()) {
@@ -83,7 +80,7 @@ SchemaManager::SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn rend
     throw std::invalid_argument("SchemaManager requires fully populated LiveKitMethods");
   }
   if (!render_schema_) {
-    render_schema_ = renderRosMessageSchema;
+    render_schema_ = [](const std::string& topic_type) { return schema::renderRosMessageSchema(topic_type); };
   }
   if (!render_json_schema_) {
     render_json_schema_ = renderJsonSchema;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/schema/message_definition_source.hpp"
+#include "ros2_livekit_bridge/schema/renderer.hpp"
 
 #include <ament_index_cpp/get_resource.hpp>
 #include <cstddef>
@@ -28,8 +28,8 @@
 #include <stdexcept>
 #include <unordered_set>
 
-// Set by CMake after probing for the rosbag2 message-definition header. Treated
-// as absent when undefined so the translation unit still compiles standalone.
+#include "renderer_backend.hpp"
+
 #ifndef LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS
 #define LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS 0
 #endif
@@ -133,7 +133,7 @@ std::string appendDefinition(const std::string& type, DefinitionFormat format, s
   return result;
 }
 
-RosMessageSchema renderLegacyRosMessageSchema(const std::string& topic_type) {
+RosMessageSchema renderBundled(const std::string& topic_type) {
   try {
     std::unordered_set<std::string> seen{topic_type};
     return RosMessageSchema{"ros2msg", appendDefinition(topic_type, DefinitionFormat::kMsg, seen, kMaxDefinitionDepth)};
@@ -145,23 +145,19 @@ RosMessageSchema renderLegacyRosMessageSchema(const std::string& topic_type) {
   }
 }
 
-} // namespace
-
-bool hasRosbag2DefinitionSource() { return LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS != 0; }
-
-std::optional<RosMessageSchema> renderBundledDefinition(const std::string& topic_type) {
+std::optional<RosMessageSchema> tryRenderBundled(const std::string& topic_type) {
   if (topic_type.empty()) {
     return std::nullopt;
   }
 
   try {
-    return renderLegacyRosMessageSchema(topic_type);
+    return renderBundled(topic_type);
   } catch (const std::exception&) {
     return std::nullopt;
   }
 }
 
-std::optional<RosMessageSchema> renderRosbag2Definition(const std::string& topic_type) {
+std::optional<RosMessageSchema> tryRenderWithRosbag2(const std::string& topic_type) {
   if (topic_type.empty()) {
     return std::nullopt;
   }
@@ -187,11 +183,27 @@ std::optional<RosMessageSchema> renderRosbag2Definition(const std::string& topic
 #endif
 }
 
-std::optional<RosMessageSchema> renderDefinition(const std::string& topic_type) {
-  if (hasRosbag2DefinitionSource()) {
-    return renderRosbag2Definition(topic_type);
-  }
-  return renderBundledDefinition(topic_type);
+} // namespace
+
+std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type) {
+#if LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS
+  return tryRenderWithRosbag2(topic_type);
+#else
+  return tryRenderBundled(topic_type);
+#endif
 }
 
+namespace detail {
+
+std::optional<RosMessageSchema> renderWithBackend(const std::string& topic_type, RendererBackend backend) {
+  switch (backend) {
+    case RendererBackend::Bundled:
+      return tryRenderBundled(topic_type);
+    case RendererBackend::Rosbag2:
+      return tryRenderWithRosbag2(topic_type);
+  }
+  return std::nullopt;
+}
+
+} // namespace detail
 } // namespace ros2_livekit_bridge::schema

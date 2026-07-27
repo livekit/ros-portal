@@ -29,9 +29,7 @@
 #include <string>
 #include <unordered_map>
 
-// Defines ros2_livekit_bridge::RosMessageSchema, which this header's interface
-// is expressed in terms of.
-#include "ros2_livekit_bridge/schema/message_definition_source.hpp"
+#include "ros2_livekit_bridge/schema/renderer.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -99,8 +97,7 @@ public:
   /// @brief Construct a schema manager.
   /// @param livekit_methods LiveKit schema definition and retrieval operations.
   /// @param render_schema Optional renderer override for deterministic tests.
-  /// When unset, rosbag2 is used to render definitions from the local ament
-  /// index.
+  /// When unset, the build-selected renderer uses the local ament index.
   /// @param render_json_schema Optional JSON Schema renderer override for
   /// deterministic tests. When unset, ROS introspection is used to generate the
   /// schema from the local ament index.
@@ -130,15 +127,11 @@ public:
 
 private:
 #ifdef BUILD_TESTING
-  FRIEND_TEST(SchemaManagerTest, RenderRosMessageSchema);
   FRIEND_TEST(SchemaManagerTest, SchemaEncodingFromRosDefinition);
   FRIEND_TEST(SchemaManagerTest, SchemaDedupeKey);
   FRIEND_TEST(SchemaManagerTest, HashSchemaText);
   FRIEND_TEST(SchemaManagerTest, SchemaHashToHex);
 #endif
-
-  /// @brief Render a local ROS message definition and its dependencies.
-  static std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type);
 
   /// @brief Generate a JSON Schema for a local ROS message type.
   static std::optional<std::string> renderJsonSchema(const std::string& topic_type);

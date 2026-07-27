@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/schema_manager.hpp"
-
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -27,6 +25,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include "ros2_livekit_bridge/schema/manager.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {
@@ -188,16 +188,6 @@ SchemaManager::InboundSchemaContext makeInboundSchemaContext() {
 }
 
 } // namespace
-
-TEST(SchemaManagerTest, RenderRosMessageSchema) {
-  const auto schema = SchemaManager::renderRosMessageSchema("std_msgs/msg/String");
-  ASSERT_TRUE(schema.has_value());
-  EXPECT_EQ(schema->encoding, "ros2msg");
-  EXPECT_EQ(canonicalSchemaFields(schema->text), canonicalSchemaFields(kStdMsgsStringSchemaText));
-
-  EXPECT_FALSE(SchemaManager::renderRosMessageSchema("").has_value());
-  EXPECT_FALSE(SchemaManager::renderRosMessageSchema("nonexistent_pkg/msg/DoesNotExist").has_value());
-}
 
 TEST(SchemaManagerTest, SchemaEncodingFromRosDefinition) {
   EXPECT_EQ(SchemaManager::schemaEncodingFromRosDefinition("ros2msg"), livekit::DataTrackSchemaEncoding::Ros2Msg);

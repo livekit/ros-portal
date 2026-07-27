@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/schema_manager.hpp"
-
 #include <gtest/gtest.h>
 #include <livekit/data_track_options.h>
 #include <livekit/local_data_track.h>
@@ -33,6 +31,7 @@
 #include <vector>
 
 #include "bridge_e2e_fixture.hpp"
+#include "ros2_livekit_bridge/schema/manager.hpp"
 
 namespace ros2_livekit_bridge::test {
 namespace {

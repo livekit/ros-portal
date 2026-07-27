@@ -167,13 +167,16 @@ participant data blobs enabled. Setup details are in the
 
 ## Implementation map
 
-- Schema rendering, registration, hashing, and validation:
-  [`schema_manager.cpp`](../../src/ros2_livekit_bridge/src/schema_manager.cpp)
+- Schema rendering:
+  [`renderer.cpp`](../../src/ros2_livekit_bridge/src/schema/renderer.cpp)
+- Schema registration, hashing, and validation:
+  [`manager.cpp`](../../src/ros2_livekit_bridge/src/schema/manager.cpp)
 - Track lifecycle and frame handling:
   [`topic_forwarder.cpp`](../../src/ros2_livekit_bridge/src/topic_forwarder.cpp)
 - Runtime JSON-to-CDR conversion:
   [`introspection_utils.cpp`](../../src/ros2_livekit_bridge/src/introspection/introspection_utils.cpp)
 - Unit and integration coverage:
+  [`test/unit/schema_renderer_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_renderer_test.cpp),
   [`test/unit/schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_manager_test.cpp),
   [`test/unit/topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp), and
   [`test/integration/schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/integration/schema_manager_test.cpp)

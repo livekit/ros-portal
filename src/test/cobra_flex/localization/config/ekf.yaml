@@ -1,11 +1,8 @@
 # robot_localization EKF for the Cobra Flex.
 #
-# BOILERPLATE / UNTESTED ON HARDWARE: the Jetson is not wired into the chassis
-# yet. With no additional sensors installed, the only input is the wheel
+# With no additional sensors installed, the only input is the wheel
 # odometry from cobra_flex_control (odom/wheel), so for now the EKF is mostly a
-# smoothing/republishing stage that owns odom -> base_link. It exists so an IMU
-# (or laser odometry) can be fused later without restructuring the stack --
-# see the commented imu0 block below.
+# smoothing/republishing stage that owns odom -> base_link.
 #
 # Skid-steer caveat: in-place turns scrub the wheels, so wheel-derived yaw
 # over-reports rotation. Only velocities are fused (differential-friendly);
@@ -36,17 +33,3 @@ ekf_filter_node:
     odom0_differential: false
     odom0_relative: false
     odom0_queue_size: 10
-
-    # Future IMU (none installed today). When one is added, publish
-    # sensor_msgs/Imu on imu/data_raw, then enable vyaw here and drop it from
-    # odom0_config so the gyro owns heading rate:
-    # imu0: imu/data_raw
-    # imu0_config: [false, false, false,
-    #               false, false, false,
-    #               false, false, false,
-    #               false, false, true,
-    #               false, false, false]
-    # imu0_differential: false
-    # imu0_relative: false
-    # imu0_queue_size: 10
-    # imu0_remove_gravitational_acceleration: true

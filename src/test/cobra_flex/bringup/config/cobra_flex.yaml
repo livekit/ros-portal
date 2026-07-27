@@ -1,8 +1,4 @@
 # Shared parameters for the Cobra Flex physical stack.
-#
-# BOILERPLATE / UNTESTED ON HARDWARE: the Jetson is not wired into the chassis
-# yet. Geometry comes from the wiki spec sheet; serial_port and covariances
-# need verification on first bring-up.
 cobra_flex_driver:
   ros__parameters:
     serial_port: /dev/ttyACM0   # VERIFY: ttyACM (USB) vs ttyTHS (UART header)

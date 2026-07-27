@@ -3,11 +3,6 @@
 ROS2 stack for the [Waveshare Cobra Flex](https://www.waveshare.com/wiki/Cobra_Flex)
 4WD chassis, driven from a Jetson Orin Nano over serial.
 
-> **Status: boilerplate, untested on hardware.** The Jetson is not wired into
-> the chassis yet. Protocol details come from the wiki; the serial device path,
-> baud rate, feedback frame fields, and covariances all need verification on
-> first bring-up.
-
 ## Packages
 
 | Directory | Package | Purpose |

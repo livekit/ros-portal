@@ -16,8 +16,7 @@
 
 """Serial motion driver for the Waveshare Cobra Flex chassis.
 
-BOILERPLATE / UNTESTED ON HARDWARE: the Jetson Orin Nano is not wired into the
-chassis yet. Protocol details come from the wiki
+Protocol details come from the wiki
 (https://www.waveshare.com/wiki/Cobra_Flex) and mirror the WAVE ROVER driver's
 serial handling; expect to recheck the serial device path, baud, and feedback
 frame fields on first bring-up.

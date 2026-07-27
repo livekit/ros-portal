@@ -16,9 +16,6 @@
 
 """Wheel odometry for the Cobra Flex from the driver's ``wheel_states`` feedback.
 
-BOILERPLATE / UNTESTED ON HARDWARE: the Jetson is not wired into the chassis
-yet; covariances are placeholders until the encoders can be characterized.
-
 Subscribes to ``wheel_states`` (``sensor_msgs/JointState``, published by
 ``cobra_flex_driver`` with the four hub-motor speeds in rad/s), averages each
 side, converts to a body twist with differential-drive kinematics, and

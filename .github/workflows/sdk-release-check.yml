@@ -1,0 +1,74 @@
+name: SDK Release Check
+
+# Mirrors client-sdk-cpp/.github/workflows/rust-release-check.yml: keep the
+# source-build commit aligned with the published release selected by CMake.
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-release-check:
+    name: SDK Release Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Resolve SDK pins
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sha="$(awk '
+            /^  client-sdk-cpp:$/ { in_sdk = 1; next }
+            in_sdk && /^    version:/ { print $2; exit }
+          ' external.repos)"
+          version="$(sed -nE \
+            's/^set\(LIVEKIT_SDK_VERSION "([^"]+)".*/\1/p' \
+            src/ros2_livekit_bridge/CMakeLists.txt)"
+
+          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ || -z "${version}" ]]; then
+            echo "::error::Could not resolve the client-sdk-cpp SHA and CMake release version."
+            exit 1
+          fi
+
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify SDK pin matches its release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPO: livekit/client-sdk-cpp
+          SDK_SHA: ${{ steps.sdk.outputs.sha }}
+          SDK_TAG: ${{ steps.sdk.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "Pinned client-sdk-cpp commit: ${SDK_SHA}"
+          echo "CMake SDK release: ${SDK_TAG}"
+
+          gh api --paginate "repos/${SDK_REPO}/releases" \
+            --jq '.[] | select(.draft == false) | .tag_name' \
+            | sort -u > release_tags.txt
+          gh api --paginate "repos/${SDK_REPO}/tags" \
+            --jq '.[] | [.name, .commit.sha] | @tsv' > all_tags.tsv
+
+          release_sha="$(awk -v tag="${SDK_TAG}" '
+            NR == FNR { released[$0] = 1; next }
+            ($1 == tag) && ($1 in released) { print $2 }
+          ' release_tags.txt all_tags.tsv | head -n 1)"
+
+          if [[ -z "${release_sha}" ]]; then
+            echo "::error::${SDK_TAG} is not a published release in ${SDK_REPO}."
+            exit 1
+          fi
+          if [[ "${SDK_SHA}" != "${release_sha}" ]]; then
+            echo "::error::external.repos pins ${SDK_SHA}, but ${SDK_TAG} points to ${release_sha}."
+            exit 1
+          fi
+
+          echo "${SDK_TAG} and external.repos both resolve to ${SDK_SHA}."

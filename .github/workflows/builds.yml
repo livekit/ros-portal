@@ -29,6 +29,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  sdk-release-check:
+    name: SDK Release Check
+    uses: ./.github/workflows/sdk-release-check.yml
+
   cpp-tools:
     name: C++ Tools
     uses: ./.github/workflows/cpp-tools.yml
@@ -108,22 +112,9 @@ jobs:
           configFile: .devcontainer/devcontainer.json
           push: never
 
-      # Distributions whose runtime is too old for the prebuilt SDK archives
-      # compile the pinned client-sdk-cpp checkout instead, which dominates their
-      # job. Cache what that produces: the cargo target directory (Rust plus the
-      # vendored WebRTC it unpacks) and the SDK's own CMake tree and install
-      # prefix under the colcon build base.
-      #
-      # This must run after "Setup devcontainer environment", never before. That
-      # step's postCreateCommand runs `vcs import --skip-existing`, and the cargo
-      # target directory lives inside src/externals/client-sdk-cpp. Restoring
-      # first would create that directory, vcs would skip cloning the SDK, and the
-      # build would fail with no source to compile.
-      #
-      # The base image digest is part of the restore-key prefix so a fallback
-      # match can never cross a toolchain change, which CMake would reject. Within
-      # one image, cargo fingerprints and CMake handle a stale tree by rebuilding
-      # what actually changed.
+      # Restore after setup so vcs imports the SDK before the cache creates its
+      # target directory. Keep the Dockerfile hash in the fallback prefix so
+      # cached build trees never cross toolchain definitions.
       - name: Restore LiveKit SDK build cache
         id: livekit_sdk_cache
         if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
@@ -132,9 +123,9 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros2_livekit_bridge/_deps
-          key: livekit-sdk-${{ matrix.ros_distro }}-${{ matrix.arch }}-${{ matrix.ros_image_digest }}-${{ hashFiles('external.repos', 'Dockerfile', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
+          key: livekit-sdk-${{ matrix.ros_distro }}-${{ matrix.arch }}-${{ matrix.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
           restore-keys: |
-            livekit-sdk-${{ matrix.ros_distro }}-${{ matrix.arch }}-${{ matrix.ros_image_digest }}-
+            livekit-sdk-${{ matrix.ros_distro }}-${{ matrix.arch }}-${{ matrix.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-
 
       - name: Build packages
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -152,11 +143,8 @@ jobs:
               colcon build --packages-up-to ros2_livekit_bridge test_utilities custom_msgs
             '
 
-      # The devcontainer writes these trees as root, but actions/cache tars them as
-      # the unprivileged runner user, and the vendored WebRTC archive carries a few
-      # mode-640 headers that tar would fail to read. Widen only what is too
-      # narrow. chmod moves ctime, not mtime, so this cannot disturb the cargo and
-      # make timestamps the whole cache depends on.
+      # The container writes as root; make only unreadable cache entries visible
+      # to the runner before actions/cache archives them.
       - name: Make LiveKit SDK build cache readable
         if: >-
           env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
@@ -174,11 +162,8 @@ jobs:
             sudo find "${tree}" -type d ! -perm -o=rx -exec chmod a+rx {} +
           done
 
-      # Saved right after the build so a later test failure does not throw the SDK
-      # away, and only on non-pull-request events. A pull request's cache writes
-      # are scoped to that pull request and unusable by any other, so letting every
-      # pull request store a multi-gigabyte entry would just evict the shared entry
-      # they all read from. Pull requests restore from the base branch instead.
+      # Save before tests, and only from trusted runs that can populate a cache
+      # reusable by pull requests.
       - name: Save LiveKit SDK build cache
         if: >-
           env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
@@ -189,7 +174,7 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros2_livekit_bridge/_deps
-          key: livekit-sdk-${{ matrix.ros_distro }}-${{ matrix.arch }}-${{ matrix.ros_image_digest }}-${{ hashFiles('external.repos', 'Dockerfile', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
+          key: livekit-sdk-${{ matrix.ros_distro }}-${{ matrix.arch }}-${{ matrix.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
 
       - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3

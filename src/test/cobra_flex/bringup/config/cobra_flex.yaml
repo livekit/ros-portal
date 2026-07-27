@@ -1,0 +1,23 @@
+# Shared parameters for the Cobra Flex physical stack.
+cobra_flex_driver:
+  ros__parameters:
+    serial_port: /dev/ttyACM0   # VERIFY: ttyACM (USB) vs ttyTHS (UART header)
+    baud: 115200
+    wheel_radius: 0.03725       # 74.5 mm drive wheels
+    track_width: 0.228          # 228 mm track
+    max_wheel_rpm: 180.0        # protocol bound; rated speed is 100 rpm
+    control_rate: 20.0
+    cmd_timeout: 0.5
+    continuous_feedback: true
+    feedback_poll_rate: 0.0     # rely on the firmware stream; >0 adds T:130 polls
+    publish_wheel_states: true
+    publish_battery: true
+
+wheel_odometry:
+  ros__parameters:
+    wheel_radius: 0.03725
+    track_width: 0.228
+    odom_frame: odom
+    base_frame: base_link
+    # Overridden to false by cobra_flex.launch.py when use_ekf:=true.
+    publish_tf: true

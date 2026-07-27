@@ -16,23 +16,25 @@
   limitations under the License.
 -->
 <package format="3">
-  <name>waveshare_driver</name>
+  <name>waver_localization</name>
   <version>0.0.0</version>
-  <description>Serial motion driver bridging /cmd_vel to the Waveshare WAVE ROVER ESP32 board.</description>
+  <description>Localization launch, EKF configuration, and rf2o covariance relay for the WAVE ROVER.</description>
   <maintainer email="stephen.derosa@livekit.io">Stephen DeRosa</maintainer>
   <license>Apache-2.0</license>
 
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>python3-serial</exec_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

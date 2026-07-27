@@ -32,7 +32,7 @@ Two params files select what the EKF does (via the ``fuse_imu`` arg):
 
 Both files carry unprefixed frames (map/odom/base_link/world); this helper rewrites
 them to the ``<robot_name>/`` prefix (matching robot_state_publisher and the rest of
-waveshare.launch.xml), mirroring slam.launch.py.
+waver.launch.xml), mirroring slam.launch.py.
 """
 
 import os
@@ -55,7 +55,7 @@ def _launch_setup(context, *args, **kwargs):
     # No explicit params override -> pick the file from fuse_imu: the full rf2o+IMU
     # fusion (ekf.yaml) or the rf2o-only high-rate TF republisher (ekf_rf2o_only.yaml).
     if not ekf_params_file:
-        share = get_package_share_directory('waveshare_launch')
+        share = get_package_share_directory('waver_localization')
         ekf_params_file = os.path.join(
             share, 'config', 'ekf.yaml' if fuse_imu else 'ekf_rf2o_only.yaml')
 
@@ -81,7 +81,7 @@ def _launch_setup(context, *args, **kwargs):
         # relay stamps sane covariances and rotates the twist into the base frame,
         # /odom_rf2o -> /odom_rf2o_cov (the EKF's odom0).
         Node(
-            package='waveshare_launch',
+            package='waver_localization',
             executable='rf2o_covariance_relay.py',
             name='rf2o_covariance_relay',
             output='screen',

@@ -15,7 +15,7 @@
 from setuptools import find_packages
 from setuptools import setup
 
-package_name = 'waveshare_driver'
+package_name = 'waver_driver'
 
 setup(
     name=package_name,
@@ -34,7 +34,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'wave_rover_driver = waveshare_driver.wave_rover_driver:main',
+            'wave_rover_driver = waver_driver.wave_rover_driver:main',
+            'wave_rover_serial_teleop.py = waver_driver.wave_rover_serial_teleop:main',
         ],
     },
 )

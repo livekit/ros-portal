@@ -14,11 +14,7 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.8)
-project(waveshare_launch)
-
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
+project(waver_navigation)
 
 find_package(ament_cmake_auto REQUIRED)
 
@@ -26,13 +22,5 @@ if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
-
-install(FILES README.md
-  DESTINATION share/${PROJECT_NAME})
-
-install(PROGRAMS
-  scripts/sim_frame_prefix_relay.py
-  scripts/rf2o_covariance_relay.py
-  DESTINATION lib/${PROJECT_NAME})
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)

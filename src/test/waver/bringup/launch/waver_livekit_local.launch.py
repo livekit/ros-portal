@@ -15,9 +15,9 @@
 # limitations under the License.
 
 """
-Bring up the Waveshare stack alongside the LiveKit bridge.
+Bring up the WAVE ROVER stack alongside the LiveKit bridge.
 
-This keeps the composition (and its dependency on waveshare_launch) out of the
+This keeps the composition (and its dependency on waver_bringup) out of the
 reusable ros2_livekit_bridge package.
 """
 
@@ -40,17 +40,16 @@ def _as_bool(value: str) -> bool:
 def _launch_setup(context, *args, **kwargs):
     sim_enabled = _as_bool(LaunchConfiguration('sim').perform(context))
 
-    waveshare_launch = PathJoinSubstitution([
-        FindPackageShare('waveshare_launch'),
+    waver_launch = PathJoinSubstitution([
+        FindPackageShare('waver_bringup'),
         'launch',
-        'waveshare.launch.xml',
+        'waver.launch.xml',
     ])
-    waveshare = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(waveshare_launch),
+    waver = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(waver_launch),
         launch_arguments={
             'sim': LaunchConfiguration('sim'),
             'sim_gui': LaunchConfiguration('sim_gui'),
-            'foxglove': LaunchConfiguration('foxglove'),
         }.items(),
     )
 
@@ -76,32 +75,27 @@ def _launch_setup(context, *args, **kwargs):
     # before the bridge starts forwarding.
     bridge_action = TimerAction(period=10.0, actions=[bridge]) if sim_enabled else bridge
 
-    return [waveshare, bridge_action]
+    return [waver, bridge_action]
 
 
 def generate_launch_description():
     default_config = PathJoinSubstitution([
-        FindPackageShare('ros2_livekit_bridge'),
+        FindPackageShare('waver_bringup'),
         'config',
-        'ros2_livekit_bridge.yaml',
+        'livekit.yaml',
     ])
 
     return LaunchDescription([
-        # Waveshare stack arguments (forwarded to waveshare.launch.xml).
+        # WAVE ROVER stack arguments (forwarded to waver.launch.xml).
         DeclareLaunchArgument(
             'sim',
             default_value='false',
-            description='Launch the Waveshare stack with sim:=true.',
+            description='Launch the WAVE ROVER stack with sim:=true.',
         ),
         DeclareLaunchArgument(
             'sim_gui',
             default_value='false',
             description='Launch the Gazebo GUI client when sim is enabled.',
-        ),
-        DeclareLaunchArgument(
-            'foxglove',
-            default_value='false',
-            description='Launch the Foxglove bridge (passed to waveshare.launch.xml).',
         ),
         # Bridge arguments (forwarded to livekit_bridge_local.launch.py).
         DeclareLaunchArgument('config', default_value=default_config),

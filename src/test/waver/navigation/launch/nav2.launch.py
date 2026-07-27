@@ -19,7 +19,7 @@
 nav2's servers read their frames (global_frame, robot_base_frame, ...) from a
 params yaml, and the stock params use unprefixed frames (map / odom / base_link).
 This robot prefixes every frame with ``<robot_name>/`` (matching the frame_prefix
-used by robot_state_publisher and the other nodes in waveshare.launch.xml), so
+used by robot_state_publisher and the other nodes in waver.launch.xml), so
 without rewriting, every nav2 TF lookup would fail and the stack would never
 activate. This helper rewrites the frame keys to the ``<robot_name>/`` prefix and
 forwards the result to nav2_bringup's stock navigation_launch.
@@ -31,7 +31,7 @@ behaviors but to ``<prefix>odom`` in the local costmap — a flat leaf rewrite
 
 Topics stay flat (/scan, /odom, /cmd_vel, /map) and are inherited unchanged.
 navigation_launch does NOT start map_server or amcl; the map and map->odom
-transform come from the always-on slam_toolbox (see waveshare.launch.xml).
+transform come from the always-on slam_toolbox (see waver.launch.xml).
 """
 
 import os
@@ -133,7 +133,7 @@ def _launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     default_params = os.path.join(
-        get_package_share_directory('waveshare_launch'),
+        get_package_share_directory('waver_navigation'),
         'config',
         'nav2_params.yaml',
     )

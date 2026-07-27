@@ -1,4 +1,4 @@
-# slam_toolbox online-async params, Pi-4-tuned copy owned by waveshare_launch.
+# slam_toolbox online-async params, Pi-4-tuned copy owned by waver_navigation.
 #
 # Forked from waver_nav/param/mapper_params_online_async.yaml (vendored, re-imported
 # by vcs, so edits there don't persist). slam.launch.py defaults to THIS file.

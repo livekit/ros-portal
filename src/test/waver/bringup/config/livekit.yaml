@@ -60,15 +60,6 @@ ros2_livekit_bridge:
       direction: "out"
       encoding: "jsonschema"
 
-    - topic: "/odom"
-      direction: "out"
-      encoding: "jsonschema"
-
-    - topic: "/imu/data_raw"
-      max_rate_hz: 20
-      direction: "out"
-      encoding: "jsonschema"
-
     # Transform tree — required so the controller's Foxglove 3D panel has a
     # valid fixed frame (without it the click-to-publish tool is hidden).
     - topic: "/tf"

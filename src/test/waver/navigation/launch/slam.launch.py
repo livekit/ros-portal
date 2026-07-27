@@ -20,7 +20,7 @@ slam_toolbox reads map_frame / odom_frame / base_frame from a params yaml, not
 from launch arguments, so there is no clean way to prefix them from XML. This
 helper rewrites those three keys to the ``<robot_name>/`` prefix (matching the
 frame_prefix used by robot_state_publisher and the other nodes in
-waveshare.launch.xml) and forwards the result to slam_toolbox's stock
+waver.launch.xml) and forwards the result to slam_toolbox's stock
 online_async launch. The scan_topic and all tuning parameters are inherited
 unchanged from the source params file.
 """
@@ -77,7 +77,7 @@ def generate_launch_description():
     # which vcs re-imports would wipe). Lightened so slam_toolbox keeps map->odom
     # under real-time on the CPU-bound Pi -- see config/slam_params.yaml header.
     default_params = os.path.join(
-        get_package_share_directory('waveshare_launch'),
+        get_package_share_directory('waver_navigation'),
         'config',
         'slam_params.yaml',
     )

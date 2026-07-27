@@ -28,7 +28,7 @@ This mirrors slam.launch.py / nav2.launch.py: rewrite the one frame key via
 RewrittenYaml and launch the stock node.
 
 Requires slam_toolbox (for /map) and the nav2 stack (for the navigate_to_pose
-action) to be running — see waveshare.launch.xml, which gates this on nav2:=true.
+action) to be running -- see waver.launch.xml, which gates this on nav2:=true.
 """
 
 import os
@@ -71,7 +71,7 @@ def _launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     default_params = os.path.join(
-        get_package_share_directory('waveshare_launch'),
+        get_package_share_directory('waver_navigation'),
         'config',
         'explore_params.yaml',
     )

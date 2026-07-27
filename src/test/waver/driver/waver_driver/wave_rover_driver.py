@@ -41,7 +41,7 @@ publishes ``sensor_msgs/Imu`` on ``imu/data_raw`` (raw/unfused: angular velocity
 + linear acceleration, no orientation estimate); the poll rate is the IMU rate.
 The firmware emits acceleration in milli-g and angular rate in deg/s, which are
 converted to SI (m/s^2, rad/s); a measured gyro zero-rate bias is then subtracted.
-See ``test_utilities/wave_rover_serial_teleop.py`` for the standalone reference
+See ``waver_driver/wave_rover_serial_teleop.py`` for the standalone reference
 reader this mirrors.
 """
 
@@ -62,7 +62,7 @@ try:
     import serial
 except ImportError as exc:  # pragma: no cover - surfaced clearly at runtime
     raise ImportError(
-        'pyserial is required by waveshare_driver. Install it with '
+        'pyserial is required by waver_driver. Install it with '
         '`rosdep install` (python3-serial) or `pip install pyserial`.'
     ) from exc
 
@@ -240,7 +240,7 @@ class WaveRoverDriver(Node):
         # ships with continuous base-info streaming OFF (baseFeedbackFlow = 0), and
         # that stream carries only fused r/p/y -- raw accel/gyro exist solely in the
         # T:126 reply, so the poll rate IS the IMU sample rate. Mirrors the reader in
-        # test_utilities/wave_rover_serial_teleop.py.
+        # waver_driver/wave_rover_serial_teleop.py.
         self._running = True
         self._reader = None
         if self._imu_enabled:
@@ -354,7 +354,7 @@ class WaveRoverDriver(Node):
     def _read_loop(self) -> None:
         """Read feedback JSON lines and publish IMU samples until shutdown.
 
-        Mirrors the reader in test_utilities/wave_rover_serial_teleop.py: tolerate
+        Mirrors the reader in waver_driver/wave_rover_serial_teleop.py: tolerate
         non-JSON debug lines, and match feedback frames by field presence rather than
         their ``T`` tag (which varies across firmware revisions). Only this thread
         reads the port; only the executor thread writes it, so no lock is needed.

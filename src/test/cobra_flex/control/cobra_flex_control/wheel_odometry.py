@@ -111,7 +111,7 @@ class WheelOdometry(Node):
             f'({self._odom_frame} -> {self._base_frame}, publish_tf={self._publish_tf})'
         )
 
-    def _side_speed(self, msg: JointState, joints: set) -> float:
+    def _side_speed(self, msg: JointState, joints: set) -> 'float | None':
         """Mean ground speed (m/s) of the wheels named in ``joints``, or None."""
         speeds = [msg.velocity[i] * self._wheel_radius
                   for i, name in enumerate(msg.name)

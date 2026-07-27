@@ -24,10 +24,15 @@ types include `audio_common_msgs/msg/AudioData` and raw PCM topics.
   Cancel the executor and join its spin thread first; if the executor also hosts
   nodes that must keep running, replace it rather than resume it. Jazzy and newer
   are unaffected — their executors take shared ownership of what they wait on.
-- Humble renders message schemas from a bundled reimplementation of
-  `rosbag2_cpp`'s definition source, because the `MessageDefinition` API it needs
-  does not exist there. The reimplementation is faithful: it emits the same
-  concatenation format and the same dependency ordering as `rosbag2_cpp`.
+- Message schemas come from one of two interchangeable definition sources behind
+  `schema::renderDefinition`: `rosbag2_cpp::LocalMessageDefinitionSource` where it
+  exists, and a bundled equivalent otherwise. Which one is used is decided by a
+  configure-time probe for the rosbag2 header, not by distribution name, so only
+  Humble currently falls back. The two must agree byte-for-byte;
+  `MessageDefinitionSourceTest.BundledSourceMatchesRosbag2ByteForByte` enforces
+  that over a corpus of message shapes and runs wherever rosbag2 is present.
+  Humble has no reference to compare against and relies on that test passing on
+  the other distributions.
 - Schema identity is a SHA-256 over the rendered definition text, and that text
   is the `.msg` files as shipped, comments included. Distributions do not ship
   byte-identical `.msg` files — `builtin_interfaces/msg/Time.msg`, for example,

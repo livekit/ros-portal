@@ -43,6 +43,23 @@ ament_auto_find_build_dependencies(REQUIRED
   std_msgs
   yaml_cpp_vendor)
 
+# rosbag2 gained a message-definition API (rosbag2_cpp::LocalMessageDefinitionSource
+# plus rosbag2_storage::MessageDefinition) after Humble, and the bridge ships a
+# bundled equivalent for builds without it. Probe for the header rather than
+# testing the distribution name, so a distribution that gains or loses the API
+# needs no code change. See src/schema/message_definition_source.cpp.
+find_file(LIVEKIT_ROSBAG2_MESSAGE_DEFINITIONS_HEADER
+  NAMES rosbag2_cpp/message_definitions/local_message_definition_source.hpp
+  PATHS ${rosbag2_cpp_INCLUDE_DIRS}
+  NO_DEFAULT_PATH)
+if(LIVEKIT_ROSBAG2_MESSAGE_DEFINITIONS_HEADER)
+  add_compile_definitions(LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=1)
+  message(STATUS "rosbag2 definitions   : yes (${LIVEKIT_ROSBAG2_MESSAGE_DEFINITIONS_HEADER})")
+else()
+  add_compile_definitions(LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=0)
+  message(STATUS "rosbag2 definitions   : no (using the bundled definition source)")
+endif()
+
 set(_ros_distro "$ENV{ROS_DISTRO}")
 if(_ros_distro)
   string(TOUPPER "${_ros_distro}" _ros_distro_upper)
@@ -313,6 +330,7 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
   src/ros2_livekit_bridge.cpp
+  src/schema/message_definition_source.cpp
   src/schema_manager.cpp
   src/service_forwarder.cpp
   src/topic_forwarder.cpp

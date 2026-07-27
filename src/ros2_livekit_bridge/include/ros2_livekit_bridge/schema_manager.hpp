@@ -29,26 +29,15 @@
 #include <string>
 #include <unordered_map>
 
+// Defines ros2_livekit_bridge::RosMessageSchema, which this header's interface
+// is expressed in terms of.
+#include "ros2_livekit_bridge/schema/message_definition_source.hpp"
+
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
 
 namespace ros2_livekit_bridge {
-
-/// @brief A self-contained ROS2 message schema suitable for LiveKit data tracks.
-///
-/// The @p encoding field is the rosbag2 definition encoding (for example
-/// `"ros2msg"` or `"ros2idl"`). The @p text field is the full concatenated
-/// definition text in MCAP format, including dependency sections separated by
-/// `================================================================================`
-/// delimiters.
-struct RosMessageSchema {
-  /// @brief Definition encoding, e.g. `"ros2msg"` or `"ros2idl"`.
-  /// @note String because rosbag2 returns encoding as one.
-  std::string encoding;
-  /// @brief Full concatenated message definition text.
-  std::string text;
-};
 
 /// @brief Binary SHA-256 digest of exact schema text bytes.
 /// @note The hash is intentionally a fixed-size array of 32 bytes and strings are only rendered for diagnostics.

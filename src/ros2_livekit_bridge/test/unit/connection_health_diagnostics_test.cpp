@@ -24,9 +24,9 @@
 #include <string>
 #include <utility>
 
-#include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
 #include "diagnostics_test_utils.hpp"
+#include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
 namespace {
@@ -141,8 +141,9 @@ livekit::SessionStats makeSessionStats(std::uint64_t bytes_sent = 1200, std::uin
 
 TEST(ConnectionHealthDiagnosticsTest, RegistersAndRemovesTaskWithSharedHub) {
   auto node = std::make_shared<rclcpp::Node>("connection_health_diagnostics_unit_test");
-  const auto diagnostics = std::make_shared<DiagnosticsManager>(node);
-  const auto fns = test::makeDiagnosticsManagerFns(diagnostics);
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+  const auto fns = test::makeDiagnosticsFns(diagnostics_updater);
 
   {
     ConnectionHealthDiagnostics connection_health(fns);

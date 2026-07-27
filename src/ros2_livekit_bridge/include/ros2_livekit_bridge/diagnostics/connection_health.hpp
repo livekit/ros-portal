@@ -27,7 +27,7 @@
 #include <optional>
 #include <string>
 
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 
 namespace ros2_livekit_bridge::diagnostics {
 

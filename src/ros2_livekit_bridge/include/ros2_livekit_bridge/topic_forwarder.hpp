@@ -42,7 +42,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/schema_manager.hpp"
 
 #ifdef BUILD_TESTING

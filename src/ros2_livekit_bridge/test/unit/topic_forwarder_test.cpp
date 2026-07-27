@@ -38,10 +38,10 @@
 #include <utility>
 #include <vector>
 
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "diagnostics_test_utils.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/schema_manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
-#include "diagnostics_test_utils.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
 // ROS node it is given, so these unit tests cover only the node-independent
@@ -99,13 +99,14 @@ class TopicForwarderTest : public ::testing::Test {
 protected:
   void SetUp() override {
     node_ = std::make_shared<rclcpp::Node>("topic_forwarder_unit_test");
-    diagnostics_manager_ = std::make_shared<diagnostics::DiagnosticsManager>(node_);
-    diagnostics_fns_ = test::makeDiagnosticsManagerFns(diagnostics_manager_);
+    diagnostics_updater_ = std::make_shared<diagnostic_updater::Updater>(node_);
+    diagnostics_updater_->setHardwareID("ros2_livekit_bridge");
+    diagnostics_fns_ = test::makeDiagnosticsFns(diagnostics_updater_);
   }
 
   void TearDown() override {
     diagnostics_fns_ = {};
-    diagnostics_manager_.reset();
+    diagnostics_updater_.reset();
     node_.reset();
   }
 
@@ -135,7 +136,7 @@ protected:
   }
 
   std::shared_ptr<rclcpp::Node> node_;
-  std::shared_ptr<diagnostics::DiagnosticsManager> diagnostics_manager_;
+  std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   diagnostics::DiagnosticsManagerFns diagnostics_fns_;
 };
 

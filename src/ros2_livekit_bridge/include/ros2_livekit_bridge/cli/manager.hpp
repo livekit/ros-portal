@@ -33,7 +33,7 @@
 #include "ros2_livekit_bridge/cli/service_call.hpp"
 #include "ros2_livekit_bridge/cli/topic_pub.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/types.hpp"
 
 #ifdef BUILD_TESTING

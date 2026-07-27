@@ -32,11 +32,11 @@
 #include <utility>
 #include <vector>
 
+#include "diagnostics_test_utils.hpp"
 #include "ros2_livekit_bridge/cli/constants.hpp"
 #include "ros2_livekit_bridge/cli/json_converters.hpp"
 #include "ros2_livekit_bridge/cli/types.hpp"
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
-#include "diagnostics_test_utils.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 
 namespace ros2_livekit_bridge {
 namespace {
@@ -121,8 +121,9 @@ protected:
     node = std::make_shared<rclcpp::Node>("cli_manager_unit_test");
     callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     rpc_client = std::make_shared<FakeRpcClient>();
-    diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
-    diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
+    diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+    diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+    diagnostics_fns = test::makeDiagnosticsFns(diagnostics_updater);
     makeManager();
   }
 
@@ -130,7 +131,7 @@ protected:
     manager.reset();
     rpc_client.reset();
     diagnostics_fns = {};
-    diagnostics_manager.reset();
+    diagnostics_updater.reset();
     callback_group.reset();
     node.reset();
   }
@@ -205,7 +206,7 @@ protected:
   std::shared_ptr<rclcpp::Node> node;
   rclcpp::CallbackGroup::SharedPtr callback_group;
   std::shared_ptr<FakeRpcClient> rpc_client;
-  std::shared_ptr<diagnostics::DiagnosticsManager> diagnostics_manager;
+  std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater;
   diagnostics::DiagnosticsManagerFns diagnostics_fns;
   std::unique_ptr<cli::Manager> manager;
 };
@@ -224,8 +225,9 @@ TEST(ManagerUtilityTest, ServiceCallRpcTimeoutAddsMargin) {
 TEST(ManagerRpcRegistrationTest, RegistrationFailureDegradesWithoutThrowing) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_rpc_registration_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
-  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+  const auto diagnostics_fns = test::makeDiagnosticsFns(diagnostics_updater);
   FakeRpcClient rpc_client;
   rpc_client.register_succeeds = false;
 
@@ -849,8 +851,9 @@ static std::optional<std::string> diagnosticValueFor(const diagnostic_updater::D
 TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_ok_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
-  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+  const auto diagnostics_fns = test::makeDiagnosticsFns(diagnostics_updater);
   FakeRpcClient rpc_client;
   Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods(), {}, diagnostics_fns);
 
@@ -874,8 +877,9 @@ TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
 TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_remote_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
-  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+  const auto diagnostics_fns = test::makeDiagnosticsFns(diagnostics_updater);
   FakeRpcClient rpc_client;
   Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods(), {}, diagnostics_fns);
 
@@ -909,8 +913,9 @@ TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
 TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_error_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  const auto diagnostics_manager = std::make_shared<diagnostics::DiagnosticsManager>(node);
-  const auto diagnostics_fns = test::makeDiagnosticsManagerFns(diagnostics_manager);
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros2_livekit_bridge");
+  const auto diagnostics_fns = test::makeDiagnosticsFns(diagnostics_updater);
   FakeRpcClient rpc_client;
   rpc_client.failing_methods = {kServiceCallRpcMethod};
   Manager manager(*node, callback_group, rpc_client.makeLiveKitMethods(), {}, diagnostics_fns);

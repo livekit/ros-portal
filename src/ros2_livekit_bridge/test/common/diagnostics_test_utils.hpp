@@ -16,30 +16,32 @@
 
 #pragma once
 
+#include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 
 namespace ros2_livekit_bridge::test {
 
-/// Wrap a shared diagnostics manager for unit-test component construction.
+/// Wrap a shared diagnostics updater for unit-test component construction.
 ///
-/// @param manager Shared manager that must outlive every returned callback user.
-/// @return Bridge-style registration functions forwarding to @p manager.
-/// @throws std::invalid_argument when @p manager is null.
-inline diagnostics::DiagnosticsManagerFns makeDiagnosticsManagerFns(
-    const std::shared_ptr<diagnostics::DiagnosticsManager>& manager) {
-  if (!manager) {
-    throw std::invalid_argument("DiagnosticsManager must not be null");
+/// @param updater Shared updater that must outlive every returned callback user.
+/// @return Bridge-style registration functions forwarding to @p updater.
+/// @throws std::invalid_argument when @p updater is null.
+inline diagnostics::DiagnosticsManagerFns makeDiagnosticsFns(
+    const std::shared_ptr<diagnostic_updater::Updater>& updater) {
+  if (!updater) {
+    throw std::invalid_argument("diagnostic_updater::Updater must not be null");
   }
   diagnostics::DiagnosticsManagerFns fns;
-  fns.add = [manager](const std::string& name, diagnostics::DiagnosticsManagerFns::TaskCallback callback) {
-    manager->add(name, std::move(callback));
+  fns.add = [updater](const std::string& name, diagnostics::DiagnosticsManagerFns::TaskCallback callback) {
+    updater->removeByName(name);
+    updater->add(name, std::move(callback));
   };
-  fns.remove = [manager](const std::string& name) { manager->remove(name); };
+  fns.remove = [updater](const std::string& name) { updater->removeByName(name); };
   return fns;
 }
 

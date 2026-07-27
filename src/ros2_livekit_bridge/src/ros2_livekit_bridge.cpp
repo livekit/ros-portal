@@ -37,7 +37,7 @@
 
 #include "ros2_livekit_bridge/cli/manager.hpp"
 #include "ros2_livekit_bridge/diagnostics/connection_health.hpp"
-#include "ros2_livekit_bridge/diagnostics/manager.hpp"
+#include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
 #include "ros2_livekit_bridge/latched_topic_forwarder.hpp"
 #include "ros2_livekit_bridge/service_forwarder.hpp"
 #include "ros2_livekit_bridge/topic_forwarder.hpp"
@@ -78,7 +78,8 @@ bool Ros2LiveKitBridge::initialize() {
   ros_threads_ = config->ros_threads;
   topic_forwarder_.reset();
   connection_diagnostics_.reset();
-  diagnostics_ = std::make_unique<diagnostics::DiagnosticsManager>(this);
+  diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
+  diagnostics_updater_->setHardwareID("ros2_livekit_bridge");
   connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(makeDiagnosticsFns());
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -189,8 +190,8 @@ Ros2LiveKitBridge::~Ros2LiveKitBridge() {
   connection_stats_timer_.reset();
   connection_diagnostics_.reset();
 
-  // reset diagnostics_ after all its users are gone
-  diagnostics_.reset();
+  // Reset diagnostics_updater_ after all its task owners are gone.
+  diagnostics_updater_.reset();
   if (room_) {
     RCLCPP_INFO(this->get_logger(), "Disconnecting LiveKit room...");
     room_.reset();
@@ -204,20 +205,21 @@ diagnostics::DiagnosticsManagerFns Ros2LiveKitBridge::makeDiagnosticsFns() {
   // `this` is safe for the lifetime of every wrapper handed out here.
   diagnostics::DiagnosticsManagerFns fns;
   fns.add = [this](const std::string& name, diagnostics::DiagnosticsManagerFns::TaskCallback callback) {
-    if (diagnostics_ == nullptr) {
-      RCLCPP_FATAL(this->get_logger(), "Cannot register diagnostic task '%s': diagnostics manager does not exist",
+    if (diagnostics_updater_ == nullptr) {
+      RCLCPP_FATAL(this->get_logger(), "Cannot register diagnostic task '%s': diagnostics updater does not exist",
                    name.c_str());
       return;
     }
-    diagnostics_->add(name, std::move(callback));
+    diagnostics_updater_->removeByName(name);
+    diagnostics_updater_->add(name, std::move(callback));
   };
   fns.remove = [this](const std::string& name) {
-    if (diagnostics_ == nullptr) {
-      RCLCPP_FATAL(this->get_logger(), "Cannot deregister diagnostic task '%s': diagnostics manager does not exist",
+    if (diagnostics_updater_ == nullptr) {
+      RCLCPP_FATAL(this->get_logger(), "Cannot deregister diagnostic task '%s': diagnostics updater does not exist",
                    name.c_str());
       return;
     }
-    diagnostics_->remove(name);
+    diagnostics_updater_->removeByName(name);
   };
   return fns;
 }

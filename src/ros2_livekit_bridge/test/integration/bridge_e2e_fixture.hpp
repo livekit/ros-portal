@@ -220,15 +220,11 @@ protected:
     graph_b_executor_->add_node(robot_b_node_);
 
     graph_a_spinning_.store(true);
-    graph_b_spinning_.store(true);
     graph_a_spin_thread_ = std::thread([this]() {
       graph_a_executor_->spin();
       graph_a_spinning_.store(false);
     });
-    graph_b_spin_thread_ = std::thread([this]() {
-      graph_b_executor_->spin();
-      graph_b_spinning_.store(false);
-    });
+    startGraphBSpin();
 
     publisher_a_ = robot_a_node_->create_publisher<std_msgs::msg::String>(publish_topic_a, 10);
     publisher_b_ = robot_b_node_->create_publisher<std_msgs::msg::String>(publish_topic_b, 10);
@@ -267,11 +263,7 @@ protected:
     graph_b_executor_->add_node(bridge_b_);
     graph_b_executor_->add_node(robot_b_node_);
 
-    graph_b_spinning_.store(true);
-    graph_b_spin_thread_ = std::thread([this]() {
-      graph_b_executor_->spin();
-      graph_b_spinning_.store(false);
-    });
+    startGraphBSpin();
   }
 
   bool verifyDirection(const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>& publisher,
@@ -527,11 +519,32 @@ protected:
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
 
+  // Park graph B's spin thread before removing the node: a live executor may
+  // still wait on its rmw entities (use-after-free on Humble). Replace the
+  // executor afterwards — Humble keeps the removed node's notify guard
+  // condition, so resuming it throws.
   void shutdownBridgeB() {
+    const bool was_spinning = stopGraphBSpin();
+
     if (graph_b_executor_ && bridge_b_) {
       graph_b_executor_->remove_node(bridge_b_);
     }
+    if (bridge_b_) {
+      bridge_b_->shutdown();
+    }
     bridge_b_.reset();
+
+    if (graph_b_executor_) {
+      graph_b_executor_ =
+          std::make_unique<rclcpp::executors::MultiThreadedExecutor>(executorOptions(graph_b_->context()), 2);
+      if (robot_b_node_) {
+        graph_b_executor_->add_node(robot_b_node_);
+      }
+    }
+
+    if (was_spinning) {
+      startGraphBSpin();
+    }
   }
 
 private:
@@ -567,6 +580,28 @@ private:
     return bridge;
   }
 
+  void startGraphBSpin() {
+    graph_b_spinning_.store(true);
+    graph_b_spin_thread_ = std::thread([this]() {
+      graph_b_executor_->spin();
+      graph_b_spinning_.store(false);
+    });
+  }
+
+  // Cancels graph B's executor and joins its spin thread. Returns whether the
+  // thread was running, so callers know if they are responsible for restarting
+  // it.
+  bool stopGraphBSpin() {
+    const bool was_spinning = graph_b_executor_ && graph_b_spinning_.exchange(false);
+    if (was_spinning) {
+      graph_b_executor_->cancel();
+    }
+    if (graph_b_spin_thread_.joinable()) {
+      graph_b_spin_thread_.join();
+    }
+    return was_spinning;
+  }
+
   void shutdownRuntime() {
     if (graph_a_executor_ && graph_a_spinning_.exchange(false)) {
       graph_a_executor_->cancel();
@@ -597,6 +632,13 @@ private:
       if (bridge_a_) {
         graph_a_executor_->remove_node(bridge_a_);
       }
+    }
+
+    if (bridge_a_) {
+      bridge_a_->shutdown();
+    }
+    if (bridge_b_) {
+      bridge_b_->shutdown();
     }
 
     publisher_a_.reset();

@@ -75,7 +75,7 @@ The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants
 - `ros2_livekit_bridge_msgs`: custom message definitions for the bridge.
 - [`ros2_livekit_bridge_tutorials`](src/ros2_livekit_bridge_tutorials/README.md):
   tutorials for using the bridge in a variety of scenarios.
-- [`waveshare_launch`](src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
+- [`waver`](src/test/waver/README.md): packages for launching the physical and simulated Waveshare WAVE ROVER.
 
 Other package READMEs under `src/` document package-specific setup, fixtures, or examples.
 

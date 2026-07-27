@@ -80,7 +80,7 @@ RUN apt-get update && apt-get install -y \
 # (Fast DDS): on the CPU-bound Pi 4, Fast DDS starved the slam_toolbox
 # (map->odom) and rf2o (odom->base) TF publishers and produced continuous TF
 # extrapolation errors. Cyclone is lighter and Nav2 is most reliable with it.
-# Selected via RMW_IMPLEMENTATION (set below). See waveshare_launch/README.md.
+# Selected via RMW_IMPLEMENTATION (set below). See src/test/waver/README.md.
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-rmw-cyclonedds-cpp
 

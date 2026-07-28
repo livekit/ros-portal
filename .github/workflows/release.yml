@@ -99,11 +99,33 @@ jobs:
             echo "Publishing requires selecting the existing v${version} tag, got ${GITHUB_REF}" >&2
             exit 1
           fi
+
           cd release-assets
-          for checksum in ./*.sha256; do
-            sha256sum --check "${checksum}"
+
+          declare -a expected_files=()
+          declare -a expected_packages=()
+          for distro in humble jazzy kilted lyrical; do
+            for arch in amd64 arm64; do
+              package="ros2-livekit-bridge-${distro}-${arch}.deb"
+              expected_packages+=("${package}")
+              expected_files+=("${package}" "${package}.sha256")
+            done
           done
-          sha256sum ./*.deb >SHA256SUMS
+
+          shopt -s nullglob
+          actual_files=(*)
+          if ! diff -u \
+            <(printf '%s\n' "${expected_files[@]}" | LC_ALL=C sort) \
+            <(printf '%s\n' "${actual_files[@]}" | LC_ALL=C sort)
+          then
+            echo "Release assets do not contain the exact supported distro/architecture package set" >&2
+            exit 1
+          fi
+
+          for package in "${expected_packages[@]}"; do
+            sha256sum --check "${package}.sha256"
+          done
+          sha256sum "${expected_packages[@]}" >SHA256SUMS
 
       - name: Create or update GitHub prerelease
         env:
@@ -112,6 +134,10 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            if [[ "$(gh release view "${GITHUB_REF_NAME}" --json isPrerelease --jq .isPrerelease)" != "true" ]]; then
+              echo "Refusing to overwrite assets on stable release ${GITHUB_REF_NAME}" >&2
+              exit 1
+            fi
             gh release upload "${GITHUB_REF_NAME}" \
               release-assets/*.deb release-assets/SHA256SUMS --clobber
           else

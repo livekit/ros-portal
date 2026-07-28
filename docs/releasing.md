@@ -1,15 +1,15 @@
 # Debian Releases
 
 The `CI` GitHub Actions workflow builds and clean-container tests packages for
-every supported ROS distribution and architecture. Every CI run stores each
-`.deb` and checksum as a workflow artifact. It does not create a tag, GitHub
-Release, APT repository, or any public package.
+every supported ROS distribution and architecture. Every successful, completed
+CI run stores each `.deb` and checksum as a workflow artifact. It does not
+create a tag, GitHub Release, APT repository, or any public package.
 
-Every CI run builds the bridge into a clean Release tree, smoke-tests the
-resulting Debian package in a clean ROS container, and uploads the package and
-checksum to the workflow run summary. On Humble, CI reuses the LiveKit SDK
-install produced by the tested workspace build rather than compiling that
-dependency again.
+Each successful matrix job builds the bridge into a clean Release tree,
+smoke-tests the resulting Debian package in a clean ROS container, and uploads
+the package and checksum to the workflow run summary. On Humble, CI reuses the
+LiveKit SDK install produced by the tested workspace build rather than
+compiling that dependency again.
 
 ## Review CI Packages
 
@@ -19,7 +19,8 @@ dependency again.
 2. Find the `Artifacts` section on the workflow summary.
 3. Download the
    `ros2-livekit-bridge-<ros-distro>-<architecture>.deb` artifact to review or
-   test.
+   test. GitHub downloads workflow artifacts as ZIP archives; extract the
+   archive to get the `.deb` and its `.sha256` file.
 
 Each packaging CI run produces eight artifacts. Package building and
 installation smoke testing are part of the corresponding distribution and
@@ -38,6 +39,10 @@ Publishing is intentionally guarded by all of the following:
 - All three first-party `package.xml` files must have the same version.
 - Every distro and architecture package must build and pass its installation
   smoke test.
+- The source run must still contain exactly the eight expected packages and
+  their checksums.
+- An existing release for the tag must still be a prerelease; the workflow
+  refuses to overwrite assets on a stable release.
 
 When these conditions pass, the workflow creates or updates a GitHub
 prerelease and uploads all `.deb` files plus `SHA256SUMS`.

@@ -31,9 +31,16 @@ jobs:
           version="$(sed -nE \
             's/^set\(LIVEKIT_SDK_VERSION "([^"]+)".*/\1/p' \
             src/ros2_livekit_bridge/CMakeLists.txt)"
+          colcon_version="$(sed -nE \
+            's/.*-DLIVEKIT_SDK_VERSION=([^"]+)".*/\1/p' \
+            src/ros2_livekit_bridge/colcon.pkg)"
 
-          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ || -z "${version}" ]]; then
-            echo "::error::Could not resolve the client-sdk-cpp SHA and CMake release version."
+          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ || -z "${version}" || -z "${colcon_version}" ]]; then
+            echo "::error::Could not resolve the client-sdk-cpp SHA, CMake release version, and colcon release version."
+            exit 1
+          fi
+          if [[ "${version}" != "${colcon_version}" ]]; then
+            echo "::error::CMake pins LiveKit SDK ${version}, but colcon.pkg pins ${colcon_version}."
             exit 1
           fi
 
@@ -72,4 +79,4 @@ jobs:
             exit 1
           fi
 
-          echo "${SDK_TAG} and external.repos both resolve to ${SDK_SHA}."
+          echo "${SDK_TAG}, colcon.pkg, and external.repos all resolve to ${SDK_SHA}."

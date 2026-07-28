@@ -15,7 +15,9 @@ installing the bridge. The bridge package uses that source to install its ROS
 runtime dependencies.
 
 Download the `.deb` matching the machine's ROS distribution and architecture
-from a GitHub Release or a CI workflow artifact. Then run:
+from a GitHub Release. A CI workflow artifact is downloaded as a ZIP archive
+containing the `.deb` and its `.sha256` file, so extract that archive first.
+Then run:
 
 ```bash
 sudo apt update
@@ -36,6 +38,16 @@ ros2 pkg prefix ros2_livekit_bridge
 The overlay setup chains the matching ROS underlay automatically.
 
 ## Run
+
+For a self-hosted LiveKit server, enable participant data blobs in its
+configuration before starting the bridge:
+
+```yaml
+enable_participant_data_blob: true
+```
+
+LiveKit participant data blobs carry the schema definitions required by bridge
+data tracks.
 
 Set LiveKit credentials and use the installed launch file:
 

@@ -148,15 +148,28 @@ PY
 
 declare -a runtime_dependencies=("ros-${ros_distro}-ros-base")
 for rosdep_key in "${rosdep_keys[@]}"; do
+  resolution_output=""
+  if ! resolution_output="$(rosdep resolve --rosdistro "${ros_distro}" "${rosdep_key}")"; then
+    echo "Failed to resolve runtime dependency '${rosdep_key}' for ROS ${ros_distro}" >&2
+    exit 1
+  fi
+
   installer=""
+  declare -a resolved_packages=()
   while IFS= read -r resolution; do
     if [[ "${resolution}" == \#* ]]; then
       installer="${resolution#\#}"
     elif [[ "${installer}" == "apt" && -n "${resolution}" ]]; then
-      read -r -a resolved_packages <<<"${resolution}"
-      runtime_dependencies+=("${resolved_packages[@]}")
+      read -r -a packages_on_line <<<"${resolution}"
+      resolved_packages+=("${packages_on_line[@]}")
     fi
-  done < <(rosdep resolve --rosdistro "${ros_distro}" "${rosdep_key}")
+  done <<<"${resolution_output}"
+
+  if [[ "${#resolved_packages[@]}" -eq 0 ]]; then
+    echo "Runtime dependency '${rosdep_key}' did not resolve to an APT package for ROS ${ros_distro}" >&2
+    exit 1
+  fi
+  runtime_dependencies+=("${resolved_packages[@]}")
 done
 
 mkdir -p "${shlibs_root}/debian"

@@ -163,7 +163,7 @@ RIHS01 type hash.
 
 The bridge also requires the schema-capable LiveKit C++ SDK and a server with
 participant data blobs enabled. Setup details are in the
-[development guide](../development.md#livekit-sdk).
+[running guide](../running.md#livekit-server-requirement).
 
 ## Implementation map
 

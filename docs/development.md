@@ -109,9 +109,12 @@ versions used in CI automatically.
 ## LiveKit SDK
 
 The default build downloads the pinned LiveKit SDK release during CMake
-configure. The pinned version lives in `src/ros2_livekit_bridge/colcon.pkg` and
-as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable in
-`src/ros2_livekit_bridge/CMakeLists.txt`. Bump both together when upgrading.
+configure. Its release version lives in `src/ros2_livekit_bridge/colcon.pkg`
+and as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable in
+`src/ros2_livekit_bridge/CMakeLists.txt`; `external.repos` pins the source
+checkout to that release's commit. Bump all three together when upgrading. The
+SDK release check verifies that the two version strings match and that the
+source commit is the commit referenced by the published release tag.
 
 Initialize the pinned SDK source checkout with the other external repositories:
 

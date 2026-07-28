@@ -25,10 +25,7 @@ diff --git a/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cp
 index 0aa4d0a3..87030858 100644
 --- a/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cpp
 +++ b/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cpp
-@@ -391,6 +391,30 @@ void write_member_sequence<rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOL>(
-   }
- }
- 
+@@ -394,3 +394,27 @@ void write_member_sequence<rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOL>(
 +// uint8 sequences may use rosidl::Buffer instead of std::vector. Use the
 +// introspection callbacks so this works with either container.
 +template<>

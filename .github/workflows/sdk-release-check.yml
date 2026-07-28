@@ -1,7 +1,8 @@
 name: SDK Release Check
 
-# Mirrors client-sdk-cpp/.github/workflows/rust-release-check.yml: keep the
-# source-build commit aligned with the published release selected by CMake.
+# Ensures the CMake SDK release version (pre-built download) and the VCS SDK
+# checkout (source build) resolve to the same commit hash so the two paths
+# cannot diverge.
 on:
   workflow_call: {}
   workflow_dispatch: {}

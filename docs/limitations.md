@@ -17,24 +17,19 @@ types include `audio_common_msgs/msg/AudioData` and raw PCM topics.
 
 ## ROS Distributions
 
-- On Humble, do not destroy the bridge node while an executor it was added to is
-  still spinning. Humble's executor keeps referring to a removed node's rmw
-  entities and notify guard condition, so a concurrent `rcl_wait` can crash and a
-  later wait-set rebuild throws `guard condition implementation is invalid`.
-  Cancel the executor and join its spin thread first; if the executor also hosts
-  nodes that must keep running, replace it rather than resume it. Jazzy and newer
-  are unaffected — their executors take shared ownership of what they wait on.
-- Message schemas use rosbag2's renderer where available and a bundled
-  byte-compatible fallback otherwise (currently Humble). Unit tests compare both
-  renderers wherever the rosbag2 API is available.
-- Schema identity is a SHA-256 over the rendered definition text, and that text
-  is the `.msg` files as shipped, comments included. Distributions do not ship
-  byte-identical `.msg` files — `builtin_interfaces/msg/Time.msg`, for example,
-  has a trailing space on one comment line in Jazzy that Humble does not have —
-  so bridges on different distributions can compute different schema hashes for
-  the same message type and reject each other's data tracks. This is inherent to
-  hashing the definition text and is not specific to the Humble path; keep both
-  ends of a session on the same distribution.
+- On Humble, cancel and join an executor before destroying any node it still
+  owns. Humble's executor can keep dangling references to a removed node's wait
+  set, which leads to `rcl_wait` crashes or
+  `guard condition implementation is invalid`. If other nodes on that executor
+  must keep running, replace the executor rather than resume it. Jazzy and newer
+  are unaffected.
+- Message schemas use the `rosbag2` renderer when available, otherwise a bundled
+  byte-compatible fallback (Humble). Unit tests compare both where the `rosbag2`
+  API exists.
+- Schema identity is a SHA-256 of the rendered `.msg` text as shipped, comments
+  included. Distros ship non-identical `.msg` files, so the same type can hash
+  differently across distributions and reject peer data tracks. Keep both ends
+  of a session on the same distro.
 
 ## General
 

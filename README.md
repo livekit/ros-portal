@@ -10,6 +10,16 @@
 
 # ROS LiveKit Bridge
 
+[![CI](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml)
+[![Humble](https://img.shields.io/badge/ROS_2-Humble-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Humble)
+[![Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Jazzy)
+[![Kilted](https://img.shields.io/badge/ROS_2-Kilted-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Kilted)
+[![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Lyrical)
+
+ROS2 workspace for the LiveKit bridge. This repository is used as both the
+development environment and build environment for the bridge node and its
+supporting packages.
+
 The ROS 2 <-> LiveKit Bridge connects a ROS2 graph to other LiveKit participants (ROS2 or not) through LiveKit’s real-time network, enabling access to a ROS graph from anywhere in the world. It streams camera feeds as video, transports arbitrary ROS messages as schema-described data, republishes remote tracks into ROS, and forwards service calls over LiveKit RPC—enabling low-latency teleoperation, monitoring, and robot-to-cloud communication without exposing DDS across networks.
 
 <img style="width:100%;height:100%;" alt="ROS LiveKit Bridge architecture" src="docs/assets/bridge-overview.png">

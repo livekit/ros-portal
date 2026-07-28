@@ -1,0 +1,58 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk-release-check:
+    name: SDK Release Check
+    uses: ./.github/workflows/sdk-release-check.yml
+
+  cpp-tools:
+    name: C++ Tools
+    uses: ./.github/workflows/cpp-tools.yml
+
+  humble:
+    name: Humble
+    uses: ./.github/workflows/ci-humble.yml
+    secrets: inherit
+
+  jazzy:
+    name: Jazzy
+    uses: ./.github/workflows/ci-jazzy.yml
+    secrets: inherit
+
+  kilted:
+    name: Kilted
+    uses: ./.github/workflows/ci-kilted.yml
+    secrets: inherit
+
+  lyrical:
+    name: Lyrical
+    uses: ./.github/workflows/ci-lyrical.yml
+    secrets: inherit

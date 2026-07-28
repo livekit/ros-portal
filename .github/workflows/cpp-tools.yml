@@ -14,7 +14,7 @@
 
 name: C++ Tools
 
-# Called by the top-level builds workflow.
+# Called by the top-level CI workflow.
 on:
   workflow_call: {}
   workflow_dispatch: {}

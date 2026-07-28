@@ -62,7 +62,7 @@ jobs:
           conclusion="$(jq -r '.conclusion' <<<"${run_json}")"
           head_sha="$(jq -r '.head_sha' <<<"${run_json}")"
 
-          if [[ "${workflow_path}" != ".github/workflows/builds.yml" ]]; then
+          if [[ "${workflow_path}" != ".github/workflows/ci.yml" ]]; then
             echo "Run ${SOURCE_RUN_ID} belongs to ${workflow_path}, not CI" >&2
             exit 1
           fi

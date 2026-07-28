@@ -44,6 +44,7 @@ int main(int argc, char* argv[]) {
       rclcpp::executors::MultiThreadedExecutor executor(exec_options, num_threads);
       executor.add_node(node);
       executor.spin();
+      executor.remove_node(node);
     }
     node->shutdown();
   } catch (const std::exception& e) {

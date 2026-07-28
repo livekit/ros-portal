@@ -14,6 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This script is intended for the repository's rootful devcontainer and CI.
+# It removes and recreates /opt/livekit/ros/$ROS_DISTRO as a build staging
+# prefix, so running it directly on a developer host is not supported.
+
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

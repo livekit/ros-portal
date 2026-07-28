@@ -11,10 +11,10 @@
 # ROS LiveKit Bridge
 
 [![CI](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml)
-[![Humble](https://img.shields.io/badge/ROS_2-Humble-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Humble)
-[![Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Jazzy)
-[![Kilted](https://img.shields.io/badge/ROS_2-Kilted-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Kilted)
-[![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci.yml?query=Lyrical)
+[![Humble](https://img.shields.io/badge/ROS_2-Humble-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci-humble.yml)
+[![Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci-jazzy.yml)
+[![Kilted](https://img.shields.io/badge/ROS_2-Kilted-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci-kilted.yml)
+[![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros2-livekit-bridge/actions/workflows/ci-lyrical.yml)
 
 ROS2 workspace for the LiveKit bridge. This repository is used as both the
 development environment and build environment for the bridge node and its

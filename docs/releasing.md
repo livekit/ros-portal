@@ -17,7 +17,9 @@ dependency again.
    for an unmerged branch, open **Actions > CI > Run workflow** and select that
    branch; manual runs package like `main` runs do.
 2. Find the `Artifacts` section on the workflow summary.
-3. Download the `deb-<ros-distro>-<architecture>` artifact to review or test.
+3. Download the
+   `ros2-livekit-bridge-<ros-distro>-<architecture>.deb` artifact to review or
+   test.
 
 Each packaging CI run produces eight artifacts. Package building and
 installation smoke testing are part of the corresponding distribution and

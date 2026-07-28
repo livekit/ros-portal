@@ -19,10 +19,10 @@ from a GitHub Release or a CI workflow artifact. Then run:
 
 ```bash
 sudo apt update
-sudo apt install ./livekit-ros2-bridge-jazzy_0.1.0-1_amd64.deb
+sudo apt install ./ros2-livekit-bridge-jazzy-amd64.deb
 ```
 
-Replace `jazzy`, the version, and the architecture as appropriate. The package
+Replace `jazzy` and the architecture as appropriate. The package
 installs a ROS overlay at `/opt/livekit/ros/<distro>` without modifying files
 owned by the ROS installation under `/opt/ros/<distro>`.
 

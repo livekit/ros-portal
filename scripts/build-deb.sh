@@ -70,7 +70,7 @@ readonly build_base="${work_root}/build"
 readonly log_base="${work_root}/log"
 readonly package_root="${work_root}/package-root"
 readonly shlibs_root="${work_root}/shlibs"
-readonly deb_path="${output_dir}/${package_name}_${debian_version}_${debian_arch}.deb"
+readonly deb_path="${output_dir}/ros2-livekit-bridge-${ros_distro}-${debian_arch}.deb"
 
 set +u
 source "/opt/ros/${ros_distro}/setup.bash"

@@ -18,8 +18,19 @@ The devcontainer defaults to ROS 2 Jazzy. Its Docker build accepts
 `ROS_DISTRO`, `ROS_IMAGE_TAG`, and `ROS_IMAGE_DIGEST`, which CI uses to build
 Humble, Jazzy, Kilted, and Lyrical from the same configuration.
 
-To open a minimal non-Jazzy container with the Dev Container CLI, pass matching
-values from the host:
+Open the default Jazzy development container without any overrides:
+
+```bash
+devcontainer up --workspace-folder .
+```
+
+For another ROS distribution, `ROS_DISTRO`, `ROS_IMAGE_TAG`, and
+`ROS_IMAGE_DIGEST` are a matched set and must be overridden together. Changing
+only `ROS_DISTRO` leaves the Jazzy base image selected, so the requested ROS
+installation will not exist in the container. Use the matching values from the
+distribution's `.github/workflows/ci-<distro>.yml` file.
+
+For example, open a minimal Humble container with:
 
 ```bash
 ROS_DISTRO=humble \
@@ -31,16 +42,18 @@ INSTALL_SIMULATION_DEPS=false \
 devcontainer up --workspace-folder .
 ```
 
-Use `jazzy-ros-base-noble`, `kilted-ros-base-noble`, or
-`lyrical-ros-base-resolute` for the other supported distributions. CI pins
-these image tags by digest in the `ci-*.yml` distro workflows.
+The remaining overrides are independent feature choices:
 
-`INSTALL_SIMULATION_DEPS` defaults to `true` for the interactive Jazzy
-devcontainer. Core CI disables it so optional Gazebo, Nav2, Foxglove, and robot
-demo packages do not determine whether the bridge supports a ROS distribution.
-`INSTALL_CPP_TOOLS` similarly keeps the exact formatter and static-analysis
-toolchain in the default development image while matrix builds use the
-dedicated C++ tools workflow.
+- `INSTALL_SIMULATION_DEPS` defaults to `true`. Set it to `false` for a smaller
+  container without Gazebo, Nav2, Foxglove, and robot demo packages. Core CI
+  disables these optional dependencies.
+- `INSTALL_CPP_TOOLS` defaults to `true`. Set it to `false` when the formatter
+  and static-analysis toolchain are unnecessary. The distro matrix disables it
+  because those tools have a dedicated workflow.
+- `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `false`. Humble requires `true`
+  unless `LIVEKIT_LOCAL_SDK_DIR` points to a compatible SDK installation.
+- `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
+  other than the default `ros` repository.
 
 Humble must build the pinned LiveKit SDK from source because the generic Linux
 release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04

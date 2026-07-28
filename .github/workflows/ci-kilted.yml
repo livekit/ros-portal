@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.arch }})
+    name: ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:

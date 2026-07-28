@@ -60,6 +60,8 @@ if ldd "${bridge_node}" | awk '/not found/ { found = 1 } END { exit !found }'; t
   exit 1
 fi
 
+# Verify the installed launch description can be resolved and parsed without
+# starting the bridge or requiring a LiveKit server.
 ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml --show-args >/dev/null
 "livekit-ros2-bridge-${ros_distro}" --show-args >/dev/null
 

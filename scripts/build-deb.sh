@@ -61,16 +61,25 @@ if [[ "${#package_versions[@]}" -ne 3 ]] ||
 fi
 
 readonly upstream_version="${package_versions[0]}"
-readonly debian_version="${upstream_version}-1"
+ubuntu_codename="$(
+  sed -nE 's/^VERSION_CODENAME="?([^"]+)"?$/\1/p' /etc/os-release
+)"
+if [[ -z "${ubuntu_codename}" ]]; then
+  echo "Unable to determine the Ubuntu codename from /etc/os-release" >&2
+  exit 2
+fi
+readonly ubuntu_codename
+readonly debian_version="${upstream_version}-1${ubuntu_codename}"
 readonly debian_arch="$(dpkg --print-architecture)"
-readonly package_name="livekit-ros2-bridge-${ros_distro}"
+readonly package_name="ros-${ros_distro}-livekit-bridge"
+readonly command_name="livekit-ros2-bridge-${ros_distro}"
 readonly install_prefix="/opt/livekit/ros/${ros_distro}"
 readonly work_root="${repo_root}/build-deb/${ros_distro}-${debian_arch}"
 readonly build_base="${work_root}/build"
 readonly log_base="${work_root}/log"
 readonly package_root="${work_root}/package-root"
 readonly shlibs_root="${work_root}/shlibs"
-readonly deb_path="${output_dir}/ros2-livekit-bridge-${ros_distro}-${debian_arch}.deb"
+readonly deb_path="${output_dir}/${package_name}_${debian_version}_${debian_arch}.deb"
 
 set +u
 source "/opt/ros/${ros_distro}/setup.bash"
@@ -109,14 +118,14 @@ colcon --log-base "${log_base}" build \
 mkdir -p "${package_root}${install_prefix}" "${package_root}/usr/bin"
 cp -a "${install_prefix}/." "${package_root}${install_prefix}/"
 
-cat >"${package_root}/usr/bin/${package_name}" <<EOF
+cat >"${package_root}/usr/bin/${command_name}" <<EOF
 #!/usr/bin/env bash
 set -eo pipefail
 source "${install_prefix}/setup.bash"
 set -u
 exec ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml "\$@"
 EOF
-chmod 0755 "${package_root}/usr/bin/${package_name}"
+chmod 0755 "${package_root}/usr/bin/${command_name}"
 
 mapfile -t rosdep_keys < <(
   python3 - \

@@ -24,8 +24,18 @@ if [[ -z "${ros_distro}" || -z "${deb_path}" ]]; then
   exit 2
 fi
 
+readonly expected_package="ros-${ros_distro}-livekit-bridge"
+actual_package="$(dpkg-deb --field "${deb_path}" Package)"
+if [[ "${actual_package}" != "${expected_package}" ]]; then
+  echo "Unexpected Debian package name: ${actual_package}" >&2
+  exit 1
+fi
+
 apt-get update
 apt-get install -y "${deb_path}"
+
+dpkg-query --show --showformat='${Status}\n' "${expected_package}" |
+  grep -qx "install ok installed"
 
 readonly install_prefix="/opt/livekit/ros/${ros_distro}"
 set +u

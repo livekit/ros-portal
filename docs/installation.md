@@ -8,7 +8,12 @@ CI builds Debian packages for:
 - ROS 2 Lyrical on Ubuntu 26.04 (Resolute)
 - amd64 and arm64 for each distribution
 
-<!-- TODO BOT-495: Add release workflow and apt repository publishing -->
+The Debian package follows ROS naming conventions:
+`ros-<distro>-livekit-bridge`. CI workflow artifacts use
+`ros-<distro>-livekit-bridge-<arch>-deb`; each artifact is a ZIP containing
+the versioned `.deb` and its checksum.
+
+<!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
 ## Install
 
@@ -22,10 +27,11 @@ architecture. GitHub downloads the artifact as a ZIP archive containing the
 
 ```bash
 sudo apt update
-sudo apt install ./ros2-livekit-bridge-jazzy-amd64.deb
+sudo apt install ./ros-jazzy-livekit-bridge_*_amd64.deb
 ```
 
-Replace `jazzy` and the architecture as appropriate. The package
+Replace the distribution, version, Ubuntu codename, and architecture as
+appropriate. The package
 installs a ROS overlay at `/opt/livekit/ros/<distro>` without modifying files
 owned by the ROS installation under `/opt/ros/<distro>`.
 

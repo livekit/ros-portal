@@ -252,7 +252,7 @@ jobs:
         if: ${{ always() && !cancelled() && steps.debian_package.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ros2-livekit-bridge-${{ inputs.ros_distro }}-${{ inputs.arch }}.deb
+          name: ros-${{ inputs.ros_distro }}-livekit-bridge-${{ inputs.arch }}-deb
           path: |
             artifacts/debian/*.deb
             artifacts/debian/*.sha256

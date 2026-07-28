@@ -1,16 +1,15 @@
 # Debian Releases
 
 The `CI` GitHub Actions workflow builds and clean-container tests packages for
-every supported ROS distribution and architecture. Pushes to `main` and manual
-CI runs store each `.deb` and checksum as a workflow artifact. They do not
-create a tag, GitHub Release, APT repository, or any public package.
+every supported ROS distribution and architecture. Every CI run stores each
+`.deb` and checksum as a workflow artifact. It does not create a tag, GitHub
+Release, APT repository, or any public package.
 
-Pull request runs skip packaging. `scripts/build-deb.sh` builds the bridge into
-a clean Release tree; on Humble, CI reuses the LiveKit SDK install produced by
-the tested workspace build rather than compiling that dependency again.
-Everything a pull request needs to be reviewable — the workspace build, unit
-tests, and integration tests — still runs on every distribution and
-architecture.
+Every CI run builds the bridge into a clean Release tree, smoke-tests the
+resulting Debian package in a clean ROS container, and uploads the package and
+checksum to the workflow run summary. On Humble, CI reuses the LiveKit SDK
+install produced by the tested workspace build rather than compiling that
+dependency again.
 
 ## Review CI Packages
 
@@ -43,16 +42,12 @@ prerelease and uploads all `.deb` files plus `SHA256SUMS`.
 
 To publish:
 
-1. Find the successful `CI` run for the tagged commit, normally the run from
-   the corresponding push to `main`, and copy its numeric run ID from the URL.
+1. Find a successful `CI` run for the tagged commit and copy its numeric run ID
+   from the URL.
 2. Open **Actions > Debian Release > Run workflow**.
 3. Select the existing version tag.
 4. Enter the CI run ID and enable `publish`.
 5. Run the workflow.
-
-Because pull request runs do not package, they cannot be used as a publication
-source. Use the push-to-`main` run for the tagged commit, or a manual CI run on
-that commit.
 
 The workflow never creates or pushes a tag. Prepare and review the version
 change and tag separately before enabling publication.

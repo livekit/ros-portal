@@ -252,14 +252,12 @@ jobs:
         if: failure()
         run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
 
-      # Packaging is skipped on pull requests: build-deb.sh builds into a clean
-      # tree, which on Humble means compiling the LiveKit SDK a second time in
-      # the same job (~13 min of the ~47 min job; the SDK's Rust output is reused
-      # from the source tree but its C++ tree lives under the build base and is
-      # rebuilt). Debian Release consumes the deb-* artifacts from a CI run whose
-      # head SHA matches the release tag, so push-to-main and workflow_dispatch
-      # runs -- which still package -- remain the only usable release sources.
-      # A pull request run never satisfied that check.
+      # Packaging is skipped on pull requests. The package still gets a clean
+      # Release build, but Humble reuses the SDK install produced by the tested
+      # workspace build rather than compiling that dependency again. Debian
+      # Release consumes the deb-* artifacts from a CI run whose head SHA matches
+      # the release tag, so push-to-main and workflow_dispatch runs remain the
+      # usable release sources.
       - name: Build Debian package
         if: github.event_name != 'pull_request'
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -269,7 +267,14 @@ jobs:
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
-          runCmd: ./scripts/build-deb.sh
+          runCmd: |
+            bash -lc '
+              set -euo pipefail
+              if [[ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" == "true" ]]; then
+                export LIVEKIT_LOCAL_SDK_DIR="${PWD}/build/ros2_livekit_bridge/_deps/livekit-sdk-source-install"
+              fi
+              exec ./scripts/build-deb.sh
+            '
 
       - name: Smoke-test clean installation
         if: github.event_name != 'pull_request'

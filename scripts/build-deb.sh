@@ -80,7 +80,16 @@ rm -rf "${work_root}" "${install_prefix}"
 mkdir -p "${build_base}" "${log_base}" "${output_dir}"
 
 declare -a cmake_args=(-DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release)
-if [[ "${BUILD_LIVEKIT_SDK_FROM_SOURCE:-false}" == "true" ]]; then
+if [[ -n "${LIVEKIT_LOCAL_SDK_DIR:-}" ]]; then
+  if [[ ! -f "${LIVEKIT_LOCAL_SDK_DIR}/lib/cmake/LiveKit/LiveKitConfig.cmake" ]]; then
+    echo "LIVEKIT_LOCAL_SDK_DIR is not a LiveKit SDK install: ${LIVEKIT_LOCAL_SDK_DIR}" >&2
+    exit 2
+  fi
+  cmake_args+=(
+    -DLIVEKIT_BUILD_SDK_FROM_SOURCE=OFF
+    "-DLIVEKIT_LOCAL_SDK_DIR=${LIVEKIT_LOCAL_SDK_DIR}"
+  )
+elif [[ "${BUILD_LIVEKIT_SDK_FROM_SOURCE:-false}" == "true" ]]; then
   cmake_args+=(-DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON)
 fi
 

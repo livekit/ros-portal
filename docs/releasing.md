@@ -5,11 +5,12 @@ every supported ROS distribution and architecture. Pushes to `main` and manual
 CI runs store each `.deb` and checksum as a workflow artifact. They do not
 create a tag, GitHub Release, APT repository, or any public package.
 
-Pull request runs skip packaging. `scripts/build-deb.sh` builds into a clean
-tree, which on Humble means compiling the LiveKit SDK a second time in the same
-job, and that dominated pull request feedback time. Everything a pull request
-needs to be reviewable — the workspace build, unit tests, and integration tests
-— still runs on every distribution and architecture.
+Pull request runs skip packaging. `scripts/build-deb.sh` builds the bridge into
+a clean Release tree; on Humble, CI reuses the LiveKit SDK install produced by
+the tested workspace build rather than compiling that dependency again.
+Everything a pull request needs to be reviewable — the workspace build, unit
+tests, and integration tests — still runs on every distribution and
+architecture.
 
 ## Review CI Packages
 

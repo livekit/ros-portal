@@ -1,6 +1,6 @@
 # Installing Debian Packages
 
-Pre-release Debian packages are built for:
+CI builds Debian packages for:
 
 - ROS 2 Humble on Ubuntu 22.04 (Jammy)
 - ROS 2 Jazzy on Ubuntu 24.04 (Noble)
@@ -8,16 +8,17 @@ Pre-release Debian packages are built for:
 - ROS 2 Lyrical on Ubuntu 26.04 (Resolute)
 - amd64 and arm64 for each distribution
 
+<!-- TODO BOT-495: Add release workflow and apt repository publishing -->
+
 ## Install
 
 Configure the official ROS 2 APT source for your Ubuntu release before
 installing the bridge. The bridge package uses that source to install its ROS
 runtime dependencies.
 
-Download the `.deb` matching the machine's ROS distribution and architecture
-from a GitHub Release. A CI workflow artifact is downloaded as a ZIP archive
-containing the `.deb` and its `.sha256` file, so extract that archive first.
-Then run:
+Download the CI workflow artifact matching the machine's ROS distribution and
+architecture. GitHub downloads the artifact as a ZIP archive containing the
+`.deb` and its `.sha256` file, so extract that archive first. Then run:
 
 ```bash
 sudo apt update
@@ -69,14 +70,13 @@ livekit-ros2-bridge-jazzy
 See [Running](running.md) and [Configuration](configuration.md) for launch
 arguments and route configuration.
 
-## Distribution Model
+## CI Artifact Distribution
 
-GitHub Releases host downloadable Debian package files, not an APT repository.
+CI stores the Debian packages as workflow artifacts for testing and manual
+installation. These artifacts are not an APT repository and are subject to the
+repository's Actions artifact retention policy.
+
 Installing a downloaded file with `apt install ./file.deb` resolves its
 dependencies and records it with dpkg, but `apt update` cannot discover bridge
-updates from GitHub Releases.
-
-A signed APT repository is only required when users need package-name installs
-and automatic upgrades. When that becomes necessary, prefer a managed
-repository service over operating package indexes, signing, retention, and
-availability infrastructure internally.
+updates. A future signed APT repository would be required for package-name
+installs and automatic upgrades.

@@ -205,7 +205,7 @@ TEST_F(DataTrackLifecycleTests, TrackAfterBridgeBeforeSubscriberForwards) {
   ASSERT_NE(publisher, nullptr);
   ASSERT_TRUE(defineStringSchema(*publisher));
   const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
   std::atomic_bool received{false};
@@ -234,7 +234,7 @@ TEST_F(DataTrackLifecycleTests, UnpublishingTrackRemovesRosPublisher) {
   ASSERT_NE(publisher, nullptr);
   ASSERT_TRUE(defineStringSchema(*publisher));
   const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
   publisher->unpublishDataTrack(track_result.value());
@@ -294,7 +294,7 @@ TEST_F(DataTrackLifecycleTests, BridgeShutdownCleansUpActiveTrack) {
   ASSERT_NE(publisher, nullptr);
   ASSERT_TRUE(defineStringSchema(*publisher));
   const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
   const auto start = std::chrono::steady_clock::now();
@@ -321,7 +321,7 @@ TEST_F(DataTrackLifecycleTests, RecreatedSubscriberReceivesActiveTrack) {
   ASSERT_NE(publisher, nullptr);
   ASSERT_TRUE(defineStringSchema(*publisher));
   const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
   std::atomic_bool first_received{false};

@@ -89,21 +89,23 @@ TEST_F(BridgeTestE2E, InboundTrackCreatesPublisher) {
   options.schema = schema_id;
   options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
   const auto track_result = publisher->publishDataTrack(options);
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
 
   EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 }
 
-// Case: A JSON-encoded LiveKit frame with an exact ROS schema should be translated to CDR and delivered to a typed
-// ROS subscriber. Event sequence:
+// Case: A browser teleoperation client should control a ROS participant by publishing JSON frames with a ROS type name,
+// without defining an external schema document. JSON frames must advertise a JsonSchema schema encoding; the SDK
+// rejects any other pairing at publish time. Event sequence:
 // 1. Start the receiving bridge and create a typed ROS subscription.
-// 2. Connect an independent LiveKit publisher and define the ROS message schema.
-// 3. Publish a JSON-encoded data track and wait for the bridge's ROS publisher.
-// 4. Push a JSON frame and verify the typed ROS message contents.
-TEST_F(BridgeTestE2E, InboundJsonFrameCreatesTypedRosMessage) {
+// 2. Connect an independent LiveKit publisher without defining a schema document.
+// 3. Publish the same cmd_vel data track metadata used by the web teleoperation client.
+// 4. Push a Twist-shaped JSON frame and verify the typed ROS message contents.
+TEST_F(BridgeTestE2E, InboundWebJsonControlFrameCreatesTypedRosMessage) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
-  constexpr const char* kTopic = "/bridge/json_twist";
+  constexpr const char* kTrackName = "cmd_vel";
+  constexpr const char* kTopic = "/cmd_vel";
   constexpr const char* kType = "geometry_msgs/msg/Twist";
 
   // Start the receiving bridge and subscribe to the expected typed ROS message.
@@ -126,19 +128,17 @@ TEST_F(BridgeTestE2E, InboundJsonFrameCreatesTypedRosMessage) {
   const auto publisher = publisher_room.localParticipant().lock();
   ASSERT_NE(publisher, nullptr);
 
-  // Define the ROS message schema advertised by the data track.
-  const auto schema_text = renderSchemaText(kType);
-  ASSERT_TRUE(schema_text.has_value()) << kType << " schema was unavailable";
-  const livekit::DataTrackSchemaId schema_id{kType, livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_TRUE(publisher->defineSchema(schema_id, *schema_text));
+  // Match the web client: the schema ID supplies the locally installed ROS type,
+  // but the publisher does not define or upload an external schema document.
+  const livekit::DataTrackSchemaId schema_id{kType, livekit::DataTrackSchemaEncoding::JsonSchema};
 
-  // Publish a JSON-encoded track carrying messages of the advertised type.
+  // Match useControlCmdTrack(): publish a relative cmd_vel track with JSON frames.
   livekit::DataTrackPublishOptions options;
-  options.name = kTopic;
+  options.name = kTrackName;
   options.schema = schema_id;
   options.frame_encoding = livekit::DataTrackFrameEncoding::Json;
   const auto track_result = publisher->publishDataTrack(options);
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
 
   // Wait for the bridge to validate the track and create its ROS publisher.
   ASSERT_TRUE(waitFor([&]() { return subscription->get_publisher_count() > 0U; }, kGraphTimeout));
@@ -187,7 +187,7 @@ TEST_F(BridgeTestE2E, AcceptsTrackBeforeRosSubscriber) {
   options.schema = schema_id;
   options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
   const auto track_result = publisher->publishDataTrack(options);
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
 
   // Start the bridge and confirm it discovers the preexisting track.
   initializeInboundOnlyRuntime(kTopic);
@@ -252,7 +252,7 @@ TEST_F(BridgeTestE2E, RejectsTrackSchemaMismatchNoSubscriber) {
   options.schema = schema_id;
   options.frame_encoding = livekit::DataTrackFrameEncoding::Cdr;
   const auto track_result = publisher->publishDataTrack(options);
-  ASSERT_TRUE(track_result);
+  ASSERT_TRUE(track_result) << track_result.error().message;
 
   // Confirm schema validation prevents creation of a ROS publisher.
   EXPECT_FALSE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kNegativeAssertionTimeout));

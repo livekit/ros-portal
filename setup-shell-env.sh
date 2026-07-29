@@ -20,79 +20,24 @@ cat <<EOF >/etc/profile.d/ros-livekit-bridge.sh
 export ROS_DISTRO=${ROS_DISTRO}
 export WS="${WS}"
 
-_ros_shell_extension()
-{
-    if [ -n "\${ZSH_VERSION:-}" ]; then
-        printf '%s\n' zsh
-    else
-        printf '%s\n' bash
-    fi
-}
-
-_source_setup_file()
-{
-    local setup_file="\$1"
-    local source_status=0
-    local restore_nounset=0
-
-    # ROS and colcon-generated setup files reference unset variables and are
-    # not compatible with nounset. Preserve strict mode for the caller while
-    # disabling nounset only for the duration of the generated setup script.
-    case "\$-" in
-        *u*)
-            restore_nounset=1
-            set +u
-            ;;
-    esac
-
-    source "\${setup_file}" || source_status=\$?
-
-    if [ "\${restore_nounset}" -eq 1 ]; then
-        set -u
-    fi
-
-    return "\${source_status}"
-}
-
 _source_ros_env() {
-    local setup_file="/opt/ros/\${ROS_DISTRO}/setup.\$(_ros_shell_extension)"
-
-    if [ ! -r "\${setup_file}" ]; then
-        echo "ROS \${ROS_DISTRO} setup not found: \${setup_file}" >&2
-        echo "The container image and ROS_DISTRO environment variable are incompatible." >&2
-        return 1
+    if [ -n "\${ZSH_VERSION:-}" ]; then
+        source /opt/ros/${ROS_DISTRO}/setup.zsh
+    else
+        source /opt/ros/${ROS_DISTRO}/setup.bash
     fi
-
-    _source_setup_file "\${setup_file}"
 }
 
 _source_ws_overlay() {
-    local overlay_prefix="\${1:-\${WS}/install}"
-    local setup_file="\${overlay_prefix}/setup.\$(_ros_shell_extension)"
-    local overlay_ros_prefix=""
-    local overlay_ros_distro=""
-
-    if [ ! -f "\${setup_file}" ]; then
-        return 0
+    if [ -n "\${ZSH_VERSION:-}" ]; then
+        if [ -f "\${WS}/install/setup.zsh" ]; then
+            source "\${WS}/install/setup.zsh"
+        fi
+    else
+        if [ -f "\${WS}/install/setup.bash" ]; then
+            source "\${WS}/install/setup.bash"
+        fi
     fi
-
-    # Colcon-generated setup files record the absolute ROS underlay used at
-    # build time. Reusing an overlay across ROS distributions can load
-    # incompatible libraries and generated interfaces, so fail before sourcing.
-    overlay_ros_prefix="\$(
-        grep -Eom1 '/opt/ros/[^/\"[:space:]]+' "\${setup_file}" || true
-    )"
-    overlay_ros_distro="\${overlay_ros_prefix##*/}"
-    if [ -n "\${overlay_ros_distro}" ] &&
-        [ "\${overlay_ros_distro}" != "\${ROS_DISTRO}" ]; then
-        echo "Workspace overlay \${overlay_prefix} was built for ROS \${overlay_ros_distro}," >&2
-        echo "but this container uses ROS \${ROS_DISTRO}. Cross-distro overlays are incompatible." >&2
-        echo "Move or delete \${WS}/build, \${WS}/install, and \${WS}/log, then rebuild." >&2
-        echo "Alternatively, pass a compatible install prefix to sros." >&2
-        return 1
-    fi
-
-    _source_setup_file "\${setup_file}"
 }
 
 _source_ros_env
@@ -100,13 +45,7 @@ _source_ros_env
 alias bros='cd "\${WS}" && colcon build'
 alias dros='cd "\${WS}" && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
 
-# Source the container's ROS installation and a compatible workspace overlay.
-# An optional argument selects a non-default colcon install prefix.
-sros()
-{
-    local overlay_prefix="\${1:-\${WS}/install}"
-    _source_ros_env && _source_ws_overlay "\${overlay_prefix}"
-}
+alias sros='_source_ros_env && _source_ws_overlay'
 
 # Helper for running the project clang-format wrapper within the devcontainer
 clang_format()

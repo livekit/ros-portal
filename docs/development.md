@@ -63,16 +63,10 @@ the bridge CMake configuration to build the SDK checkout from `external.repos`.
 ## Shell Helpers
 
 See `setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
-`cbpu` / `cbps`. `sros` validates that the workspace overlay was built against
-the container's `ROS_DISTRO` before sourcing it. Colcon overlays are not
+`cbpu` / `cbps`. `sros` sources the container's ROS installation and the
+default workspace overlay under `/livekit_ws/install`. Colcon overlays are not
 portable across ROS distributions; move or delete `build`, `install`, and
 `log`, then rebuild after switching containers.
-
-Pass an alternate install prefix when keeping distro-specific build trees:
-
-```bash
-sros /livekit_ws/install-humble
-```
 
 ## C++ Tools
 

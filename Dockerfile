@@ -82,31 +82,8 @@ RUN if [ "${INSTALL_CPP_TOOLS}" = "true" ]; then \
 
 RUN git lfs install --system
 
-# Install LiveKit CLI. This is the only place the CLI comes from: the integration
-# tests mint their tokens with `lk` from inside this image.
-#
-# Retried because the install is two network hops and either can answer 403,
-# which fails the whole image build and so the whole CI job. The observed failure
-# was the inner one: `curl -sSL https://get.livekit.io/cli | bash` returned the
-# script fine, then the script's own release download 403'd and propagated exit
-# 22 through the pipeline. So retry the entire fetch-and-run, not just the fetch,
-# and confirm `lk` actually exists rather than trusting an exit code.
-RUN attempt=1; \
-    while [ "${attempt}" -le 5 ]; do \
-      if curl -sSL https://get.livekit.io/cli -o /tmp/install-livekit-cli.sh \
-          && bash /tmp/install-livekit-cli.sh; then \
-        break; \
-      fi; \
-      echo "livekit-cli install attempt ${attempt} of 5 failed; retrying" >&2; \
-      attempt=$((attempt + 1)); \
-      sleep $((attempt * 5)); \
-    done; \
-    rm -f /tmp/install-livekit-cli.sh; \
-    if ! command -v lk >/dev/null 2>&1; then \
-      echo "livekit-cli install failed after 5 attempts" >&2; \
-      exit 1; \
-    fi; \
-    lk --version
+# Install LiveKit CLI
+RUN curl -sSL https://get.livekit.io/cli | bash
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-example-interfaces \

@@ -84,7 +84,7 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros2_livekit_bridge/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/cmake/ConfigureLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
           restore-keys: |
             livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-
 
@@ -135,7 +135,7 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros2_livekit_bridge/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/cmake/ConfigureLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
 
       - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3

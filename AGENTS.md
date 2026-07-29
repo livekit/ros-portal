@@ -20,6 +20,10 @@ prerequisites are missing. Project-specific commands are documented in
 
 - Prefer `ament_cmake_auto` and the `ament_auto_*` helpers for ROS2 CMake
   packages.
+- Use `medkit_target_dependencies` for dependency linking that must work across
+  all supported ROS distributions. It delegates to `ament_target_dependencies`
+  where available and uses exported CMake targets on Lyrical, where the ament
+  helper has been removed. Include `ROS2MedkitCompat` before using it.
 - Keep ROS dependencies simple and explicit. Avoid adding broad dependency
   surfaces when a narrower message or utility package is enough.
 

@@ -1,189 +1,177 @@
 # End-to-end latency measurement
 
-This bridge ships a self-contained latency harness that measures the real cost of
-sending a message **ROS → LiveKit → ROS**, broken down into per-hop segments and
-summarized as live rolling percentiles.
+The latency harness traces the bridge's normal generic forwarding path:
 
-- Launch file: [`latency_measurement.launch.py`](../src/test/test_utilities/launch/latency_measurement.launch.py) (package `test_utilities`)
-- Probe publisher (T0): [`latency_probe_publisher.py`](../src/test/test_utilities/scripts/latency_probe_publisher.py)
-- Probe subscriber / stats (T5): [`latency_probe_subscriber.py`](../src/test/test_utilities/scripts/latency_probe_subscriber.py)
-- Messages: [`LatencyTimestamps.msg`](../src/ros_portal_msgs/msg/LatencyTimestamps.msg), [`LatencyMetric.msg`](../src/ros_portal_msgs/msg/LatencyMetric.msg), [`LatencyStats.msg`](../src/ros_portal_msgs/msg/LatencyStats.msg)
-
-## How it works
-
-The launch file starts **two bridges in separate ROS domains** joined to the same
-LiveKit room:
-
-- a **robot** bridge on `ROS_DOMAIN_ID=1`
-- a **controller** bridge on `ROS_DOMAIN_ID=2`
-
-Separate domains force probe traffic across LiveKit instead of short-cutting via
-local ROS discovery. Both bridge configs enable `measure_latency`.
-
-A single probe message flows publisher → robot bridge → LiveKit → controller
-bridge → subscriber. Each stage stamps its own timestamp (`T0`..`T5`) **into the
-message content**, so the whole path is self-describing with no side channels. The
-subscriber derives per-segment durations and publishes rolling percentiles.
-
-> Both bridges must share a wall clock for the cross-bridge segments to be
-> comparable — run them on one host (as this launch file does).
-
-## Prerequisites
-
-1. A built + sourced workspace:
-   ```bash
-   colcon build
-   source install/setup.bash
-   ```
-2. A LiveKit server reachable at `livekit_url` (default `ws://host.docker.internal:7880`).
-
-## Launch
-
-```bash
-ros2 launch test_utilities latency_measurement.launch.py
+```text
+ROS publisher -> sending bridge -> LiveKit -> receiving bridge -> ROS subscriber
 ```
 
-Then watch the live summary on the **controller** domain:
+It does not mutate ROS messages, create reserved bridge topics, or enable a
+measurement mode in bridge configuration. LTTng records four bridge-specific
+events alongside selected ROS 2 core events, and an offline analyzer calculates
+per-segment percentiles.
 
-```bash
-ROS_DOMAIN_ID=2 ros2 topic echo /ros_portal/latency/stats
+- Package: [`latency_tools`](../src/test/latency_tools)
+- Launch: [`latency_measurement.launch.py`](../src/test/latency_tools/launch/latency_measurement.launch.py)
+- Analyzer: [`analyze_latency_trace.py`](../src/test/latency_tools/scripts/analyze_latency_trace.py)
+- Viewer: [`view_latency.py`](../src/test/latency_tools/scripts/view_latency.py)
+- Test configs: [`latency_robot.yaml`](../src/test/latency_tools/config/latency_robot.yaml)
+  and [`latency_controller.yaml`](../src/test/latency_tools/config/latency_controller.yaml)
+
+## Requirements
+
+Tracing is disabled by default. For this workflow, build the bridge with
+`ROS_PORTAL_ENABLE_TRACING=ON`; otherwise the bridge tracepoints are
+compiled as no-ops and the analyzer will report no correlated bridge events.
+Tracing is available on Linux when `lttng-ust` is installed. The CMake
+configure output must report:
+
+```text
+ros_portal tracing: LTTng enabled
 ```
 
-The subscriber also logs a one-line highlight (`e2e`, `bridge_internal`, `t2_t3`)
-every second.
+If it reports a disabled message, install the LTTng development package and
+rebuild with the option enabled. On unsupported platforms the tracepoint calls
+compile to no-ops and normal forwarding is unchanged.
+
+The launch also requires the ROS packages `tracetools_launch` and
+`tracetools_read`. ROS 2 Iron and newer binary installations include the core
+tracing instrumentation on Linux. Plotting a JSON report with `view_latency.py`
+also requires Matplotlib.
+
+Verify the installed bridge provider after starting a bridge:
+
+```bash
+lttng list --userspace | grep ros_portal
+```
+
+## Capture a trace
+
+Build and source the workspace, then start a reachable LiveKit server:
+
+```bash
+colcon build --packages-up-to latency_tools \
+  --cmake-args -DROS_PORTAL_ENABLE_TRACING=ON
+
+source install/setup.bash
+ros2 launch latency_tools latency_measurement.launch.py
+```
+
+The launch starts:
+
+- a sending bridge on `ROS_DOMAIN_ID=1`;
+- a receiving bridge on `ROS_DOMAIN_ID=2`;
+- `ros2 topic pub` on domain 1;
+- `ros2 topic hz` on domain 2; and
+- an LTTng session containing only the required ROS and bridge events.
+
+The separate ROS domains force traffic across LiveKit. Stop the launch with
+Ctrl-C so the trace session is finalized. The launch log prints the trace
+directory, normally below `~/.ros/tracing`.
 
 ### Launch arguments
 
 | Argument | Default | Purpose |
 |---|---|---|
-| `room_name` | `latency_room` | LiveKit room both bridges join. |
+| `room_name` | `latency_room` | LiveKit room used by both bridges. |
 | `livekit_url` | `ws://host.docker.internal:7880` | LiveKit server URL. |
-| `use_dev_credentials` | `true` | Mint dev tokens instead of using real keys. |
-| `robot_config` | waveshare robot yaml | Config for the `ROS_DOMAIN_ID=1` bridge. |
-| `controller_config` | waveshare controller yaml | Config for the `ROS_DOMAIN_ID=2` bridge. |
-| `run_probes` | `true` | Also start the probe publisher + subscriber. Set `false` to bring your own traffic. |
-| `probe_rate_hz` | `100.0` | Probe publish rate. |
-| `probe_payload_size` | `0` | Extra padding bytes, to sweep serialized message size. |
+| `use_dev_credentials` | `true` | Mint development tokens. |
+| `robot_config` | test latency sender config | Domain 1 bridge config. |
+| `controller_config` | test latency receiver config | Domain 2 bridge config. |
+| `trace_session_name` | `ros_portal_latency` | Prefix for the timestamped trace directory. |
+| `probe_rate_hz` | `100.0` | Probe publication rate. |
+| `probe_payload_size` | `0` | `String.data` length in bytes (ASCII workload). |
 
-Example — 200 Hz probes with a 1 KB payload:
+Example with 1 KiB messages at 200 Hz:
 
 ```bash
-ros2 launch test_utilities latency_measurement.launch.py \
-  probe_rate_hz:=200.0 probe_payload_size:=1024
+ros2 launch latency_tools latency_measurement.launch.py probe_rate_hz:=200.0 probe_payload_size:=1024
 ```
 
-### Subscriber tuning
+## Analyze the trace
 
-Set these with `--ros-args -p name:=value` (or edit the node in the launch file):
-
-| Parameter | Default | Purpose |
-|---|---|---|
-| `stats_period_sec` | `1.0` | Seconds between published summaries. |
-| `window_size` | `50` | Rolling window per segment, in samples (`0` = keep all). |
-| `warmup` | `20` | Samples skipped per segment before counting (excludes lazy LiveKit track setup). |
-
-> **Reading `max` / `p99`:** these are computed over the last `window_size`
-> samples. A single latency spike lifts them to a flat plateau that only drops
-> once the outlier ages out of the window — so a "cyclical" square-wave in
-> `max`/`p99` reflects the window, not a periodic network event. A smaller
-> `window_size` makes the tail react faster.
-
-## The T0–T5 model
-
-Each probe carries six timestamps. This is where each is stamped and what the gap
-to the next one measures:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant P as Publisher<br/>(domain 1)
-    participant RB as Robot bridge<br/>(domain 1)
-    participant LK as LiveKit<br/>transport
-    participant CB as Controller bridge<br/>(domain 2)
-    participant S as Subscriber<br/>(domain 2)
-
-    P->>RB: /latency/timestamp (DDS)
-    Note over P: T0 stamped at publish
-    Note over RB: T1 stamped in sub callback
-    Note right of P: t0_t1 = T1-T0<br/>publisher → bridge (pure ROS/DDS)
-
-    RB->>LK: forward over LiveKit
-    Note over RB: T2 stamped just before send
-    Note right of RB: t1_t2 = T2-T1<br/>bridge send overhead
-
-    LK->>CB: deliver frame
-    Note right of LK: t2_t3 = T3-T2<br/>LiveKit transport (pure network)
-
-    CB->>S: /latency/timestamp_rx (DDS)
-    Note over CB: T3 stamped when frame read<br/>T4 stamped just before republish
-    Note right of CB: t3_t4 = T4-T3<br/>bridge recv overhead
-    Note over S: T5 stamped on arrival
-    Note right of CB: t4_t5 = T5-T4<br/>bridge → subscriber (pure ROS/DDS)
-
-    Note over P,S: e2e = T5-T0 (whole path)<br/>bridge_internal = t1_t2 + t3_t4 (bridge's own added cost)
+```bash
+ros2 run latency_tools analyze_latency_trace.py \
+  ~/.ros/tracing/ros_portal_latency-YYYYMMDDHHMMSS
 ```
 
-### Segments
+The analyzer discards the first 20 complete frames by default to exclude lazy
+track/schema setup. It prints p50, p95, p99, and maximum latency for:
 
-| Segment | Duration | Meaning |
-|---|---|---|
-| `t0_t1` | T1 − T0 | Publisher → sending bridge (pure ROS/DDS latency). |
-| `t1_t2` | T2 − T1 | Sending bridge overhead (receive → hand off to LiveKit). |
-| `t2_t3` | T3 − T2 | **LiveKit transport** — the pure network hop. Usually dominates. |
-| `t3_t4` | T4 − T3 | Receiving bridge overhead (read frame → republish to ROS). |
-| `t4_t5` | T5 − T4 | Receiving bridge → subscriber (pure ROS/DDS latency). |
-| `bridge_internal` | t1_t2 + t3_t4 | Latency the bridge itself adds (both directions). |
-| `e2e` | T5 − T0 | End-to-end, the full publisher-to-subscriber path. |
+| Segment | Meaning |
+|---|---|
+| `t0_t1` | ROS publisher RMW publish to sending bridge callback. |
+| `t1_t2` | Sending bridge callback to LiveKit push. |
+| `t2_t3` | LiveKit transport. |
+| `t3_t4` | Receiving bridge frame read to ROS publish. |
+| `t4_t5` | Receiving bridge publish to final RMW take. |
+| `bridge_internal` | `t1_t2 + t3_t4`. |
+| `e2e` | `t5 - t0`. |
 
-### Where the stamps come from
+Write machine-readable output with:
 
-| Stamp | Set by | When |
-|---|---|---|
-| `T0` | probe publisher (domain 1) | at publish time on `/ros_portal/latency/timestamp` |
-| `T1` | robot bridge | subscriber callback entry |
-| `T2` | robot bridge | just before forwarding over LiveKit |
-| `T3` | controller bridge | when the LiveKit frame is read |
-| `T4` | controller bridge | just before republishing on `/ros_portal/latency/timestamp_rx` |
-| `T5` | probe subscriber (domain 2) | on arrival of the republished probe |
-
-## The stats message
-
-Every `stats_period_sec`, the subscriber publishes a `LatencyStats` on
-`/ros_portal/latency/stats` (latched / transient-local, so a late
-subscriber gets the latest summary immediately). It carries one `LatencyMetric`
-per segment, in a **fixed order** so index paths stay stable for plotting tools:
-
-```
-metrics[0] = e2e            
-metrics[1] = bridge_internal
-metrics[2] = t0_t1
-metrics[3] = t1_t2
-metrics[4] = t2_t3
-metrics[5] = t3_t4
-metrics[6] = t4_t5
+```bash
+ros2 run latency_tools analyze_latency_trace.py --json latency.json --csv latency.csv \
+   ~/.ros/tracing/ros_portal_latency-YYYYMMDDHHMMSS
 ```
 
-Each `LatencyMetric` reports, **all in milliseconds** (the unit is carried in each
-field name):
+Use `--topic` when tracing a different configured topic and `--warmup 0` to
+retain setup frames. JSON contains aggregate metrics and individual samples;
+CSV contains one row per measured frame. Both outputs are optional and are
+written to the paths supplied on the command line.
 
-```
-string  name       # segment key, e.g. "t2_t3"
-uint64  count      # samples in the window
-float64 p50_ms
-float64 p90_ms
-float64 p95_ms
-float64 p99_ms
-float64 min_ms
-float64 max_ms
-float64 mean_ms
+### Plot the results
+
+Plot the analyzer's JSON report with:
+
+```bash
+ros2 run latency_tools view_latency.py latency.json
 ```
 
-### Viewing live
+The viewer creates `latency-results.png` in the current directory, comparing
+p50 and p95 latency across all seven segments. It reads the JSON report; the CSV
+is intended for custom per-frame analysis.
 
-- **Terminal:** `ROS_DOMAIN_ID=2 ros2 topic echo /ros_portal/latency/stats`
-- **Plot a single field:** PlotJuggler / rqt_plot on `metrics[*].p95_ms`
-- **Foxglove:** import [`latency_stats.layout.json`](../src/test/test_utilities/foxglove/latency_stats.layout.json)
-  (per-segment percentile panels + a p50 overview).
+An example of results on a local SFU:
 
-Because percentiles are precomputed on the graph, you can watch latency live or bag
-the topic for post-processing with no offline math.
+<img src="assets/latency-results.png" alt="Latency results" width="50%" height="50%" />
+
+### Regression budgets
+
+The analyzer can act as a CI gate:
+
+```bash
+ros2 run latency_tools analyze_latency_trace.py <trace-directory> \
+  --minimum-samples 30 \
+  --max-bridge-p50-ms 2 \
+  --max-bridge-p95-ms 10
+```
+
+It exits nonzero if too few complete frames were correlated or a configured
+budget is exceeded.
+
+## Trace events and correlation
+
+The T0 and T5 endpoints come from the existing `ros2:rmw_publish` and
+`ros2:rmw_take` events. The bridge adds:
+
+| Event | Position |
+|---|---|
+| `ros_portal:outbound_received` | Generic serialized subscription callback entry (T1). |
+| `ros_portal:livekit_push` | Immediately before `LocalDataTrack::tryPush` (T2). |
+| `ros_portal:livekit_received` | Immediately after an inbound frame is read (T3). |
+| `ros_portal:ros_publish` | Immediately before `GenericPublisher::publish` (T4). |
+
+When these events are enabled, the sending bridge hashes the ROS publisher GID
+and middleware source timestamp into a 64-bit correlation ID. LiveKit carries
+that ID in `DataTrackFrame.user_timestamp`, which is application metadata
+separate from the ROS payload. The receiving bridge emits the same ID at T3 and
+T4.
+
+When tracing is not active, the bridge does not calculate a correlation ID or
+set `user_timestamp`; the only instrumentation cost is the disabled tracepoint
+check. No clock reads, allocations, locks, or ROS publications are introduced.
+
+The supplied launch captures all processes on one host, so LTTng event clocks
+share a time base. Multi-host traces require clock synchronization and trace
+alignment before cross-host `t2_t3` or `e2e` values are meaningful.

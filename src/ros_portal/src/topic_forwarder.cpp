@@ -26,7 +26,6 @@
 #include <exception>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/serialization.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <stdexcept>
 #include <string>
@@ -38,11 +37,17 @@
 #include "ros_portal/utils/image_conversion.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
+#include "tracing/tracepoints.hpp"
 
 namespace ros_portal {
 
 namespace {
 constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
+
+std::uint8_t traceEncoding(const livekit::DataTrackFrameEncoding& encoding) {
+  const auto well_known = encoding.isCustom() ? livekit::DataTrackFrameEncoding::Other : encoding.wellKnown();
+  return static_cast<std::uint8_t>(well_known);
+}
 } // namespace
 
 TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackDescriptor(
@@ -111,10 +116,6 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
   callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   diagnostics_.add(kTopicForwarderDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
-
-  if (options_.measure_latency) {
-    setupLatencyMeasurement();
-  }
 }
 
 TopicForwarder::~TopicForwarder() {
@@ -148,13 +149,6 @@ void TopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_t
   }
 
   for (const auto& [topic_name, topic_types] : topic_names_and_types) {
-    // The latency probe topics are handled by the dedicated typed path in
-    // setupLatencyMeasurement()/handleInboundLatencyTrack(); never let the
-    // generic forwarder pick them up (which would double-forward or loop).
-    if (options_.measure_latency && (topic_name == kLatencyTimestampTopic || topic_name == kLatencyTimestampRxTopic)) {
-      continue;
-    }
-
     {
       const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
       if (subscriptions_.count(topic_name) > 0) {
@@ -244,7 +238,13 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       return;
     }
 
+
     auto& rcl_msg = msg->get_rcl_serialized_message();
+    std::optional<tracing::CorrelationContext> trace_context;
+    if (tracing::correlationEventsEnabled()) {
+      trace_context = tracing::makeCorrelationContext(message_info);
+      tracing::outboundReceived(topic_name, *trace_context, msg.get(), rcl_msg.buffer_length);
+    }
 
     std::shared_ptr<DataTrackWriter> writer;
     OutboundEncoding encoding = OutboundEncoding::Ros2Msg;
@@ -282,6 +282,12 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       encoding = state.encoding;
     }
 
+    std::optional<std::uint64_t> user_timestamp;
+    if (trace_context) {
+      user_timestamp = trace_context->id;
+    }
+    const auto correlation_id = user_timestamp.value_or(0U);
+
     livekit::Result<void, std::string> push_result = livekit::Result<void, std::string>::success();
     if (encoding == OutboundEncoding::JsonSchema) {
       std::string error;
@@ -291,9 +297,12 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
                              topic_name.c_str(), error.c_str());
         return;
       }
-      push_result = writer->try_push(reinterpret_cast<const std::uint8_t*>(json->data()), json->size());
+      tracing::livekitPush(topic_name, correlation_id, json->size(), static_cast<std::uint8_t>(encoding));
+      push_result =
+          writer->try_push(reinterpret_cast<const std::uint8_t*>(json->data()), json->size(), user_timestamp);
     } else {
-      push_result = writer->try_push(rcl_msg.buffer, rcl_msg.buffer_length);
+      tracing::livekitPush(topic_name, correlation_id, rcl_msg.buffer_length, static_cast<std::uint8_t>(encoding));
+      push_result = writer->try_push(rcl_msg.buffer, rcl_msg.buffer_length, user_timestamp);
     }
 
     if (!push_result) {
@@ -515,17 +524,6 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     RCLCPP_WARN(logger_, "Ignoring LiveKit data track from '%s' because the track name is empty",
                 descriptor.publisher_identity.c_str());
     return;
-  }
-
-  // Route the typed latency probe track to its dedicated handler before the
-  // generic pattern/type resolution (its ROS type is fixed and its republish
-  // topic need not exist in the graph yet).
-  if (options_.measure_latency) {
-    static const auto latency_track = utils::normalizeTrackTopicName(kLatencyTimestampTopic);
-    if (latency_track.has_value() && *normalized_track_name == *latency_track) {
-      handleInboundLatencyTrack(descriptor);
-      return;
-    }
   }
 
   if (!isIncomingTopicAllowed(*normalized_track_name)) {
@@ -841,6 +839,9 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
       continue;
     }
 
+    const auto correlation_id = frame.user_timestamp.value_or(0U);
+    tracing::livekitReceived(state->track_name, state->publisher_identity, correlation_id, frame.payload.size(),
+                             traceEncoding(state->frame_encoding));
     std::optional<rclcpp::SerializedMessage> serialized_msg;
     if (state->frame_encoding == livekit::DataTrackFrameEncoding::Json) {
       std::string error;
@@ -866,6 +867,7 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
     }
 
     try {
+      tracing::rosPublish(state->ros_topic_name, correlation_id, &*serialized_msg, serialized_msg->size());
       state->publisher->publish(*serialized_msg);
     } catch (const std::exception& e) {
       RCLCPP_WARN(logger_,
@@ -881,173 +883,6 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
     const auto terminal_error = state->stream->terminal_error();
     if (terminal_error) {
       RCLCPP_WARN(logger_, "LiveKit data track '%s' from '%s' ended with error: %s", state->track_name.c_str(),
-                  state->publisher_identity.c_str(), terminal_error->c_str());
-    }
-  }
-}
-
-void TopicForwarder::setupLatencyMeasurement() {
-  const auto node = node_.lock();
-  if (!node) {
-    return;
-  }
-
-  // Republisher for inbound probes (stamped with T3/T4), created up front so it
-  // is ready before the first inbound frame arrives.
-  latency_rx_pub_ = node->create_publisher<ros_portal_msgs::msg::LatencyTimestamps>(kLatencyTimestampRxTopic,
-                                                                                             rclcpp::QoS(10));
-
-  // Outbound: subscribe to the probe topic and forward each message over a
-  // dedicated LiveKit data track, stamping T1 (callback entry) and T2 (just
-  // before the push) into the message content. Timestamps ride inside the ROS
-  // message, so no data-track user_timestamp is used.
-  rclcpp::SubscriptionOptions sub_options;
-  sub_options.callback_group = callback_group_;
-  auto subscription = node->create_subscription<ros_portal_msgs::msg::LatencyTimestamps>(
-      kLatencyTimestampTopic, rclcpp::QoS(10),
-      [this](ros_portal_msgs::msg::LatencyTimestamps::UniquePtr msg) {
-        // T1: probe received by the sending bridge.
-        const auto t1 = clock_->now();
-
-        std::shared_ptr<DataTrackWriter> writer;
-        {
-          std::lock_guard<std::mutex> lock(latency_writer_mutex_);
-          if (!latency_writer_) {
-            const auto schema_result = schema_manager_.ensureSchemaDefined(kLatencyTimestampMsgType);
-            if (!schema_result) {
-              RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Latency: could not define schema for probe data track");
-              return;
-            }
-            const auto result = livekit_methods_.publish_data_track(kLatencyTimestampTopic, schema_result.value());
-            if (!result) {
-              RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Latency: could not create probe data track: %s",
-                                   result.error().c_str());
-              return;
-            }
-            latency_writer_ = result.value();
-          }
-          writer = latency_writer_;
-        }
-        if (!writer || !writer->try_push) {
-          return;
-        }
-
-        msg->t1 = t1;
-        rclcpp::Serialization<ros_portal_msgs::msg::LatencyTimestamps> serializer;
-        rclcpp::SerializedMessage serialized;
-        // T2: about to hand the payload to LiveKit.
-        msg->t2 = clock_->now();
-        serializer.serialize_message(msg.get(), &serialized);
-        const auto& rcl_msg = serialized.get_rcl_serialized_message();
-        const auto push_result = writer->try_push(rcl_msg.buffer, rcl_msg.buffer_length);
-        if (!push_result) {
-          RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Latency: failed to push probe: %s",
-                               push_result.error().c_str());
-        }
-      },
-      sub_options);
-
-  {
-    std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
-    subscriptions_[kLatencyTimestampTopic] = std::static_pointer_cast<void>(std::move(subscription));
-  }
-
-  RCLCPP_INFO(logger_, "Latency measurement enabled; forwarding '%s' and republishing inbound probes on '%s'",
-              kLatencyTimestampTopic, kLatencyTimestampRxTopic);
-}
-
-void TopicForwarder::handleInboundLatencyTrack(const RemoteDataTrackDescriptor& descriptor) {
-  if (!descriptor.subscribe) {
-    RCLCPP_ERROR(logger_, "Latency: inbound probe track '%s' has no subscribe callback", descriptor.track_name.c_str());
-    return;
-  }
-
-  std::shared_ptr<InboundDataTrackState> state;
-  {
-    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
-    if (inbound_data_track_states_.count(descriptor.sid) > 0) {
-      return;
-    }
-
-    state = std::make_shared<InboundDataTrackState>();
-    state->sid = descriptor.sid;
-    state->track_name = descriptor.track_name;
-    state->publisher_identity = descriptor.publisher_identity;
-    state->ros_topic_name = kLatencyTimestampRxTopic;
-    state->ros_topic_type = kLatencyTimestampMsgType;
-    state->is_latency = true;
-
-    const auto subscribe_result = descriptor.subscribe();
-    if (!subscribe_result) {
-      RCLCPP_ERROR(logger_, "Latency: failed to subscribe to probe track '%s': %s", descriptor.track_name.c_str(),
-                   subscribe_result.error().c_str());
-      return;
-    }
-
-    state->stream = subscribe_result.value();
-    if (!state->stream || !state->stream->read || !state->stream->close) {
-      RCLCPP_ERROR(logger_, "Latency: probe track '%s' returned an invalid stream", descriptor.track_name.c_str());
-      return;
-    }
-
-    inbound_data_track_states_[descriptor.sid] = state;
-    inbound_ros_topic_names_.insert(kLatencyTimestampRxTopic);
-  }
-
-  RCLCPP_INFO(logger_, "Latency: subscribed to probe track '%s' from '%s'; republishing on '%s'",
-              descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(), kLatencyTimestampRxTopic);
-
-  try {
-    state->thread = std::thread(&TopicForwarder::readInboundLatencyTrack, this, state);
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(logger_, "Latency: failed to start probe reader thread for '%s': %s", descriptor.track_name.c_str(),
-                 e.what());
-    state->stop.store(true);
-    if (state->stream && state->stream->close) {
-      state->stream->close();
-    }
-    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
-    inbound_data_track_states_.erase(descriptor.sid);
-    inbound_ros_topic_names_.erase(kLatencyTimestampRxTopic);
-  }
-}
-
-void TopicForwarder::readInboundLatencyTrack(std::shared_ptr<InboundDataTrackState> state) {
-  rclcpp::Serialization<ros_portal_msgs::msg::LatencyTimestamps> serializer;
-  livekit::DataTrackFrame frame;
-  while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
-    // T3: the receiving bridge got the probe off LiveKit.
-    const auto t3 = clock_->now();
-    if (frame.payload.empty()) {
-      RCLCPP_WARN(logger_, "Latency: empty probe payload on '%s'", state->track_name.c_str());
-      continue;
-    }
-
-    rclcpp::SerializedMessage serialized(frame.payload.size());
-    auto& rcl_msg = serialized.get_rcl_serialized_message();
-    std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
-    rcl_msg.buffer_length = frame.payload.size();
-
-    ros_portal_msgs::msg::LatencyTimestamps msg;
-    try {
-      serializer.deserialize_message(&serialized, &msg);
-    } catch (const std::exception& e) {
-      RCLCPP_WARN(logger_, "Latency: failed to deserialize probe on '%s': %s", state->track_name.c_str(), e.what());
-      continue;
-    }
-
-    msg.t3 = t3;
-    if (latency_rx_pub_) {
-      // T4: about to republish on ROS.
-      msg.t4 = clock_->now();
-      latency_rx_pub_->publish(msg);
-    }
-  }
-
-  if (state->stream && state->stream->terminal_error) {
-    const auto terminal_error = state->stream->terminal_error();
-    if (terminal_error) {
-      RCLCPP_WARN(logger_, "Latency: probe track '%s' from '%s' ended with error: %s", state->track_name.c_str(),
                   state->publisher_identity.c_str(), terminal_error->c_str());
     }
   }

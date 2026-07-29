@@ -105,8 +105,6 @@ bool RosPortal::initialize() {
   build_info_diagnostics_.reset();
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
-  measure_latency_ = config->measure_latency;
-
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
@@ -648,7 +646,6 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     auto forwarder_options = utils::topicForwarderOptions(topics, min_qos_depth_, max_qos_depth_,
                                                           best_effort_qos_topics, this->get_logger());
     forwarder_options.topic_snapshot = [manager = graph_manager_.get()]() { return manager->topics(); };
-    forwarder_options.measure_latency = measure_latency_;
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
     forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
@@ -691,11 +688,12 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 
       auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
       writer->try_push = [operations_enabled = room_operations_enabled_, track = std::move(track)](
-                             const std::uint8_t* data, std::size_t size) {
+                             const std::uint8_t* data, std::size_t size,
+                             std::optional<std::uint64_t> user_timestamp) {
         if (!operations_enabled->load()) {
           return livekit::Result<void, std::string>::success();
         }
-        const auto push_result = track->tryPush(data, size);
+        const auto push_result = track->tryPush(data, size, user_timestamp);
         if (!push_result) {
           const auto& error = push_result.error();
           return livekit::Result<void, std::string>::failure(

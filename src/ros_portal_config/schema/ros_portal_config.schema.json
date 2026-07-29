@@ -22,11 +22,6 @@
           "$ref": "#/$defs/nonNegativeInteger",
           "default": 0
         },
-        "measure_latency": {
-          "description": "When true, forward the typed latency probe topic (/ros_portal/latency/timestamp, ros_portal_msgs/msg/LatencyTimestamps) and stamp T1-T4 into each probe as it crosses the bridge, republishing inbound probes on /ros_portal/latency/timestamp_rx. Intended for characterization/regression; adds per-probe overhead, so it is off by default.",
-          "type": "boolean",
-          "default": false
-        },
         "services": {
           "type": "array",
           "items": {

@@ -35,12 +35,10 @@
 #include <rclcpp/logger.hpp>
 #include <rclcpp/message_info.hpp>
 #include <rclcpp/node.hpp>
-#include <rclcpp/publisher.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/subscription_base.hpp>
 #include <rclcpp/time.hpp>
 #include <regex>
-#include <ros_portal_msgs/msg/latency_timestamps.hpp>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -64,16 +62,6 @@ namespace ros_portal {
 /// @brief ROS type string for sensor image topics forwarded as video tracks.
 inline constexpr const char* kImageMsgType = "sensor_msgs/msg/Image";
 
-/// @brief ROS topic the bridge subscribes to (and the LiveKit data-track name it
-/// forwards on) for latency probes, created only when measure_latency is set.
-inline constexpr const char* kLatencyTimestampTopic = "/ros_portal/latency/timestamp";
-/// @brief ROS type string for latency probe messages.
-inline constexpr const char* kLatencyTimestampMsgType = "ros_portal_msgs/msg/LatencyTimestamps";
-/// @brief ROS topic the receiving bridge republishes inbound latency probes on.
-/// Deliberately distinct from @ref kLatencyTimestampTopic so the outbound
-/// subscription never re-forwards a republished probe (no cross-bridge loop).
-inline constexpr const char* kLatencyTimestampRxTopic = "/ros_portal/latency/timestamp_rx";
-
 /// @brief Default minimum subscription history depth when no publishers exist.
 inline constexpr std::size_t kDefaultMinQosDepth = 1U;
 /// @brief Default maximum subscription history depth after publisher aggregation.
@@ -92,7 +80,12 @@ public:
     ///
     /// @param payload Non-null serialized payload bytes.
     /// @param payload_size Number of bytes at @p payload.
-    std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size)> try_push;
+    /// @param user_timestamp Optional application-defined metadata propagated
+    /// unchanged with the LiveKit frame. Used as a trace correlation ID only
+    /// while bridge tracepoints are enabled.
+    std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size,
+                                                     std::optional<std::uint64_t> user_timestamp)>
+        try_push;
   };
 
   /// @brief Outbound LiveKit video-track sink.
@@ -135,9 +128,6 @@ public:
     TopicGraphSnapshotFn topic_snapshot;
     /// @brief Grace period before a subscription with no publishers is removed.
     std::chrono::milliseconds inactive_subscription_grace{std::chrono::seconds(30)};
-    /// @brief When true, forward the typed latency probe topic and stamp T1-T4 into each
-    /// ros_portal_msgs::msg::LatencyTimestamps probe (config `measure_latency`).
-    bool measure_latency{false};
   };
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
@@ -330,10 +320,6 @@ private:
     std::thread thread;
     /// @brief Set to stop the inbound read loop during teardown.
     std::atomic_bool stop{false};
-    /// @brief When true this is the typed latency probe track: frames are
-    /// deserialized to LatencyTimestamps, stamped with T3/T4, and republished
-    /// via @ref latency_rx_pub_ instead of the generic publisher.
-    bool is_latency{false};
   };
 
   /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,
@@ -351,16 +337,6 @@ private:
   void stopAllInboundDataTracks();
   /// @brief Populate the topic-forwarder diagnostic status.
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
-
-  /// @brief Wire up the typed latency probe path (subscription + republisher).
-  /// Called at construction only when @ref TopicForwarderOptions::measure_latency
-  /// is set.
-  void setupLatencyMeasurement();
-  /// @brief Handle an inbound LiveKit latency probe track: deserialize, stamp
-  /// T3/T4, and republish on @ref kLatencyTimestampRxTopic.
-  void handleInboundLatencyTrack(const RemoteDataTrackDescriptor& descriptor);
-  /// @brief Read latency probe frames, stamp T3/T4, and republish (typed).
-  void readInboundLatencyTrack(std::shared_ptr<InboundDataTrackState> state);
 
   /// @brief Forwarding configuration supplied at construction.
   Options options_;
@@ -394,14 +370,6 @@ private:
   std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>> inbound_data_track_states_;
   /// @brief Count of inbound LiveKit tracks rejected due to invalid schemas.
   std::atomic<std::uint64_t> inbound_schemas_incorrect_{0};
-  /// @brief Typed republisher for inbound latency probes, created only when
-  /// @ref TopicForwarderOptions::measure_latency is set; null otherwise.
-  rclcpp::Publisher<ros_portal_msgs::msg::LatencyTimestamps>::SharedPtr latency_rx_pub_;
-  /// @brief Outbound LiveKit data-track writer for latency probes, created
-  /// lazily on the first probe. Guarded by @ref latency_writer_mutex_.
-  std::shared_ptr<DataTrackWriter> latency_writer_;
-  /// @brief Protects lazy creation of @ref latency_writer_.
-  std::mutex latency_writer_mutex_;
 };
 
 } // namespace ros_portal

@@ -1,3 +1,4 @@
+#
 # Copyright 2026 LiveKit
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,19 +14,32 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.20)
-project(ros_portal_msgs)
+project(latency_tools)
 
-find_package(ament_cmake_auto REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
+find_package(ament_cmake REQUIRED)
 
-ament_auto_find_build_dependencies()
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/Ros2InterfaceShow.srv"
-  "srv/Ros2ServiceCall.srv"
-  "srv/Ros2ServiceList.srv"
-  "srv/Ros2TopicList.srv"
-  "srv/Ros2TopicPub.srv"
+install(PROGRAMS
+  scripts/analyze_latency_trace.py
+  scripts/view_latency.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
-ament_auto_package()
+install(DIRECTORY
+  config
+  launch
+  DESTINATION share/${PROJECT_NAME}
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
+)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  find_package(ament_lint_auto REQUIRED)
+
+  ament_add_pytest_test(latency_trace_analyzer_test
+    test/test_latency_trace_analyzer.py
+  )
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+ament_package()

@@ -36,7 +36,7 @@ Run the bridge with LiveKit credentials:
 source install/setup.bash
 export LIVEKIT_URL=<url>
 export LIVEKIT_TOKEN=<token>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.py
 ```
 
 To get familiar with using the bridge, you can follow the [tutorials](docs/tutorials.md).

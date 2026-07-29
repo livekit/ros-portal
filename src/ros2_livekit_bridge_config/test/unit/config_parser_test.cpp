@@ -45,7 +45,7 @@ ros2_livekit_bridge:
 
   EXPECT_EQ(config.version, "0.0.1");
   EXPECT_EQ(config.topic_polling_period_ms, 500);
-  EXPECT_EQ(config.ros_threads, 4);
+  EXPECT_EQ(config.ros_threads, 0);
   EXPECT_FALSE(config.room_options.join_retries.has_value());
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());

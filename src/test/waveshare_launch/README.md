@@ -43,6 +43,6 @@ is delayed briefly so the sim stack can come up first.
 ```bash
 ros2 launch waveshare_launch waveshare_livekit_local.launch.py \
   sim:=true \
-  config:=$(ros2 pkg prefix --share waveshare_launch)/config/waveshare_livekit_robot.yaml \
+  config_path:=$(ros2 pkg prefix --share waveshare_launch)/config/waveshare_livekit_robot.yaml \
   identity:=robot
 ```

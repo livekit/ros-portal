@@ -62,7 +62,7 @@ def _launch_setup(context, *args, **kwargs):
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(bridge_launch),
         launch_arguments={
-            'config': LaunchConfiguration('config'),
+            'config_path': LaunchConfiguration('config_path'),
             'livekit_url': LaunchConfiguration('livekit_url'),
             'identity': LaunchConfiguration('identity'),
             'room_name': LaunchConfiguration('room_name'),
@@ -104,7 +104,7 @@ def generate_launch_description():
             description='Launch the Foxglove bridge (passed to waveshare.launch.xml).',
         ),
         # Bridge arguments (forwarded to livekit_bridge_local.launch.py).
-        DeclareLaunchArgument('config', default_value=default_config),
+        DeclareLaunchArgument('config_path', default_value=default_config),
         DeclareLaunchArgument('livekit_url', default_value='ws://host.docker.internal:7880'),
         DeclareLaunchArgument('identity', default_value='ros2-livekit-bridge'),
         DeclareLaunchArgument('room_name', default_value='robo_room'),

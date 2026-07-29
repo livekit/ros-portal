@@ -74,7 +74,7 @@ def test_launch_setup_mints_token_and_passes_config_path(tmp_path, monkeypatch):
     monkeypatch.setattr(module, '_mint_token', fake_mint_token)
 
     context = LaunchContext()
-    context.launch_configurations['config'] = str(config_path)
+    context.launch_configurations['config_path'] = str(config_path)
     context.launch_configurations['livekit_url'] = 'ws://example.test:7880'
     context.launch_configurations['identity'] = 'test-bridge'
     context.launch_configurations['room_name'] = 'launch_room'
@@ -120,7 +120,7 @@ def test_launch_setup_uses_provided_token_without_minting(tmp_path, monkeypatch)
     monkeypatch.setattr(module, '_mint_token', fake_mint_token)
 
     context = LaunchContext()
-    context.launch_configurations['config'] = str(config_path)
+    context.launch_configurations['config_path'] = str(config_path)
     context.launch_configurations['livekit_url'] = 'wss://example.livekit.cloud'
     context.launch_configurations['identity'] = 'custom-id'
     context.launch_configurations['room_name'] = 'ignored-room'
@@ -147,7 +147,7 @@ def test_launch_setup_rejects_missing_config_file(tmp_path, monkeypatch):
     monkeypatch.setattr(module, '_mint_token', lambda *args, **kwargs: 'unused')
 
     context = LaunchContext()
-    context.launch_configurations['config'] = str(missing_config)
+    context.launch_configurations['config_path'] = str(missing_config)
     context.launch_configurations['livekit_url'] = 'ws://example.test:7880'
     context.launch_configurations['identity'] = 'test-bridge'
     context.launch_configurations['room_name'] = 'launch_room'
@@ -167,7 +167,7 @@ def test_launch_setup_rejects_empty_room_name_when_minting(tmp_path, monkeypatch
     monkeypatch.setattr(module, '_mint_token', lambda *args, **kwargs: 'unused')
 
     context = LaunchContext()
-    context.launch_configurations['config'] = str(config_path)
+    context.launch_configurations['config_path'] = str(config_path)
     context.launch_configurations['livekit_url'] = 'ws://example.test:7880'
     context.launch_configurations['identity'] = 'test-bridge'
     context.launch_configurations['room_name'] = ''

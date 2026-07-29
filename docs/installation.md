@@ -62,7 +62,7 @@ Set LiveKit credentials and use the installed launch file:
 source /opt/livekit/ros/jazzy/setup.bash
 export LIVEKIT_URL=<url>
 export LIVEKIT_TOKEN=<token>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.py
 ```
 
 Each package also installs a distro-specific convenience command:

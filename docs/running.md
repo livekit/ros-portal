@@ -26,16 +26,18 @@ Launch with the installed default config:
 
 ```bash
 source install/setup.bash
-ros2 run ros2_livekit_bridge ros2_livekit_bridge_node \
-  --ros-args -p config_path:=\
-$(ros2 pkg prefix ros2_livekit_bridge)/share/ros2_livekit_bridge/config/ros2_livekit_bridge.yaml
+export LIVEKIT_URL=<url>
+export LIVEKIT_TOKEN=<token>
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.py
 ```
 
-Or use the launch file:
+Or use the launch file (the `config_path` argument is required):
 
 ```bash
 source install/setup.bash
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
+export LIVEKIT_URL=<url>
+export LIVEKIT_TOKEN=<token>
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.py config_path:=/path/to/custom_config.yaml
 ```
 
 ## Local Development Launch
@@ -70,5 +72,5 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 
 export LIVEKIT_TOKEN=<token>
 export LIVEKIT_URL=<url>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.py
 ```

@@ -24,9 +24,7 @@ find_package(nav_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
 
-ament_add_pytest_test(livekit_bridge_local_launch_test
-  launch/test_livekit_bridge_local_launch.py
-)
+ament_add_pytest_test(livekit_bridge_launch_test launch/)
 
 # ---------------------------------------------------------------------------
 # Unit tests

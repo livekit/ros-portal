@@ -1,5 +1,11 @@
 # Running
 
+## LiveKit Server
+To start a LiveKit server, follow the [install docs](https://docs.livekit.io/transport/self-hosting/local/). Be sure to enable the `enable_participant_data_blob` option.
+```bash
+livekit-server --dev --enable_participant_data_blob
+```
+
 The bridge reads LiveKit credentials from the environment:
 
 ```bash
@@ -57,13 +63,3 @@ export LIVEKIT_TOKEN=<token>
 export LIVEKIT_URL=<url>
 ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml
 ```
-
-## USB Camera Publisher
-
-For local camera testing:
-
-```bash
-python3 test/scripts/usb_camera_publisher.py
-```
-
-This requires a video camera and OpenCV for Python 3.

@@ -71,18 +71,15 @@ endif()
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
 #
-# Build the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE, use a local
-# install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release asset from
-# GitHub. The same version pin is mirrored in this package's colcon.pkg.
+# Build the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE or
+# download a release asset from GitHub. The same version pin is mirrored in
+# this package's colcon.pkg.
 #
 # Examples:
 #   colcon build --packages-select ros2_livekit_bridge
 #
 #   colcon build --packages-select ros2_livekit_bridge \
 #     --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
-#
-#   export LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk
-#   colcon build --packages-select ros2_livekit_bridge
 #
 #   # Override the pin for a one-off build (or track upstream with "latest"):
 #   colcon build --packages-select ros2_livekit_bridge \
@@ -126,48 +123,42 @@ function(livekit_set_runtime_rpath target)
   endif()
 endfunction()
 
-if(LIVEKIT_LOCAL_SDK_DIR)
-  if(CMAKE_BUILD_TYPE)
-    string(TOUPPER "${CMAKE_BUILD_TYPE}" _livekit_imported_config)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      "IMPORTED_LOCATION_${_livekit_imported_config}")
-  endif()
+if(CMAKE_BUILD_TYPE)
+  string(TOUPPER "${CMAKE_BUILD_TYPE}" _livekit_imported_config)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    "IMPORTED_LOCATION_${_livekit_imported_config}")
+endif()
 
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION_RELEASE)
-  endif()
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION_RELWITHDEBINFO)
-  endif()
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION_DEBUG)
-  endif()
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION)
-  endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION_RELEASE)
+endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION_RELWITHDEBINFO)
+endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION_DEBUG)
+endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION)
+endif()
 
-  if(_livekit_imported_location)
-    if(APPLE AND NOT _livekit_imported_location MATCHES "\\.(dylib|a)$")
-      message(FATAL_ERROR
-        "LiveKit SDK at ${LIVEKIT_LOCAL_SDK_DIR} is not a macOS build.\n"
-        "Imported library: ${_livekit_imported_location}\n"
-        "Build or install a macOS SDK bundle for this workspace.")
-    elseif(UNIX AND NOT APPLE AND NOT _livekit_imported_location MATCHES "\\.(so([.].*)?|a)$")
-      message(FATAL_ERROR
-        "LiveKit SDK at ${LIVEKIT_LOCAL_SDK_DIR} is not a Linux build.\n"
-        "Imported library: ${_livekit_imported_location}\n"
-        "This usually means a macOS `.dylib` SDK install was mounted into a Linux container.\n"
-        "Build or install a Linux SDK bundle for this workspace, then rerun colcon.")
-    elseif(WIN32 AND NOT _livekit_imported_location MATCHES "\\.(dll|lib)$")
-      message(FATAL_ERROR
-        "LiveKit SDK at ${LIVEKIT_LOCAL_SDK_DIR} is not a Windows build.\n"
-        "Imported library: ${_livekit_imported_location}\n"
-        "Build or install a Windows SDK bundle for this workspace.")
-    endif()
+if(_livekit_imported_location)
+  if(APPLE AND NOT _livekit_imported_location MATCHES "\\.(dylib|a)$")
+    message(FATAL_ERROR
+      "LiveKit SDK at ${LIVEKIT_SDK_INSTALL_ROOT} is not a macOS build.\n"
+      "Imported library: ${_livekit_imported_location}")
+  elseif(UNIX AND NOT APPLE AND NOT _livekit_imported_location MATCHES "\\.(so([.].*)?|a)$")
+    message(FATAL_ERROR
+      "LiveKit SDK at ${LIVEKIT_SDK_INSTALL_ROOT} is not a Linux build.\n"
+      "Imported library: ${_livekit_imported_location}")
+  elseif(WIN32 AND NOT _livekit_imported_location MATCHES "\\.(dll|lib)$")
+    message(FATAL_ERROR
+      "LiveKit SDK at ${LIVEKIT_SDK_INSTALL_ROOT} is not a Windows build.\n"
+      "Imported library: ${_livekit_imported_location}")
   endif()
 endif()
 
@@ -191,7 +182,7 @@ else()
 endif()
 
 message(STATUS "LiveKit core target   : ${LIVEKIT_CORE_TARGET}")
-message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_LOCAL_SDK_DIR}")
+message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_SDK_INSTALL_ROOT}")
 
 # ---------------------------------------------------------------------------
 # Introspection library
@@ -269,12 +260,6 @@ target_link_libraries(ros2_livekit_bridge_node
   ros2_livekit_bridge_lib
 )
 livekit_set_runtime_rpath(ros2_livekit_bridge_node)
-
-if(LIVEKIT_LOCAL_SDK_DIR)
-  set(LIVEKIT_SDK_INSTALL_ROOT "${LIVEKIT_LOCAL_SDK_DIR}")
-else()
-  set(LIVEKIT_SDK_INSTALL_ROOT "${LIVEKIT_SDK_EXTRACTED_ROOT}")
-endif()
 
 if(APPLE)
   install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"

@@ -51,7 +51,7 @@ The remaining overrides are independent feature choices:
   and static-analysis toolchain are unnecessary. The distro matrix disables it
   because those tools have a dedicated workflow.
 - `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `false`. Humble requires `true`
-  unless `LIVEKIT_LOCAL_SDK_DIR` points to a compatible SDK installation.
+  because its system toolchain is incompatible with the release archive.
 - `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
   other than the default `ros` repository.
 
@@ -166,17 +166,6 @@ To override the pin for one build, or to track upstream with `latest`:
 
     colcon build --packages-select ros2_livekit_bridge \
       --cmake-args -DLIVEKIT_SDK_VERSION=latest
-
-### Local LiveKit SDK
-
-To use a local LiveKit SDK install prefix, set `LIVEKIT_LOCAL_SDK_DIR`:
-
-```bash
-LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk \
-colcon build --packages-select ros2_livekit_bridge
-```
-
-__NOTE:__ If in the devcontainer, mount the SDK install prefix from the host before building. Or move the install artifacts to the root of the repo.
 
 ## Building Debian Packages
 

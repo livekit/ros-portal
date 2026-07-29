@@ -19,11 +19,6 @@ function(livekit_validate_sdk_configuration)
     message(FATAL_ERROR "LIVEKIT_SDK_VERSION must not be empty")
   endif()
 
-  if(LIVEKIT_BUILD_SDK_FROM_SOURCE AND LIVEKIT_LOCAL_SDK_DIR)
-    message(FATAL_ERROR
-      "LIVEKIT_BUILD_SDK_FROM_SOURCE and LIVEKIT_LOCAL_SDK_DIR are mutually exclusive")
-  endif()
-
   if(LIVEKIT_BUILD_SDK_FROM_SOURCE)
     if(NOT LIVEKIT_SDK_BUILD_JOBS MATCHES "^[1-9][0-9]*$")
       message(FATAL_ERROR
@@ -33,9 +28,6 @@ function(livekit_validate_sdk_configuration)
       message(FATAL_ERROR
         "LIVEKIT_SDK_SOURCE_DIR is not an initialized SDK checkout: ${LIVEKIT_SDK_SOURCE_DIR}")
     endif()
-  elseif(LIVEKIT_LOCAL_SDK_DIR AND NOT EXISTS "${LIVEKIT_LOCAL_SDK_DIR}")
-    message(FATAL_ERROR
-      "LIVEKIT_LOCAL_SDK_DIR does not exist: ${LIVEKIT_LOCAL_SDK_DIR}")
   endif()
 
   if(LIVEKIT_SDK_SHA256)
@@ -79,10 +71,6 @@ function(livekit_configure_sdk)
     "Maximum parallel jobs for a LiveKit SDK source build")
   set(LIVEKIT_SDK_SHA256 "" CACHE STRING
     "Optional SHA-256 checksum for the LiveKit C++ SDK archive")
-  set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
-    "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
-  set(LIVEKIT_LOCAL_SDK_DIR "$ENV{LIVEKIT_LOCAL_SDK_DIR}" CACHE PATH
-    "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}.")
 
   if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.5.0-rc2")
     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _livekit_target_processor)
@@ -99,14 +87,6 @@ function(livekit_configure_sdk)
     endif()
   endif()
 
-  if(LIVEKIT_SDK_DIR AND NOT LIVEKIT_LOCAL_SDK_DIR)
-    message(STATUS
-      "LIVEKIT_SDK_DIR is deprecated; treating it as LIVEKIT_LOCAL_SDK_DIR")
-    set(LIVEKIT_LOCAL_SDK_DIR "${LIVEKIT_SDK_DIR}" CACHE PATH
-      "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}."
-      FORCE)
-  endif()
-
   livekit_validate_sdk_configuration()
 
   if(LIVEKIT_BUILD_SDK_FROM_SOURCE)
@@ -120,11 +100,8 @@ function(livekit_configure_sdk)
       JOBS "${LIVEKIT_SDK_BUILD_JOBS}"
       VERSION "${LIVEKIT_SDK_VERSION}"
     )
-    set(LIVEKIT_LOCAL_SDK_DIR "${_livekit_source_install_dir}")
-    list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
-  elseif(LIVEKIT_LOCAL_SDK_DIR)
-    message(STATUS "Using local LiveKit SDK: ${LIVEKIT_LOCAL_SDK_DIR}")
-    list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
+    set(LIVEKIT_SDK_INSTALL_ROOT "${_livekit_source_install_dir}")
+    list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_SDK_INSTALL_ROOT}")
   else()
     include(LiveKitSDK)
     set(_livekit_sdk_setup_args
@@ -136,9 +113,10 @@ function(livekit_configure_sdk)
       list(APPEND _livekit_sdk_setup_args SHA256 "${LIVEKIT_SDK_SHA256}")
     endif()
     livekit_sdk_setup(${_livekit_sdk_setup_args})
+    set(LIVEKIT_SDK_INSTALL_ROOT "${LIVEKIT_SDK_EXTRACTED_ROOT}")
   endif()
 
-  set(LIVEKIT_LOCAL_SDK_DIR "${LIVEKIT_LOCAL_SDK_DIR}" PARENT_SCOPE)
+  set(LIVEKIT_SDK_INSTALL_ROOT "${LIVEKIT_SDK_INSTALL_ROOT}" PARENT_SCOPE)
   set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
   if(DEFINED LiveKit_DIR)
     set(LiveKit_DIR "${LiveKit_DIR}" PARENT_SCOPE)

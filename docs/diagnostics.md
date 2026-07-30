@@ -2,8 +2,11 @@
 
 `ros2_livekit_bridge` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. The bridge currently exposes one diagnostic task:
-`connection_health`.
+stack. The bridge currently exposes three diagnostic tasks:
+
+- `connection_health` — always published
+- `topic_forwarder` — published when topic forwarding is configured
+- `cli_manager` — published when the ROS CLI manager is enabled
 
 The bridge publishes raw `diagnostic_msgs/msg/DiagnosticArray` messages. Grouped
 `/diagnostics_agg` output is provided by a separate `diagnostic_aggregator`
@@ -102,6 +105,75 @@ rtc.data_channels.open=1
 rtc.data_channels.total=1
 ```
 
+## `topic_forwarder`
+
+Reports whether inbound DataTrack schemas match the ROS topic types the bridge
+expects.
+
+| Property | Value |
+|---|---|
+| Task name | `topic_forwarder` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros2_livekit_bridge` |
+| Source | Inbound DataTrack schema validation in `TopicForwarder` |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `Inbound schemas valid` | No inbound schema mismatches have been observed. |
+| `WARN` | `Inbound schema validation failures detected` | At least one inbound DataTrack schema did not match the expected ROS type. |
+
+### Key/Value Fields
+
+| Key | Value |
+|---|---|
+| `inbound_schemas_incorrect` | Cumulative count of inbound schema validation failures. |
+
+## `cli_manager`
+
+Reports whether the bridge's ROS CLI services and matching LiveKit RPC handlers
+are registered, plus cache pressure and remote-call failure counters.
+
+| Property | Value |
+|---|---|
+| Task name | `cli_manager` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros2_livekit_bridge` |
+| Source | CLI ROS service and LiveKit RPC registration, publisher/client caches, and remote RPC outcomes |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `All CLI command pairs registered` | Every CLI ROS service has a matching LiveKit RPC handler. |
+| `WARN` | `CLI command pairs registered; publisher/client cache is dropping requests` | Registration is complete, but a bounded cache rejected new topic publishers or service clients because it was full. |
+| `ERROR` | `One or more CLI command pairs failed to register` | At least one CLI ROS service or LiveKit RPC handler is missing. |
+
+### Registration Fields
+
+Each CLI command pair is reported under its RPC method name:
+
+| Key | Value |
+|---|---|
+| `ros2_topic_list` | `ok`, or `service missing`, `rpc missing`, or `service and rpc missing`. |
+| `ros2_topic_pub` | Same as above. |
+| `ros2_service_list` | Same as above. |
+| `ros2_service_call` | Same as above. |
+| `ros2_interface_show` | Same as above. |
+
+### Cache and Remote-Call Fields
+
+| Key | Value |
+|---|---|
+| `topic_pub_cache` | Current and maximum cached generic topic publishers, for example `0/20`. |
+| `topic_pub_cache_full_rejections` | Number of topic publish requests rejected because the cache was full. |
+| `service_call_cache` | Current and maximum cached service clients, for example `0/20`. |
+| `service_call_cache_full_rejections` | Number of service call requests rejected because the cache was full. |
+| `remote_participant_not_found` | Cumulative remote RPC failures because the target participant was absent. Informational; does not change the diagnostic level by itself. |
+| `remote_transport_failures` | Cumulative remote RPC transport failures. Informational; does not change the diagnostic level by itself. |
+| `remote_malformed_responses` | Cumulative remote RPC responses that could not be parsed. Informational; does not change the diagnostic level by itself. |
+
 ## Quick Check
 
 After launching the bridge with valid LiveKit credentials, inspect one diagnostic
@@ -109,9 +181,9 @@ message with:
 
     ros2 topic echo /diagnostics
 
-Look for a `connection_health` status containing the base fields above. When the
-room is connected, the status should also contain the fixed `rtc.*` summary
-fields.
+Look for `connection_health`, and when those subsystems are enabled,
+`topic_forwarder` and `cli_manager` statuses. When the room is connected,
+`connection_health` should also contain the fixed `rtc.*` summary fields.
 
 ## Aggregating Diagnostics
 
@@ -159,11 +231,19 @@ Save this as `livekit_bridge_diagnostics_aggregator.yaml`:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Connection Health
       contains: ['connection_health']
+    topic_forwarder:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Topic Forwarder
+      contains: ['topic_forwarder']
+    cli_manager:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: CLI Manager
+      contains: ['cli_manager']
 ```
 
-This groups the bridge's `connection_health` status under `LiveKit Bridge /
-Connection Health`. Add more analyzers only when the bridge publishes additional
-diagnostic tasks that should affect the aggregate health view.
+This groups the bridge diagnostics under `LiveKit Bridge / Connection Health`,
+`LiveKit Bridge / Topic Forwarder`, and `LiveKit Bridge / CLI Manager`.
+Omit analyzers for tasks that are not enabled in your configuration.
 
 ### Launch The Aggregator
 

@@ -62,7 +62,7 @@ fi
 
 # Verify the installed launch description can be resolved and parsed without
 # starting the bridge or requiring a LiveKit server.
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml --show-args >/dev/null
+ros2 launch ros2_livekit_bridge livekit_bridge.launch.py --show-args >/dev/null
 "livekit-ros2-bridge-${ros_distro}" --show-args >/dev/null
 
 echo "Verified ${deb_path} on ROS ${ros_distro}"

@@ -20,7 +20,7 @@
         },
         "ros_threads": {
           "$ref": "#/$defs/nonNegativeInteger",
-          "default": 4
+          "default": 0
         },
         "room_options": {
           "$ref": "#/$defs/roomOptions"

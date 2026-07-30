@@ -15,12 +15,12 @@ work out of the box after a build.
 # turtle_sim side (ROS_DOMAIN_ID=42): sim, then the bridge
 ros2 run turtlesim turtlesim_node
 ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  config:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_config.yaml \
+  config_path:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_config.yaml \
   identity:=turtle_sim room_name:=turtle_room
 
 # controller side (ROS_DOMAIN_ID=100): the bridge
 ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  config:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_controller.yaml \
+  config_path:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_controller.yaml \
   identity:=controller room_name:=turtle_room
 ```
 

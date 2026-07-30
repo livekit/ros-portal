@@ -125,7 +125,7 @@ installed config:
 ```bash
 export ROS_DOMAIN_ID=42
 ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  config:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_config.yaml \
+  config_path:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_config.yaml \
   identity:=turtle_sim room_name:=turtle_room
 ```
 
@@ -134,7 +134,7 @@ ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  config:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_controller.yaml \
+  config_path:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_controller.yaml \
   identity:=controller room_name:=turtle_room
 ```
 

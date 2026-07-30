@@ -118,7 +118,7 @@ cat >"${package_root}/usr/bin/${command_name}" <<EOF
 set -eo pipefail
 source "${install_prefix}/setup.bash"
 set -u
-exec ros2 launch ros2_livekit_bridge livekit_bridge.launch.xml "\$@"
+exec ros2 launch ros2_livekit_bridge livekit_bridge.launch.py "\$@"
 EOF
 chmod 0755 "${package_root}/usr/bin/${command_name}"
 

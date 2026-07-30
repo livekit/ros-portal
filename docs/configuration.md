@@ -28,7 +28,7 @@ All config lives under `ros2_livekit_bridge`.
 |---|---:|---:|---:|---|
 | `version` | string | yes | - | Must be `"0.0.1"`. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
-| `ros_threads` | integer | no | `4` | ROS executor thread count. Use `0` for the rclcpp default. Keep this greater than `1` when using remote CLI services so a pending LiveKit RPC does not occupy the only executor thread. |
+| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` will use the number of cpu cores found, matching rclcpp default thread count. |
 | `room_options` | map | no | `{}` | LiveKit room connection options. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
@@ -41,12 +41,12 @@ All config lives under `ros2_livekit_bridge`.
 
 ## Services
 
-| Field | Type | Required | Description |
-|---|---:|---:|---|
-| `service` | string | yes | ROS service name. Must be non-empty. |
-| `direction` | string | yes | `out` — the only supported value. |
-| `participant` | string | yes | LiveKit participant identity. Must be non-empty. |
-| `msg_type` | string | yes | ROS service type, such as `std_srvs/srv/SetBool`. Must be non-empty. |
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `service` | string | yes | - | ROS service name. Must be non-empty. |
+| `direction` | string | yes | - | `out` — the only supported value. |
+| `participant` | string | yes | - | LiveKit participant identity. Must be non-empty. |
+| `msg_type` | string | yes | - | ROS service type, such as `std_srvs/srv/SetBool`. Must be non-empty. |
 
 `direction: "out"` creates a local ROS service server that forwards calls to
 the configured LiveKit participant using `msg_type`.
@@ -60,15 +60,15 @@ used to limit which streams cross the bridge for bandwidth reasons.
 
 ## Topics
 
-| Field | Type | Required | Description |
-|---|---:|---:|---|
-| `topic` | string | yes | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz`, `latched`, and `encoding`. |
-| `direction` | string | yes | `in`, `out`, or `bidirectional`. |
-| `preserve_id` | boolean | no | Default `false`. Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
-| `max_rate_hz` | number | no | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
-| `latched` | boolean | no | Default `false`. Treat the topic as latched (see below). Literal topic names only. |
-| `encoding` | string | no | Default `ros2msg`. Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
-| `video_options` | map | no | Optional video publish settings. |
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `topic` | string | yes | - | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz`, `latched`, and `encoding`. |
+| `direction` | string | yes | - | `in`, `out`, or `bidirectional`. |
+| `preserve_id` | boolean | no | `false` | Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
+| `max_rate_hz` | number | no | - | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
+| `latched` | boolean | no | `false` | Treat the topic as latched (see below). Literal topic names only. |
+| `encoding` | string | no | `ros2msg` | Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
+| `video_options` | map | no | - | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
 `direction: "bidirectional"`. Incoming topics are those with `direction: "in"`

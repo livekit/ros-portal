@@ -66,7 +66,8 @@ def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentia
 
 
 def _launch_setup(context, *args, **kwargs):
-    config_path = Path(LaunchConfiguration('config').perform(context))
+    config_path_value = Path(LaunchConfiguration('config_path').perform(context))
+    config_path = Path(config_path_value).expanduser()
     if not config_path.is_file():
         raise RuntimeError(f'Config file does not exist: {config_path}')
     livekit_url = LaunchConfiguration('livekit_url').perform(context)
@@ -108,7 +109,7 @@ def generate_launch_description():
     ])
 
     return LaunchDescription([
-        DeclareLaunchArgument('config', default_value=default_config),
+        DeclareLaunchArgument('config_path', default_value=default_config),
         DeclareLaunchArgument('livekit_url', default_value='ws://host.docker.internal:7880'),
         DeclareLaunchArgument('identity', default_value='ros2-livekit-bridge'),
         DeclareLaunchArgument(

@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=../../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# yaml-language-server: $schema=../../../ros_portal_config/schema/ros_portal_config.schema.json
 # Copyright 2026 LiveKit
 
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
   topic_polling_period_ms: 500
   ros_threads: 0
@@ -61,7 +61,7 @@ ros2_livekit_bridge:
 
     # /tf_static is latched (published once at startup with TRANSIENT_LOCAL
     # durability). DataTracks are not latched, so it is forwarded over the RPC
-    # push-with-ack path: the bridge stores it and pushes it to every peer that
+    # push-with-ack path: ROS Portal stores it and pushes it to every peer that
     # joins, so transforms published before the controller connected still
     # arrive. See `latched` in docs/configuration.md.
     - topic: "/tf_static"

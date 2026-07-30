@@ -46,9 +46,9 @@ fi
 
 mapfile -t package_versions < <(
   python3 - \
-    "${repo_root}/src/ros2_livekit_bridge/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_config/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_msgs/package.xml" <<'PY'
+    "${repo_root}/src/ros_portal/package.xml" \
+    "${repo_root}/src/ros_portal_config/package.xml" \
+    "${repo_root}/src/ros_portal_msgs/package.xml" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -75,8 +75,8 @@ fi
 readonly ubuntu_codename
 readonly debian_version="${upstream_version}-1${ubuntu_codename}"
 readonly debian_arch="$(dpkg --print-architecture)"
-readonly package_name="ros-${ros_distro}-livekit-bridge"
-readonly command_name="livekit-ros2-bridge-${ros_distro}"
+readonly package_name="ros-${ros_distro}-livekit-portal"
+readonly command_name="ros-portal-${ros_distro}"
 readonly install_prefix="/opt/livekit/ros/${ros_distro}"
 readonly work_root="${repo_root}/build-deb/${ros_distro}-${debian_arch}"
 readonly build_base="${work_root}/build"
@@ -99,15 +99,15 @@ fi
 
 colcon --log-base "${log_base}" build \
   --base-paths \
-    "${repo_root}/src/ros2_livekit_bridge" \
-    "${repo_root}/src/ros2_livekit_bridge_config" \
-    "${repo_root}/src/ros2_livekit_bridge_msgs" \
+    "${repo_root}/src/ros_portal" \
+    "${repo_root}/src/ros_portal_config" \
+    "${repo_root}/src/ros_portal_msgs" \
     "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_cmake" \
     "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_serialization" \
   --build-base "${build_base}" \
   --install-base "${install_prefix}" \
   --merge-install \
-  --packages-up-to ros2_livekit_bridge \
+  --packages-up-to ros_portal \
   --cmake-args "${cmake_args[@]}"
 
 mkdir -p "${package_root}${install_prefix}" "${package_root}/usr/bin"
@@ -118,24 +118,24 @@ cat >"${package_root}/usr/bin/${command_name}" <<EOF
 set -eo pipefail
 source "${install_prefix}/setup.bash"
 set -u
-exec ros2 launch ros2_livekit_bridge livekit_bridge.launch.py "\$@"
+exec ros2 launch ros_portal ros_portal.launch.py "\$@"
 EOF
 chmod 0755 "${package_root}/usr/bin/${command_name}"
 
 mapfile -t rosdep_keys < <(
   python3 - \
-    "${repo_root}/src/ros2_livekit_bridge/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_config/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_msgs/package.xml" \
+    "${repo_root}/src/ros_portal/package.xml" \
+    "${repo_root}/src/ros_portal_config/package.xml" \
+    "${repo_root}/src/ros_portal_msgs/package.xml" \
     "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_cmake/package.xml" \
     "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_serialization/package.xml" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
 bundled = {
-    "ros2_livekit_bridge",
-    "ros2_livekit_bridge_config",
-    "ros2_livekit_bridge_msgs",
+    "ros_portal",
+    "ros_portal_config",
+    "ros_portal_msgs",
     "ros2_medkit_cmake",
     "ros2_medkit_serialization",
 }
@@ -185,7 +185,7 @@ Maintainer: LiveKit <sderosa@livekit.io>
 
 Package: ${package_name}
 Architecture: any
-Description: LiveKit bridge for ROS 2 ${ros_distro}
+Description: ROS Portal for ROS 2 ${ros_distro}
 EOF
 
 declare -a elf_arguments=()
@@ -230,10 +230,10 @@ Section: misc
 Priority: optional
 Architecture: ${debian_arch}
 Maintainer: LiveKit <sderosa@livekit.io>
-Homepage: https://github.com/livekit/ros-livekit-bridge
+Homepage: https://github.com/livekit/ros-portal
 Installed-Size: ${installed_size}
 Depends: ${depends_field}
-Description: LiveKit bridge for ROS 2 ${ros_distro}
+Description: ROS Portal for ROS 2 ${ros_distro}
  Connects a ROS 2 graph to LiveKit for remote topics, services, video,
  diagnostics, and ROS 2 CLI operations.
 EOF

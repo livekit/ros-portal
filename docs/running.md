@@ -6,7 +6,7 @@ To start a LiveKit server, follow the [install docs](https://docs.livekit.io/tra
 livekit-server --dev --enable_participant_data_blob
 ```
 
-The bridge reads LiveKit credentials from the environment:
+ROS Portal reads LiveKit credentials from the environment:
 
 ```bash
 export LIVEKIT_URL=<url>
@@ -15,7 +15,7 @@ export LIVEKIT_TOKEN=<token>
 
 ## LiveKit Server Requirement
 
-Self-hosted LiveKit servers must enable participant data blobs so the bridge can
+Self-hosted LiveKit servers must enable participant data blobs so ROS Portal can
 store and retrieve ROS schema definitions:
 
 ```bash
@@ -28,7 +28,7 @@ Launch with the installed default config:
 source install/setup.bash
 export LIVEKIT_URL=<url>
 export LIVEKIT_TOKEN=<token>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.py
+ros2 launch ros_portal ros_portal.launch.py
 ```
 
 Or use the launch file (the `config_path` argument is required):
@@ -37,7 +37,7 @@ Or use the launch file (the `config_path` argument is required):
 source install/setup.bash
 export LIVEKIT_URL=<url>
 export LIVEKIT_TOKEN=<token>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.py config_path:=/path/to/custom_config.yaml
+ros2 launch ros_portal ros_portal.launch.py config_path:=/path/to/custom_config.yaml
 ```
 
 ## Local Development Launch
@@ -47,7 +47,7 @@ sets `LIVEKIT_URL` and `LIVEKIT_TOKEN` against a local server:
 
 ```bash
 source install/setup.bash
-ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py
+ros2 launch ros_portal ros_portal_local.launch.py
 ```
 
 ## Simulation And Display Forwarding
@@ -58,12 +58,12 @@ display contents to the host and view them with Foxglove Studio or the browser.
 ## Ignition Gazebo Example
 
 Install Gazebo and the `ros_gz` repositories for your ROS distribution, then run
-the image bridge and LiveKit bridge:
+the image bridge and ROS Portal:
 
 ```bash
 source /opt/ros/humble/setup.bash
 
-ros2 launch ros2_livekit_bridge image_bridge.launch.py image_topic:=/rgbd_camera/image
+ros2 launch ros_portal image_bridge.launch.py image_topic:=/rgbd_camera/image
 
 ign topic -l
 ros2 topic list
@@ -72,5 +72,5 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 
 export LIVEKIT_TOKEN=<token>
 export LIVEKIT_URL=<url>
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.py
+ros2 launch ros_portal ros_portal.launch.py
 ```

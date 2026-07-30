@@ -1,0 +1,47 @@
+{{ prologue }}
+
+#ifndef {{ guard }}
+#define {{ guard }}
+
+#include "ros_portal_config/config/error.hpp"
+
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace ros_portal_config
+{
+
+{% for enum in model.canonical_enums %}
+enum class {{ enum.cpp_name }}
+{
+{% for value in enum.values %}
+  {{ value | enum_value_name }},
+{% endfor %}
+};
+
+{% endfor %}
+{% for spec in all_specs %}
+struct {{ spec.cpp_name }}
+{
+{% for field in spec.fields %}
+  {{ field.member_type }} {{ field.member_name }}{{ default_initializer(field) }};
+{% endfor %}
+};
+
+{% endfor %}
+class ConfigParser
+{
+public:
+  RosPortalConfig parseFile(const std::filesystem::path & path) const;
+  RosPortalConfig parseString(const std::string & yaml) const;
+};
+
+{% for enum in model.canonical_enums %}
+const char * toString({{ enum.cpp_name }} value);
+{% endfor %}
+
+} // namespace ros_portal_config
+
+#endif // {{ guard }}

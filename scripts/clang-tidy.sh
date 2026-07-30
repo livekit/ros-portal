@@ -36,7 +36,7 @@ fi
 exec "${shared_script}" \
   --repo-root "${repo_root}" \
   --build-dir build \
-  --file-regex '^.*/src/(ros2_livekit_bridge|ros2_livekit_bridge_config)/src/.*\.(c|cc|cpp|cxx)$' \
-  --header-filter '^.*/src/(ros2_livekit_bridge|ros2_livekit_bridge_config)/(include|src)/.*\.(h|hh|hpp|hxx)$' \
+  --file-regex '^.*/src/(ros_portal|ros_portal_config)/src/.*\.(c|cc|cpp|cxx)$' \
+  --header-filter '^.*/src/(ros_portal|ros_portal_config)/(include|src)/.*\.(h|hh|hpp|hxx)$' \
   --exclude-header-filter '(.*/test/.*)|(.*/build/.*)|(.*/install/.*)|(.*/src/externals/.*)' \
   "$@"

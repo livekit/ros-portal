@@ -1,2 +1,2 @@
 CompileFlags:
-  CompilationDatabase: build/ros2_livekit_bridge
+  CompilationDatabase: build/ros_portal

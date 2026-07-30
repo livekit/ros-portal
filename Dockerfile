@@ -121,7 +121,7 @@ RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Optional demo and simulation dependencies. Core CI disables these because
-# their release cadence is independent of the bridge and ROS distribution.
+# their release cadence is independent of ROS Portal and ROS distribution.
 RUN if [ "${INSTALL_SIMULATION_DEPS}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \

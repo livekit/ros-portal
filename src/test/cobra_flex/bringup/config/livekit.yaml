@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=../../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# yaml-language-server: $schema=../../../ros_portal_config/schema/ros_portal_config.schema.json
 # Copyright 2026 LiveKit
 
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
   topic_polling_period_ms: 500
   ros_threads: 0

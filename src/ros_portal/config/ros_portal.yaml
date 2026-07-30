@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../ros_portal_config/schema/ros_portal_config.schema.json
+# Copyright 2026 LiveKit
+
+ros_portal:
+  version: "0.0.1"
+  topic_polling_period_ms: 500
+  ros_threads: 0
+
+  topics:
+    - topic: "/rgbd_camera/image"
+      direction: "out"
+
+    - topic: "/laser_scan"
+      direction: "out"
+
+    - topic: "/lidar/points"
+      direction: "out"
+
+    - topic: "/odom"
+      direction: "out"
+
+    - topic: "/battery_state"
+      direction: "out"
+
+    # Forward /diagnostics as JSON (described by a generated JSON Schema) instead
+    # of ROS CDR, so non-ROS consumers can read it directly. Matched by literal
+    # topic name. See `encoding` in docs/configuration.md.
+    - topic: "/diagnostics"
+      direction: "out"
+      encoding: "jsonschema"
+
+    # /tf carries dynamic transforms and stays on the DataTrack path.
+    - topic: "/tf"
+      direction: "out"
+
+    # /tf_static is latched (published once with TRANSIENT_LOCAL durability), so
+    # it is forwarded over the RPC push-with-ack path instead of a DataTrack.
+    # See `latched` in docs/configuration.md.
+    - topic: "/tf_static"
+      direction: "out"
+      latched: true
+
+    - topic: "/test/.*"
+      direction: "bidirectional"

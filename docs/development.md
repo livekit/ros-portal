@@ -58,7 +58,7 @@ The remaining overrides are independent feature choices:
 Humble must build the pinned LiveKit SDK from source because the generic Linux
 release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04
 provides. CI installs the source-build toolchain in the Humble image and asks
-the bridge CMake configuration to build the SDK checkout from `external.repos`.
+ROS Portal CMake configuration to build the SDK checkout from `external.repos`.
 
 ## Shell Helpers
 
@@ -116,9 +116,9 @@ versions used in CI automatically.
 ## LiveKit SDK
 
 The default build downloads the pinned LiveKit SDK release during CMake
-configure. Its release version lives in `src/ros2_livekit_bridge/colcon.pkg`
+configure. Its release version lives in `src/ros_portal/colcon.pkg`
 and as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable in
-`src/ros2_livekit_bridge/CMakeLists.txt`; `external.repos` pins the source
+`src/ros_portal/CMakeLists.txt`; `external.repos` pins the source
 checkout to that release's commit. Bump all three together when upgrading. The
 SDK release check verifies that the two version strings match and that the
 source commit is the commit referenced by the published release tag.
@@ -131,15 +131,15 @@ vcs import --recursive src/externals < external.repos
 ./scripts/apply-external-patches.sh
 ```
 
-To compile the SDK from that checkout and build the bridge against the
+To compile the SDK from that checkout and build ROS Portal against the
 resulting package:
 
 ```bash
-colcon build --packages-select ros2_livekit_bridge \
+colcon build --packages-select ros_portal \
   --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
 ```
 
-The SDK uses isolated build and install directories under the bridge package's
+The SDK uses isolated build and install directories under ROS Portal package's
 colcon build directory. Its source build defaults to two parallel jobs. Set
 `CMAKE_BUILD_PARALLEL_LEVEL` or `LIVEKIT_SDK_BUILD_JOBS` to override that bound;
 the same limit is applied to both the CMake and Rust/Cargo build steps. Use one
@@ -152,7 +152,7 @@ caches them:
   vendored WebRTC the build scripts unpack. This is the bulk of both the time and
   the ~3.4 GB on disk. It lives in the source tree, so it is shared by every
   colcon build base, including the one `scripts/build-deb.sh` creates.
-- `<build-base>/ros2_livekit_bridge/_deps` — the SDK's own CMake tree and install
+- `<build-base>/ros_portal/_deps` — the SDK's own CMake tree and install
   prefix, roughly 250 MB. This is per build base, so a packaging build rebuilds
   it even when the Rust half is warm.
 
@@ -164,7 +164,7 @@ scratch it is tens of minutes.
 
 To override the pin for one build, or to track upstream with `latest`:
 
-    colcon build --packages-select ros2_livekit_bridge \
+    colcon build --packages-select ros_portal \
       --cmake-args -DLIVEKIT_SDK_VERSION=latest
 
 ## Building Debian Packages
@@ -173,7 +173,7 @@ Run `scripts/build-deb.sh` only inside the matching repository devcontainer or
 CI environment. The script uses `/opt/livekit/ros/$ROS_DISTRO` as its build
 staging prefix and removes that directory before building. Running it directly
 on a developer host is therefore unsupported and could remove an existing
-bridge installation outside dpkg's control.
+ROS Portal installation outside dpkg's control.
 
 From the rootful devcontainer, run:
 

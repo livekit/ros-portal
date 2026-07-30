@@ -30,10 +30,10 @@ jobs:
           ' external.repos)"
           version="$(sed -nE \
             's/^set\(LIVEKIT_SDK_VERSION "([^"]+)".*/\1/p' \
-            src/ros2_livekit_bridge/CMakeLists.txt)"
+            src/ros_portal/CMakeLists.txt)"
           colcon_version="$(sed -nE \
             's/.*-DLIVEKIT_SDK_VERSION=([^"]+)".*/\1/p' \
-            src/ros2_livekit_bridge/colcon.pkg)"
+            src/ros_portal/colcon.pkg)"
 
           if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ || -z "${version}" || -z "${colcon_version}" ]]; then
             echo "::error::Could not resolve the client-sdk-cpp SHA, CMake release version, and colcon release version."

@@ -76,6 +76,19 @@ jobs:
           # checkout before the cache can create a partial SDK directory.
           runCmd: /bin/true
 
+      - name: Prepare LiveKit SDK cache directories
+        if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tree in \
+            src/externals/client-sdk-cpp/client-sdk-rust/target \
+            build/ros2_livekit_bridge/_deps
+          do
+            sudo mkdir -p "${tree}"
+            sudo chown -R "$(id -u):$(id -g)" "${tree}"
+          done
+
       # Restore after setup so vcs imports the SDK before the cache creates its
       # target directory. Keep the Dockerfile hash in the fallback prefix so
       # cached build trees never cross toolchain definitions.

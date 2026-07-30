@@ -14,15 +14,67 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script is intended for the repository's rootful devcontainer and CI.
-# It removes and recreates /opt/livekit/ros/$ROS_DISTRO as a build staging
-# prefix, so running it directly on a developer host is not supported.
+# Bundle an existing isolated colcon install tree into a Debian package. This
+# script does not compile, configure, install, or download anything.
 
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ros_distro="${ROS_DISTRO:-}"
 readonly output_dir="${OUTPUT_DIR:-${repo_root}/artifacts/debian}"
+readonly source_install_input="${SOURCE_INSTALL_BASE:-}"
+readonly packaged_packages=(
+  ros2_livekit_bridge
+  ros2_livekit_bridge_config
+  ros2_livekit_bridge_msgs
+  ros2_medkit_cmake
+  ros2_medkit_serialization
+)
+
+if [[ -z "${source_install_input}" ]]; then
+  echo "SOURCE_INSTALL_BASE is required." >&2
+  echo "Build the workspace first, then pass its install prefix, for example:" >&2
+  echo "  SOURCE_INSTALL_BASE=${repo_root}/install ./scripts/package-deb.sh" >&2
+  exit 2
+fi
+
+if [[ ! -d "${source_install_input}" ]]; then
+  echo "SOURCE_INSTALL_BASE does not exist: ${source_install_input}" >&2
+  exit 2
+fi
+
+readonly source_install_base="$(cd "${source_install_input}" && pwd)"
+readonly layout_file="${source_install_base}/.colcon_install_layout"
+if [[ ! -f "${layout_file}" ]] ||
+  [[ "$(tr -d '[:space:]' <"${layout_file}")" != "isolated" ]]; then
+  echo "SOURCE_INSTALL_BASE must be a completed isolated colcon install: ${source_install_base}" >&2
+  exit 2
+fi
+
+declare -a installed_package_xmls=()
+for package in "${packaged_packages[@]}"; do
+  package_marker="${source_install_base}/${package}/share/colcon-core/packages/${package}"
+  package_xml="${source_install_base}/${package}/share/${package}/package.xml"
+  if [[ ! -f "${package_marker}" || ! -f "${package_xml}" ]]; then
+    echo "Required package '${package}' is missing from ${source_install_base}" >&2
+    exit 2
+  fi
+  installed_package_xmls+=("${package_xml}")
+done
+
+readonly source_bridge_prefix="${source_install_base}/ros2_livekit_bridge"
+readonly source_bridge_node="${source_bridge_prefix}/lib/ros2_livekit_bridge/ros2_livekit_bridge_node"
+if [[ ! -x "${source_bridge_node}" ]]; then
+  echo "Built bridge node is missing: ${source_bridge_node}" >&2
+  exit 2
+fi
+
+for required_setup_file in setup.bash local_setup.bash _local_setup_util_sh.py; do
+  if [[ ! -f "${source_install_base}/${required_setup_file}" ]]; then
+    echo "Incomplete colcon install; missing ${source_install_base}/${required_setup_file}" >&2
+    exit 2
+  fi
+done
 
 case "${ros_distro}" in
   humble | jazzy | kilted | lyrical) ;;
@@ -37,18 +89,11 @@ if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
   exit 2
 fi
 
-if [[ ! -f "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_serialization/package.xml" ]]; then
-  echo "Pinned externals are missing; import external.repos before packaging" >&2
-  exit 2
-fi
-
-"${repo_root}/scripts/apply-external-patches.sh"
-
 mapfile -t package_versions < <(
   python3 - \
-    "${repo_root}/src/ros2_livekit_bridge/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_config/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_msgs/package.xml" <<'PY'
+    "${source_install_base}/ros2_livekit_bridge/share/ros2_livekit_bridge/package.xml" \
+    "${source_install_base}/ros2_livekit_bridge_config/share/ros2_livekit_bridge_config/package.xml" \
+    "${source_install_base}/ros2_livekit_bridge_msgs/share/ros2_livekit_bridge_msgs/package.xml" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -78,10 +123,9 @@ readonly debian_arch="$(dpkg --print-architecture)"
 readonly package_name="ros-${ros_distro}-livekit-bridge"
 readonly command_name="livekit-ros2-bridge-${ros_distro}"
 readonly install_prefix="/opt/livekit/ros/${ros_distro}"
-readonly work_root="${repo_root}/build-deb/${ros_distro}-${debian_arch}"
-readonly build_base="${work_root}/build"
-readonly log_base="${work_root}/log"
+readonly work_root="${repo_root}/package-deb/${ros_distro}-${debian_arch}"
 readonly package_root="${work_root}/package-root"
+readonly staging_prefix="${package_root}${install_prefix}"
 readonly shlibs_root="${work_root}/shlibs"
 readonly deb_path="${output_dir}/${package_name}_${debian_version}_${debian_arch}.deb"
 
@@ -89,30 +133,50 @@ set +u
 source "/opt/ros/${ros_distro}/setup.bash"
 set -u
 
-rm -rf "${work_root}" "${install_prefix}"
-mkdir -p "${build_base}" "${log_base}" "${output_dir}"
+rm -rf "${work_root}"
+mkdir -p "${staging_prefix}" "${output_dir}"
+touch "${work_root}/COLCON_IGNORE"
 
-declare -a cmake_args=(-DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release)
-if [[ "${BUILD_LIVEKIT_SDK_FROM_SOURCE:-false}" == "true" ]]; then
-  cmake_args+=(-DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON)
-fi
+for package in "${packaged_packages[@]}"; do
+  cp -a "${source_install_base}/${package}" "${staging_prefix}/"
+done
 
-colcon --log-base "${log_base}" build \
-  --base-paths \
-    "${repo_root}/src/ros2_livekit_bridge" \
-    "${repo_root}/src/ros2_livekit_bridge_config" \
-    "${repo_root}/src/ros2_livekit_bridge_msgs" \
-    "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_cmake" \
-    "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_serialization" \
-  --build-base "${build_base}" \
-  --install-base "${install_prefix}" \
-  --merge-install \
-  --packages-up-to ros2_livekit_bridge \
-  --cmake-args "${cmake_args[@]}"
+for setup_file in \
+  .colcon_install_layout \
+  _local_setup_util_sh.py \
+  _local_setup_util_ps1.py \
+  local_setup.bash \
+  local_setup.sh \
+  local_setup.zsh \
+  local_setup.ps1 \
+  setup.bash \
+  setup.sh \
+  setup.zsh \
+  setup.ps1
+do
+  if [[ -f "${source_install_base}/${setup_file}" ]]; then
+    cp -a "${source_install_base}/${setup_file}" "${staging_prefix}/"
+  fi
+done
 
-mkdir -p "${package_root}${install_prefix}" "${package_root}/usr/bin"
-cp -a "${install_prefix}/." "${package_root}${install_prefix}/"
+# POSIX shell setup files cannot discover their own location when sourced, so
+# replace the build-time install prefix with the package's final prefix.
+python3 - "${staging_prefix}" "${source_install_base}" "${install_prefix}" <<'PY'
+from pathlib import Path
+import sys
 
+staging_prefix = Path(sys.argv[1])
+source_prefix = sys.argv[2]
+install_prefix = sys.argv[3]
+
+for setup_file in staging_prefix.rglob("*.sh"):
+    contents = setup_file.read_text()
+    relocated = contents.replace(source_prefix, install_prefix)
+    if relocated != contents:
+        setup_file.write_text(relocated)
+PY
+
+mkdir -p "${package_root}/usr/bin"
 cat >"${package_root}/usr/bin/${command_name}" <<EOF
 #!/usr/bin/env bash
 set -eo pipefail
@@ -123,12 +187,7 @@ EOF
 chmod 0755 "${package_root}/usr/bin/${command_name}"
 
 mapfile -t rosdep_keys < <(
-  python3 - \
-    "${repo_root}/src/ros2_livekit_bridge/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_config/package.xml" \
-    "${repo_root}/src/ros2_livekit_bridge_msgs/package.xml" \
-    "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_cmake/package.xml" \
-    "${repo_root}/src/externals/ros2_medkit/src/ros2_medkit_serialization/package.xml" <<'PY'
+  python3 - "${installed_package_xmls[@]}" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -193,20 +252,26 @@ while IFS= read -r -d '' candidate; do
   if [[ "$(file -b "${candidate}")" == *ELF* ]]; then
     elf_arguments+=("-e${candidate}")
   fi
-done < <(find "${package_root}${install_prefix}" -type f -print0)
+done < <(find "${staging_prefix}" -type f -print0)
 
 if [[ "${#elf_arguments[@]}" -eq 0 ]]; then
-  echo "No ELF runtime artifacts found in ${install_prefix}" >&2
+  echo "No ELF runtime artifacts found in staged prefix ${staging_prefix}" >&2
   exit 1
 fi
 
 shlibs_output="$(
   cd "${shlibs_root}"
+  declare -a library_paths=("-l/opt/ros/${ros_distro}/lib")
+  for package in "${packaged_packages[@]}"; do
+    package_lib="${staging_prefix}/${package}/lib"
+    if [[ -d "${package_lib}" ]]; then
+      library_paths+=("-l${package_lib}")
+    fi
+  done
   dpkg-shlibdeps \
     --ignore-missing-info \
     -O \
-    "-l${package_root}${install_prefix}/lib" \
-    "-l/opt/ros/${ros_distro}/lib" \
+    "${library_paths[@]}" \
     "${elf_arguments[@]}"
 )"
 shlibs_dependencies="${shlibs_output#shlibs:Depends=}"
@@ -244,4 +309,4 @@ dpkg-deb --root-owner-group --build "${package_root}" "${deb_path}"
   sha256sum "$(basename "${deb_path}")" >"$(basename "${deb_path}").sha256"
 )
 
-echo "Built ${deb_path}"
+echo "Packaged ${deb_path} from ${source_install_base}"

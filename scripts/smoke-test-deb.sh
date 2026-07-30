@@ -42,13 +42,14 @@ set +u
 source "${install_prefix}/setup.bash"
 set -u
 
+readonly bridge_prefix="${install_prefix}/ros2_livekit_bridge"
 actual_prefix="$(ros2 pkg prefix ros2_livekit_bridge)"
-if [[ "${actual_prefix}" != "${install_prefix}" ]]; then
+if [[ "${actual_prefix}" != "${bridge_prefix}" ]]; then
   echo "Unexpected bridge prefix: ${actual_prefix}" >&2
   exit 1
 fi
 
-readonly bridge_node="${install_prefix}/lib/ros2_livekit_bridge/ros2_livekit_bridge_node"
+readonly bridge_node="${bridge_prefix}/lib/ros2_livekit_bridge/ros2_livekit_bridge_node"
 if [[ ! -x "${bridge_node}" ]]; then
   echo "Bridge node is missing: ${bridge_node}" >&2
   exit 1

@@ -34,7 +34,7 @@
 #include <vector>
 
 #include "bridge_e2e_fixture.hpp"
-#include "ros2_livekit_bridge/schema_manager.hpp"
+#include "ros2_livekit_bridge/schema/manager.hpp"
 
 namespace ros2_livekit_bridge::test {
 namespace {

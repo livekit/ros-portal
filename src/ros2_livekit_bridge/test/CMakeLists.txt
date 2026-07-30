@@ -49,11 +49,12 @@ if(TARGET ros2_livekit_bridge_unit_tests)
   target_compile_definitions(ros2_livekit_bridge_unit_tests PRIVATE BUILD_TESTING=1)
   target_include_directories(ros2_livekit_bridge_unit_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
+    "${PROJECT_SOURCE_DIR}/src"
   )
   target_link_libraries(ros2_livekit_bridge_unit_tests
     ros2_livekit_bridge_lib
   )
-  ament_target_dependencies(ros2_livekit_bridge_unit_tests nav_msgs std_srvs test_msgs)
+  medkit_target_dependencies(ros2_livekit_bridge_unit_tests nav_msgs std_srvs test_msgs)
   livekit_set_runtime_rpath(ros2_livekit_bridge_unit_tests)
 endif()
 
@@ -78,7 +79,7 @@ if(TARGET ros2_livekit_bridge_integration_tests)
   target_include_directories(ros2_livekit_bridge_integration_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
   )
-  ament_target_dependencies(ros2_livekit_bridge_integration_tests std_srvs)
+  medkit_target_dependencies(ros2_livekit_bridge_integration_tests std_srvs)
   target_link_libraries(ros2_livekit_bridge_integration_tests
     ros2_livekit_bridge_lib
   )

@@ -13,6 +13,15 @@ export LIVEKIT_URL=<url>
 export LIVEKIT_TOKEN=<token>
 ```
 
+## LiveKit Server Requirement
+
+Self-hosted LiveKit servers must enable participant data blobs so the bridge can
+store and retrieve ROS schema definitions:
+
+```bash
+LIVEKIT_CONFIG="enable_participant_data_blob: true" livekit-server
+```
+
 Launch with the installed default config:
 
 ```bash

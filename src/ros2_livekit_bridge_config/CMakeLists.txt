@@ -27,7 +27,9 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies(REQUIRED
   yaml_cpp_vendor)
 
-find_package(yaml-cpp REQUIRED)
+find_package(ros2_medkit_cmake REQUIRED)
+include(ROS2MedkitCompat)
+medkit_find_yaml_cpp()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 execute_process(
@@ -97,8 +99,7 @@ target_include_directories(${PROJECT_NAME}
     src
 )
 target_link_libraries(${PROJECT_NAME}
-  PRIVATE
-    yaml-cpp::yaml-cpp
+  yaml-cpp::yaml-cpp
 )
 
 if(BUILD_TESTING)

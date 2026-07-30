@@ -21,6 +21,7 @@
 
 #include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
+#include <std_msgs/msg/u_int8_multi_array.hpp>
 #include <string>
 #include <test_msgs/msg/basic_types.hpp>
 #include <test_msgs/msg/builtins.hpp>
@@ -151,6 +152,23 @@ TEST(MessageRenderTest, RendersSequenceField) {
   // An empty sequence is rendered as the YAML null scalar '~' rather than an
   // empty flow sequence '[]', so layout.dim comes through as null here.
   EXPECT_TRUE(output["layout"]["dim"].IsNull());
+}
+
+TEST(MessageRenderTest, RendersUint8SequenceField) {
+  const auto loaded = loadIntrospection("std_msgs/msg/UInt8MultiArray");
+  std_msgs::msg::UInt8MultiArray message;
+  message.data.resize(3U);
+  message.data[0] = 1U;
+  message.data[1] = 2U;
+  message.data[2] = 255U;
+
+  const YAML::Node output = YAML::Load(toYaml(loaded.members, &message));
+
+  ASSERT_TRUE(output["data"].IsSequence());
+  ASSERT_EQ(output["data"].size(), 3U);
+  EXPECT_EQ(output["data"][0].as<unsigned>(), 1U);
+  EXPECT_EQ(output["data"][1].as<unsigned>(), 2U);
+  EXPECT_EQ(output["data"][2].as<unsigned>(), 255U);
 }
 
 TEST(MessageRenderTest, RendersNestedMessageSequence) {

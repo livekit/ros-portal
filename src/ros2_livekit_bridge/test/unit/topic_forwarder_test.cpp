@@ -40,7 +40,7 @@
 
 #include "diagnostics_test_utils.hpp"
 #include "ros2_livekit_bridge/diagnostics/diagnostics_fns.hpp"
-#include "ros2_livekit_bridge/schema_manager.hpp"
+#include "ros2_livekit_bridge/schema/manager.hpp"
 #include "ros2_livekit_bridge/utils/topic_matcher.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the

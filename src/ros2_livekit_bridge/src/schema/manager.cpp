@@ -14,43 +14,20 @@
  * limitations under the License.
  */
 
-#include "ros2_livekit_bridge/schema_manager.hpp"
+#include "ros2_livekit_bridge/schema/manager.hpp"
 
-#include <rcutils/sha256.h>
+#include <openssl/sha.h>
 
 #include <array>
-#include <cstdint>
 #include <exception>
 #include <rclcpp/logging.hpp>
-#include <rosbag2_cpp/message_definitions/local_message_definition_source.hpp>
 #include <stdexcept>
 #include <utility>
 
 #include "ros2_livekit_bridge/introspection/introspection_utils.hpp"
+#include "ros2_livekit_bridge/schema/renderer.hpp"
 
 namespace ros2_livekit_bridge {
-
-std::optional<RosMessageSchema> SchemaManager::renderRosMessageSchema(const std::string& topic_type) {
-  if (topic_type.empty()) {
-    return std::nullopt;
-  }
-
-  try {
-    rosbag2_cpp::LocalMessageDefinitionSource source;
-    const rosbag2_storage::MessageDefinition definition = source.get_full_text(topic_type);
-
-    if (definition.encoded_message_definition.empty()) {
-      return std::nullopt;
-    }
-
-    return RosMessageSchema{
-        definition.encoding,
-        definition.encoded_message_definition,
-    };
-  } catch (const std::exception&) {
-    return std::nullopt;
-  }
-}
 
 std::optional<std::string> SchemaManager::renderJsonSchema(const std::string& topic_type) {
   if (topic_type.empty()) {
@@ -76,14 +53,10 @@ std::string SchemaManager::schemaDedupeKey(const std::string& topic_type, const 
 }
 
 SchemaHash SchemaManager::hashSchemaText(const std::string& schema_text) {
-  static_assert(SchemaHash{}.size() == RCUTILS_SHA256_BLOCK_SIZE);
-
-  rcutils_sha256_ctx_t context;
-  rcutils_sha256_init(&context);
-  rcutils_sha256_update(&context, reinterpret_cast<const std::uint8_t*>(schema_text.data()), schema_text.size());
+  static_assert(SchemaHash{}.size() == SHA256_DIGEST_LENGTH);
 
   SchemaHash hash{};
-  rcutils_sha256_final(&context, hash.data());
+  SHA256(reinterpret_cast<const unsigned char*>(schema_text.data()), schema_text.size(), hash.data());
   return hash;
 }
 
@@ -107,7 +80,7 @@ SchemaManager::SchemaManager(LiveKitMethods livekit_methods, RenderSchemaFn rend
     throw std::invalid_argument("SchemaManager requires fully populated LiveKitMethods");
   }
   if (!render_schema_) {
-    render_schema_ = renderRosMessageSchema;
+    render_schema_ = [](const std::string& topic_type) { return schema::renderRosMessageSchema(topic_type); };
   }
   if (!render_json_schema_) {
     render_json_schema_ = renderJsonSchema;

@@ -1,0 +1,82 @@
+name: SDK Release Check
+
+# Ensures the CMake SDK release version (pre-built download) and the VCS SDK
+# checkout (source build) resolve to the same commit hash so the two paths
+# cannot diverge.
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-release-check:
+    name: SDK Release Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Resolve SDK pins
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sha="$(awk '
+            /^  client-sdk-cpp:$/ { in_sdk = 1; next }
+            in_sdk && /^    version:/ { print $2; exit }
+          ' external.repos)"
+          version="$(sed -nE \
+            's/^set\(LIVEKIT_SDK_VERSION "([^"]+)".*/\1/p' \
+            src/ros2_livekit_bridge/CMakeLists.txt)"
+          colcon_version="$(sed -nE \
+            's/.*-DLIVEKIT_SDK_VERSION=([^"]+)".*/\1/p' \
+            src/ros2_livekit_bridge/colcon.pkg)"
+
+          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ || -z "${version}" || -z "${colcon_version}" ]]; then
+            echo "::error::Could not resolve the client-sdk-cpp SHA, CMake release version, and colcon release version."
+            exit 1
+          fi
+          if [[ "${version}" != "${colcon_version}" ]]; then
+            echo "::error::CMake pins LiveKit SDK ${version}, but colcon.pkg pins ${colcon_version}."
+            exit 1
+          fi
+
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify SDK pin matches its release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPO: livekit/client-sdk-cpp
+          SDK_SHA: ${{ steps.sdk.outputs.sha }}
+          SDK_TAG: ${{ steps.sdk.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "Pinned client-sdk-cpp commit: ${SDK_SHA}"
+          echo "CMake SDK release: ${SDK_TAG}"
+
+          gh api --paginate "repos/${SDK_REPO}/releases" \
+            --jq '.[] | select(.draft == false) | .tag_name' \
+            | sort -u > release_tags.txt
+          gh api --paginate "repos/${SDK_REPO}/tags" \
+            --jq '.[] | [.name, .commit.sha] | @tsv' > all_tags.tsv
+
+          release_sha="$(awk -v tag="${SDK_TAG}" '
+            NR == FNR { released[$0] = 1; next }
+            ($1 == tag) && ($1 in released) { print $2 }
+          ' release_tags.txt all_tags.tsv | head -n 1)"
+
+          if [[ -z "${release_sha}" ]]; then
+            echo "::error::${SDK_TAG} is not a published release in ${SDK_REPO}."
+            exit 1
+          fi
+          if [[ "${SDK_SHA}" != "${release_sha}" ]]; then
+            echo "::error::external.repos pins ${SDK_SHA}, but ${SDK_TAG} points to ${release_sha}."
+            exit 1
+          fi
+
+          echo "${SDK_TAG}, colcon.pkg, and external.repos all resolve to ${SDK_SHA}."

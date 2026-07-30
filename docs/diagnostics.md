@@ -141,6 +141,7 @@ For source-based workspaces, make sure the diagnostics repositories from
 ```bash
 mkdir -p src/externals
 vcs import --skip-existing src/externals < external.repos
+./scripts/apply-external-patches.sh
 rosdep install --from-paths src --ignore-src -r -y
 ```
 

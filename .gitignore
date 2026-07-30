@@ -1,12 +1,16 @@
 devel/
 logs/
 build/
+build-*/
+artifacts/
 install/
+install-*/
 CMakeFiles/
 CMakeCache.txt
 bin/
 lib/
 log/
+log-*/
 msg_gen/
 srv_gen/
 msg/*Action.msg

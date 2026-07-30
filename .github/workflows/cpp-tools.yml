@@ -14,7 +14,7 @@
 
 name: C++ Tools
 
-# Called by the top-level builds workflow.
+# Called by the top-level CI workflow.
 on:
   workflow_call: {}
   workflow_dispatch: {}
@@ -48,6 +48,7 @@ jobs:
           sudo apt-get install -y python3-vcstool
           mkdir -p src/externals
           vcs import --recursive --skip-existing src/externals < external.repos
+          ./scripts/apply-external-patches.sh
 
       - name: Install shared clang-format configuration
         run: ./src/externals/cpp-tools/install.sh clang-format --repo-root "$GITHUB_WORKSPACE" --force
@@ -107,6 +108,7 @@ jobs:
           rosdep update --rosdistro jazzy
           mkdir -p src/externals
           vcs import --recursive --skip-existing src/externals < external.repos
+          ./scripts/apply-external-patches.sh
           rosdep install \
             --from-paths \
               src/ros2_livekit_bridge \

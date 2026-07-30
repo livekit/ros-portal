@@ -1,7 +1,7 @@
 # LiveKitSDK.cmake
 #
 # Helper for example repos:
-# - Downloads the appropriate prebuilt LiveKit C++ SDK release asset for the host OS/arch
+# - Downloads the appropriate prebuilt LiveKit C++ SDK release asset for the target OS/arch
 # - Extracts it into a local directory (default: <build>/_deps/livekit-sdk)
 # - Prepends the extracted prefix to CMAKE_PREFIX_PATH so:
 #     find_package(LiveKit CONFIG REQUIRED)
@@ -17,7 +17,7 @@
 
 include_guard(GLOBAL)
 
-# -------------------- Host detection --------------------
+# -------------------- Target detection --------------------
 function(_lk_detect_host out_os out_arch)
   if(WIN32)
     set(_os "windows")
@@ -29,8 +29,8 @@ function(_lk_detect_host out_os out_arch)
     message(FATAL_ERROR "LiveKitSDK: unsupported host OS")
   endif()
 
-  # Use host processor; normalize common variants (case-insensitive)
-  set(_proc "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+  # Use the target processor; normalize common variants (case-insensitive)
+  set(_proc "${CMAKE_SYSTEM_PROCESSOR}")
   string(TOLOWER "${_proc}" _proc_l)
 
   if(_proc_l MATCHES "^(x86_64|amd64)$")
@@ -38,7 +38,7 @@ function(_lk_detect_host out_os out_arch)
   elseif(_proc_l MATCHES "^(arm64|aarch64)$")
     set(_arch "arm64")
   else()
-    message(FATAL_ERROR "LiveKitSDK: unsupported host arch: ${_proc}")
+    message(FATAL_ERROR "LiveKitSDK: unsupported target arch: ${_proc}")
   endif()
 
   set(${out_os}   "${_os}"   PARENT_SCOPE)

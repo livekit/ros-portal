@@ -47,8 +47,13 @@ typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeIn
                                                            const char* service_name, CallbackT callback,
                                                            const rclcpp::CallbackGroup::SharedPtr& callback_group) {
   try {
+#ifdef ROS_DISTRO_HUMBLE
+    const auto services_qos = rmw_qos_profile_services_default;
+#else
+    const auto services_qos = rclcpp::ServicesQoS();
+#endif
     return rclcpp::create_service<SrvT>(node_interfaces.node_base, node_interfaces.node_services, service_name,
-                                        std::move(callback), rclcpp::ServicesQoS(), callback_group);
+                                        std::move(callback), services_qos, callback_group);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(node_interfaces.node_logging->get_logger(), "Failed to create ROS service '%s': %s", service_name,
                  error.what());

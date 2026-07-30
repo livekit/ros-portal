@@ -29,26 +29,13 @@
 #include <string>
 #include <unordered_map>
 
+#include "ros2_livekit_bridge/schema/renderer.hpp"
+
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
 
 namespace ros2_livekit_bridge {
-
-/// @brief A self-contained ROS2 message schema suitable for LiveKit data tracks.
-///
-/// The @p encoding field is the rosbag2 definition encoding (for example
-/// `"ros2msg"` or `"ros2idl"`). The @p text field is the full concatenated
-/// definition text in MCAP format, including dependency sections separated by
-/// `================================================================================`
-/// delimiters.
-struct RosMessageSchema {
-  /// @brief Definition encoding, e.g. `"ros2msg"` or `"ros2idl"`.
-  /// @note String because rosbag2 returns encoding as one.
-  std::string encoding;
-  /// @brief Full concatenated message definition text.
-  std::string text;
-};
 
 /// @brief Binary SHA-256 digest of exact schema text bytes.
 /// @note The hash is intentionally a fixed-size array of 32 bytes and strings are only rendered for diagnostics.
@@ -110,8 +97,7 @@ public:
   /// @brief Construct a schema manager.
   /// @param livekit_methods LiveKit schema definition and retrieval operations.
   /// @param render_schema Optional renderer override for deterministic tests.
-  /// When unset, rosbag2 is used to render definitions from the local ament
-  /// index.
+  /// When unset, the build-selected renderer uses the local ament index.
   /// @param render_json_schema Optional JSON Schema renderer override for
   /// deterministic tests. When unset, ROS introspection is used to generate the
   /// schema from the local ament index.
@@ -141,15 +127,11 @@ public:
 
 private:
 #ifdef BUILD_TESTING
-  FRIEND_TEST(SchemaManagerTest, RenderRosMessageSchema);
   FRIEND_TEST(SchemaManagerTest, SchemaEncodingFromRosDefinition);
   FRIEND_TEST(SchemaManagerTest, SchemaDedupeKey);
   FRIEND_TEST(SchemaManagerTest, HashSchemaText);
   FRIEND_TEST(SchemaManagerTest, SchemaHashToHex);
 #endif
-
-  /// @brief Render a local ROS message definition and its dependencies.
-  static std::optional<RosMessageSchema> renderRosMessageSchema(const std::string& topic_type);
 
   /// @brief Generate a JSON Schema for a local ROS message type.
   static std::optional<std::string> renderJsonSchema(const std::string& topic_type);

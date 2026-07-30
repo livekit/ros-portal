@@ -94,7 +94,12 @@ struct ServiceCall::ServiceClient : public rclcpp::ClientBase {
 
   /// @brief Executor response hook; direct polling consumes responses here.
   /// @note This overrides the virtual implementation in ClientBase.
+#ifdef ROS_DISTRO_LYRICAL
+  void handle_response(const std::shared_ptr<rmw_request_id_t>& request_header,
+                       const std::shared_ptr<void>& response) override {
+#else
   void handle_response(std::shared_ptr<rmw_request_id_t> request_header, std::shared_ptr<void> response) override {
+#endif
     (void)request_header;
     (void)response;
   }

@@ -4,6 +4,13 @@
     "context": "..",
     "dockerfile": "../Dockerfile",
     "args": {
+      "BUILD_LIVEKIT_SDK_FROM_SOURCE": "${localEnv:BUILD_LIVEKIT_SDK_FROM_SOURCE:false}",
+      "INSTALL_CPP_TOOLS": "${localEnv:INSTALL_CPP_TOOLS:true}",
+      "INSTALL_SIMULATION_DEPS": "${localEnv:INSTALL_SIMULATION_DEPS:true}",
+      "ROS_DISTRO": "${localEnv:ROS_DISTRO:jazzy}",
+      "ROS_IMAGE_DIGEST": "${localEnv:ROS_IMAGE_DIGEST:31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f}",
+      "ROS_IMAGE_REPOSITORY": "${localEnv:ROS_IMAGE_REPOSITORY:ros}",
+      "ROS_IMAGE_TAG": "${localEnv:ROS_IMAGE_TAG:jazzy-ros-base-noble}",
       "WS_ROS": "livekit_ws"
     }
   },
@@ -25,7 +32,7 @@
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent"
   },
-  "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && mkdir -p src/externals && if [ -f external.repos ]; then vcs import --recursive --skip-existing src/externals < external.repos; fi && ./src/externals/cpp-tools/install.sh --repo-root \"$PWD\" --force && rosdep update && apt-get update && rosdep install --from-paths src/ros2_livekit_bridge src/ros2_livekit_bridge_config src/ros2_livekit_bridge_msgs src/externals/ros2_medkit/src/ros2_medkit_cmake src/externals/ros2_medkit/src/ros2_medkit_serialization --ignore-src -r -y --skip-keys ament_cmake_clang_tidy'",
+  "postCreateCommand": "bash -lc 'source \"/opt/ros/${ROS_DISTRO}/setup.bash\" && mkdir -p src/externals && if [ -f external.repos ]; then vcs import --recursive --skip-existing src/externals < external.repos; fi && ./scripts/apply-external-patches.sh && ./src/externals/cpp-tools/install.sh --repo-root \"$PWD\" && rosdep update --rosdistro \"${ROS_DISTRO}\" && apt-get update && rosdep install --from-paths src/ros2_livekit_bridge src/ros2_livekit_bridge_config src/ros2_livekit_bridge_msgs src/externals/ros2_medkit/src/ros2_medkit_cmake src/externals/ros2_medkit/src/ros2_medkit_serialization --ignore-src -r -y --rosdistro \"${ROS_DISTRO}\" --skip-keys ament_cmake_clang_tidy'",
   "postStartCommand": "bash -lc 'if [ -d src/externals ]; then for repo in src/externals/*; do if [ -d \"$repo/.git\" ]; then if [ -n \"$(git -C \"$repo\" status --porcelain)\" ]; then echo \"Skipping pull for $repo because it has local changes\"; elif ! git -C \"$repo\" symbolic-ref --quiet --short HEAD >/dev/null; then echo \"Skipping pull for $repo because it is detached HEAD\"; else git -C \"$repo\" pull --recurse-submodules; fi; fi; done; fi'",
   "customizations": {
     "vscode": {

@@ -32,7 +32,6 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
-  rcutils
   ros2_medkit_serialization
   rosbag2_cpp
   rosbag2_storage
@@ -44,63 +43,63 @@ ament_auto_find_build_dependencies(REQUIRED
   std_msgs
   yaml_cpp_vendor)
 
+# Use rosbag2's renderer where its header is available.
+find_file(LIVEKIT_ROSBAG2_MESSAGE_DEFINITIONS_HEADER
+  NAMES rosbag2_cpp/message_definitions/local_message_definition_source.hpp
+  PATHS ${rosbag2_cpp_INCLUDE_DIRS}
+  NO_DEFAULT_PATH)
+if(LIVEKIT_ROSBAG2_MESSAGE_DEFINITIONS_HEADER)
+  set(LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS 1)
+  message(STATUS "rosbag2 definitions   : yes (${LIVEKIT_ROSBAG2_MESSAGE_DEFINITIONS_HEADER})")
+else()
+  set(LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS 0)
+  message(STATUS "rosbag2 definitions   : no (using the bundled definition source)")
+endif()
+
+set(_ros_distro "$ENV{ROS_DISTRO}")
+if(_ros_distro)
+  string(TOUPPER "${_ros_distro}" _ros_distro_upper)
+  string(REGEX REPLACE "[^A-Z0-9_]" "_" _ros_distro_upper
+    "${_ros_distro_upper}")
+  add_compile_definitions("ROS_DISTRO_${_ros_distro_upper}=1")
+  message(STATUS "ROS distribution      : ${_ros_distro} (ROS_DISTRO_${_ros_distro_upper})")
+else()
+  message(WARNING
+    "ROS_DISTRO is not set; no ROS_DISTRO_<NAME> compatibility macro will be defined")
+endif()
+
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
 #
-# Use a local install prefix via LIVEKIT_LOCAL_SDK_DIR, or download a release
-# asset from GitHub. By default, a pinned SDK version is downloaded (see
-# LIVEKIT_SDK_VERSION below). The same pin is mirrored in this package's
-# colcon.pkg so that a bare `colcon build` is reproducible without the pin
-# leaking into other packages' CMake invocations.
+# Build the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE or
+# download a release asset from GitHub. The same version pin is mirrored in
+# this package's colcon.pkg.
 #
 # Examples:
 #   colcon build --packages-select ros2_livekit_bridge
 #
-#   export LIVEKIT_LOCAL_SDK_DIR=/path/to/livekit-sdk
-#   colcon build --packages-select ros2_livekit_bridge
+#   colcon build --packages-select ros2_livekit_bridge \
+#     --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
 #
 #   # Override the pin for a one-off build (or track upstream with "latest"):
 #   colcon build --packages-select ros2_livekit_bridge \
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
-# If you build the SDK locally for use here, build the SDK itself with
-# -DLIVEKIT_USE_SYSTEM_SPDLOG=ON. Do not pass that option to colcon; it only
-# affects the SDK build and avoids loading multiple spdlog/fmt copies.
 # ---------------------------------------------------------------------------
 set(LIVEKIT_SDK_VERSION "1.5.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
-set(LIVEKIT_SDK_DIR "$ENV{LIVEKIT_SDK_DIR}" CACHE PATH
-  "Deprecated alias for LIVEKIT_LOCAL_SDK_DIR. Path to a local LiveKit SDK install prefix.")
-set(LIVEKIT_LOCAL_SDK_DIR "$ENV{LIVEKIT_LOCAL_SDK_DIR}" CACHE PATH
-  "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}.")
-
-if(LIVEKIT_SDK_DIR AND NOT LIVEKIT_LOCAL_SDK_DIR)
-  message(STATUS
-    "LIVEKIT_SDK_DIR is deprecated; treating it as LIVEKIT_LOCAL_SDK_DIR")
-  set(LIVEKIT_LOCAL_SDK_DIR "${LIVEKIT_SDK_DIR}" CACHE PATH
-    "Path to a local LiveKit SDK install prefix (skips download). Defaults to \$ENV{LIVEKIT_LOCAL_SDK_DIR}."
-    FORCE)
-endif()
-
-if(LIVEKIT_LOCAL_SDK_DIR)
-  if(NOT EXISTS "${LIVEKIT_LOCAL_SDK_DIR}")
-    message(FATAL_ERROR
-      "LIVEKIT_LOCAL_SDK_DIR does not exist: ${LIVEKIT_LOCAL_SDK_DIR}")
-  endif()
-  message(STATUS "Using local LiveKit SDK: ${LIVEKIT_LOCAL_SDK_DIR}")
-  list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_LOCAL_SDK_DIR}")
-else()
-  include(LiveKitSDK)
-  livekit_sdk_setup(
-    VERSION "${LIVEKIT_SDK_VERSION}"
-    SDK_DIR "${CMAKE_BINARY_DIR}/_deps/livekit-sdk"
-    GITHUB_TOKEN "$ENV{GITHUB_TOKEN}"
-  )
-endif()
+include(ConfigureLiveKitSDK)
+livekit_configure_sdk(
+  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../externals/client-sdk-cpp"
+  BUILD_ROOT "${CMAKE_BINARY_DIR}/_deps"
+)
 
 find_package(LiveKit CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(yaml-cpp REQUIRED)
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+find_package(ros2_medkit_cmake REQUIRED)
+include(ROS2MedkitCompat)
+medkit_find_yaml_cpp()
 
 if(TARGET LiveKit::livekit)
   set(LIVEKIT_CORE_TARGET LiveKit::livekit)
@@ -116,54 +115,50 @@ set(LIVEKIT_RUNTIME_LIBRARY_DIR "$<TARGET_FILE_DIR:${LIVEKIT_CORE_TARGET}>")
 # Point a target's RPATH at the LiveKit SDK so its shared library is resolved at
 # both build and install time. Shared by the targets here and under test/.
 function(livekit_set_runtime_rpath target)
-  set_target_properties(${target} PROPERTIES
-    BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-    INSTALL_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}"
-  )
+  set_target_properties(${target} PROPERTIES BUILD_RPATH "${LIVEKIT_RUNTIME_LIBRARY_DIR}")
+  if(APPLE)
+    set_target_properties(${target} PROPERTIES INSTALL_RPATH "@loader_path;@loader_path/..")
+  elseif(UNIX)
+    set_target_properties(${target} PROPERTIES INSTALL_RPATH "$ORIGIN;$ORIGIN/..")
+  endif()
 endfunction()
 
-if(LIVEKIT_LOCAL_SDK_DIR)
-  if(CMAKE_BUILD_TYPE)
-    string(TOUPPER "${CMAKE_BUILD_TYPE}" _livekit_imported_config)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      "IMPORTED_LOCATION_${_livekit_imported_config}")
-  endif()
+if(CMAKE_BUILD_TYPE)
+  string(TOUPPER "${CMAKE_BUILD_TYPE}" _livekit_imported_config)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    "IMPORTED_LOCATION_${_livekit_imported_config}")
+endif()
 
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION_RELEASE)
-  endif()
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION_RELWITHDEBINFO)
-  endif()
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION_DEBUG)
-  endif()
-  if(NOT _livekit_imported_location)
-    get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
-      IMPORTED_LOCATION)
-  endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION_RELEASE)
+endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION_RELWITHDEBINFO)
+endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION_DEBUG)
+endif()
+if(NOT _livekit_imported_location)
+  get_target_property(_livekit_imported_location "${LIVEKIT_CORE_TARGET}"
+    IMPORTED_LOCATION)
+endif()
 
-  if(_livekit_imported_location)
-    if(APPLE AND NOT _livekit_imported_location MATCHES "\\.(dylib|a)$")
-      message(FATAL_ERROR
-        "LiveKit SDK at ${LIVEKIT_LOCAL_SDK_DIR} is not a macOS build.\n"
-        "Imported library: ${_livekit_imported_location}\n"
-        "Build or install a macOS SDK bundle for this workspace.")
-    elseif(UNIX AND NOT APPLE AND NOT _livekit_imported_location MATCHES "\\.(so([.].*)?|a)$")
-      message(FATAL_ERROR
-        "LiveKit SDK at ${LIVEKIT_LOCAL_SDK_DIR} is not a Linux build.\n"
-        "Imported library: ${_livekit_imported_location}\n"
-        "This usually means a macOS `.dylib` SDK install was mounted into a Linux container.\n"
-        "Build or install a Linux SDK bundle for this workspace, then rerun colcon.")
-    elseif(WIN32 AND NOT _livekit_imported_location MATCHES "\\.(dll|lib)$")
-      message(FATAL_ERROR
-        "LiveKit SDK at ${LIVEKIT_LOCAL_SDK_DIR} is not a Windows build.\n"
-        "Imported library: ${_livekit_imported_location}\n"
-        "Build or install a Windows SDK bundle for this workspace.")
-    endif()
+if(_livekit_imported_location)
+  if(APPLE AND NOT _livekit_imported_location MATCHES "\\.(dylib|a)$")
+    message(FATAL_ERROR
+      "LiveKit SDK at ${LIVEKIT_SDK_INSTALL_ROOT} is not a macOS build.\n"
+      "Imported library: ${_livekit_imported_location}")
+  elseif(UNIX AND NOT APPLE AND NOT _livekit_imported_location MATCHES "\\.(so([.].*)?|a)$")
+    message(FATAL_ERROR
+      "LiveKit SDK at ${LIVEKIT_SDK_INSTALL_ROOT} is not a Linux build.\n"
+      "Imported library: ${_livekit_imported_location}")
+  elseif(WIN32 AND NOT _livekit_imported_location MATCHES "\\.(dll|lib)$")
+    message(FATAL_ERROR
+      "LiveKit SDK at ${LIVEKIT_SDK_INSTALL_ROOT} is not a Windows build.\n"
+      "Imported library: ${_livekit_imported_location}")
   endif()
 endif()
 
@@ -187,7 +182,7 @@ else()
 endif()
 
 message(STATUS "LiveKit core target   : ${LIVEKIT_CORE_TARGET}")
-message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_LOCAL_SDK_DIR}")
+message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_SDK_INSTALL_ROOT}")
 
 # ---------------------------------------------------------------------------
 # Introspection library
@@ -200,7 +195,7 @@ target_link_libraries(introspection_lib
   nlohmann_json::nlohmann_json
   yaml-cpp::yaml-cpp
 )
-ament_target_dependencies(introspection_lib
+medkit_target_dependencies(introspection_lib
   ros2_medkit_serialization
 )
 
@@ -232,7 +227,8 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
   src/ros2_livekit_bridge.cpp
-  src/schema_manager.cpp
+  src/schema/manager.cpp
+  src/schema/renderer.cpp
   src/service_forwarder.cpp
   src/topic_forwarder.cpp
   src/utils/base64.cpp
@@ -241,11 +237,15 @@ ament_auto_add_library(ros2_livekit_bridge_lib SHARED
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
 )
+target_compile_definitions(ros2_livekit_bridge_lib PRIVATE
+  LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}
+)
 target_link_libraries(ros2_livekit_bridge_lib
   introspection_lib
   ros2_cli_lib
   "${LIVEKIT_CORE_TARGET}"
   nlohmann_json::nlohmann_json
+  OpenSSL::Crypto
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros2_livekit_bridge_lib)
@@ -260,6 +260,20 @@ target_link_libraries(ros2_livekit_bridge_node
   ros2_livekit_bridge_lib
 )
 livekit_set_runtime_rpath(ros2_livekit_bridge_node)
+
+if(APPLE)
+  install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"
+    DESTINATION lib
+    FILES_MATCHING PATTERN "*.dylib")
+elseif(UNIX)
+  install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"
+    DESTINATION lib
+    FILES_MATCHING PATTERN "*.so" PATTERN "*.so.*")
+elseif(WIN32)
+  install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/bin/"
+    DESTINATION bin
+    FILES_MATCHING PATTERN "*.dll")
+endif()
 
 if(BUILD_TESTING)
   target_compile_definitions(ros2_cli_lib PRIVATE BUILD_TESTING=1)

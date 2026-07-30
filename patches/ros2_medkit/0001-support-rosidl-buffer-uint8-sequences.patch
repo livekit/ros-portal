@@ -1,0 +1,55 @@
+diff --git a/src/ros2_medkit_serialization/src/vendored/dynmsg/message_reading_cpp.cpp b/src/ros2_medkit_serialization/src/vendored/dynmsg/message_reading_cpp.cpp
+index 16a3cd1c..c838f6b9 100644
+--- a/src/ros2_medkit_serialization/src/vendored/dynmsg/message_reading_cpp.cpp
++++ b/src/ros2_medkit_serialization/src/vendored/dynmsg/message_reading_cpp.cpp
+@@ -456,10 +456,14 @@ dynamic_array_to_yaml(
+         array_node);
+       break;
+     case rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8:
+-      dynamic_array_to_yaml_impl(
+-        member_info,
+-        reinterpret_cast<const std::vector<uint8_t> *>(member_data),
+-        array_node);
++      for (size_t ii = 0; ii < member_info.size_function(member_data); ++ii) {
++        uint8_t value;
++        member_info.fetch_function(member_data, ii, &value);
++        member_to_yaml_array_item(
++          member_info,
++          reinterpret_cast<const uint8_t *>(&value),
++          array_node);
++      }
+       break;
+     case rosidl_typesupport_introspection_cpp::ROS_TYPE_INT8:
+       dynamic_array_to_yaml_impl(
+diff --git a/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cpp b/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cpp
+index 0aa4d0a3..87030858 100644
+--- a/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cpp
++++ b/src/ros2_medkit_serialization/src/vendored/dynmsg/msg_parser_cpp.cpp
+@@ -394,3 +394,27 @@ void write_member_sequence<rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOL>(
++// uint8 sequences may use rosidl::Buffer instead of std::vector. Use the
++// introspection callbacks so this works with either container.
++template<>
++void write_member_sequence<rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8>(
++  const YAML::Node & yaml,
++  uint8_t * buffer,
++  const MemberInfo_Cpp & member)
++{
++  DYNMSG_DEBUG(std::cout << "DEBUG: write_member_sequence<uint8>: " << std::flush);
++  DYNMSG_DEBUG(std::cout << yaml.size() << ":" << yaml << std::endl);
++  if (member.is_upper_bound_ && yaml.size() > member.array_size_) {
++    throw std::runtime_error("yaml sequence is more than capacity");
++  }
++  member.resize_function(buffer, yaml.size());
++  for (size_t i = 0; i < yaml.size(); i++) {  // NOLINT(modernize-loop-convert)
++#ifdef DYNMSG_YAML_CPP_BAD_INT8_HANDLING
++    const auto value = static_cast<uint8_t>(std::stoul(yaml[i].as<std::string>()));
++#else
++    const auto value = yaml[i].as<uint8_t>();
++#endif
++    member.assign_function(buffer, i, &value);
++  }
++}
++
+ // Check if a field is a sequence of some kind
+ bool is_sequence(const MemberInfo_Cpp & member)
+ {

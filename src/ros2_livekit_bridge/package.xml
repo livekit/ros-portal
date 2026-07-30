@@ -23,6 +23,7 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ros2_medkit_cmake</buildtool_depend>
 
   <depend>ament_index_cpp</depend>
   <depend>diagnostic_msgs</depend>
@@ -30,7 +31,6 @@
   <depend>geometry_msgs</depend>
   <depend>nlohmann-json-dev</depend>
   <depend>rclcpp</depend>
-  <depend>rcutils</depend>
   <depend>ros2_medkit_serialization</depend>
   <depend>rosbag2_cpp</depend>
   <depend>rosbag2_storage</depend>
@@ -41,6 +41,12 @@
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>yaml_cpp_vendor</depend>
+
+  <build_depend>libssl-dev</build_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>

@@ -823,8 +823,9 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
           return rpcPerform(id, method, payload, timeout_sec);
         },
     };
-    service_forwarder_ = std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this,
-                                                            reentrant_callback_group_, livekit_methods);
+    service_forwarder_ =
+        std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this, reentrant_callback_group_,
+                                           livekit_methods, makeDiagnosticsFns());
     diagnostic_state_.service_forwarder_active.store(service_forwarder_ != nullptr, std::memory_order_relaxed);
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());

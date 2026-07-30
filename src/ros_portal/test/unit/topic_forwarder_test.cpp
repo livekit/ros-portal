@@ -752,4 +752,100 @@ TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
   EXPECT_EQ(push_count->load(), kSamples);
 }
 
+TEST_F(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures) {
+  auto push_count = std::make_shared<std::atomic<int>>(0);
+  auto remaining_failures = std::make_shared<std::atomic<int>>(1);
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_,
+                           makeFlakyLiveKitMethods(push_count, remaining_failures), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  diagnostic_updater::DiagnosticStatusWrapper pending_status;
+  forwarder.populateStatus(pending_status);
+  EXPECT_EQ(pending_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(pending_status, "outbound.data_topics"), "1");
+  EXPECT_EQ(valueFor(pending_status, "outbound.image_topics"), "0");
+  EXPECT_EQ(valueFor(pending_status, "outbound.subscriptions"), "1");
+  EXPECT_EQ(valueFor(pending_status, "outbound.data_tracks_pending_writer"), "1");
+  EXPECT_EQ(valueFor(pending_status, "outbound.image_tracks_pending_sink"), "0");
+
+  std_msgs::msg::String msg;
+  msg.data = "dropped by writer";
+  publisher->publish(msg);
+  ASSERT_TRUE(spinUntil([&]() { return remaining_failures->load() <= 0; }));
+
+  diagnostic_updater::DiagnosticStatusWrapper failed_status;
+  forwarder.populateStatus(failed_status);
+  EXPECT_EQ(failed_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(failed_status, "outbound.data_tracks_pending_writer"), "0");
+  EXPECT_EQ(valueFor(failed_status, "outbound.push_failures"), "1");
+  EXPECT_EQ(valueFor(failed_status, "outbound.json_conversion_failures"), "0");
+  EXPECT_EQ(valueFor(failed_status, "outbound.subscription_create_failures"), "0");
+}
+
+TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) {
+  auto options = makeOptions();
+  options.preserve_id_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/remote/name"});
+  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  TopicForwarder::RemoteDataTrackDescriptor not_allowed;
+  not_allowed.sid = "not-allowed";
+  not_allowed.track_name = "/blocked/topic";
+  not_allowed.publisher_identity = "remote_robot";
+  forwarder.onDataTrackPublished(std::move(not_allowed));
+
+  TopicForwarder::RemoteDataTrackDescriptor no_type;
+  no_type.sid = "no-type";
+  no_type.track_name = "/remote/no_type";
+  no_type.publisher_identity = "remote_robot";
+  forwarder.onDataTrackPublished(std::move(no_type));
+
+  TopicForwarder::RemoteDataTrackDescriptor bad_name;
+  bad_name.sid = "bad-name";
+  bad_name.track_name = "/remote/name";
+  bad_name.schema = livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::JsonSchema};
+  bad_name.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  forwarder.onDataTrackPublished(std::move(bad_name));
+
+  TopicForwarder::RemoteDataTrackDescriptor stopped_reader;
+  stopped_reader.sid = "stopped-reader";
+  stopped_reader.track_name = "/remote/stopped";
+  stopped_reader.publisher_identity = "remote_robot";
+  stopped_reader.schema =
+      livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::JsonSchema};
+  stopped_reader.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  stopped_reader.subscribe =
+      []() -> livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>, std::string> {
+    auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
+    stream->read = [](livekit::DataTrackFrame&) { return false; };
+    stream->close = []() {};
+    stream->terminal_error = []() { return std::optional<std::string>{"reader stopped"}; };
+    return livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>, std::string>::success(
+        std::move(stream));
+  };
+  forwarder.onDataTrackPublished(std::move(stopped_reader));
+
+  const auto reader_stopped = [&]() {
+    return forwarder.diagnostic_state_.inbound_terminal_errors.load(std::memory_order_relaxed) == 1U;
+  };
+  ASSERT_TRUE(spinUntil(reader_stopped));
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(status, "inbound.active_tracks"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.reader_threads_alive"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.tracks_rejected_no_type"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.tracks_rejected_not_allowed"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.tracks_rejected_name_resolution_failed"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.publish_failures"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.json_decode_failures"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.empty_payload_drops"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.terminal_errors"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.last_terminal_error"), "reader stopped");
+}
+
 } // namespace ros_portal

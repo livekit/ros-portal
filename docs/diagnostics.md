@@ -2,12 +2,13 @@
 
 `ros_portal` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. ROS Portal currently exposes five diagnostic tasks:
+stack. ROS Portal currently exposes six diagnostic tasks:
 
 - `build_info` — always published
 - `ros_portal_status` — always published
 - `connection_health` — published after configuration loads
 - `topic_forwarder` — published when topic forwarding is configured
+- `service_forwarder` — published when service forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
 
 ROS Portal publishes raw `diagnostic_msgs/msg/DiagnosticArray` messages. Grouped
@@ -188,28 +189,89 @@ rtc.data_channels.total=1
 
 ## `topic_forwarder`
 
-Reports whether inbound DataTrack schemas match the ROS topic types ROS Portal
-expects.
+Reports topic inventory, lazy LiveKit writer/sink availability, inbound reader
+liveness, and cumulative forwarding failures.
 
 | Property | Value |
 |---|---|
 | Task name | `topic_forwarder` |
 | Topic | `/diagnostics` |
 | Hardware ID | `ros_portal` |
-| Source | Inbound DataTrack schema validation in `TopicForwarder` |
+| Source | Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack readers, and forwarding outcomes |
 
 ### Status Levels
 
 | Level | Message | Meaning |
 |---|---|---|
-| `OK` | `Inbound schemas valid` | No inbound schema mismatches have been observed. |
-| `WARN` | `Inbound schema validation failures detected` | At least one inbound DataTrack schema did not match the expected ROS type. |
+| `OK` | `Topic forwarding healthy` | All currently tracked forwarding paths are available and no failures have been observed. |
+| `WARN` | `Topic forwarding failures or drops detected` | At least one cumulative forwarding failure, rejection, or drop counter is nonzero. |
+| `ERROR` | `One or more forwarding paths are unavailable` | An outbound data track is pending its writer, or an active inbound track's reader thread has stopped. |
 
 ### Key/Value Fields
 
 | Key | Value |
 |---|---|
+| `outbound.data_topics` | Number of discovered outbound data topics. |
+| `outbound.image_topics` | Number of discovered outbound image topics. |
+| `outbound.subscriptions` | Number of active outbound ROS subscriptions. |
+| `outbound.data_tracks_pending_writer` | Data topics whose lazy LiveKit writer is unavailable. |
+| `outbound.image_tracks_pending_sink` | Image topics whose lazy LiveKit video sink is unavailable. |
+| `outbound.push_failures` | Cumulative LiveKit data-frame push failures. |
+| `outbound.json_conversion_failures` | Cumulative outbound ROS-to-JSON conversion failures. |
+| `outbound.subscription_create_failures` | Cumulative ROS subscription creation failures. |
+| `inbound.active_tracks` | Number of inbound LiveKit data tracks being republished. |
+| `inbound.reader_threads_alive` | Number of active inbound track reader threads still running. |
+| `inbound.tracks_rejected_no_type` | Cumulative inbound tracks rejected because no ROS type could be resolved. |
+| `inbound.tracks_rejected_not_allowed` | Cumulative inbound tracks rejected by topic patterns. |
+| `inbound.tracks_rejected_name_resolution_failed` | Cumulative inbound tracks rejected because a ROS topic name could not be produced. |
+| `inbound.publish_failures` | Cumulative failures publishing inbound frames on ROS. |
+| `inbound.json_decode_failures` | Cumulative invalid inbound JSON frames. |
+| `inbound.empty_payload_drops` | Cumulative empty inbound CDR payloads. |
+| `inbound.terminal_errors` | Cumulative inbound streams that ended with a terminal error. |
+| `inbound.last_terminal_error` | Most recent terminal error text, or `none`. |
 | `inbound_schemas_incorrect` | Cumulative count of inbound schema validation failures. |
+
+## `service_forwarder`
+
+Reports configured route availability and cumulative local-to-remote service
+forwarding outcomes.
+
+| Property | Value |
+|---|---|
+| Task name | `service_forwarder` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | Configured routes, runtime type support, LiveKit RPC outcomes, and local ROS response handling |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `Service forwarding healthy` | Every configured route was created and no request failure has been observed. |
+| `WARN` | `Service forwarding failures detected` | A request failed, a handler threw, or a local response send timed out. |
+| `ERROR` | `One or more configured service routes are unavailable` | The number of created services does not match the configured route count. |
+
+### Key/Value Fields
+
+| Key | Value |
+|---|---|
+| `routes_configured` | Number of configured outgoing service routes. |
+| `services_created` | Number of local forwarded ROS services successfully created. |
+| `routes_skipped_invalid_config` | Routes skipped because service, type, or participant was empty. |
+| `routes_skipped_no_type_support` | Routes skipped because runtime service type support could not be loaded. |
+| `requests_forwarded` | Cumulative local requests handled by the forwarder. |
+| `requests_succeeded` | Cumulative requests whose remote response populated the local response. |
+| `requests_failed` | Cumulative forwarding failures, including handler exceptions. |
+| `failures.participant_not_found` | Requests whose target LiveKit participant was absent. |
+| `failures.rpc_transport` | Requests whose LiveKit RPC failed. |
+| `failures.malformed_response` | Requests whose RPC response was malformed. |
+| `failures.remote_error` | Requests for which the remote service returned an error. |
+| `failures.request_serialization` | Requests that could not be serialized for RPC. |
+| `failures.response_deserialization` | Remote responses that could not populate the local ROS response. |
+| `handler_exceptions` | Exceptions caught while handling forwarded requests. |
+| `response_send_timeouts` | Timeouts sending a response to the local ROS client. |
+| `last_failure_service` | Service name for the most recent failure, or `none`. |
+| `last_failure_reason` | Stable category for the most recent failure, or `none`. |
 
 ## `cli_manager`
 
@@ -264,7 +326,8 @@ message with:
 
 Look for `build_info`, `ros_portal_status`, and, after configuration loads,
 `connection_health`. When those subsystems are enabled, look for
-`topic_forwarder` and `cli_manager` statuses. When the room is connected,
+`topic_forwarder`, `service_forwarder`, and `cli_manager` statuses. When the room
+is connected,
 `connection_health` should also contain the fixed `rtc.*` summary fields.
 
 ## Aggregating Diagnostics
@@ -325,6 +388,10 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Topic Forwarder
       contains: ['topic_forwarder']
+    service_forwarder:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Service Forwarder
+      contains: ['service_forwarder']
     cli_manager:
       type: diagnostic_aggregator/GenericAnalyzer
       path: CLI Manager

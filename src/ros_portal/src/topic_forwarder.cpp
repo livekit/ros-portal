@@ -42,6 +42,18 @@ namespace ros_portal {
 
 namespace {
 constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
+
+class ReaderAliveGuard {
+public:
+  explicit ReaderAliveGuard(std::atomic_bool& alive) : alive_(alive) { alive_.store(true, std::memory_order_relaxed); }
+  ~ReaderAliveGuard() { alive_.store(false, std::memory_order_relaxed); }
+
+  ReaderAliveGuard(const ReaderAliveGuard&) = delete;
+  ReaderAliveGuard& operator=(const ReaderAliveGuard&) = delete;
+
+private:
+  std::atomic_bool& alive_;
+};
 } // namespace
 
 TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackDescriptor(
@@ -275,6 +287,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       std::string error;
       const auto json = introspection::jsonFromSerializedMessage(topic_type, *msg, error);
       if (!json) {
+        diagnostic_state_.outbound_json_conversion_failures.fetch_add(1, std::memory_order_relaxed);
         RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Dropping frame for '%s'; JSON conversion failed: %s",
                              topic_name.c_str(), error.c_str());
         return;
@@ -285,6 +298,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     }
 
     if (!push_result) {
+      diagnostic_state_.outbound_push_failures.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Failed to push data frame for '%s': %s", topic_name.c_str(),
                            push_result.error().c_str());
     }
@@ -316,11 +330,13 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);
+    diagnostic_state_.outbound_subscription_create_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Failed to create generic subscription for '%s' [%s]: %s", topic_name.c_str(),
                  topic_type.c_str(), e.what());
     return;
   } catch (...) {
     data_topic_states_.erase(topic_name);
+    diagnostic_state_.outbound_subscription_create_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Unknown exception creating generic subscription for '%s' [%s]", topic_name.c_str(),
                  topic_type.c_str());
     return;
@@ -475,6 +491,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     return;
   } catch (...) {
     image_topic_states_.erase(topic_name);
+    diagnostic_state_.outbound_subscription_create_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Unknown exception creating image subscription for '%s' [%s]", topic_name.c_str(),
                  kImageMsgType);
     return;
@@ -506,6 +523,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
   }
 
   if (!isIncomingTopicAllowed(*normalized_track_name)) {
+    diagnostic_state_.inbound_tracks_rejected_not_allowed.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_DEBUG(logger_,
                  "Ignoring LiveKit data track '%s' from '%s' because it does not match "
                  "any incoming topic patterns",
@@ -515,6 +533,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
 
   const auto topic_type = resolveInboundRosTopicType(descriptor.track_name, descriptor.schema);
   if (!topic_type) {
+    diagnostic_state_.inbound_tracks_rejected_no_type.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_WARN(logger_,
                 "Ignoring LiveKit data track '%s' from '%s' because neither its schema "
                 "nor the ROS graph resolved its ROS message type",
@@ -529,7 +548,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
           descriptor.schema,
           descriptor.frame_encoding,
       })) {
-    inbound_schemas_incorrect_.fetch_add(1, std::memory_order_relaxed);
+    diagnostic_state_.inbound_schemas_incorrect.fetch_add(1, std::memory_order_relaxed);
     // Return to prevent creating a publisher for the track due to invalid schema
     return;
   }
@@ -539,6 +558,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
                                   ? utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name)
                                   : utils::liveKitToRosTopicName(descriptor.track_name);
   if (!ros_topic_name) {
+    diagnostic_state_.inbound_tracks_rejected_name_resolution_failed.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_WARN(logger_,
                 "Ignoring LiveKit data track '%s' from '%s' because ROS topic name "
                 "resolution failed",
@@ -811,7 +831,8 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
   return qos;
 }
 
-void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state) {
+void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state) {
+  const ReaderAliveGuard reader_alive(state->reader_thread_alive);
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
     if (!livekit_methods_.is_room_available()) {
@@ -824,6 +845,7 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
       serialized_msg = introspection::serializedMessageFromJson(
           state->ros_topic_type, std::string(frame.payload.begin(), frame.payload.end()), error);
       if (!serialized_msg) {
+        diagnostic_state_.inbound_json_decode_failures.fetch_add(1, std::memory_order_relaxed);
         RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
                              "Dropping invalid JSON frame from LiveKit data track '%s' from '%s': %s",
                              state->track_name.c_str(), state->publisher_identity.c_str(), error.c_str());
@@ -835,6 +857,7 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
       if (!frame.payload.empty()) {
         std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
       } else {
+        diagnostic_state_.inbound_empty_payload_drops.fetch_add(1, std::memory_order_relaxed);
         RCLCPP_WARN(logger_, "Received empty payload from LiveKit data track '%s' from '%s'", state->track_name.c_str(),
                     state->publisher_identity.c_str());
         return;
@@ -845,6 +868,7 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
     try {
       state->publisher->publish(*serialized_msg);
     } catch (const std::exception& e) {
+      diagnostic_state_.inbound_publish_failures.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_WARN(logger_,
                   "Failed to publish inbound LiveKit data frame from '%s' "
                   "track '%s' to "
@@ -857,6 +881,11 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
   if (state->stream && state->stream->terminal_error) {
     const auto terminal_error = state->stream->terminal_error();
     if (terminal_error) {
+      {
+        const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+        diagnostic_state_.inbound_last_terminal_error = *terminal_error;
+      }
+      diagnostic_state_.inbound_terminal_errors.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_WARN(logger_, "LiveKit data track '%s' from '%s' ended with error: %s", state->track_name.c_str(),
                   state->publisher_identity.c_str(), terminal_error->c_str());
     }
@@ -879,12 +908,90 @@ void TopicForwarder::stopAllInboundDataTracks() {
 }
 
 void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
-  const auto inbound_schemas_incorrect = inbound_schemas_incorrect_.load(std::memory_order_relaxed);
-  if (inbound_schemas_incorrect > 0U) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Inbound schema validation failures detected");
-  } else {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Inbound schemas valid");
+  const auto inbound_schemas_incorrect = diagnostic_state_.inbound_schemas_incorrect.load(std::memory_order_relaxed);
+  const auto outbound_push_failures = diagnostic_state_.outbound_push_failures.load(std::memory_order_relaxed);
+  const auto outbound_json_conversion_failures =
+      diagnostic_state_.outbound_json_conversion_failures.load(std::memory_order_relaxed);
+  const auto outbound_subscription_create_failures =
+      diagnostic_state_.outbound_subscription_create_failures.load(std::memory_order_relaxed);
+  const auto inbound_tracks_rejected_no_type =
+      diagnostic_state_.inbound_tracks_rejected_no_type.load(std::memory_order_relaxed);
+  const auto inbound_tracks_rejected_not_allowed =
+      diagnostic_state_.inbound_tracks_rejected_not_allowed.load(std::memory_order_relaxed);
+  const auto inbound_tracks_rejected_name_resolution_failed =
+      diagnostic_state_.inbound_tracks_rejected_name_resolution_failed.load(std::memory_order_relaxed);
+  const auto inbound_publish_failures = diagnostic_state_.inbound_publish_failures.load(std::memory_order_relaxed);
+  const auto inbound_json_decode_failures =
+      diagnostic_state_.inbound_json_decode_failures.load(std::memory_order_relaxed);
+  const auto inbound_empty_payload_drops =
+      diagnostic_state_.inbound_empty_payload_drops.load(std::memory_order_relaxed);
+  const auto inbound_terminal_errors = diagnostic_state_.inbound_terminal_errors.load(std::memory_order_relaxed);
+
+  std::size_t outbound_data_topics = 0U;
+  std::size_t outbound_image_topics = 0U;
+  std::size_t outbound_subscriptions = 0U;
+  std::size_t outbound_data_tracks_pending_writer = 0U;
+  std::size_t outbound_image_tracks_pending_sink = 0U;
+  {
+    const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    outbound_data_topics = data_topic_states_.size();
+    outbound_image_topics = image_topic_states_.size();
+    outbound_subscriptions = subscriptions_.size();
+    outbound_data_tracks_pending_writer =
+        static_cast<std::size_t>(std::count_if(data_topic_states_.begin(), data_topic_states_.end(),
+                                               [](const auto& entry) { return entry.second.writer == nullptr; }));
+    outbound_image_tracks_pending_sink =
+        static_cast<std::size_t>(std::count_if(image_topic_states_.begin(), image_topic_states_.end(),
+                                               [](const auto& entry) { return entry.second.sink == nullptr; }));
   }
+
+  std::size_t inbound_active_tracks = 0U;
+  std::size_t inbound_reader_threads_alive = 0U;
+  std::string inbound_last_terminal_error;
+  {
+    const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+    inbound_active_tracks = inbound_data_track_states_.size();
+    inbound_reader_threads_alive = static_cast<std::size_t>(std::count_if(
+        inbound_data_track_states_.begin(), inbound_data_track_states_.end(),
+        [](const auto& entry) { return entry.second->reader_thread_alive.load(std::memory_order_relaxed); }));
+    inbound_last_terminal_error = diagnostic_state_.inbound_last_terminal_error;
+  }
+
+  const bool forwarding_unavailable =
+      outbound_data_tracks_pending_writer > 0U || inbound_reader_threads_alive < inbound_active_tracks;
+  const bool failures_detected = inbound_schemas_incorrect > 0U || outbound_push_failures > 0U ||
+                                 outbound_json_conversion_failures > 0U || outbound_subscription_create_failures > 0U ||
+                                 inbound_tracks_rejected_no_type > 0U || inbound_tracks_rejected_not_allowed > 0U ||
+                                 inbound_tracks_rejected_name_resolution_failed > 0U || inbound_publish_failures > 0U ||
+                                 inbound_json_decode_failures > 0U || inbound_empty_payload_drops > 0U ||
+                                 inbound_terminal_errors > 0U;
+
+  if (forwarding_unavailable) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "One or more forwarding paths are unavailable");
+  } else if (failures_detected) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Topic forwarding failures or drops detected");
+  } else {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Topic forwarding healthy");
+  }
+
+  status.add("outbound.data_topics", outbound_data_topics);
+  status.add("outbound.image_topics", outbound_image_topics);
+  status.add("outbound.subscriptions", outbound_subscriptions);
+  status.add("outbound.data_tracks_pending_writer", outbound_data_tracks_pending_writer);
+  status.add("outbound.image_tracks_pending_sink", outbound_image_tracks_pending_sink);
+  status.add("outbound.push_failures", outbound_push_failures);
+  status.add("outbound.json_conversion_failures", outbound_json_conversion_failures);
+  status.add("outbound.subscription_create_failures", outbound_subscription_create_failures);
+  status.add("inbound.active_tracks", inbound_active_tracks);
+  status.add("inbound.reader_threads_alive", inbound_reader_threads_alive);
+  status.add("inbound.tracks_rejected_no_type", inbound_tracks_rejected_no_type);
+  status.add("inbound.tracks_rejected_not_allowed", inbound_tracks_rejected_not_allowed);
+  status.add("inbound.tracks_rejected_name_resolution_failed", inbound_tracks_rejected_name_resolution_failed);
+  status.add("inbound.publish_failures", inbound_publish_failures);
+  status.add("inbound.json_decode_failures", inbound_json_decode_failures);
+  status.add("inbound.empty_payload_drops", inbound_empty_payload_drops);
+  status.add("inbound.terminal_errors", inbound_terminal_errors);
+  status.add("inbound.last_terminal_error", inbound_last_terminal_error.empty() ? "none" : inbound_last_terminal_error);
   status.add("inbound_schemas_incorrect", inbound_schemas_incorrect);
 }
 

@@ -196,6 +196,8 @@ private:
   FRIEND_TEST(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNull);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure);
   FRIEND_TEST(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho);
+  FRIEND_TEST(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures);
+  FRIEND_TEST(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
@@ -315,6 +317,37 @@ private:
     std::thread thread;
     /// @brief Set to stop the inbound read loop during teardown.
     std::atomic_bool stop{false};
+    /// @brief True while the background reader thread is executing.
+    std::atomic_bool reader_thread_alive{false};
+  };
+
+  /// @brief Mutable counters and metadata published by the diagnostic task.
+  struct DiagnosticState {
+    /// @brief Count of inbound LiveKit tracks rejected due to invalid schemas.
+    std::atomic<std::uint64_t> inbound_schemas_incorrect{0};
+    /// @brief Count of outbound data frames rejected by the LiveKit writer.
+    std::atomic<std::uint64_t> outbound_push_failures{0};
+    /// @brief Count of outbound ROS messages that could not be converted to JSON.
+    std::atomic<std::uint64_t> outbound_json_conversion_failures{0};
+    /// @brief Count of outbound ROS subscriptions that could not be created.
+    std::atomic<std::uint64_t> outbound_subscription_create_failures{0};
+    /// @brief Count of inbound tracks rejected because no ROS type was available.
+    std::atomic<std::uint64_t> inbound_tracks_rejected_no_type{0};
+    /// @brief Count of inbound tracks rejected by the configured allowlist.
+    std::atomic<std::uint64_t> inbound_tracks_rejected_not_allowed{0};
+    /// @brief Count of inbound tracks whose ROS topic name could not be resolved.
+    std::atomic<std::uint64_t> inbound_tracks_rejected_name_resolution_failed{0};
+    /// @brief Count of inbound frames that failed ROS publication.
+    std::atomic<std::uint64_t> inbound_publish_failures{0};
+    /// @brief Count of inbound JSON frames that could not be decoded.
+    std::atomic<std::uint64_t> inbound_json_decode_failures{0};
+    /// @brief Count of inbound empty CDR payloads dropped.
+    std::atomic<std::uint64_t> inbound_empty_payload_drops{0};
+    /// @brief Count of inbound streams that reported terminal errors.
+    std::atomic<std::uint64_t> inbound_terminal_errors{0};
+    /// @brief Most recent inbound stream terminal error. Protected by
+    /// @ref inbound_data_track_states_mutex_.
+    std::string inbound_last_terminal_error;
   };
 
   /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,
@@ -363,8 +396,10 @@ private:
   std::mutex inbound_data_track_states_mutex_;
   /// @brief Active inbound LiveKit data tracks keyed by track SID.
   std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>> inbound_data_track_states_;
-  /// @brief Count of inbound LiveKit tracks rejected due to invalid schemas.
-  std::atomic<std::uint64_t> inbound_schemas_incorrect_{0};
+  /// @brief ROS topic names reserved by inbound LiveKit data tracks.
+  std::unordered_set<std::string> inbound_ros_topic_names_;
+  /// @brief Mutable state owned exclusively for diagnostics reporting.
+  DiagnosticState diagnostic_state_;
 };
 
 } // namespace ros_portal

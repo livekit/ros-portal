@@ -72,4 +72,6 @@ prerequisites are missing. Project-specific commands are documented in
 - Keep documentation clean, concise, and practical. Explain the supported path,
   key configuration, and verification steps without duplicating implementation
   details.
-- If new configuration fields are added, update the documentation in `docs/configuration.md`.
+- If configuration fields are added, updated, or removed, .
+- If configuration fields are added, updated, or removed, update the documentation in `docs/configuration.md`. If reviewing work,add a task to update the corresponding sections of the external web/ repo documentation.
+- If diagnostics fields are added, updated, or removed, update the documentation in `docs/diagnostics.md`. If reviewing work, add a task to update the corresponding sections of the external web/ repo documentation.

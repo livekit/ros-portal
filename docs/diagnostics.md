@@ -1,7 +1,8 @@
 # Diagnostics
 
 `ros2_livekit_bridge` publishes ROS diagnostics on `/diagnostics` using
-`diagnostic_updater`. The bridge currently exposes one diagnostic task:
+`diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
+stack. The bridge currently exposes one diagnostic task:
 `connection_health`.
 
 The bridge publishes raw `diagnostic_msgs/msg/DiagnosticArray` messages. Grouped
@@ -106,7 +107,7 @@ rtc.data_channels.total=1
 After launching the bridge with valid LiveKit credentials, inspect one diagnostic
 message with:
 
-    ros2 topic echo /diagnostics --once
+    ros2 topic echo /diagnostics
 
 Look for a `connection_health` status containing the base fields above. When the
 room is connected, the status should also contain the fixed `rtc.*` summary
@@ -116,7 +117,8 @@ fields.
 
 The bridge publishes raw diagnostics only. To expose grouped health on
 `/diagnostics_agg` and `/diagnostics_toplevel_state`, run the standard ROS
-`diagnostic_aggregator` node alongside the bridge.
+[`diagnostic_aggregator`](https://github.com/ros/diagnostics) node alongside
+the bridge.
 
 ### Required Dependencies
 

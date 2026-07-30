@@ -47,6 +47,8 @@ ros2 launch ros_portal ros_portal.launch.py
 
 To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutorials.md).
 
+To run in a container without an IDE, see [Running the container without an IDE](docs/development.md#running-the-container-without-an-ide).
+
 ## User Guides
 
 - [Installing Debian packages](docs/installation.md): supported ROS and Ubuntu

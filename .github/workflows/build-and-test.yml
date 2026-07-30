@@ -246,7 +246,9 @@ jobs:
               exec ./scripts/package-deb.sh
             '
 
-      - name: Smoke-test clean installation
+      # Use a clean ROS base image so workspace artifacts and dev dependencies
+      # cannot hide missing package dependencies or installation errors.
+      - name: Smoke-test Debian in ROS Image
         shell: bash
         run: |
           set -euo pipefail

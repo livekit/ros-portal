@@ -172,6 +172,9 @@ public:
   /// Mark ROS Portal disconnected and clear cached RTC summary.
   void markDisconnected();
 
+  /// Mark ROS Portal reconnecting, increment the reconnect count, and refresh peers.
+  void markReconnecting(livekit::Room& room);
+
   /// Update the diagnostic updater and poll LiveKit stats when appropriate.
   ///
   /// This method is intended to be called periodically from the ROS executor. It
@@ -209,9 +212,6 @@ public:
 private:
   /// Populate one updater status from the current state snapshot.
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
-
-  /// Mark reconnecting, increment reconnect count, and clear cached RTC summary.
-  void markReconnecting(livekit::Room& room);
 
   /// Store the current remote participant count from the LiveKit room.
   void updatePeerCount(livekit::Room& room);

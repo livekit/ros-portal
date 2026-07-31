@@ -232,6 +232,14 @@ protected:
         [&]() { return topicExists(*robot_a_node_, publish_topic_a) && topicExists(*robot_b_node_, publish_topic_b); },
         kGraphTimeout));
 
+    // Establish both outbound paths before either side publishes. Otherwise, the
+    // first inbound track can claim the shared topic name and suppress the other
+    // portal's outbound subscription as loop prevention.
+    ASSERT_TRUE(waitFor(
+        [&]() { return publisher_a_->get_subscription_count() > 0U && publisher_b_->get_subscription_count() > 0U; },
+        kGraphTimeout))
+        << "ROS Portal nodes did not subscribe to both local publish topics";
+
     // The local ROS graphs being ready says nothing about LiveKit participant
     // discovery, which is delivered asynchronously as each ROS Portal node connects.
     // Wait for ROS Portals to see each other in the room so that cross-

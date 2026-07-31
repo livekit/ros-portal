@@ -216,6 +216,77 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   EXPECT_EQ(valueFor(warn_status, "inbound_schemas_incorrect"), "1");
 }
 
+// Case: A remote track claims a bidirectional topic before its local publisher appears.
+// 1. Create the inbound LiveKit-to-ROS publisher.
+// 2. Add a local ROS publisher and discover the outbound subscription.
+// 3. Verify the inbound sample is not echoed while the local sample is forwarded.
+TEST_F(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho) {
+  auto options = makeOptions();
+  options.incoming_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/allowed/.*"});
+  auto push_count = std::make_shared<std::atomic<int>>(0);
+  auto livekit_methods = makeLiveKitMethods();
+  livekit_methods.publish_data_track = [push_count](const std::string&, const livekit::DataTrackSchemaId&)
+      -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+    auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
+    writer->try_push = [push_count](std::vector<std::uint8_t>) {
+      push_count->fetch_add(1);
+      return livekit::Result<void, std::string>::success();
+    };
+    return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
+  };
+  TopicForwarder forwarder(std::move(options), node_, std::move(livekit_methods), diagnostics_fns_);
+
+  const std::string inbound_json = R"({"data":"from LiveKit"})";
+  const std::vector<std::uint8_t> inbound_payload(inbound_json.begin(), inbound_json.end());
+
+  auto release_inbound = std::make_shared<std::atomic_bool>(false);
+  auto delivered_inbound = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteDataTrackDescriptor descriptor;
+  descriptor.sid = "inbound-first-sid";
+  descriptor.track_name = "/allowed/data";
+  descriptor.publisher_identity = "remote_robot";
+  descriptor.schema = livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::JsonSchema};
+  descriptor.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  descriptor.subscribe = [release_inbound, delivered_inbound, inbound_payload]() {
+    auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
+    stream->read = [release_inbound, delivered_inbound, inbound_payload](livekit::DataTrackFrame& frame) {
+      while (!release_inbound->load()) {
+        std::this_thread::sleep_for(1ms);
+      }
+      if (delivered_inbound->exchange(true)) {
+        return false;
+      }
+      frame.payload = inbound_payload;
+      return true;
+    };
+    stream->close = [release_inbound]() { release_inbound->store(true); };
+    stream->terminal_error = []() { return std::optional<std::string>{}; };
+    return livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>, std::string>::success(
+        std::move(stream));
+  };
+  forwarder.onDataTrackPublished(std::move(descriptor));
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
+
+  // A local publisher appears after the inbound track claimed the same topic.
+  // Polling must still create the outbound subscription.
+  auto local_publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 2U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return local_publisher->get_subscription_count() > 0U; }));
+
+  // The inbound publication must not be echoed back to LiveKit.
+  release_inbound->store(true);
+  ASSERT_TRUE(spinUntil([&]() { return delivered_inbound->load(); }));
+  spinUntil([]() { return false; }, 100ms);
+  EXPECT_EQ(push_count->load(), 0);
+
+  // A publication from the application on that same topic still goes outbound.
+  std_msgs::msg::String local_msg;
+  local_msg.data = "from local ROS";
+  local_publisher->publish(local_msg);
+  ASSERT_TRUE(spinUntil([&]() { return push_count->load() == 1; }));
+}
+
 TEST_F(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile) {
   auto forwarder = makeForwarder();
 

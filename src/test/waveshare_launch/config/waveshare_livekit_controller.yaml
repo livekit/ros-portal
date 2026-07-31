@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=../../../ros2_livekit_bridge_config/schema/ros2_livekit_bridge_config.schema.json
+# yaml-language-server: $schema=../../../ros_portal_config/schema/ros_portal_config.schema.json
 # Copyright 2026 LiveKit
 
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
   topic_polling_period_ms: 500
   ros_threads: 0
@@ -41,7 +41,7 @@ ros2_livekit_bridge:
 
     # /tf_static is latched: received over the RPC push-with-ack path and
     # republished on a TRANSIENT_LOCAL publisher, so Foxglove (or any consumer)
-    # that starts after the bridge still resolves the static frames. The ROS
+    # that starts after ROS Portal still resolves the static frames. The ROS
     # type travels in the RPC payload, so no msg_type is needed here.
     - topic: "/tf_static"
       direction: "in"

@@ -32,25 +32,25 @@ float64 y
 float64 theta
 ```
 
-The LiveKit SDK / server infrastructure supports schema definitions and retrievals. This functionality is used to enable the following features in the bridge:
+The LiveKit SDK / server infrastructure supports schema definitions and retrievals. This functionality is used to enable the following features in ROS Portal:
 
-- **Schema hash validation**: two bridge participants may have different schema versions of the same topic/type. Schemas are used to verify alignment before bridging topics
+- **Schema hash validation**: two ROS Portal participants may have different schema versions of the same topic/type. Schemas are used to verify alignment before bridging topics
 - **JSON to CDR**: enables translation from JSON into CDR, such as from a web participant into a ROS graph
 - **MCAP export**: natively, `ros2 bag record` embeds the schema text into `.mcap` files. Recording bridged ROS data out LiveKit can be written to MCAPs in conjunction with the schema to mirror this
 
 ## Design
 
 Schemas protect each ordinary data track from being interpreted as the wrong
-ROS message type. The sending bridge publishes the complete ROS definition;
-the receiving bridge validates it against the same interface installed locally
+ROS message type. The sending ROS Portal node publishes the complete ROS definition;
+the receiving ROS Portal node validates it against the same interface installed locally
 before accepting any frames. External publishers using `JsonSchema` follow a
 relaxed path that validates only the schema name and local type availability.
 
 ```mermaid
 flowchart LR
-  A[ROS publisher] --> B[Sending bridge]
+  A[ROS publisher] --> B[Sending ROS Portal node]
   B -->|schema, track, frames| C[LiveKit]
-  C --> D[Receiving bridge]
+  C --> D[Receiving ROS Portal node]
   D --> E[ROS subscriber]
 ```
 
@@ -59,7 +59,7 @@ transports and do not follow this design.
 
 ### Sending
 
-The sending bridge creates a LiveKit track lazily, when the first eligible ROS
+The sending ROS Portal node creates a LiveKit track lazily, when the first eligible ROS
 message arrives:
 
 1. Render the ROS type's complete definition, including recursive dependencies.
@@ -79,7 +79,7 @@ cached.
 
 ### Receiving
 
-When a LiveKit data track is published, the receiving bridge:
+When a LiveKit data track is published, the receiving ROS Portal node:
 
 1. Resolves the expected ROS type from the local ROS graph, or uses the
    advertised schema name when no local endpoint exists.
@@ -121,14 +121,14 @@ An ordinary data track carries:
 
 - a track name that maps to a ROS topic;
 - a schema ID whose name is the ROS type;
-- `Ros2Msg` or `Ros2Idl` schema encoding for bridge-produced tracks, or
+- `Ros2Msg` or `Ros2Idl` schema encoding for ROS Portal-produced tracks, or
   `JsonSchema` for external JSON publishers;
 - the complete schema definition stored on the publishing participant for
   `Ros2Msg` and `Ros2Idl` (not required for `JsonSchema`); and
 - a `Cdr` or `Json` frame encoding.
 
-Bridge-produced tracks use CDR with a `Ros2Msg` or `Ros2Idl` schema. An external
-publisher may instead use `JsonSchema` with JSON frames: the receiving bridge
+ROS Portal-produced tracks use CDR with a `Ros2Msg` or `Ros2Idl` schema. An external
+publisher may instead use `JsonSchema` with JSON frames: the receiving ROS Portal node
 accepts the track when the schema name matches the resolved ROS type and
 converts each JSON frame with local ROS introspection. Schemas IDs for json encodings are not validated to local schema IDs. If conversion to ROS messages fail, errors are logged. External publishers that
 do provide a ROS definition should still use `Ros2Msg` or `Ros2Idl` with the
@@ -147,8 +147,8 @@ The server must enable participant data blobs with
 ### Lifecycle and delivery
 
 - A track can be validated before a matching ROS subscriber exists, provided
-  the receiving bridge has the interface package installed.
-- Existing tracks are discovered when a bridge joins LiveKit.
+  the receiving ROS Portal node has the interface package installed.
+- Existing tracks are discovered when a ROS Portal node joins LiveKit.
 - A rejected inbound publication is reconsidered only after a new publication
   event, such as republishing the track or reconnecting.
 - Unpublishing a track removes its ROS publisher and reader state. A later
@@ -161,22 +161,22 @@ definition text. Comments, whitespace, constants, defaults, dependency order,
 and nested definitions all affect the result. This is stricter than the ROS
 RIHS01 type hash.
 
-The bridge also requires the schema-capable LiveKit C++ SDK and a server with
+ROS Portal also requires the schema-capable LiveKit C++ SDK and a server with
 participant data blobs enabled. Setup details are in the
 [running guide](../running.md#livekit-server-requirement).
 
 ## Implementation map
 
 - Schema rendering:
-  [`renderer.cpp`](../../src/ros2_livekit_bridge/src/schema/renderer.cpp)
+  [`renderer.cpp`](../../src/ros_portal/src/schema/renderer.cpp)
 - Schema registration, hashing, and validation:
-  [`manager.cpp`](../../src/ros2_livekit_bridge/src/schema/manager.cpp)
+  [`manager.cpp`](../../src/ros_portal/src/schema/manager.cpp)
 - Track lifecycle and frame handling:
-  [`topic_forwarder.cpp`](../../src/ros2_livekit_bridge/src/topic_forwarder.cpp)
+  [`topic_forwarder.cpp`](../../src/ros_portal/src/topic_forwarder.cpp)
 - Runtime JSON-to-CDR conversion:
-  [`introspection_utils.cpp`](../../src/ros2_livekit_bridge/src/introspection/introspection_utils.cpp)
+  [`introspection_utils.cpp`](../../src/ros_portal/src/introspection/introspection_utils.cpp)
 - Unit and integration coverage:
-  [`test/unit/schema_renderer_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_renderer_test.cpp),
-  [`test/unit/schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/unit/schema_manager_test.cpp),
-  [`test/unit/topic_forwarder_test.cpp`](../../src/ros2_livekit_bridge/test/unit/topic_forwarder_test.cpp), and
-  [`test/integration/schema_manager_test.cpp`](../../src/ros2_livekit_bridge/test/integration/schema_manager_test.cpp)
+  [`test/unit/schema_renderer_test.cpp`](../../src/ros_portal/test/unit/schema_renderer_test.cpp),
+  [`test/unit/schema_manager_test.cpp`](../../src/ros_portal/test/unit/schema_manager_test.cpp),
+  [`test/unit/topic_forwarder_test.cpp`](../../src/ros_portal/test/unit/topic_forwarder_test.cpp), and
+  [`test/integration/schema_manager_test.cpp`](../../src/ros_portal/test/integration/schema_manager_test.cpp)

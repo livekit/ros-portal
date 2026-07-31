@@ -111,9 +111,9 @@ jobs:
           ./scripts/apply-external-patches.sh
           rosdep install \
             --from-paths \
-              src/ros2_livekit_bridge \
-              src/ros2_livekit_bridge_config \
-              src/ros2_livekit_bridge_msgs \
+              src/ros_portal \
+              src/ros_portal_config \
+              src/ros_portal_msgs \
               src/externals/ros2_medkit/src/ros2_medkit_cmake \
               src/externals/ros2_medkit/src/ros2_medkit_serialization \
             --ignore-src -r -y --rosdistro jazzy \
@@ -145,7 +145,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           set -u
           colcon build \
-            --packages-up-to ros2_livekit_bridge \
+            --packages-up-to ros_portal \
             --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
           jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
 

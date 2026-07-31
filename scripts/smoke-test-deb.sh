@@ -24,7 +24,7 @@ if [[ -z "${ros_distro}" || -z "${deb_path}" ]]; then
   exit 2
 fi
 
-readonly expected_package="ros-${ros_distro}-livekit-bridge"
+readonly expected_package="ros-${ros_distro}-livekit-portal"
 actual_package="$(dpkg-deb --field "${deb_path}" Package)"
 if [[ "${actual_package}" != "${expected_package}" ]]; then
   echo "Unexpected Debian package name: ${actual_package}" >&2
@@ -42,27 +42,27 @@ set +u
 source "${install_prefix}/setup.bash"
 set -u
 
-actual_prefix="$(ros2 pkg prefix ros2_livekit_bridge)"
+actual_prefix="$(ros2 pkg prefix ros_portal)"
 if [[ "${actual_prefix}" != "${install_prefix}" ]]; then
-  echo "Unexpected bridge prefix: ${actual_prefix}" >&2
+  echo "Unexpected ROS Portal prefix: ${actual_prefix}" >&2
   exit 1
 fi
 
-readonly bridge_node="${install_prefix}/lib/ros2_livekit_bridge/ros2_livekit_bridge_node"
-if [[ ! -x "${bridge_node}" ]]; then
-  echo "Bridge node is missing: ${bridge_node}" >&2
+readonly ros_portal_node="${install_prefix}/lib/ros_portal/ros_portal_node"
+if [[ ! -x "${ros_portal_node}" ]]; then
+  echo "ROS Portal node is missing: ${ros_portal_node}" >&2
   exit 1
 fi
 
-if ldd "${bridge_node}" | awk '/not found/ { found = 1 } END { exit !found }'; then
-  ldd "${bridge_node}" >&2
-  echo "Bridge node has unresolved shared libraries" >&2
+if ldd "${ros_portal_node}" | awk '/not found/ { found = 1 } END { exit !found }'; then
+  ldd "${ros_portal_node}" >&2
+  echo "ROS Portal node has unresolved shared libraries" >&2
   exit 1
 fi
 
 # Verify the installed launch description can be resolved and parsed without
-# starting the bridge or requiring a LiveKit server.
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.py --show-args >/dev/null
-"livekit-ros2-bridge-${ros_distro}" --show-args >/dev/null
+# starting ROS Portal or requiring a LiveKit server.
+ros2 launch ros_portal ros_portal.launch.py --show-args >/dev/null
+"ros-portal-${ros_distro}" --show-args >/dev/null
 
 echo "Verified ${deb_path} on ROS ${ros_distro}"

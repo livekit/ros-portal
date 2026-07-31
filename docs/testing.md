@@ -5,8 +5,8 @@ There are unit and integration tests which are run in CI. For more manual integr
 ## Unit Tests
 
 ```bash
-colcon test --packages-select ros2_livekit_bridge \
-  --ctest-args -R ros2_livekit_bridge_unit_tests
+colcon test --packages-select ros_portal \
+  --ctest-args -R ros_portal_unit_tests
 ```
 
 ## Integration Tests
@@ -21,15 +21,15 @@ source .token_helpers/set_test_tokens.bash
 Then run the integration tests:
 
 ```bash
-colcon test --packages-select ros2_livekit_bridge \
-  --ctest-args -R ros2_livekit_bridge_integration_tests
+colcon test --packages-select ros_portal \
+  --ctest-args -R ros_portal_integration_tests
 ```
 
 Or run the integration binary directly after building:
 
 ```bash
-colcon build --packages-select ros2_livekit_bridge
-GTEST_COLOR=1 build/ros2_livekit_bridge/test/ros2_livekit_bridge_integration_tests
+colcon build --packages-select ros_portal
+GTEST_COLOR=1 build/ros_portal/test/ros_portal_integration_tests
 ```
 
 Inspect results with:
@@ -39,7 +39,7 @@ colcon test-result --verbose
 ```
 
 The token helper defaults to local development credentials (`devkey` /
-`secret`) and the room `ros2_livekit_bridge_test_room`. It uses
+`secret`) and the room `ros_portal_test_room`. It uses
 `ws://host.docker.internal:7880` by default to match the devcontainer launch
 setup. Override `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
 `LIVEKIT_ROOM`, or the `LIVEKIT_IDENTITY_A/B` values before sourcing the script

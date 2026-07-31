@@ -1,7 +1,7 @@
 # Test Utilities
 
-Support launch files and scripts for manual bridge testing and integration
-fixtures. These are not part of the bridge package itself.
+Support launch files and scripts for manual ROS Portal testing and integration
+fixtures. These are not part of ROS Portal package itself.
 
 ## Service stub
 
@@ -14,7 +14,7 @@ standalone launch file that starts inline `std_srvs/srv/SetBool` and
 | `/test/set_bool` | `std_srvs/srv/SetBool` | Stores `request.data` and echoes it into `success` / `message` |
 | `/test/get_bool` | `std_srvs/srv/Trigger` | Returns `message: "state is: <last set_bool value>"` |
 
-Launch it on the remote side of a two-bridge setup:
+Launch it on the remote side of a two-ROS-Portal-node setup:
 
 ```bash
 ros2 launch test_utilities server_stub.launch.py
@@ -28,9 +28,9 @@ Service names can be overridden with launch arguments `service_name` and
 **Set state on the remote side**:
 
 ```bash
-ros2 service call /ros2_livekit_bridge/ros2_service_call \
-  ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
-  "{participant_id: 'bridge-b', service: '/test/set_bool', msg_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
+ros2 service call /ros_portal/ros2_service_call \
+  ros_portal_msgs/srv/Ros2ServiceCall \
+  "{participant_id: 'ros-portal-b', service: '/test/set_bool', msg_type: 'std_srvs/srv/SetBool', payload: '{data: true}'}"
 ```
 
 On success, `output` contains YAML similar to native `ros2 service call`:
@@ -43,9 +43,9 @@ message: enabled
 **Read state back:**
 
 ```bash
-ros2 service call /ros2_livekit_bridge/ros2_service_call \
-  ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
-  "{participant_id: 'bridge-b', service: '/test/get_bool', msg_type: 'std_srvs/srv/Trigger', payload: '{}'}"
+ros2 service call /ros_portal/ros2_service_call \
+  ros_portal_msgs/srv/Ros2ServiceCall \
+  "{participant_id: 'ros-portal-b', service: '/test/get_bool', msg_type: 'std_srvs/srv/Trigger', payload: '{}'}"
 ```
 
 Expected `output`:

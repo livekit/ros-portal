@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../ros_portal_config/schema/ros_portal_config.schema.json
+# Copyright 2026 LiveKit
+#
+# Turtlesim tutorial — controller side. See docs/tutorials.md.
+ros_portal:
+  version: "0.0.1"
+  ros_threads: 4
+
+  topics:
+    - topic: "/turtle.*/cmd_vel"
+      direction: "out"
+
+    - topic: "/turtle.*/pose"
+      direction: "in"
+
+  services:
+    - service: "/turtle2/teleport_absolute"
+      direction: "out"
+      participant: "turtle_sim"
+      msg_type: "turtlesim/srv/TeleportAbsolute"
+
+    - service: "/spawn"
+      direction: "out"
+      participant: "turtle_sim"
+      msg_type: "turtlesim/srv/Spawn"

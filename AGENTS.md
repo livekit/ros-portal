@@ -35,15 +35,15 @@ prerequisites are missing. Project-specific commands are documented in
 - When tests already exist for the affected area, run them after making
  functional changes. Do not skip existing relevant tests.
 - Prefer targeted test commands during iteration. After any functional change
- to `ros2_livekit_bridge`, run both the unit and integration suites before
+ to `ros_portal`, run both the unit and integration suites before
  finalizing; a passing unit suite alone is not sufficient:
-  - `colcon test --packages-select ros2_livekit_bridge --ctest-args -R ros2_livekit_bridge_unit_tests`
-  - `colcon test --packages-select ros2_livekit_bridge --ctest-args -R ros2_livekit_bridge_integration_tests`
+  - `colcon test --packages-select ros_portal --ctest-args -R ros_portal_unit_tests`
+  - `colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests`
   - `colcon test-result --verbose`
 - Before treating integration credentials as unavailable, source
   `.token_helpers/set_test_tokens.bash` in the same shell that runs the tests.
   For example:
-  `source .token_helpers/set_test_tokens.bash && colcon test --packages-select ros2_livekit_bridge --ctest-args -R ros2_livekit_bridge_integration_tests`.
+  `source .token_helpers/set_test_tokens.bash && colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests`.
 - If an integration test requires external services or credentials, keep the
  test deterministic and document/emit the exact environment assumptions.
 - If tests cannot be run in the current environment, explicitly state what was
@@ -72,4 +72,5 @@ prerequisites are missing. Project-specific commands are documented in
 - Keep documentation clean, concise, and practical. Explain the supported path,
   key configuration, and verification steps without duplicating implementation
   details.
-- If new configuration fields are added, update the documentation in `docs/configuration.md`.
+- If configuration fields are added, updated, or removed, update the documentation in `docs/configuration.md`. If reviewing work, add a task to update the corresponding sections of the external documentation.
+- If diagnostics fields are added, updated, or removed, update the documentation in `docs/diagnostics.md`. If reviewing work, add a task to update the corresponding sections of the external web/ repo documentation.

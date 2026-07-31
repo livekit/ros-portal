@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # Generate two LiveKit access tokens via `lk` and set the environment variables
-# required by the ROS bridge participant-ID integration test.
+# required by the ROS Portal participant-ID integration test.
 #
 #   source .token_helpers/set_test_tokens.bash
 #   eval "$(bash .token_helpers/set_test_tokens.bash)"
@@ -49,10 +49,10 @@ fi
 
 LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-devkey}"
 LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-secret}"
-LIVEKIT_ROOM="${LIVEKIT_ROOM:-ros2_livekit_bridge_test_room}"
+LIVEKIT_ROOM="${LIVEKIT_ROOM:-ros_portal_test_room}"
 LIVEKIT_VALID_FOR="${LIVEKIT_VALID_FOR:-99999h}"
-LIVEKIT_IDENTITY_A="${LIVEKIT_IDENTITY_A:-bridge-test-a}"
-LIVEKIT_IDENTITY_B="${LIVEKIT_IDENTITY_B:-bridge-test-b}"
+LIVEKIT_IDENTITY_A="${LIVEKIT_IDENTITY_A:-ros-portal-test-a}"
+LIVEKIT_IDENTITY_B="${LIVEKIT_IDENTITY_B:-ros-portal-test-b}"
 _grant_json='{"canPublish":true,"canSubscribe":true,"canPublishData":true}'
 
 if [[ -z "${LIVEKIT_URL:-}" ]]; then

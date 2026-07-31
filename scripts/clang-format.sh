@@ -36,6 +36,6 @@ fi
 export CLANG_FORMAT_FIX_COMMAND="./scripts/clang-format.sh --fix"
 exec "${shared_script}" \
   --repo-root "${repo_root}" \
-  --path src/ros2_livekit_bridge \
-  --path src/ros2_livekit_bridge_config \
+  --path src/ros_portal \
+  --path src/ros_portal_config \
   "$@"

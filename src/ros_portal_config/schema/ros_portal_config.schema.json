@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://livekit.io/schemas/ros_portal_config.schema.json",
+  "title": "ROS Portal Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ros_portal"],
+  "properties": {
+    "ros_portal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "const": "0.0.1"
+        },
+        "topic_polling_period_ms": {
+          "$ref": "#/$defs/positiveInteger",
+          "default": 500
+        },
+        "ros_threads": {
+          "$ref": "#/$defs/nonNegativeInteger",
+          "default": 0
+        },
+        "room_options": {
+          "$ref": "#/$defs/roomOptions"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/serviceConfig"
+          }
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/topicConfig"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "direction": {
+      "enum": ["in", "out", "bidirectional"]
+    },
+    "serviceDirection": {
+      "enum": ["out"]
+    },
+    "encoding": {
+      "enum": ["ros2msg", "ros2idl", "jsonschema"]
+    },
+    "nonemptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "roomOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "join_retries": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "videoOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bitrate_kbps": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "codec": {
+          "$ref": "#/$defs/nonemptyString"
+        }
+      }
+    },
+    "serviceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "direction", "participant", "msg_type"],
+      "properties": {
+        "service": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "direction": {
+          "$ref": "#/$defs/serviceDirection"
+        },
+        "participant": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "msg_type": {
+          "$ref": "#/$defs/nonemptyString"
+        }
+      }
+    },
+    "topicConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "direction"],
+      "properties": {
+        "topic": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "direction": {
+          "$ref": "#/$defs/direction"
+        },
+        "preserve_id": {
+          "description": "Inbound topics only. When true, the publishing participant's (sanitized) identity is prepended to the republished ROS topic name, e.g. /tf from participant robot-1 becomes /robot_1/tf. Prevents topic-name collisions when multiple participants publish the same topic. Ignored for outbound topics.",
+          "type": "boolean",
+          "default": false
+        },
+        "max_rate_hz": {
+          "description": "Outbound topics only. Optional cap (in Hz) on the rate at which this topic is forwarded to LiveKit, keeping unnecessary traffic off constrained links (e.g. throttle a high-rate /imu to a viewer-friendly rate for a remote consumer). Mirrors ros-tooling/topic_tools `throttle messages`: samples are forwarded on arrival, but any sample arriving less than one period (1 / max_rate_hz) after the last forwarded one is dropped. Only new samples are ever forwarded, so an idle topic is never re-sent and the cap is not a rate floor. This is lossy for topics whose messages each carry distinct content (e.g. /tf aggregates transforms from multiple broadcasters). Matched by literal topic name, not regex. Ignored for inbound topics.",
+          "type": "number",
+          "minimum": 0
+        },
+        "latched": {
+          "description": "When true, this topic is treated as latched (ROS RELIABLE + TRANSIENT_LOCAL durability, e.g. /tf_static). LiveKit DataTracks are not latched, so latched topics are routed off the DataTrack path and onto a reliable RPC push-with-ack mechanism instead. Outbound: ROS Portal subscribes with TRANSIENT_LOCAL (capturing state published before it started), stores the topic's messages, and pushes them to every peer ROS Portal node that joins the room, so state published before a peer connected is still delivered. Inbound: ROS Portal republishes received messages via a TRANSIENT_LOCAL publisher so ROS subscribers that start after ROS Portal still receive them; the ROS message type travels in the RPC payload, so 'msg_type' is not required for a latched inbound topic. Matched by literal topic name, not regex. Intended for small whole-state latched topics; a single message exceeding the LiveKit RPC payload limit (15 KiB) is skipped with a warning.",
+          "type": "boolean",
+          "default": false
+        },
+        "encoding": {
+          "description": "Outbound topics only. Selects how this ROS Portal node encodes and sends the topic's data on the LiveKit DataTrack, and the schema encoding it advertises to subscribers. 'ros2msg' (default) and 'ros2idl' send raw ROS CDR frames described by a Ros2Msg or Ros2Idl schema; 'jsonschema' deserializes each ROS message and sends a JSON frame described by a generated JSON Schema, easing communication with non-ROS systems. 'ros2idl' requires the local ROS type definition to be renderable as ROS 2 IDL; a topic requesting an encoding whose schema cannot be rendered is skipped with an error. Inbound decoding is unaffected: it is auto-detected from the remote track's advertised frame encoding, so this field is ignored for pure inbound topics. Matched by literal topic name, not regex.",
+          "$ref": "#/$defs/encoding",
+          "default": "ros2msg"
+        },
+        "video_options": {
+          "$ref": "#/$defs/videoOptions"
+        }
+      }
+    }
+  }
+}

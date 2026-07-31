@@ -1,6 +1,6 @@
 # Custom Messages
 
-This test package represents user custom messages, ensuring the bridge can
+This test package represents user custom messages, ensuring ROS Portal can
 support them via integration tests.
 
 Run the sample publisher with:

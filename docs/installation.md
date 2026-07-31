@@ -6,6 +6,9 @@
 
 ## Debian Packages
 
+For a prebuilt runtime that doesn't require a host ROS installation, see
+[Running with Docker](docker.md).
+
 CI builds Debian packages for:
 
 - ROS 2 Humble on Ubuntu 22.04 (Jammy)

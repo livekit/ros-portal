@@ -4,6 +4,7 @@ build/
 build-*/
 package-deb/
 artifacts/
+docker/runtime/*.deb
 install/
 install-*/
 CMakeFiles/

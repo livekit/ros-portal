@@ -1,0 +1,336 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Docker Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      update_distro_tags:
+        description: Update the moving humble, jazzy, kilted, and lyrical tags
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: docker.io/livekit/ros-portal
+
+jobs:
+  release-metadata:
+    name: Validate Release
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate tag and package versions
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "Select a v<major>.<minor>.<patch> tag when dispatching this workflow." >&2
+            exit 2
+          fi
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Release tag must match v<major>.<minor>.<patch>: ${GITHUB_REF_NAME}" >&2
+            exit 2
+          fi
+
+          version="${GITHUB_REF_NAME#v}"
+          mapfile -t package_versions < <(
+            python3 - \
+              src/ros_portal/package.xml \
+              src/ros_portal_config/package.xml \
+              src/ros_portal_msgs/package.xml <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          for package_xml in sys.argv[1:]:
+              print(ET.parse(package_xml).getroot().findtext("version"))
+          PY
+          )
+
+          if [[ "${#package_versions[@]}" -ne 3 ]]; then
+            echo "Expected three first-party package versions" >&2
+            exit 1
+          fi
+          for package_version in "${package_versions[@]}"; do
+            if [[ "${package_version}" != "${version}" ]]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match package version ${package_version}" >&2
+              exit 1
+            fi
+          done
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Publishing ROS Portal ${version}" >> "${GITHUB_STEP_SUMMARY}"
+
+  ros-build-matrix:
+    name: Load ROS Build Matrix
+    needs: release-metadata
+    uses: ./.github/workflows/ros-build-matrix.yml
+    with:
+      git_ref: ${{ github.ref_name }}
+
+  ci-matrix:
+    name: CI (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    needs:
+      - release-metadata
+      - ros-build-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-entry.yml
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      ros_image_tag: ${{ matrix.ros_image_tag }}
+      ros_image_digest: ${{ matrix.ros_image_digest }}
+      git_ref: ${{ github.ref_name }}
+    secrets: inherit
+
+  build-platform-images:
+    name: Build Image (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    needs:
+      - release-metadata
+      - ros-build-matrix
+      - ci-matrix
+    runs-on: ${{ matrix.os }}
+    environment: docker-hub
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download Debian package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ros-${{ matrix.ros_distro }}-livekit-portal-${{ matrix.arch }}-deb
+          path: artifacts/debian
+
+      - name: Verify and select Debian package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd artifacts/debian
+            sha256sum --check ./*.sha256
+          )
+          deb_path="$(compgen -G 'artifacts/debian/*.deb')"
+          echo "deb_file=${deb_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify Docker Hub credentials
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          [[ -n "${DOCKERHUB_USERNAME}" ]] || {
+            echo "DOCKERHUB_USERNAME is not configured" >&2
+            exit 1
+          }
+          [[ -n "${DOCKERHUB_TOKEN}" ]] || {
+            echo "DOCKERHUB_TOKEN is not configured" >&2
+            exit 1
+          }
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Build and push platform image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: docker/runtime/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            DEB_FILE=${{ steps.package.outputs.deb_file }}
+            IMAGE_REVISION=${{ github.sha }}
+            IMAGE_SOURCE=https://github.com/${{ github.repository }}
+            IMAGE_VERSION=${{ needs.release-metadata.outputs.version }}
+            ROS_DISTRO=${{ matrix.ros_distro }}
+            ROS_IMAGE_DIGEST=${{ matrix.ros_image_digest }}
+            ROS_IMAGE_REPOSITORY=ros
+            ROS_IMAGE_TAG=${{ matrix.ros_image_tag }}
+          cache-from: type=gha,scope=runtime-${{ matrix.ros_distro }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.ros_distro }}-${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Export platform digest
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${IMAGE_DIGEST#sha256:}"
+
+      - name: Upload platform digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-digest-${{ matrix.ros_distro }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-versioned-images:
+    name: Publish ${{ matrix.ros_distro }}-${{ needs.release-metadata.outputs.version }}
+    needs:
+      - release-metadata
+      - build-platform-images
+    runs-on: ubuntu-24.04
+    environment: docker-hub
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro:
+          - humble
+          - jazzy
+          - kilted
+          - lyrical
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download platform digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: docker-digest-${{ matrix.ros_distro }}-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Check for existing versioned image
+        id: existing_image
+        env:
+          ROS_DISTRO: ${{ matrix.ros_distro }}
+          VERSION: ${{ needs.release-metadata.outputs.version }}
+        shell: bash
+        run: |
+          if docker buildx imagetools inspect \
+            "${IMAGE_NAME}:${ROS_DISTRO}-${VERSION}" >/dev/null 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Create versioned multi-architecture image
+        if: steps.existing_image.outputs.exists != 'true'
+        env:
+          ROS_DISTRO: ${{ matrix.ros_distro }}
+          VERSION: ${{ needs.release-metadata.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t digest_files < <(find /tmp/digests -maxdepth 1 -type f | sort)
+          if [[ "${#digest_files[@]}" -ne 2 ]]; then
+            echo "Expected two platform digests, found ${#digest_files[@]}" >&2
+            exit 1
+          fi
+
+          sources=()
+          for digest_file in "${digest_files[@]}"; do
+            sources+=("${IMAGE_NAME}@sha256:$(basename "${digest_file}")")
+          done
+
+          docker buildx imagetools create \
+            --tag "${IMAGE_NAME}:${ROS_DISTRO}-${VERSION}" \
+            "${sources[@]}"
+
+      - name: Verify versioned multi-architecture image
+        env:
+          ROS_DISTRO: ${{ matrix.ros_distro }}
+          VERSION: ${{ needs.release-metadata.outputs.version }}
+        run: >-
+          ./scripts/verify-multiarch-image.sh
+          "${IMAGE_NAME}:${ROS_DISTRO}-${VERSION}"
+
+  publish-distro-tags:
+    name: Publish ${{ matrix.ros_distro }}
+    needs:
+      - release-metadata
+      - publish-versioned-images
+    if: ${{ github.event_name == 'push' || inputs.update_distro_tags }}
+    runs-on: ubuntu-24.04
+    environment: docker-hub
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro:
+          - humble
+          - jazzy
+          - kilted
+          - lyrical
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Promote versioned image
+        env:
+          ROS_DISTRO: ${{ matrix.ros_distro }}
+          VERSION: ${{ needs.release-metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${IMAGE_NAME}:${ROS_DISTRO}" \
+            "${IMAGE_NAME}:${ROS_DISTRO}-${VERSION}"
+
+      - name: Verify promoted image
+        env:
+          ROS_DISTRO: ${{ matrix.ros_distro }}
+        run: ./scripts/verify-multiarch-image.sh "${IMAGE_NAME}:${ROS_DISTRO}"

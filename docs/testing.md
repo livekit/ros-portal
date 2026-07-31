@@ -62,6 +62,14 @@ default. Without `ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1`, the target reports a
 GTest skip. Its separate target name means the existing unit and integration
 test selections do not run it.
 
+`PublishesConfiguredDeviceCaptureFrames` needs a real camera attached and skips
+itself when the host exposes none, which is the expected outcome in CI
+containers. To check what the host exposes:
+
+```bash
+ros2 run ros_portal capture_devices
+```
+
 The token helper defaults to local development credentials (`devkey` /
 `secret`) and the room `ros_portal_test_room`. It uses
 `ws://host.docker.internal:7880` by default to match the devcontainer launch

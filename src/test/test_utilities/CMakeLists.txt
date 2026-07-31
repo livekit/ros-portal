@@ -40,7 +40,7 @@ ament_auto_add_executable(message_to_json
   src/message_to_json.cpp
 )
 
-install(DIRECTORY launch/
+install(DIRECTORY launch/ config/
   DESTINATION share/${PROJECT_NAME}/launch
   USE_SOURCE_PERMISSIONS
   PATTERN "__pycache__" EXCLUDE

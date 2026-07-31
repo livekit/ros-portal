@@ -134,6 +134,7 @@ All config lives under `ros_portal`.
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
+| `video_sources` | list | no | `[]` | Independent capture sources published as LiveKit video tracks. |
 
 ### Services
 
@@ -164,7 +165,6 @@ used to limit which streams cross ROS Portal for bandwidth reasons.
 | `max_rate_hz` | number | no | - | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
 | `latched` | boolean | no | `false` | Treat the topic as latched (see below). Literal topic names only. |
 | `encoding` | string | no | `ros2msg` | Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
-| `video_options` | map | no | - | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
 `direction: "bidirectional"`. Incoming topics are those with `direction: "in"`
@@ -339,11 +339,237 @@ Notes:
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
 
-### Video Options
+## Video Sources
+
+`video_sources` publishes video independently of the ROS topic graph. Every
+entry owns one capture producer, one LiveKit video track, and one diagnostic
+status. Sources are created, published, and started after ROS Portal connects to
+the room. A failure affects only that entry: ROS Portal and other configured
+sources continue running, while `video_source/<track_name>/<index>` reports the
+error.
+
+```yaml
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: >-
+          v4l2src device=/dev/video0 ! videoconvert !
+          x264enc name=lk_encoder tune=zerolatency ! h264parse !
+          appsink name=lk_appsink
+        codec: "h264"
+        resolution:
+          width: 1280
+          height: 720
+        rate_control:
+          element: "lk_encoder"
+          property: "bitrate"
+          unit: "kbps"
+      publish_options:
+        max_bitrate_bps: 3500000
+        max_framerate: 30
+```
+
+### Video source entry
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
-| `bitrate_kbps` | integer | no | Target bitrate in kbps. Must be positive. |
-| `codec` | string | no | Video codec name. Must be non-empty when set. |
+| `track_name` | string | yes | Non-empty LiveKit video track name. |
+| `simulcast` | boolean | no | Publish the track with simulcast enabled. Defaults to `false`. |
+| `source` | map | yes | Capture backend and its configuration. |
+| `publish_options` | map | no | Application-controlled LiveKit publish limits. |
+
+All capture-backed tracks are published with LiveKit track source `camera`.
+Capture-derived settings take precedence where required: encoded GStreamer
+ingest dictates its codec, disables simulcast, and selects the pre-encoded
+encoder backend. Because of that precedence, `simulcast` only takes effect for
+pixel sources (`demo` and `device`); a `gstreamer` source publishes the single
+pre-encoded layer it produces regardless of the setting.
+
+### Source configuration
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `type` | string | yes | `gstreamer`, `demo`, or `device`. |
+| `pipeline` | string | GStreamer only | GStreamer launch description. Must contain `appsink name=lk_appsink` or leave exactly one encoded video source pad unlinked. |
+| `codec` | string | GStreamer only | `h264`, `h265`, `vp8`, `vp9`, or `av1`. Inferred from GStreamer caps when omitted. |
+| `resolution` | map | GStreamer only | Positive `width` and `height`. Discovered from negotiated caps when omitted; verified against the stream when supplied. |
+| `rate_control` | map | GStreamer only | Forward WebRTC bitrate targets to a GStreamer encoder property. |
+| `device` | map | Device only | Camera selection and requested format. Required when `type` is `device`. |
+| `demo` | map | no | Demo-only output characteristics. Optional when `type` is `demo`. |
+
+Each type accepts only its own fields: a `demo` or `device` source rejects the
+GStreamer-only fields above, and a `gstreamer` source rejects the `device` and
+`demo` blocks. The schema tags the union by `type` but cannot express those
+rules, so they are enforced when the source is created and reported through
+`video_source/<track_name>/<index>`.
+
+When resolution is omitted, source creation waits up to five seconds for the
+first encoded sample. Supplying it avoids that discovery wait, but the first
+sample must still match. Codec or resolution changes after capture begins end
+the source with an error because the track cannot yet be republished in place.
+
+`rate_control` has three required fields:
+
+| Field | Type | Description |
+|---|---:|---|
+| `element` | string | Name of the encoder element in the pipeline, such as `lk_encoder`. |
+| `property` | string | Writable integer bitrate property, such as `bitrate` or `target-bitrate`. |
+| `unit` | string | `bps` or `kbps`, matching the encoder property. |
+
+Without `rate_control`, the pipeline encoder retains the fixed bitrate supplied
+in the launch description. Downstream keyframe requests are still forwarded to
+the pipeline.
+
+### Publish options
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `max_bitrate_bps` | integer | no | Positive maximum advertised publish bitrate in bits per second. |
+| `max_framerate` | integer | no | Positive maximum advertised publish frame rate. |
+
+These correspond to the bitrate and frame-rate limits used by the Rust capture
+examples. They do not configure the GStreamer encoder itself; use the pipeline
+properties and optional `rate_control` binding for that.
+
+This bridge maps every capture setting currently exposed by the pinned C++ SDK:
+GStreamer pipeline, codec, resolution, encoder rate-control binding, native
+camera selection, and the capture-derived publish options. It also follows the
+Rust example's `max_bitrate` and `fps` publish limits as `max_bitrate_bps` and
+`max_framerate`. LiveKit credentials remain process environment settings, and
+source diagnostics are always enabled. Rust-only TCP/RTSP/shared-memory wire
+formats, frame metadata, simulcast, and encoder selection are not accepted until
+equivalent C++ capture APIs exist.
+
+### Demo source
+
+The built-in deterministic demo source publishes cycling solid-color frames and
+accepts no GStreamer fields. It is intended for testing:
+
+```yaml
+video_sources:
+  - track_name: "demo_camera"
+    source:
+      type: "demo"
+```
+
+Output characteristics default to 640x480 at 30 fps. Override either with an
+optional `demo` block:
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `resolution` | map | no | Positive `width` and `height`. Defaults to 640x480. |
+| `framerate_fps` | integer | no | Positive frame rate. Defaults to 30. |
+
+```yaml
+video_sources:
+  - track_name: "demo_camera"
+    source:
+      type: "demo"
+      demo:
+        resolution: { width: 1280, height: 720 }
+        framerate_fps: 15
+```
+
+### Device source
+
+A `device` source captures from a camera through the platform's native capture
+stack — AVFoundation on macOS, V4L2 on Linux — with no GStreamer pipeline to
+author and no GStreamer runtime dependency. Unlike encoded GStreamer ingest, a
+device source is a pixel source encoded by WebRTC, so it gets normal WebRTC rate
+control and does not accept `codec` or `rate_control`.
+
+```yaml
+video_sources:
+  - track_name: "front_camera"
+    source:
+      type: "device"
+      device:
+        id: "0x8020000005ac8514"
+        format:
+          strategy: "closest"
+          resolution: { width: 1280, height: 720 }
+          framerate_fps: 30
+    publish_options:
+      max_framerate: 30
+```
+
+List what the host exposes, including the `id` values to paste into config:
+
+```bash
+ros2 run ros_portal capture_devices
+```
+
+#### `device`
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `id` | string | no | Platform-stable identifier as reported by `capture_devices`. Mutually exclusive with `index`. |
+| `index` | integer | no | Platform enumeration position. Mutually exclusive with `id`. |
+| `format` | map | no | Requested capture format. Omit to accept the device's default. |
+
+With neither `id` nor `index`, the platform default device is opened. Prefer
+`id`: it is stable across reboots and re-plugging on macOS, whereas `index` is
+the AVFoundation device position on macOS and the `/dev/videoN` node number on
+Linux, either of which can shift as devices are attached. On V4L2 the `id` *is*
+the node number, so re-enumerate there rather than persisting it. Supplying both
+`id` and `index` is rejected.
+
+#### `device.format`
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `strategy` | string | yes | `exact`, `closest`, `highest_framerate`, or `highest_resolution`. |
+| `resolution` | map | see below | Positive `width` and `height`. |
+| `framerate_fps` | integer | see below | Positive frame rate. |
+| `frame_format` | string | no | `i420`, `nv12`, `bgra`, `rgb24`, `bgr24`, `yuyv`, `uyvy`, `grey`, or `mjpeg`. |
+
+Which fields a strategy accepts:
+
+| `strategy` | `resolution` | `framerate_fps` | Behavior |
+|---|---:|---:|---|
+| `exact` | required | required | Fails creation unless the device offers this resolution and frame rate. Frame-rate matching is rounding-tolerant, so 30 fps is satisfied by a device advertising 30.00003 fps. |
+| `closest` | required | required | Uses the device's nearest supported resolution and frame rate. |
+| `highest_framerate` | optional constraint | rejected | Maximizes frame rate, considering only formats matching the supplied fields. |
+| `highest_resolution` | rejected | optional constraint | Maximizes resolution, considering only formats matching the supplied fields. |
+
+`frame_format` needs care, because only resolution and frame rate participate in
+format selection — a frame format is validated and then treated as a preference
+the backend may substitute:
+
+- **macOS** accepts only `i420`, `nv12`, and `bgra`; any other value fails
+  creation. It then delivers NV12 regardless of which of the three was asked for.
+- **V4L2** rejects `i420` and `bgra`. For `exact` and `closest` it tries the
+  requested format first and then falls back through the formats it supports.
+- `nv12` is the only value both backends accept, so `exact` and `closest` default
+  to it when `frame_format` is omitted.
+- For `highest_framerate` and `highest_resolution` there is **no default and no
+  fallback**: naming a frame format there selects it outright, which can exclude
+  a camera whose top resolution is offered only as `yuyv` or `mjpeg`. Leave it
+  unset unless you specifically need one format.
+
+Platform format viability is not validated against the config host, since a
+package may be cross-built for a different target. An unusable request fails when
+the source is created and surfaces on the source's diagnostic.
+
+The negotiated frame rate and frame format are not reported back by the SDK. The
+negotiated resolution is, and ROS Portal logs it per source at startup:
+
+```
+Capture source 'front_camera' (device) negotiated 1280x720
+```
+
+Operationally: on Linux the process needs the relevant `/dev/video*` node
+visible, which for containers means mapping the device in (devcontainer users
+must add `--device`). On macOS the first open prompts for camera permission; a
+denied or headless process fails source creation.
+
+Capture requires the pinned C++ SDK source build. GStreamer is additionally
+required for `type: gstreamer`, but not for `device` or `demo`. The schema's
+tagged `source.type` is intentionally backend-neutral so future RTSP and other
+ingestion backends can be added without changing the `video_sources` collection
+shape — `device` is the first backend added under it.
 
 Audio options are not part of config version `0.0.1`.

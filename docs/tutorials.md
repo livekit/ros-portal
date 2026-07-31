@@ -68,7 +68,6 @@ exports the turtle's pose:
 ```yaml
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4          # keep > 1 so remote CLI calls have a free executor thread
 
   topics:
     # Velocity commands (LiveKit -> ROS).
@@ -87,7 +86,6 @@ locally for use in [step 3b](#3-spawn-a-turtle-service-call):
 ```yaml
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4
 
   topics:
     # Velocity commands (ROS -> LiveKit).

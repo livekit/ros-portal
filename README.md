@@ -45,12 +45,32 @@ export LIVEKIT_TOKEN=<token>
 ros2 launch ros_portal ros_portal.launch.py
 ```
 
+Run the same node from the multi-architecture Docker image for your ROS
+distribution:
+
+```bash
+docker run --rm \
+  --network host \
+  --env LIVEKIT_URL=<url> \
+  --env LIVEKIT_TOKEN=<token> \
+  --volume /path/on/host/config.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:jazzy \
+  ros2 launch ros_portal ros_portal.launch.py \
+  config_path:=/config/ros_portal.yaml
+```
+
+Images are available for Humble, Jazzy, Kilted, and Lyrical on amd64 and
+arm64. See [Running with Docker](docs/docker.md) for tags, networking, and
+release details.
+
 To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutorials.md).
 
 ## User Guides
 
 - [Installing Debian packages](docs/installation.md): supported ROS and Ubuntu
   versions, local package installation, and the installed overlay.
+- [Running with Docker](docs/docker.md): supported images, tags, configuration,
+  networking, and local image builds.
 - [Running](docs/running.md): launch commands, credentials, local development launch,
   and simulation examples.
 - [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,

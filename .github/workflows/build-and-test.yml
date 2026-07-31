@@ -57,6 +57,7 @@ jobs:
       ROS_IMAGE_DIGEST: ${{ inputs.ros_image_digest }}
       ROS_IMAGE_REPOSITORY: ros
       ROS_IMAGE_TAG: ${{ inputs.ros_image_tag }}
+      RUNTIME_IMAGE: ros-portal-ci:${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ github.sha }}
 
     steps:
       - name: Check out repository
@@ -245,21 +246,33 @@ jobs:
               exec ./scripts/package-deb.sh
             '
 
-      # Use a clean ROS base image so workspace artifacts and dev dependencies
-      # cannot hide missing package dependencies or installation errors.
-      - name: Smoke-test Debian in ROS Image
+      # The runtime image installs the same Debian package into a clean ROS base
+      # image, so this also preserves the clean-install package smoke test.
+      - name: Build runtime Docker image
         shell: bash
         run: |
           set -euo pipefail
           deb_path="$(compgen -G 'artifacts/debian/*.deb')"
-          docker run --rm \
-            --network host \
-            --env "CI=true" \
-            --env "ROS_DISTRO=${ROS_DISTRO}" \
-            --volume "${PWD}/artifacts/debian:/packages:ro" \
-            --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" \
-            "${ROS_IMAGE}" \
-            bash -lc "/smoke-test-deb.sh /packages/$(basename "${deb_path}")"
+          docker build \
+            --platform "linux/${{ inputs.arch }}" \
+            --file docker/runtime/Dockerfile \
+            --build-arg "DEB_FILE=${deb_path}" \
+            --build-arg "IMAGE_REVISION=${GITHUB_SHA}" \
+            --build-arg "IMAGE_SOURCE=https://github.com/${GITHUB_REPOSITORY}" \
+            --build-arg "IMAGE_VERSION=ci-${GITHUB_SHA}" \
+            --build-arg "ROS_DISTRO=${ROS_DISTRO}" \
+            --build-arg "ROS_IMAGE_DIGEST=${ROS_IMAGE_DIGEST}" \
+            --build-arg "ROS_IMAGE_REPOSITORY=${ROS_IMAGE_REPOSITORY}" \
+            --build-arg "ROS_IMAGE_TAG=${ROS_IMAGE_TAG}" \
+            --tag "${RUNTIME_IMAGE}" \
+            .
+
+      - name: Smoke-test runtime Docker image
+        run: >-
+          ./scripts/smoke-test-docker-image.sh
+          "${RUNTIME_IMAGE}"
+          "${ROS_DISTRO}"
+          "${{ inputs.arch }}"
 
       - name: Upload Debian package
         # Preserve a built package for diagnosis when its clean-install smoke

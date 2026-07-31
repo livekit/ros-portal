@@ -322,7 +322,7 @@ forwarding outcomes.
 ## `cli_manager`
 
 Reports whether ROS Portal's ROS CLI services and matching LiveKit RPC handlers
-are registered, plus cache pressure and remote-call failure counters.
+are registered, plus cache pressure and inbound/outbound RPC outcomes.
 
 | Property | Value |
 |---|---|
@@ -351,17 +351,36 @@ Each CLI command pair is reported under its RPC method name:
 | `ros2_service_call` | Same as above. |
 | `ros2_interface_show` | Same as above. |
 
-### Cache and Remote-Call Fields
+### Cache Fields
 
 | Key | Value |
 |---|---|
-| `topic_pub_cache` | Current and maximum cached generic topic publishers, for example `0/20`. |
+| `topic_pub_cache_size` | Current number of cached generic topic publishers. |
+| `topic_pub_cache_capacity` | Maximum number of cached generic topic publishers. |
 | `topic_pub_cache_full_rejections` | Number of topic publish requests rejected because the cache was full. |
-| `service_call_cache` | Current and maximum cached service clients, for example `0/20`. |
+| `service_call_cache_size` | Current number of cached generic service clients. |
+| `service_call_cache_capacity` | Maximum number of cached generic service clients. |
 | `service_call_cache_full_rejections` | Number of service call requests rejected because the cache was full. |
+
+### RPC Outcome Fields
+
+| Key | Value |
+|---|---|
+| `remote_calls_total` | Cumulative local requests across all five remote CLI methods. |
 | `remote_participant_not_found` | Cumulative remote RPC failures because the target participant was absent. Informational; does not change the diagnostic level by itself. |
 | `remote_transport_failures` | Cumulative remote RPC transport failures. Informational; does not change the diagnostic level by itself. |
 | `remote_malformed_responses` | Cumulative remote RPC responses that could not be parsed. Informational; does not change the diagnostic level by itself. |
+| `<rpc_method>.rpc_invocations` | Cumulative requests for the named method, including locally rejected requests. |
+| `<rpc_method>.rpc_failures` | Cumulative requests for the named method that returned an unsuccessful response. |
+| `inbound_rpc_requests` | Cumulative inbound LiveKit CLI RPC requests. |
+| `inbound_rpc_failures` | Cumulative inbound CLI RPC requests that returned an unsuccessful response. |
+| `topic_pub_rejected_not_allowed` | Cumulative inbound topic publish requests rejected by the local allow policy. |
+| `service_call_timeouts` | Cumulative inbound ROS service calls that timed out. |
+
+The per-method fields use `ros2_topic_list`, `ros2_topic_pub`,
+`ros2_service_list`, `ros2_service_call`, and `ros2_interface_show` in place of
+`<rpc_method>`. RPC outcome fields are informational and do not change the
+diagnostic level by themselves.
 
 ## Quick Check
 

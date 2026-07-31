@@ -198,7 +198,46 @@ private:
   FRIEND_TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered);
   FRIEND_TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails);
   FRIEND_TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures);
+  FRIEND_TEST(ManagerDiagnosticsTest, CountsInboundOutcomesAndLocalFailures);
 #endif
+
+  /// @brief Invocation and failure counters for one outbound RPC method.
+  struct RpcMethodDiagnosticState {
+    /// @brief Number of local requests made for this RPC method.
+    std::atomic<std::uint64_t> rpc_invocations{0};
+    /// @brief Number of those requests that returned an unsuccessful response.
+    std::atomic<std::uint64_t> rpc_failures{0};
+  };
+
+  /// @brief Mutable counters published by the diagnostic task.
+  struct DiagnosticState {
+    /// @brief Total local requests made across all remote CLI methods.
+    std::atomic<std::uint64_t> remote_calls_total{0};
+    /// @brief Count of remote calls rejected because the participant was absent.
+    std::atomic<std::uint64_t> remote_participant_not_found{0};
+    /// @brief Count of remote RPCs that failed at the LiveKit transport layer.
+    std::atomic<std::uint64_t> remote_transport_failures{0};
+    /// @brief Count of remote RPC responses that failed JSON parsing.
+    std::atomic<std::uint64_t> remote_malformed_responses{0};
+    /// @brief Outbound diagnostics for `ros2 topic list`.
+    RpcMethodDiagnosticState topic_list;
+    /// @brief Outbound diagnostics for `ros2 topic pub`.
+    RpcMethodDiagnosticState topic_pub;
+    /// @brief Outbound diagnostics for `ros2 service list`.
+    RpcMethodDiagnosticState service_list;
+    /// @brief Outbound diagnostics for `ros2 service call`.
+    RpcMethodDiagnosticState service_call;
+    /// @brief Outbound diagnostics for `ros2 interface show`.
+    RpcMethodDiagnosticState interface_show;
+    /// @brief Count of inbound LiveKit CLI RPC requests.
+    std::atomic<std::uint64_t> inbound_rpc_requests{0};
+    /// @brief Count of inbound RPC requests that returned failure.
+    std::atomic<std::uint64_t> inbound_rpc_failures{0};
+    /// @brief Count of topic publishes rejected by the local allow policy.
+    std::atomic<std::uint64_t> topic_pub_rejected_not_allowed{0};
+    /// @brief Count of local ROS service calls that timed out.
+    std::atomic<std::uint64_t> service_call_timeouts{0};
+  };
 
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
@@ -245,6 +284,26 @@ private:
   ResponseT performRemoteRpc(const std::string& participant_id, const char* rpc_method,
                              const std::string& request_payload, std::uint8_t timeout_sec) const;
 
+  /// @brief Record one outbound result and return it unchanged.
+  /// @tparam ResponseT Generated ROS service response type.
+  /// @param method_state Per-method counters for the requested command.
+  /// @param response Response to record and return.
+  /// @return @p response, moved to the caller.
+  template <typename ResponseT>
+  ResponseT recordRemoteResult(RpcMethodDiagnosticState& method_state, ResponseT response) const {
+    if (!response.success) {
+      method_state.rpc_failures.fetch_add(1, std::memory_order_relaxed);
+    }
+    return response;
+  }
+
+  /// @brief Build an inbound RPC response and record unsuccessful outcomes.
+  /// @param success Whether the inbound command succeeded.
+  /// @param err_msg Human-readable failure detail.
+  /// @param output Human-readable command output.
+  /// @return Serialized CLI response JSON.
+  std::string makeInboundRpcResponse(bool success, const std::string& err_msg, const std::string& output) const;
+
   /// @brief Populate the cli-manager diagnostic status from creation state.
   ///
   /// Reports OK when every CLI command has both its ROS service and its LiveKit
@@ -276,14 +335,8 @@ private:
   std::vector<std::string> registered_rpc_methods_;
   /// ROS Portal-owned diagnostics functions used to (de)register the cli-manager task.
   diagnostics::DiagnosticsManagerFns diagnostics_;
-  /// Count of remote calls rejected because the target participant was absent.
-  /// Mutable/atomic: incremented from const request handlers on executor and RPC
-  /// threads and read from the diagnostic timer thread.
-  mutable std::atomic<std::uint64_t> remote_participant_not_found_{0};
-  /// Count of remote RPCs that failed at the LiveKit transport layer.
-  mutable std::atomic<std::uint64_t> remote_transport_failures_{0};
-  /// Count of remote RPC responses that failed to parse as valid JSON.
-  mutable std::atomic<std::uint64_t> remote_malformed_responses_{0};
+  /// Counters updated by executor/RPC threads and read by diagnostics.
+  mutable DiagnosticState diagnostic_state_;
 };
 
 } // namespace ros_portal::cli

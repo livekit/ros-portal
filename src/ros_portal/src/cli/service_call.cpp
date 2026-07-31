@@ -186,7 +186,7 @@ ServiceCallSrv::Response ServiceCall::call(const ServiceCallOptions& options) {
     std::this_thread::sleep_for(kPollPeriod);
   }
 
-  return makeCliResponse<ServiceCallSrv::Response>(false, "Service call timed out.");
+  return makeCliResponse<ServiceCallSrv::Response>(false, kServiceCallTimeoutError);
 }
 
 std::optional<ServiceCall::ClientPtr> ServiceCall::getClient(const std::string& service, const std::string& msg_type,

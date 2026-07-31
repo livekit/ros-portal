@@ -236,6 +236,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
+  src/video_source_manager.cpp
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}

@@ -32,6 +32,7 @@ All config lives under `ros_portal`.
 | `room_options` | map | no | `{}` | LiveKit room connection options. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
+| `video_sources` | list | no | `[]` | Independent capture sources published as LiveKit video tracks. |
 
 ## Room Options
 
@@ -68,7 +69,6 @@ used to limit which streams cross ROS Portal for bandwidth reasons.
 | `max_rate_hz` | number | no | - | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
 | `latched` | boolean | no | `false` | Treat the topic as latched (see below). Literal topic names only. |
 | `encoding` | string | no | `ros2msg` | Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
-| `video_options` | map | no | - | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
 `direction: "bidirectional"`. Incoming topics are those with `direction: "in"`
@@ -241,11 +241,114 @@ Notes:
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
 
-## Video Options
+## Video Sources
+
+`video_sources` publishes video independently of the ROS topic graph. Every
+entry owns one capture producer, one LiveKit video track, and one diagnostic
+status. Sources are created, published, and started after ROS Portal connects to
+the room. A failure affects only that entry: ROS Portal and other configured
+sources continue running, while `video_source/<track_name>/<index>` reports the
+error.
+
+```yaml
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: >-
+          v4l2src device=/dev/video0 ! videoconvert !
+          x264enc name=lk_encoder tune=zerolatency ! h264parse !
+          appsink name=lk_appsink
+        codec: "h264"
+        resolution:
+          width: 1280
+          height: 720
+        rate_control:
+          element: "lk_encoder"
+          property: "bitrate"
+          unit: "kbps"
+      publish_options:
+        max_bitrate_bps: 3500000
+        max_framerate: 30
+```
+
+### Video source entry
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
-| `bitrate_kbps` | integer | no | Target bitrate in kbps. Must be positive. |
-| `codec` | string | no | Video codec name. Must be non-empty when set. |
+| `track_name` | string | yes | Non-empty LiveKit video track name. |
+| `source` | map | yes | Capture backend and its configuration. |
+| `publish_options` | map | no | Application-controlled LiveKit publish limits. |
+
+All capture-backed tracks are published with LiveKit track source `camera`.
+Capture-derived settings take precedence where required: encoded GStreamer
+ingest dictates its codec, disables simulcast, and selects the pre-encoded
+encoder backend.
+
+### Source configuration
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `type` | string | yes | `gstreamer` or `demo`. |
+| `pipeline` | string | GStreamer only | GStreamer launch description. Must contain `appsink name=lk_appsink` or leave exactly one encoded video source pad unlinked. |
+| `codec` | string | no | `h264`, `h265`, `vp8`, `vp9`, or `av1`. Inferred from GStreamer caps when omitted. |
+| `resolution` | map | no | Positive `width` and `height`. Discovered from negotiated caps when omitted; verified against the stream when supplied. |
+| `rate_control` | map | no | Forward WebRTC bitrate targets to a GStreamer encoder property. |
+
+When resolution is omitted, source creation waits up to five seconds for the
+first encoded sample. Supplying it avoids that discovery wait, but the first
+sample must still match. Codec or resolution changes after capture begins end
+the source with an error because the track cannot yet be republished in place.
+
+`rate_control` has three required fields:
+
+| Field | Type | Description |
+|---|---:|---|
+| `element` | string | Name of the encoder element in the pipeline, such as `lk_encoder`. |
+| `property` | string | Writable integer bitrate property, such as `bitrate` or `target-bitrate`. |
+| `unit` | string | `bps` or `kbps`, matching the encoder property. |
+
+Without `rate_control`, the pipeline encoder retains the fixed bitrate supplied
+in the launch description. Downstream keyframe requests are still forwarded to
+the pipeline.
+
+### Publish options
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `max_bitrate_bps` | integer | no | Positive maximum advertised publish bitrate in bits per second. |
+| `max_framerate` | integer | no | Positive maximum advertised publish frame rate. |
+
+These correspond to the bitrate and frame-rate limits used by the Rust capture
+examples. They do not configure the GStreamer encoder itself; use the pipeline
+properties and optional `rate_control` binding for that.
+
+This first bridge maps every capture setting currently exposed by the pinned
+C++ SDK: GStreamer pipeline, codec, resolution, encoder rate-control binding,
+and the capture-derived publish options. It also follows the Rust example's
+`max_bitrate` and `fps` publish limits as `max_bitrate_bps` and
+`max_framerate`. LiveKit credentials remain process environment settings, and
+source diagnostics are always enabled. Rust-only TCP/RTSP/shared-memory wire
+formats, frame metadata, native camera selection, simulcast, and encoder
+selection are not accepted until equivalent C++ capture APIs exist.
+
+### Demo source
+
+The built-in deterministic demo source publishes cycling solid-color frames and
+accepts no GStreamer fields. It is intended for testing:
+
+```yaml
+video_sources:
+  - track_name: "demo_camera"
+    source:
+      type: "demo"
+```
+
+Capture currently requires the pinned C++ SDK source build and system
+GStreamer. The schema's tagged `source.type` is intentionally backend-neutral
+so future native camera, RTSP, and other ingestion backends can be added without
+changing the `video_sources` collection shape.
 
 Audio options are not part of config version `0.0.1`.

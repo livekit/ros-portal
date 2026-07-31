@@ -16,6 +16,7 @@
 
 #include "ros_portal/ros_portal.hpp"
 
+#include <livekit/capture_source.h>
 #include <livekit/data_track_options.h>
 #include <livekit/data_track_schema.h>
 #include <livekit/data_track_stream.h>
@@ -32,6 +33,8 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <future>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -43,9 +46,86 @@
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
+#include "ros_portal/video_source_manager.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal {
+
+namespace {
+
+livekit::VideoCodec toLiveKitCodec(ros_portal_config::VideoCodec codec) {
+  switch (codec) {
+    case ros_portal_config::VideoCodec::H264:
+      return livekit::VideoCodec::H264;
+    case ros_portal_config::VideoCodec::H265:
+      return livekit::VideoCodec::H265;
+    case ros_portal_config::VideoCodec::Vp8:
+      return livekit::VideoCodec::VP8;
+    case ros_portal_config::VideoCodec::Vp9:
+      return livekit::VideoCodec::VP9;
+    case ros_portal_config::VideoCodec::Av1:
+      return livekit::VideoCodec::AV1;
+  }
+  return livekit::VideoCodec::H264;
+}
+
+std::future<std::shared_ptr<livekit::CaptureSource>> createCaptureSource(
+    const ros_portal_config::CaptureSourceConfig& source) {
+  if (source.type == ros_portal_config::CaptureSourceType::Demo) {
+    if (source.pipeline || source.codec || source.resolution || source.rate_control) {
+      throw std::invalid_argument("demo source does not accept gstreamer options");
+    }
+    return livekit::CaptureSource::create(livekit::DemoVideoSourceConfig{});
+  }
+
+  if (!source.pipeline) {
+    throw std::invalid_argument("gstreamer source requires a pipeline");
+  }
+  livekit::GstreamerVideoSourceConfig config;
+  config.pipeline = *source.pipeline;
+  if (source.codec) {
+    config.codec = toLiveKitCodec(*source.codec);
+  }
+  if (source.resolution) {
+    config.resolution = livekit::CaptureResolution{source.resolution->width, source.resolution->height};
+  }
+  if (source.rate_control) {
+    const auto& rate_control = *source.rate_control;
+    config.rate_control = livekit::GstreamerRateControl{
+        rate_control.element,
+        rate_control.property,
+        rate_control.unit == ros_portal_config::GstreamerBitrateUnit::Kbps ? livekit::GstreamerBitrateUnit::Kbps
+                                                                           : livekit::GstreamerBitrateUnit::Bps,
+    };
+  }
+  return livekit::CaptureSource::create(std::move(config));
+}
+
+livekit::TrackPublishOptions capturePublishOptions(
+    const std::optional<ros_portal_config::VideoPublishOptions>& configured) {
+  livekit::TrackPublishOptions options;
+  options.source = livekit::TrackSource::SOURCE_CAMERA;
+  if (!configured) {
+    return options;
+  }
+
+  livekit::VideoEncodingOptions encoding;
+  bool has_encoding = false;
+  if (configured->max_bitrate_bps) {
+    encoding.max_bitrate = static_cast<std::uint64_t>(*configured->max_bitrate_bps);
+    has_encoding = true;
+  }
+  if (configured->max_framerate) {
+    encoding.max_framerate = static_cast<double>(*configured->max_framerate);
+    has_encoding = true;
+  }
+  if (has_encoding) {
+    options.video_encoding = encoding;
+  }
+  return options;
+}
+
+} // namespace
 
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros_portal", options),
@@ -172,6 +252,10 @@ bool RosPortal::initialize() {
     return false;
   }
 
+  if (!initializeVideoSources(config->video_sources)) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to initialize video source manager");
+  }
+
   RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
 
   poll_timer_ = this->create_wall_timer(std::chrono::milliseconds(topic_polling_period_ms_),
@@ -220,6 +304,7 @@ void RosPortal::shutdown() {
   service_forwarder_.reset();
   cli_manager_.reset();
   latched_topic_forwarder_.reset();
+  video_source_manager_.reset();
 
   // Disconnect before destroying delegate targets. Room::disconnect() removes
   // its listener only after in-flight callbacks complete.
@@ -472,6 +557,66 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     return false;
   }
   return topic_forwarder_ != nullptr;
+}
+
+bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources) {
+  VideoSourceManager::LiveKitMethods methods;
+  methods.create_and_publish = [this](const ros_portal_config::VideoSourceConfig& config,
+                                      VideoSourceManager::FinishedCallback finished_callback)
+      -> livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string> {
+    const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
+    if (!participant) {
+      return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+          "local participant is unavailable");
+    }
+
+    try {
+      auto capture = createCaptureSource(config.source).get();
+      if (!capture || !capture->videoSource()) {
+        return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+            "capture source creation returned no video source");
+      }
+
+      capture->setOnFinishedCallback(
+          [finished_callback = std::move(finished_callback)](const livekit::CaptureResult& result) {
+            VideoSourceResult mapped;
+            mapped.error = result.error;
+            mapped.frames_captured = result.frames_captured;
+            mapped.exit = result.exit == livekit::CaptureExit::EndOfStream ? VideoSourceExit::EndOfStream
+                                                                           : VideoSourceExit::Stopped;
+            finished_callback(mapped);
+          });
+
+      auto track = livekit::LocalVideoTrack::createLocalVideoTrack(config.track_name, capture->videoSource());
+      if (!track) {
+        return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+            "failed to create local video track");
+      }
+
+      participant->publishTrack(track, capture->publishOptions(capturePublishOptions(config.publish_options)));
+
+      auto session = std::make_shared<VideoSourceManager::Session>();
+      session->start = [capture] { capture->start(); };
+      session->stop = [capture] { capture->stop(); };
+      session->unpublish = [participant, track] {
+        if (const auto publication = track->publication()) {
+          participant->unpublishTrack(publication->sid());
+        }
+      };
+      return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::success(std::move(session));
+    } catch (const std::exception& error) {
+      return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(error.what());
+    }
+  };
+
+  try {
+    video_source_manager_ = std::make_unique<VideoSourceManager>(video_sources, std::move(methods),
+                                                                 makeDiagnosticsFns(), this->get_logger());
+  } catch (const std::exception& error) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to construct video source manager: %s", error.what());
+    return false;
+  }
+  return true;
 }
 
 bool RosPortal::initializeCliManager() {

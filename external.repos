@@ -2,7 +2,7 @@ repositories:
   client-sdk-cpp:
     type: git
     url: https://github.com/livekit/client-sdk-cpp.git
-    version: 2cbf9a31eebd4d397ffae0ea6a8f63bf88310c50  # v1.5.0
+    version: 328419a9e8ab1f5385d747b5a642bd830bc2bf9b  # ladvoc/livekit-capture
   cpp-tools:
     type: git
     url: https://github.com/livekit/cpp-tools.git

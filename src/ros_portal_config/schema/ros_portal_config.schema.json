@@ -36,6 +36,12 @@
           "items": {
             "$ref": "#/$defs/topicConfig"
           }
+        },
+        "video_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/videoSourceConfig"
+          }
         }
       }
     }
@@ -49,6 +55,15 @@
     },
     "encoding": {
       "enum": ["ros2msg", "ros2idl", "jsonschema"]
+    },
+    "captureSourceType": {
+      "enum": ["gstreamer", "demo"]
+    },
+    "videoCodec": {
+      "enum": ["h264", "h265", "vp8", "vp9", "av1"]
+    },
+    "gstreamerBitrateUnit": {
+      "enum": ["bps", "kbps"]
     },
     "nonemptyString": {
       "type": "string",
@@ -71,15 +86,89 @@
         }
       }
     },
-    "videoOptions": {
+    "captureResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "height": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "gstreamerRateControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["element", "property", "unit"],
+      "properties": {
+        "element": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "property": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "unit": {
+          "$ref": "#/$defs/gstreamerBitrateUnit"
+        }
+      }
+    },
+    "captureSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/captureSourceType"
+        },
+        "pipeline": {
+          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'demo'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "codec": {
+          "description": "Expected encoded codec. When omitted for a GStreamer source, it is inferred from negotiated pipeline caps.",
+          "$ref": "#/$defs/videoCodec"
+        },
+        "resolution": {
+          "description": "Expected encoded resolution. When omitted for a GStreamer source, it is discovered from negotiated pipeline caps.",
+          "$ref": "#/$defs/captureResolution"
+        },
+        "rate_control": {
+          "description": "Optional binding that forwards WebRTC bitrate targets to a writable GStreamer encoder property.",
+          "$ref": "#/$defs/gstreamerRateControl"
+        }
+      }
+    },
+    "videoPublishOptions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "bitrate_kbps": {
+        "max_bitrate_bps": {
+          "description": "Maximum advertised publish bitrate in bits per second.",
           "$ref": "#/$defs/positiveInteger"
         },
-        "codec": {
+        "max_framerate": {
+          "description": "Maximum advertised publish frame rate in frames per second.",
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "videoSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["track_name", "source"],
+      "properties": {
+        "track_name": {
+          "description": "Name of the LiveKit video track published for this source.",
           "$ref": "#/$defs/nonemptyString"
+        },
+        "source": {
+          "$ref": "#/$defs/captureSourceConfig"
+        },
+        "publish_options": {
+          "$ref": "#/$defs/videoPublishOptions"
         }
       }
     },
@@ -132,9 +221,6 @@
           "description": "Outbound topics only. Selects how this ROS Portal node encodes and sends the topic's data on the LiveKit DataTrack, and the schema encoding it advertises to subscribers. 'ros2msg' (default) and 'ros2idl' send raw ROS CDR frames described by a Ros2Msg or Ros2Idl schema; 'jsonschema' deserializes each ROS message and sends a JSON frame described by a generated JSON Schema, easing communication with non-ROS systems. 'ros2idl' requires the local ROS type definition to be renderable as ROS 2 IDL; a topic requesting an encoding whose schema cannot be rendered is skipped with an error. Inbound decoding is unaffected: it is auto-detected from the remote track's advertised frame encoding, so this field is ignored for pure inbound topics. Matched by literal topic name, not regex.",
           "$ref": "#/$defs/encoding",
           "default": "ros2msg"
-        },
-        "video_options": {
-          "$ref": "#/$defs/videoOptions"
         }
       }
     }

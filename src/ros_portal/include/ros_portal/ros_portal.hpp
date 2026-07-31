@@ -44,6 +44,7 @@ class Manager;
 } // namespace cli
 class TopicForwarder;
 class LatchedTopicForwarder;
+class VideoSourceManager;
 
 /// @brief The main ROS Portal node.
 ///
@@ -176,6 +177,12 @@ private:
   /// the forwarder could not be initialized.
   bool initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics);
 
+  /// @brief Create, publish, and start all configured capture-backed video sources.
+  /// @param video_sources Configured independent LiveKit video sources.
+  /// @return True when the manager was constructed. Individual source failures
+  /// are isolated and reported through diagnostics.
+  bool initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources);
+
   //! @brief The period for polling the topics
   int topic_polling_period_ms_;
 
@@ -211,6 +218,8 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
+  //! @brief Configured capture-backed LiveKit video sources.
+  std::unique_ptr<VideoSourceManager> video_source_manager_;
   //! @brief LiveKit connection health diagnostic task owner.
   std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.

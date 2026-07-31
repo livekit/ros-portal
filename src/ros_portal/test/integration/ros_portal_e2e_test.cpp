@@ -22,9 +22,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
@@ -38,6 +40,8 @@
 
 namespace ros_portal::test {
 namespace {
+
+constexpr int kMinimumCaptureFrames = 5;
 
 std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   SchemaManager::LiveKitMethods methods;
@@ -135,6 +139,46 @@ TEST_F(RosPortalTestE2E, RepublishesRosMessagesBothWays) {
                               "message from ROS Portal A"));
   EXPECT_TRUE(verifyDirection(publisherB(), robotANode(), kBidirectionalTopic, kBidirectionalTopic,
                               "message from ROS Portal B"));
+}
+
+TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+
+  livekit::Room receiver_room;
+  const livekit::RoomOptions room_options;
+  ASSERT_TRUE(receiver_room.connect(liveKitUrl(), tokenB(), room_options));
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  int frames_received = 0;
+  constexpr const char* kTrackName = "ros-portal-demo-capture";
+  receiver_room.setOnVideoFrameEventCallback(identityA(), kTrackName,
+                                             [&mutex, &cv, &frames_received](const livekit::VideoFrameEvent&) {
+                                               const std::lock_guard<std::mutex> lock(mutex);
+                                               if (++frames_received >= kMinimumCaptureFrames) {
+                                                 cv.notify_all();
+                                               }
+                                             });
+
+  initializeSinglePortalRuntime(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "ros-portal-demo-capture"
+      source:
+        type: "demo"
+      publish_options:
+        max_bitrate_bps: 1000000
+        max_framerate: 30
+)");
+
+  std::unique_lock<std::mutex> lock(mutex);
+  EXPECT_TRUE(
+      cv.wait_for(lock, kMessageTimeout, [&frames_received] { return frames_received >= kMinimumCaptureFrames; }))
+      << "Timed out waiting for ROS Portal demo capture frames; received " << frames_received;
+  lock.unlock();
+
+  receiver_room.clearOnVideoFrameCallback(identityA(), kTrackName);
 }
 
 // End-to-end encoding check: ROS Portal A forwards a ROS message with a configured

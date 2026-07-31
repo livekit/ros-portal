@@ -16,7 +16,6 @@
 ros_portal:
   version: "0.0.1"
   topic_polling_period_ms: 500
-  ros_threads: 4
 
   room_options:
     join_retries: 3
@@ -38,9 +37,6 @@ ros_portal:
   topics:
     - topic: "/camera/image_raw"
       direction: "out"
-      video_options:
-        bitrate_kbps: 3500
-        codec: "h264"
 
     - topic: "/lidar/points"
       direction: "out"
@@ -66,3 +62,26 @@ ros_portal:
     #   audio_options:
     #     bitrate_kbps: 500
     #     codec: "wav"
+
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: >-
+          videotestsrc is-live=true ! videoconvert ! x264enc name=lk_encoder
+          tune=zerolatency ! h264parse ! appsink name=lk_appsink
+        codec: "h264"
+        resolution:
+          width: 1280
+          height: 720
+        rate_control:
+          element: "lk_encoder"
+          property: "bitrate"
+          unit: "kbps"
+      publish_options:
+        max_bitrate_bps: 3500000
+        max_framerate: 30
+
+    - track_name: "demo_camera"
+      source:
+        type: "demo"

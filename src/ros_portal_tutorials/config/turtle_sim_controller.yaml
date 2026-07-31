@@ -4,7 +4,6 @@
 # Turtlesim tutorial — controller side. See docs/tutorials.md.
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4
 
   topics:
     - topic: "/turtle.*/cmd_vel"

@@ -62,7 +62,6 @@ __`turtle_sim_config.yaml`__ - the turtle receives velocity commands from LiveKi
 ```yaml
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4          # keep > 1 so remote CLI calls have a free executor thread
 
   topics:
     # Velocity commands (LiveKit -> ROS).
@@ -81,7 +80,6 @@ step [3b](tutorials.md#3-spawn-a-turtle-service-call)):
 ```yaml
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4
 
   topics:
     # Velocity commands (ROS -> LiveKit).

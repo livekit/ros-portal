@@ -2,6 +2,7 @@ devel/
 logs/
 build/
 build-*/
+package-deb/
 artifacts/
 install/
 install-*/

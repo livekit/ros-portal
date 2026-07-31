@@ -43,12 +43,13 @@ source "${install_prefix}/setup.bash"
 set -u
 
 actual_prefix="$(ros2 pkg prefix ros_portal)"
-if [[ "${actual_prefix}" != "${install_prefix}" ]]; then
+readonly portal_prefix="${install_prefix}/ros_portal"
+if [[ "${actual_prefix}" != "${portal_prefix}" ]]; then
   echo "Unexpected ROS Portal prefix: ${actual_prefix}" >&2
   exit 1
 fi
 
-readonly ros_portal_node="${install_prefix}/lib/ros_portal/ros_portal_node"
+readonly ros_portal_node="${portal_prefix}/lib/ros_portal/ros_portal_node"
 if [[ ! -x "${ros_portal_node}" ]]; then
   echo "ROS Portal node is missing: ${ros_portal_node}" >&2
   exit 1
@@ -60,9 +61,61 @@ if ldd "${ros_portal_node}" | awk '/not found/ { found = 1 } END { exit !found }
   exit 1
 fi
 
-# Verify the installed launch description can be resolved and parsed without
-# starting ROS Portal or requiring a LiveKit server.
+# Verify the installed launch description can be resolved and parsed.
 ros2 launch ros_portal ros_portal.launch.py --show-args >/dev/null
 "ros-portal-${ros_distro}" --show-args >/dev/null
+
+readonly smoke_config="$(mktemp)"
+readonly bridge_log="$(mktemp)"
+trap 'rm -f "${smoke_config}" "${bridge_log}"' EXIT
+cat >"${smoke_config}" <<'EOF'
+ros_portal:
+  version: "0.0.1"
+EOF
+
+export LIVEKIT_URL="${LIVEKIT_URL:-ws://127.0.0.1:7880}"
+export LIVEKIT_TOKEN="${LIVEKIT_TOKEN:-$(
+  python3 - <<'PY'
+import base64
+import hashlib
+import hmac
+import json
+import time
+
+def encode(value):
+    return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=")
+
+header = encode({"alg": "HS256", "typ": "JWT"})
+payload = encode({
+    "iss": "devkey",
+    "sub": "debian-smoke-test",
+    "nbf": int(time.time()) - 1,
+    "exp": int(time.time()) + 60,
+    "video": {
+        "room": "ros_portal_debian_smoke",
+        "roomJoin": True,
+        "canPublish": True,
+        "canSubscribe": True,
+        "canPublishData": True,
+    },
+})
+signature = hmac.new(b"secret", header + b"." + payload, hashlib.sha256).digest()
+print((header + b"." + payload + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")).decode())
+PY
+)}"
+
+set +e
+timeout 10s "${ros_portal_node}" --ros-args -p "config_path:=${smoke_config}" >"${bridge_log}" 2>&1
+readonly bridge_status=$?
+set -e
+cat "${bridge_log}"
+if [[ "${bridge_status}" -ne 124 ]]; then
+  echo "ROS Portal exited before the 10-second smoke-test timeout (status ${bridge_status})" >&2
+  exit "${bridge_status}"
+fi
+if ! grep -q "Connected to LiveKit room" "${bridge_log}"; then
+  echo "ROS Portal did not connect to the LiveKit smoke-test server" >&2
+  exit 1
+fi
 
 echo "Verified ${deb_path} on ROS ${ros_distro}"

@@ -34,7 +34,7 @@ networks.
 
 Open the repository in the devcontainer, then build from `/livekit_ws`:
 
-    colcon build --packages-select ros_portal
+    colcon build --packages-up-to ros_portal
 
 Run ROS Portal with LiveKit credentials:
 

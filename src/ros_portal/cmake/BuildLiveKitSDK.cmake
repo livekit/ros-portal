@@ -74,6 +74,7 @@ function(livekit_build_sdk_from_source)
     -DCMAKE_INSTALL_PREFIX=${LIVEKIT_SOURCE_INSTALL_DIR}
     -DLIVEKIT_BUILD_EXAMPLES=OFF
     -DLIVEKIT_BUILD_TESTS=OFF
+    -DLIVEKIT_ENABLE_CAPTURE=ON
     -DLIVEKIT_VERSION=${LIVEKIT_SOURCE_VERSION}
   )
   _livekit_run_source_build_step(

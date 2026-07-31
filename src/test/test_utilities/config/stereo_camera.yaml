@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=../../ros_portal_config/schema/ros_portal_config.schema.json
+# Copyright 2026 LiveKit
+#
+# Publishes a stereo camera as two LiveKit video tracks using native device
+# capture -- no GStreamer pipeline and no GStreamer runtime dependency. The
+# cameras are read directly by the SDK (V4L2 on Linux, AVFoundation on macOS),
+# so this does not require a ROS camera driver or any ROS image topics.
+#
+# Run it locally (mints a dev token and joins `robo_room`):
+#
+#   ros2 launch ros_portal ros_portal_local.launch.py \
+#     config_path:=$(ros2 pkg prefix ros_portal)/share/ros_portal/config/stereo_camera.yaml
+#
+# FIRST: find your cameras and replace the `index` values below.
+#
+#   ros2 run ros_portal capture_devices
+#
+# Prefer `id` over `index` where you can -- see the notes at the bottom.
+
+ros_portal:
+  version: "0.0.1"
+
+  # Independent capture sources publish directly as LiveKit video tracks.
+  # Uncomment this deterministic source for capture integration testing.
+  video_sources:
+    - track_name: "demo_camera"
+      source:
+        type: "demo"
+      resolution:
+        width: 1280
+        height: 720
+      framerate_fps: 30
+
+    - track_name: "stereo"
+      source:
+        type: "device"
+        device:
+          # On Linux this is the /dev/videoN node number, NOT the position in
+          # `capture_devices` output. UVC cameras commonly claim two nodes each
+          # (capture + metadata), so two physical cameras are often video0 and
+          # video2 rather than video0 and video1.
+          index: 0
+          format:
+            # `closest` lets the camera pick its nearest supported mode instead
+            # of failing outright. Use `exact` once you know a mode it offers.
+            strategy: "closest"
+            resolution:
+              width: 1280
+              height: 720
+            framerate_fps: 30
+      publish_options:
+        # Two tracks share the uplink, so budget per eye rather than per stream.
+        max_bitrate_bps: 2500000
+        max_framerate: 30
+
+# tracks:
+#   stereo:
+#     type: video
+#     source: device
+#     device:
+#       id: "0x212000032e40035"
+#     # Take the camera's largest frame, which for a stereo device is the full
+#     # side-by-side pair. On the camera above this negotiates 2560x720 at 30 fps.
+#     #
+#     # No frame rate is pinned here on purpose. A request that names one --
+#     # `closest`, `exact`, or `highest_resolution` with `framerate_fps` -- makes
+#     # the macOS backend set an explicit frame duration, and until the fix for
+#     # near-integral device rates lands (a UVC camera advertising 30.00003 fps
+#     # rejects a duration of exactly 1/30 s), AVFoundation raises an
+#     # Objective-C exception that aborts the process.
+#     format:
+#       highest_resolution: {}
+
+# ---------------------------------------------------------------------------
+# If your rig is a single side-by-side ("dual lens") camera
+# ---------------------------------------------------------------------------
+# Many USB stereo cameras expose ONE device that delivers both eyes in one wide
+# frame. In that case use a single source at the full stitched width and let the
+# subscriber split it, e.g. 2560x720 for a 2x 1280x720 pair:
+#
+#   video_sources:
+#     - track_name: "stereo"
+#       source:
+#         type: "device"
+#         device:
+#           id: "replace-with-capture_devices-id"
+#           format:
+#             strategy: "exact"
+#             resolution: { width: 2560, height: 720 }
+#             framerate_fps: 30
+#       publish_options:
+#         max_bitrate_bps: 5000000
+#         max_framerate: 30
+#
+# Some of these cameras only offer the widest side-by-side modes as MJPEG. If
+# `closest`/`exact` lands on a narrower mode than you expect, ask for the format
+# explicitly (`frame_format: "mjpeg"`). Note the trade-off documented in
+# docs/configuration.md: naming a frame format under `highest_resolution` or
+# `highest_framerate` selects it outright with no fallback.
+#
+# ---------------------------------------------------------------------------
+# Notes
+# ---------------------------------------------------------------------------
+# - Prefer `id` over `index`: `index` can shift as devices are attached. On
+#   macOS `id` is a stable AVFoundation UUID; on V4L2 it is the node number, so
+#   re-enumerate there rather than persisting it. `index` and `id` are mutually
+#   exclusive.
+# - Only resolution and frame rate drive mode selection. `frame_format` is a
+#   preference the backend may substitute: macOS accepts only i420/nv12/bgra and
+#   always delivers NV12; V4L2 rejects i420/bgra. Omitted here, so `closest`
+#   defaults to nv12 (the only value both backends accept).
+# - The negotiated frame rate and pixel format are not reported back. The
+#   negotiated resolution is, and is logged per source at startup:
+#     Capture source 'stereo_left' (device) negotiated 1280x720
+#   Check that line to confirm `closest` resolved the way you expected.
+# - Watch `video_source/stereo_left/0` and `video_source/stereo_right/1` on
+#   /diagnostics for per-source state; one camera failing does not stop the
+#   other or the node.
+# - In a container the device nodes must be mapped in (`--device /dev/video0`,
+#   `--device /dev/video2`). On macOS the first open prompts for camera
+#   permission; a denied or headless process fails source creation.
+# - If your camera is already published as sensor_msgs/msg/Image by a ROS
+#   driver, forward those topics with an outbound `topics` entry instead of
+#   using a device source.

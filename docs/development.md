@@ -174,14 +174,17 @@ Build the workspace first, then package. `SOURCE_INSTALL_BASE` is required and
 must point at the completed install prefix.
 
 Run it inside the matching repository devcontainer or CI environment (it needs
-`dpkg-deb`, `rosdep`, and the ROS underlay). From the rootful devcontainer:
+`dpkg-deb`, `dpkg-shlibdeps`, and the ROS underlay). From the rootful
+devcontainer:
 
 ```bash
 colcon build --packages-up-to ros2_livekit_bridge
 SOURCE_INSTALL_BASE="${PWD}/install" ./scripts/package-deb.sh
 ```
 
-It preserves the isolated package prefixes for the bridge and medkit packages
-under `/opt/livekit/ros/$ROS_DISTRO`. The package and its checksum are written
-to `artifacts/debian/`. CI packages the install tree from the tested build,
-then installs the `.deb` into a clean ROS base image for smoke testing.
+The resulting fat package preserves the isolated prefixes for the bridge,
+config, message, and medkit packages under `/opt/livekit/ros/$ROS_DISTRO`; it
+also includes the LiveKit SDK installed by the bridge build. ROS and system
+libraries remain normal APT dependencies. The package and its checksum are
+written to `artifacts/debian/`. CI installs it into a clean ROS base image,
+then connects the bridge to the test LiveKit server for ten seconds.

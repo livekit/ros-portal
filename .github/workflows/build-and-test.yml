@@ -254,6 +254,8 @@ jobs:
           set -euo pipefail
           deb_path="$(compgen -G 'artifacts/debian/*.deb')"
           docker run --rm \
+            --network host \
+            --env "CI=true" \
             --env "ROS_DISTRO=${ROS_DISTRO}" \
             --volume "${PWD}/artifacts/debian:/packages:ro" \
             --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" \

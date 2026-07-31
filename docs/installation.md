@@ -13,6 +13,11 @@ The Debian package follows ROS naming conventions:
 `ros-<distro>-livekit-bridge-<arch>-deb`; each artifact is a ZIP containing
 the versioned `.deb` and its checksum.
 
+Each package is a fat bridge overlay: it includes the bridge, its config and
+message packages, the pinned medkit packages, and the LiveKit SDK. It relies
+on the matching ROS 2 underlay and Ubuntu system libraries through normal APT
+dependencies.
+
 <!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
 ## Install

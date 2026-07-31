@@ -61,9 +61,61 @@ if ldd "${bridge_node}" | awk '/not found/ { found = 1 } END { exit !found }'; t
   exit 1
 fi
 
-# Verify the installed launch description can be resolved and parsed without
-# starting the bridge or requiring a LiveKit server.
+# Verify the installed launch description can be resolved and parsed.
 ros2 launch ros2_livekit_bridge livekit_bridge.launch.py --show-args >/dev/null
 "livekit-ros2-bridge-${ros_distro}" --show-args >/dev/null
+
+readonly smoke_config="$(mktemp)"
+readonly bridge_log="$(mktemp)"
+trap 'rm -f "${smoke_config}" "${bridge_log}"' EXIT
+cat >"${smoke_config}" <<'EOF'
+ros2_livekit_bridge:
+  version: "0.0.1"
+EOF
+
+export LIVEKIT_URL="${LIVEKIT_URL:-ws://127.0.0.1:7880}"
+export LIVEKIT_TOKEN="${LIVEKIT_TOKEN:-$(
+  python3 - <<'PY'
+import base64
+import hashlib
+import hmac
+import json
+import time
+
+def encode(value):
+    return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=")
+
+header = encode({"alg": "HS256", "typ": "JWT"})
+payload = encode({
+    "iss": "devkey",
+    "sub": "debian-smoke-test",
+    "nbf": int(time.time()) - 1,
+    "exp": int(time.time()) + 60,
+    "video": {
+        "room": "ros2_livekit_bridge_debian_smoke",
+        "roomJoin": True,
+        "canPublish": True,
+        "canSubscribe": True,
+        "canPublishData": True,
+    },
+})
+signature = hmac.new(b"secret", header + b"." + payload, hashlib.sha256).digest()
+print((header + b"." + payload + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")).decode())
+PY
+)}"
+
+set +e
+timeout 10s "${bridge_node}" --ros-args -p "config_path:=${smoke_config}" >"${bridge_log}" 2>&1
+readonly bridge_status=$?
+set -e
+cat "${bridge_log}"
+if [[ "${bridge_status}" -ne 124 ]]; then
+  echo "Bridge exited before the 10-second smoke-test timeout (status ${bridge_status})" >&2
+  exit "${bridge_status}"
+fi
+if ! grep -q "Connected to LiveKit room" "${bridge_log}"; then
+  echo "Bridge did not connect to the LiveKit smoke-test server" >&2
+  exit 1
+fi
 
 echo "Verified ${deb_path} on ROS ${ros_distro}"

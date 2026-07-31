@@ -81,7 +81,7 @@ cbtpu()
 
 clean_ws()
 {
-    cd "\${WS}" && rm -rf build/ log/ install/
+    cd "\${WS}" && rm -rf build*/ log*/ install/
 }
 
 rtl()

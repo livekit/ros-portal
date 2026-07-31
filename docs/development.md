@@ -151,10 +151,9 @@ caches them:
 - `src/externals/client-sdk-cpp/client-sdk-rust/target` — Rust artifacts and the
   vendored WebRTC the build scripts unpack. This is the bulk of both the time and
   the ~3.4 GB on disk. It lives in the source tree, so it is shared by every
-  colcon build base, including the one `scripts/build-deb.sh` creates.
+  colcon build base.
 - `<build-base>/ros_portal/_deps` — the SDK's own CMake tree and install
-  prefix, roughly 250 MB. This is per build base, so a packaging build rebuilds
-  it even when the Rust half is warm.
+  prefix, roughly 250 MB.
 
 Deleting either forces that half to be rebuilt. With both warm, a full CMake
 reconfigure plus SDK build and install finishes in well under a minute; from
@@ -167,20 +166,24 @@ To override the pin for one build, or to track upstream with `latest`:
     colcon build --packages-select ros_portal \
       --cmake-args -DLIVEKIT_SDK_VERSION=latest
 
-## Building Debian Packages
+## Packaging Debian Artifacts
 
-Run `scripts/build-deb.sh` only inside the matching repository devcontainer or
-CI environment. The script uses `/opt/livekit/ros/$ROS_DISTRO` as its build
-staging prefix and removes that directory before building. Running it directly
-on a developer host is therefore unsupported and could remove an existing
-ROS Portal installation outside dpkg's control.
+`scripts/package-deb.sh` bundles an existing isolated colcon install tree into
+a `.deb`. Build the workspace first; the script packages the completed
+`install/` tree.
 
-From the rootful devcontainer, run:
+Run it inside the matching repository devcontainer or CI environment (it needs
+`dpkg-deb`, `dpkg-shlibdeps`, and the ROS underlay). From the rootful
+devcontainer:
 
 ```bash
-./scripts/build-deb.sh
+colcon build --packages-up-to ros_portal
+./scripts/package-deb.sh
 ```
 
-The package and its checksum are written to `artifacts/debian/`. CI performs
-the same build and then installs the package into a clean ROS base image for
-smoke testing.
+The resulting self-contained package preserves the isolated prefixes for ROS
+Portal, config, message, and medkit packages under `/opt/livekit/ros/$ROS_DISTRO`;
+it also includes the LiveKit SDK installed by the ROS Portal build. ROS and
+system libraries remain normal APT dependencies. The package and its checksum
+are written to `artifacts/debian/`. CI installs it into a clean ROS base image,
+then connects ROS Portal to the test LiveKit server for ten seconds.

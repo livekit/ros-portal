@@ -13,6 +13,11 @@ The custom Debian package is named
 `ros-<distro>-livekit-portal-<arch>-deb`; each artifact is a ZIP containing
 the versioned `.deb` and its checksum.
 
+Each package is a self-contained ROS Portal overlay: it includes ROS Portal, its
+config and message packages, the pinned medkit packages, and the LiveKit SDK.
+It relies on the matching ROS 2 underlay and Ubuntu system libraries through
+normal APT dependencies.
+
 <!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
 ## Install

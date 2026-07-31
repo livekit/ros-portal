@@ -48,7 +48,14 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:
-      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ inputs.ros_distro == 'humble' && 'true' || 'false' }}
+      # Every distro builds the pinned SDK checkout because capture
+      # (livekit/capture_source.h) only exists on the client-sdk-cpp branch
+      # pinned in external.repos, not in the LIVEKIT_SDK_VERSION release
+      # archive. Humble needs the source build regardless: the generic Linux
+      # release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04
+      # provides. Restore the per-distro download once capture ships in a
+      # tagged SDK release.
+      BUILD_LIVEKIT_SDK_FROM_SOURCE: "true"
       CMAKE_BUILD_PARALLEL_LEVEL: 2
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
@@ -91,8 +98,8 @@ jobs:
           done
 
       # Restore after setup so vcs imports the SDK before the cache creates its
-      # target directory. Keep the development Dockerfile hash in the fallback
-      # prefix so cached build trees never cross toolchain definitions.
+      # target directory. Keep the Dockerfile hash in the fallback prefix so
+      # cached build trees never cross toolchain definitions.
       - name: Restore LiveKit SDK build cache
         id: livekit_sdk_cache
         if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'

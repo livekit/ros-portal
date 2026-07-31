@@ -262,6 +262,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 # ROS Portal library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros_portal_lib SHARED
+  src/capture_source_factory.cpp
   src/connection/connection_diagnostics.cpp
   src/connection/connection_manager.cpp
   src/diagnostics/build_info.cpp
@@ -276,6 +277,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
+  src/video_source_manager.cpp
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}
@@ -303,6 +305,22 @@ target_link_libraries(ros_portal_node
   ros_portal_lib
 )
 livekit_set_runtime_rpath(ros_portal_node)
+
+# ---------------------------------------------------------------------------
+# Capture device enumeration tool
+#
+# Prints the video capture devices a `type: device` video source can open, so
+# operators can author `device.id`. Needs no ROS node, room, or credentials, so
+# it links the SDK directly rather than ros_portal_lib.
+# ---------------------------------------------------------------------------
+ament_auto_add_executable(capture_devices
+  src/capture_devices_main.cpp
+)
+target_link_libraries(capture_devices
+  "${LIVEKIT_CORE_TARGET}"
+  ${LIVEKIT_EXTRA_LINK_LIBS}
+)
+livekit_set_runtime_rpath(capture_devices)
 
 if(APPLE)
   install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"

@@ -10,6 +10,15 @@ on:
 permissions:
   contents: read
 
+env:
+  # external.repos deliberately pins a pre-release client-sdk-cpp branch
+  # (ladvoc/livekit-capture) because capture has not shipped in a tagged SDK
+  # release yet, and every CI distro builds that checkout from source. A branch
+  # commit can never equal a release commit, so the release equality check is
+  # off until capture lands in a release; flip this back to "true" then. The
+  # CMake/colcon version agreement check below always runs.
+  VERIFY_SDK_RELEASE_PIN: "false"
+
 jobs:
   sdk-release-check:
     name: SDK Release Check
@@ -47,7 +56,17 @@ jobs:
           echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
           echo "tag=v${version}" >> "${GITHUB_OUTPUT}"
 
+      - name: Report skipped release verification
+        if: env.VERIFY_SDK_RELEASE_PIN != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Release pin verification is disabled while external.repos" \
+            "pins a pre-release client-sdk-cpp commit" \
+            "(${{ steps.sdk.outputs.sha }}). Re-enable VERIFY_SDK_RELEASE_PIN once" \
+            "capture ships in a tagged SDK release."
+
       - name: Verify SDK pin matches its release
+        if: env.VERIFY_SDK_RELEASE_PIN == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

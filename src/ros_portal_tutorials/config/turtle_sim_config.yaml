@@ -4,7 +4,6 @@
 # Turtlesim tutorial — turtle_sim side. See docs/tutorials.md.
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4          # keep > 1 so remote CLI calls have a free executor thread
 
   topics:
     # Velocity commands: received from LiveKit and re-exported so the
@@ -18,3 +17,29 @@ ros_portal:
     # Pose telemetry out to the controller (ROS -> LiveKit).
     - topic: "/turtle.*/pose"
       direction: "out"
+
+  # Independent capture sources publish directly as LiveKit video tracks.
+  video_sources:
+    - track_name: "turtle_sim"
+      source:
+        type: "gstreamer"
+        pipeline: >-
+          videotestsrc is-live=true do-timestamp=true pattern=ball motion=wavy animation-mode=frames
+          ! video/x-raw,width=1280,height=720,framerate=30/1
+          ! timeoverlay halignment=right valignment=bottom shaded-background=true
+          ! videoconvert ! video/x-raw,format=I420
+          ! vp8enc name=lk_encoder deadline=1 cpu-used=8 keyframe-max-dist=30
+          lag-in-frames=0 target-bitrate=2500000
+          ! video/x-vp8
+          ! appsink name=lk_appsink sync=false max-buffers=2 drop=true
+        codec: "vp8"
+        resolution:
+          width: 1280
+          height: 720
+        rate_control:
+          element: "lk_encoder"
+          property: "target-bitrate"
+          unit: "bps"
+      publish_options:
+        max_bitrate_bps: 2500000
+        max_framerate: 30

@@ -18,6 +18,17 @@ exposes selected remote `ros2` CLI operations through ROS 2 services backed by
 - `launch/`: ROS Portal launch files for normal and local development use.
 - `test/`: unit and integration tests.
 
+## Executables
+
+- `ros_portal_node`: the ROS Portal node itself.
+- `capture_devices`: lists the video capture devices a `type: device` video
+  source can open, so operators can author `device.id`. Needs no ROS node, room,
+  or credentials:
+
+  ```bash
+  ros2 run ros_portal capture_devices
+  ```
+
 ROS Portal-specific service interfaces live in the sibling
 `ros_portal_msgs` package.
 

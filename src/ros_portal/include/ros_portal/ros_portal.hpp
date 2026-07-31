@@ -49,6 +49,7 @@ class Manager;
 class ConnectionManager;
 class TopicForwarder;
 class LatchedTopicForwarder;
+class VideoSourceManager;
 
 /// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
 inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
@@ -252,6 +253,12 @@ private:
   /// the forwarder could not be initialized.
   bool initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics);
 
+  /// @brief Create, publish, and start all configured capture-backed video sources.
+  /// @param video_sources Configured independent LiveKit video sources.
+  /// @return True when the manager was constructed. Individual source failures
+  /// are isolated and reported through diagnostics.
+  bool initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources);
+
   //! @brief The period for polling the topics
   int topic_polling_period_ms_;
 
@@ -296,6 +303,8 @@ private:
   std::mutex room_components_mutex_;
   //! @brief Stored topic configuration used to recreate components after reconnect.
   std::vector<ros_portal_config::TopicConfig> topics_;
+  //! @brief Stored video source configuration used to recreate sources after reconnect.
+  std::vector<ros_portal_config::VideoSourceConfig> video_sources_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.
   std::unique_ptr<TopicForwarder> topic_forwarder_;
   //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.
@@ -304,6 +313,8 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
+  //! @brief Configured capture-backed LiveKit video sources.
+  std::unique_ptr<VideoSourceManager> video_source_manager_;
   //! @brief Always-OK build and dependency version diagnostic task owner.
   std::unique_ptr<diagnostics::BuildInfoDiagnostics> build_info_diagnostics_;
   //! @brief Mutable state owned exclusively for node-level diagnostics.

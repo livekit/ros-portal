@@ -129,7 +129,6 @@ RUN if [ "${INSTALL_SIMULATION_DEPS}" = "true" ]; then \
         ros-${ROS_DISTRO}-joint-state-publisher \
         ros-${ROS_DISTRO}-nav2-bringup \
         ros-${ROS_DISTRO}-navigation2 \
-        ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
         ros-${ROS_DISTRO}-robot-localization \
         ros-${ROS_DISTRO}-ros-gz-* \
         ros-${ROS_DISTRO}-ros2-control* \
@@ -143,7 +142,9 @@ RUN if [ "${INSTALL_SIMULATION_DEPS}" = "true" ]; then \
 # extrapolation errors. Cyclone is lighter and Nav2 is most reliable with it.
 # Selected via RMW_IMPLEMENTATION (set below). See src/test/waver/README.md.
 RUN apt-get update && apt-get install -y \
-    
+      ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+      && \
+    rm -rf /var/lib/apt/lists/*
 
 # Middleware config baked into the image so EVERY shell and process in the
 # container inherits it (no manual export needed). Cyclone as the RMW (installed

@@ -2,12 +2,13 @@
 
 `ros_portal` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. ROS Portal currently exposes six diagnostic tasks:
+stack. ROS Portal currently exposes seven diagnostic tasks:
 
 - `build_info` — always published
 - `ros_portal_status` — always published
 - `connection_health` — published after configuration loads
 - `topic_forwarder` — published when topic forwarding is configured
+- `latched_topic_forwarder` — published when latched topic forwarding is configured
 - `service_forwarder` — published when service forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
 
@@ -231,6 +232,51 @@ liveness, and cumulative forwarding failures.
 | `inbound.last_terminal_error` | Most recent terminal error text, or `none`. |
 | `inbound_schemas_incorrect` | Cumulative count of inbound schema validation failures. |
 
+## `latched_topic_forwarder`
+
+Reports latched-topic RPC registration, topic and message inventory, per-peer
+delivery state, worker outcomes, and inbound RPC failures.
+
+| Property | Value |
+|---|---|
+| Task name | `latched_topic_forwarder` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | Latched ROS subscriptions and publishers, stored outbound state, participant delivery bookkeeping, and RPC outcomes |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `Latched topic forwarding healthy` | Required RPC registration is available, configured outbound topics are subscribed, peers are current, and no failures have been observed. |
+| `WARN` | `Latched topic forwarding is degraded` | An outbound topic is undiscovered, retained-message storage is full, a peer is behind, or a cumulative failure counter is nonzero. |
+| `ERROR` | `Latched topic forwarding has an unavailable RPC path or peer` | Required inbound RPC registration failed or at least one peer reached the consecutive-failure cap. |
+
+### Key/Value Fields
+
+| Key | Value |
+|---|---|
+| `rpc_registered` | Whether the inbound latched-state RPC handler is registered. This is `false` when no inbound latched topics are configured because no handler is required. |
+| `outbound.topics_configured` | Number of configured outbound latched topics. |
+| `outbound.topics_subscribed` | Number of discovered outbound latched topics with ROS subscriptions. |
+| `outbound.messages_stored` | Number of distinct outbound messages currently retained. |
+| `outbound.max_stored_messages` | Configured retained-message capacity. |
+| `outbound.state_version` | Monotonic version incremented for each distinct stored message. |
+| `peers.total` | Number of remote participants in delivery bookkeeping. |
+| `peers.up_to_date` | Peers that acknowledged the current state version. |
+| `peers.behind` | Peers that have not acknowledged the current version and remain eligible for retries. |
+| `peers.given_up` | Peers that reached the consecutive-failure cap. |
+| `outbound.oversize_drops` | Cumulative outbound messages exceeding the LiveKit RPC payload limit. |
+| `outbound.push_failures` | Cumulative failed outbound latched-state RPC calls. |
+| `time_since_last_successful_push_sec` | Seconds since the latest successful outbound RPC, or `unset` before the first success. |
+| `inbound.topics_configured` | Number of configured inbound latched topics. |
+| `inbound.publishers_created` | Number of lazily created inbound TRANSIENT_LOCAL ROS publishers. |
+| `inbound.rpc_requests` | Cumulative inbound latched-state RPC requests. |
+| `inbound.rejected_unconfigured_topic` | Requests rejected because the topic was not configured inbound. |
+| `inbound.malformed_payloads` | Requests whose JSON envelope or required fields were malformed. |
+| `inbound.base64_decode_failures` | Requests whose serialized message payload was not valid base64. |
+| `inbound.publish_failures` | Requests that could not create or use the required ROS publisher. |
+
 ## `service_forwarder`
 
 Reports configured route availability and cumulative local-to-remote service
@@ -326,9 +372,9 @@ message with:
 
 Look for `build_info`, `ros_portal_status`, and, after configuration loads,
 `connection_health`. When those subsystems are enabled, look for
-`topic_forwarder`, `service_forwarder`, and `cli_manager` statuses. When the room
-is connected,
-`connection_health` should also contain the fixed `rtc.*` summary fields.
+`topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and
+`cli_manager` statuses. When the room is connected, `connection_health` should
+also contain the fixed `rtc.*` summary fields.
 
 ## Aggregating Diagnostics
 
@@ -388,6 +434,10 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Topic Forwarder
       contains: ['topic_forwarder']
+    latched_topic_forwarder:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Latched Topic Forwarder
+      contains: ['latched_topic_forwarder']
     service_forwarder:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Service Forwarder
@@ -400,7 +450,8 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
 
 This groups ROS Portal diagnostics under `ROS Portal / Build Info`,
 `ROS Portal / Node Status`, `ROS Portal / Connection Health`,
-`ROS Portal / Topic Forwarder`, and `ROS Portal / CLI Manager`.
+`ROS Portal / Topic Forwarder`, `ROS Portal / Latched Topic Forwarder`,
+`ROS Portal / Service Forwarder`, and `ROS Portal / CLI Manager`.
 Omit analyzers for tasks that are not enabled in your configuration.
 
 ### Launch The Aggregator

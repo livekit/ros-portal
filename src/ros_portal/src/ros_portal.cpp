@@ -872,7 +872,7 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
 
     latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(std::move(options),
                                                                        this->weak_from_this(), // after constructor
-                                                                       std::move(methods));
+                                                                       std::move(methods), makeDiagnosticsFns());
     diagnostic_state_.latched_topic_forwarder_active.store(latched_topic_forwarder_ != nullptr,
                                                            std::memory_order_relaxed);
     latched_topic_forwarder_->start();

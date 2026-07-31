@@ -37,12 +37,17 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/types.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
 #endif
+
+namespace diagnostic_updater {
+class DiagnosticStatusWrapper;
+}
 
 namespace ros_portal {
 
@@ -107,9 +112,16 @@ public:
   /// @brief Construct the forwarder and register the inbound RPC handler when
   /// any inbound latched topic is configured. Does not start the push worker;
   /// call @ref start().
+  /// @param options Latched-topic forwarding configuration and limits.
+  /// @param node Non-owning handle to the ROS node used for subscriptions and
+  /// publishers.
+  /// @param livekit_methods LiveKit RPC and participant callbacks.
+  /// @param diagnostics ROS Portal-owned diagnostics functions used to register
+  /// the latched-topic-forwarder diagnostic task.
   /// @throws std::invalid_argument when the node has expired or any LiveKit
-  /// callback is unset.
-  LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods);
+  /// or diagnostics callback is unset.
+  LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+                        diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop the push worker and unregister the RPC handler.
   ~LatchedTopicForwarder();
@@ -142,6 +154,9 @@ private:
   FRIEND_TEST(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion);
   FRIEND_TEST(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves);
   FRIEND_TEST(LatchedTopicForwarderTest, IdlesQuietlyWhileRoomUnavailable);
+  FRIEND_TEST(LatchedTopicForwarderTest, DiagnosticsReportConfigurationAndRpcRegistration);
+  FRIEND_TEST(LatchedTopicForwarderTest, DiagnosticsErrorWhenRpcRegistrationFails);
+  FRIEND_TEST(LatchedTopicForwarderTest, InboundHandlerValidatesTopic);
 #endif
 
   /// @brief A distinct stored outbound message, prebuilt as its RPC payload.
@@ -154,6 +169,27 @@ private:
   struct ParticipantState {
     std::uint64_t delivered_version{0};
     std::size_t consecutive_failures{0};
+  };
+
+  /// @brief Mutable counters and metadata published by the diagnostic task.
+  struct DiagnosticState {
+    /// @brief Count of outbound messages exceeding the LiveKit RPC limit.
+    std::atomic<std::uint64_t> outbound_oversize_drops{0};
+    /// @brief Count of failed outbound latched-state RPC calls.
+    std::atomic<std::uint64_t> outbound_push_failures{0};
+    /// @brief Steady-clock nanoseconds of the latest successful outbound RPC.
+    /// Zero means no successful push has occurred.
+    std::atomic<std::int64_t> last_successful_push_steady_ns{0};
+    /// @brief Count of inbound latched-state RPC requests.
+    std::atomic<std::uint64_t> inbound_rpc_requests{0};
+    /// @brief Count of inbound requests for unconfigured topics.
+    std::atomic<std::uint64_t> inbound_rejected_unconfigured_topic{0};
+    /// @brief Count of malformed inbound JSON payloads.
+    std::atomic<std::uint64_t> inbound_malformed_payloads{0};
+    /// @brief Count of inbound payloads that failed base64 decoding.
+    std::atomic<std::uint64_t> inbound_base64_decode_failures{0};
+    /// @brief Count of inbound requests that could not be published on ROS.
+    std::atomic<std::uint64_t> inbound_publish_failures{0};
   };
 
   /// @brief QoS for latched publishers/subscriptions: reliable, transient-local,
@@ -179,9 +215,13 @@ private:
   /// called with @ref state_mutex_ held.
   void reconcileRosterLocked(const std::vector<std::string>& identities);
 
+  /// @brief Populate the latched-topic-forwarder diagnostic status.
+  void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
+
   Options options_;
   rclcpp::Node::WeakPtr node_;
   LiveKitMethods livekit_methods_;
+  diagnostics::DiagnosticsManagerFns diagnostics_;
   rclcpp::Logger logger_;
   rclcpp::Clock::SharedPtr clock_;
   rclcpp::CallbackGroup::SharedPtr callback_group_;
@@ -206,6 +246,9 @@ private:
   // Background push worker.
   std::atomic_bool stop_{false};
   std::thread worker_;
+
+  /// @brief Mutable state owned exclusively for diagnostics reporting.
+  DiagnosticState diagnostic_state_;
 };
 
 } // namespace ros_portal

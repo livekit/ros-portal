@@ -20,6 +20,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
+#include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -29,7 +32,9 @@
 #include <utility>
 #include <vector>
 
+#include "diagnostics_test_utils.hpp"
 #include "ros_portal/cli/json_converters.hpp"
+#include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/types.hpp"
 #include "ros_portal/utils/base64.hpp"
 
@@ -38,10 +43,33 @@
 // can reach the forwarder's private store / push internals.
 namespace ros_portal {
 
+namespace {
+
+std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key) {
+  for (const auto& value : status.values) {
+    if (value.key == key) {
+      return value.value;
+    }
+  }
+  return std::nullopt;
+}
+
+} // namespace
+
 class LatchedTopicForwarderTest : public ::testing::Test {
 protected:
-  void SetUp() override { node_ = std::make_shared<rclcpp::Node>("latched_topic_forwarder_unit_test"); }
-  void TearDown() override { node_.reset(); }
+  void SetUp() override {
+    node_ = std::make_shared<rclcpp::Node>("latched_topic_forwarder_unit_test");
+    diagnostics_updater_ = std::make_shared<diagnostic_updater::Updater>(node_);
+    diagnostics_updater_->setHardwareID("ros_portal");
+    diagnostics_fns_ = test::makeDiagnosticsFns(diagnostics_updater_);
+  }
+
+  void TearDown() override {
+    diagnostics_fns_ = {};
+    diagnostics_updater_.reset();
+    node_.reset();
+  }
 
   LatchedTopicForwarder::Options makeOptions() {
     LatchedTopicForwarder::Options options;
@@ -59,7 +87,7 @@ protected:
     methods.register_rpc_method = [this](const std::string& method, RpcHandler handler) {
       registered_method_ = method;
       registered_handler_ = std::move(handler);
-      return true;
+      return rpc_registration_succeeds_;
     };
     methods.unregister_rpc_method = [this](const std::string& method) {
       unregistered_method_ = method;
@@ -78,28 +106,79 @@ protected:
   }
 
   std::shared_ptr<rclcpp::Node> node_;
+  std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater_;
+  diagnostics::DiagnosticsManagerFns diagnostics_fns_;
 
   // Stub state observed/controlled by tests.
   std::vector<std::string> roster_;
   std::vector<std::pair<std::string, std::string>> rpc_calls_;
   bool room_available_ = true;
   bool rpc_should_succeed_ = true;
+  bool rpc_registration_succeeds_ = true;
   std::string registered_method_;
   std::string unregistered_method_;
   RpcHandler registered_handler_;
 };
 
 TEST_F(LatchedTopicForwarderTest, ConstructorRejectsExpiredNode) {
-  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeMethods()), std::invalid_argument);
-}
-
-TEST_F(LatchedTopicForwarderTest, ConstructorRejectsMissingMethods) {
-  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), node_, LatchedTopicForwarder::LiveKitMethods{}),
+  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeMethods(), diagnostics_fns_),
                std::invalid_argument);
 }
 
+TEST_F(LatchedTopicForwarderTest, ConstructorRejectsMissingMethods) {
+  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), node_, LatchedTopicForwarder::LiveKitMethods{}, diagnostics_fns_),
+               std::invalid_argument);
+}
+
+TEST_F(LatchedTopicForwarderTest, ConstructorRejectsMissingDiagnostics) {
+  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), node_, makeMethods(), {}), std::invalid_argument);
+}
+
+TEST_F(LatchedTopicForwarderTest, DiagnosticsReportConfigurationAndRpcRegistration) {
+  auto options = makeOptions();
+  options.inbound_topics = {"/tf_static"};
+  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods(), diagnostics_fns_);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(status, "rpc_registered"), "true");
+  EXPECT_EQ(valueFor(status, "outbound.topics_configured"), "1");
+  EXPECT_EQ(valueFor(status, "outbound.topics_subscribed"), "0");
+  EXPECT_EQ(valueFor(status, "outbound.messages_stored"), "0");
+  EXPECT_EQ(valueFor(status, "outbound.max_stored_messages"), "32");
+  EXPECT_EQ(valueFor(status, "outbound.state_version"), "0");
+  EXPECT_EQ(valueFor(status, "peers.total"), "0");
+  EXPECT_EQ(valueFor(status, "peers.up_to_date"), "0");
+  EXPECT_EQ(valueFor(status, "peers.behind"), "0");
+  EXPECT_EQ(valueFor(status, "peers.given_up"), "0");
+  EXPECT_EQ(valueFor(status, "outbound.oversize_drops"), "0");
+  EXPECT_EQ(valueFor(status, "outbound.push_failures"), "0");
+  EXPECT_EQ(valueFor(status, "time_since_last_successful_push_sec"), "unset");
+  EXPECT_EQ(valueFor(status, "inbound.topics_configured"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.publishers_created"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.rpc_requests"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.rejected_unconfigured_topic"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.malformed_payloads"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.base64_decode_failures"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.publish_failures"), "0");
+}
+
+TEST_F(LatchedTopicForwarderTest, DiagnosticsErrorWhenRpcRegistrationFails) {
+  auto options = makeOptions();
+  options.outbound_topics.clear();
+  options.inbound_topics = {"/tf_static"};
+  rpc_registration_succeeds_ = false;
+  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods(), diagnostics_fns_);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(status, "rpc_registered"), "false");
+}
+
 TEST_F(LatchedTopicForwarderTest, StoresDistinctMessagesAndBumpsVersion) {
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods());
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
   const std::vector<std::uint8_t> b = {4, 5, 6};
 
@@ -119,17 +198,22 @@ TEST_F(LatchedTopicForwarderTest, StoresDistinctMessagesAndBumpsVersion) {
 }
 
 TEST_F(LatchedTopicForwarderTest, SkipsOversizeMessage) {
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods());
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
   // Already over 15 KiB before base64 inflation.
   const std::vector<std::uint8_t> big(20 * 1024, 0xAB);
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", big.data(), big.size());
   EXPECT_TRUE(forwarder.messages_.empty());
   EXPECT_EQ(forwarder.version_, 0u);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(status, "outbound.oversize_drops"), "1");
 }
 
 TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
   roster_ = {"peerA"};
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods());
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
 
@@ -139,6 +223,16 @@ TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
   ASSERT_EQ(forwarder.participant_states_.count("peerA"), 1u);
   EXPECT_EQ(forwarder.participant_states_["peerA"].delivered_version, forwarder.version_);
 
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(valueFor(status, "peers.total"), "1");
+  EXPECT_EQ(valueFor(status, "peers.up_to_date"), "1");
+  EXPECT_EQ(valueFor(status, "peers.behind"), "0");
+  EXPECT_EQ(valueFor(status, "peers.given_up"), "0");
+  EXPECT_EQ(valueFor(status, "outbound.push_failures"), "0");
+  ASSERT_TRUE(valueFor(status, "time_since_last_successful_push_sec").has_value());
+  EXPECT_NE(valueFor(status, "time_since_last_successful_push_sec"), "unset");
+
   // Already delivered at the current version: a second cycle sends nothing.
   forwarder.pushToPeers();
   EXPECT_EQ(rpc_calls_.size(), 1u);
@@ -147,7 +241,8 @@ TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
 TEST_F(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion) {
   roster_ = {"peerA"};
   rpc_should_succeed_ = false;
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods()); // max_participant_failures = 3
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(),
+                                  diagnostics_fns_); // max_participant_failures = 3
   const std::vector<std::uint8_t> a = {1, 2, 3};
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
 
@@ -156,6 +251,16 @@ TEST_F(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion) {
   }
   EXPECT_EQ(rpc_calls_.size(), 3u);
   EXPECT_EQ(forwarder.participant_states_["peerA"].consecutive_failures, 3u);
+
+  diagnostic_updater::DiagnosticStatusWrapper failed_status;
+  forwarder.populateStatus(failed_status);
+  EXPECT_EQ(failed_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(failed_status, "peers.total"), "1");
+  EXPECT_EQ(valueFor(failed_status, "peers.up_to_date"), "0");
+  EXPECT_EQ(valueFor(failed_status, "peers.behind"), "0");
+  EXPECT_EQ(valueFor(failed_status, "peers.given_up"), "1");
+  EXPECT_EQ(valueFor(failed_status, "outbound.push_failures"), "3");
+  EXPECT_EQ(valueFor(failed_status, "time_since_last_successful_push_sec"), "unset");
 
   // Given up: further cycles do not attempt the peer.
   forwarder.pushToPeers();
@@ -172,7 +277,7 @@ TEST_F(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion) {
 
 TEST_F(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves) {
   roster_ = {"peerA"};
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods());
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
 
@@ -204,7 +309,7 @@ TEST_F(LatchedTopicForwarderTest, InboundHandlerValidatesTopic) {
   auto options = makeOptions();
   options.outbound_topics.clear();
   options.inbound_topics = {"/tf_static"};
-  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods());
+  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods(), diagnostics_fns_);
 
   // Registered the inbound handler because an inbound latched topic exists.
   EXPECT_EQ(registered_method_, kLatchedStateRpcMethod);
@@ -220,6 +325,20 @@ TEST_F(LatchedTopicForwarderTest, InboundHandlerValidatesTopic) {
   // Malformed request -> failure envelope.
   const auto malformed = nlohmann::json::parse(forwarder.handleLatchedStateRpc("not json"));
   EXPECT_FALSE(malformed.at("success").get<bool>());
+
+  request["topic"] = "/tf_static";
+  request["data"] = "not-base64!";
+  const auto invalid_base64 = nlohmann::json::parse(forwarder.handleLatchedStateRpc(request.dump()));
+  EXPECT_FALSE(invalid_base64.at("success").get<bool>());
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(status, "inbound.rpc_requests"), "3");
+  EXPECT_EQ(valueFor(status, "inbound.rejected_unconfigured_topic"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.malformed_payloads"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.base64_decode_failures"), "1");
+  EXPECT_EQ(valueFor(status, "inbound.publish_failures"), "0");
 }
 
 } // namespace ros_portal

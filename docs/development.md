@@ -166,12 +166,11 @@ To override the pin for one build, or to track upstream with `latest`:
     colcon build --packages-select ros_portal \
       --cmake-args -DLIVEKIT_SDK_VERSION=latest
 
-## Packaging Debian Packages
+## Packaging Debian Artifacts
 
 `scripts/package-deb.sh` bundles an existing isolated colcon install tree into
-a `.deb`. It does not reconfigure, rebuild, or redownload the LiveKit SDK.
-Build the workspace first, then package. `SOURCE_INSTALL_BASE` is required and
-must point at the completed install prefix.
+a `.deb`. Build the workspace first; the script packages the completed
+`install/` tree.
 
 Run it inside the matching repository devcontainer or CI environment (it needs
 `dpkg-deb`, `dpkg-shlibdeps`, and the ROS underlay). From the rootful
@@ -179,7 +178,7 @@ devcontainer:
 
 ```bash
 colcon build --packages-up-to ros_portal
-SOURCE_INSTALL_BASE="${PWD}/install" ./scripts/package-deb.sh
+./scripts/package-deb.sh
 ```
 
 The resulting fat package preserves the isolated prefixes for ROS Portal,

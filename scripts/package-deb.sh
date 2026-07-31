@@ -22,6 +22,7 @@ set -euo pipefail
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ros_distro="${ROS_DISTRO:-}"
 readonly output_dir="${OUTPUT_DIR:-${repo_root}/artifacts/debian}"
+readonly source_install_base="${repo_root}/install"
 readonly packaged_packages=(
   ros_portal
   ros_portal_config
@@ -30,19 +31,8 @@ readonly packaged_packages=(
   ros2_medkit_serialization
 )
 
-if [[ -z "${SOURCE_INSTALL_BASE:-}" ]]; then
-  echo "SOURCE_INSTALL_BASE is required." >&2
-  exit 2
-fi
-
-if [[ ! -d "${SOURCE_INSTALL_BASE}" ]]; then
-  echo "SOURCE_INSTALL_BASE does not exist: ${SOURCE_INSTALL_BASE}" >&2
-  exit 2
-fi
-
-readonly source_install_base="$(cd "${SOURCE_INSTALL_BASE}" && pwd)"
 if [[ "$(tr -d '[:space:]' <"${source_install_base}/.colcon_install_layout" 2>/dev/null)" != "isolated" ]]; then
-  echo "SOURCE_INSTALL_BASE must be an isolated colcon install: ${source_install_base}" >&2
+  echo "Expected an isolated colcon install at ${source_install_base}" >&2
   exit 2
 fi
 

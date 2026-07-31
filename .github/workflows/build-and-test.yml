@@ -242,7 +242,6 @@ jobs:
           runCmd: |
             bash -lc '
               set -euo pipefail
-              export SOURCE_INSTALL_BASE="${PWD}/install"
               exec ./scripts/package-deb.sh
             '
 

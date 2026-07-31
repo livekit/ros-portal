@@ -246,9 +246,10 @@ TEST_F(ServiceForwarderTest, RoomUnavailableReturnsExplicitFailureWhenRepresenta
   auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   FakeLiveKit livekit;
   livekit.room_available = false;
+  CapturingDiagnostics diagnostics;
 
   ServiceForwarder forwarder({setBoolRoute("/service_forwarder/room_unavailable")}, *server_node, callback_group,
-                             livekit.methods());
+                             livekit.methods(), diagnostics.methods());
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(server_node);

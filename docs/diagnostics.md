@@ -231,6 +231,17 @@ liveness, and cumulative forwarding failures.
 | `inbound.terminal_errors` | Cumulative inbound streams that ended with a terminal error. |
 | `inbound.last_terminal_error` | Most recent terminal error text, or `none`. |
 | `inbound_schemas_incorrect` | Cumulative count of inbound schema validation failures. |
+| `schema.definitions_active` | Number of outbound schema definitions currently cached or being defined. |
+| `schema.define_failures` | Cumulative schema definitions rejected by the LiveKit SDK or an exception. |
+| `schema.render_failures` | Cumulative local ROS or JSON schema render failures. |
+| `schema.encoding_mismatch_skips` | Cumulative explicit `ros2idl` requests skipped because the local definition rendered with another encoding. |
+| `schema.inbound_rejected_no_encoding` | Cumulative inbound tracks missing supported frame/schema encoding metadata. |
+| `schema.inbound_rejected_name_mismatch` | Cumulative inbound tracks whose advertised schema name differs from the resolved local ROS type. |
+| `schema.inbound_rejected_remote_unavailable` | Cumulative inbound tracks whose remote schema definition could not be retrieved. |
+| `schema.inbound_rejected_definition_differs` | Cumulative inbound tracks whose local and remote schema definitions or encodings differ. |
+
+`inbound_schemas_incorrect` is retained as the aggregate of the four
+`schema.inbound_rejected_*` counters.
 
 ## `latched_topic_forwarder`
 

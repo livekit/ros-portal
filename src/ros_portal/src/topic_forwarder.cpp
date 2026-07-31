@@ -548,7 +548,6 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
           descriptor.schema,
           descriptor.frame_encoding,
       })) {
-    diagnostic_state_.inbound_schemas_incorrect.fetch_add(1, std::memory_order_relaxed);
     // Return to prevent creating a publisher for the track due to invalid schema
     return;
   }
@@ -908,7 +907,10 @@ void TopicForwarder::stopAllInboundDataTracks() {
 }
 
 void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
-  const auto inbound_schemas_incorrect = diagnostic_state_.inbound_schemas_incorrect.load(std::memory_order_relaxed);
+  const auto schema_diagnostics = schema_manager_.diagnosticsSnapshot();
+  const auto inbound_schemas_incorrect =
+      schema_diagnostics.inbound_rejected_no_encoding + schema_diagnostics.inbound_rejected_name_mismatch +
+      schema_diagnostics.inbound_rejected_remote_unavailable + schema_diagnostics.inbound_rejected_definition_differs;
   const auto outbound_push_failures = diagnostic_state_.outbound_push_failures.load(std::memory_order_relaxed);
   const auto outbound_json_conversion_failures =
       diagnostic_state_.outbound_json_conversion_failures.load(std::memory_order_relaxed);
@@ -959,12 +961,13 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
 
   const bool forwarding_unavailable =
       outbound_data_tracks_pending_writer > 0U || inbound_reader_threads_alive < inbound_active_tracks;
-  const bool failures_detected = inbound_schemas_incorrect > 0U || outbound_push_failures > 0U ||
-                                 outbound_json_conversion_failures > 0U || outbound_subscription_create_failures > 0U ||
-                                 inbound_tracks_rejected_no_type > 0U || inbound_tracks_rejected_not_allowed > 0U ||
-                                 inbound_tracks_rejected_name_resolution_failed > 0U || inbound_publish_failures > 0U ||
-                                 inbound_json_decode_failures > 0U || inbound_empty_payload_drops > 0U ||
-                                 inbound_terminal_errors > 0U;
+  const bool failures_detected =
+      inbound_schemas_incorrect > 0U || outbound_push_failures > 0U || outbound_json_conversion_failures > 0U ||
+      outbound_subscription_create_failures > 0U || inbound_tracks_rejected_no_type > 0U ||
+      inbound_tracks_rejected_not_allowed > 0U || inbound_tracks_rejected_name_resolution_failed > 0U ||
+      inbound_publish_failures > 0U || inbound_json_decode_failures > 0U || inbound_empty_payload_drops > 0U ||
+      inbound_terminal_errors > 0U || schema_diagnostics.define_failures > 0U ||
+      schema_diagnostics.render_failures > 0U || schema_diagnostics.encoding_mismatch_skips > 0U;
 
   if (forwarding_unavailable) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "One or more forwarding paths are unavailable");
@@ -993,6 +996,14 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
   status.add("inbound.terminal_errors", inbound_terminal_errors);
   status.add("inbound.last_terminal_error", inbound_last_terminal_error.empty() ? "none" : inbound_last_terminal_error);
   status.add("inbound_schemas_incorrect", inbound_schemas_incorrect);
+  status.add("schema.definitions_active", schema_diagnostics.definitions_active);
+  status.add("schema.define_failures", schema_diagnostics.define_failures);
+  status.add("schema.render_failures", schema_diagnostics.render_failures);
+  status.add("schema.encoding_mismatch_skips", schema_diagnostics.encoding_mismatch_skips);
+  status.add("schema.inbound_rejected_no_encoding", schema_diagnostics.inbound_rejected_no_encoding);
+  status.add("schema.inbound_rejected_name_mismatch", schema_diagnostics.inbound_rejected_name_mismatch);
+  status.add("schema.inbound_rejected_remote_unavailable", schema_diagnostics.inbound_rejected_remote_unavailable);
+  status.add("schema.inbound_rejected_definition_differs", schema_diagnostics.inbound_rejected_definition_differs);
 }
 
 } // namespace ros_portal

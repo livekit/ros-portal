@@ -293,7 +293,7 @@ TEST_F(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves) {
 TEST_F(LatchedTopicForwarderTest, IdlesQuietlyWhileRoomUnavailable) {
   room_available_ = false;
   roster_ = {"peerA"};
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods());
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
 
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());

@@ -286,6 +286,14 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   forwarder.populateStatus(ok_status);
   EXPECT_EQ(ok_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(valueFor(ok_status, "inbound_schemas_incorrect"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.definitions_active"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.define_failures"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.render_failures"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.encoding_mismatch_skips"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_no_encoding"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_name_mismatch"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_remote_unavailable"), "0");
+  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_definition_differs"), "0");
 
   TopicForwarder::RemoteDataTrackDescriptor descriptor;
   descriptor.sid = "schema-mismatch-sid";
@@ -300,6 +308,7 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   forwarder.populateStatus(warn_status);
   EXPECT_EQ(warn_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(valueFor(warn_status, "inbound_schemas_incorrect"), "1");
+  EXPECT_EQ(valueFor(warn_status, "schema.inbound_rejected_name_mismatch"), "1");
 }
 
 // Case: A remote track claims a bidirectional topic before its local publisher appears.

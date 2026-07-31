@@ -323,8 +323,6 @@ private:
 
   /// @brief Mutable counters and metadata published by the diagnostic task.
   struct DiagnosticState {
-    /// @brief Count of inbound LiveKit tracks rejected due to invalid schemas.
-    std::atomic<std::uint64_t> inbound_schemas_incorrect{0};
     /// @brief Count of outbound data frames rejected by the LiveKit writer.
     std::atomic<std::uint64_t> outbound_push_failures{0};
     /// @brief Count of outbound ROS messages that could not be converted to JSON.

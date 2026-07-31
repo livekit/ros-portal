@@ -17,7 +17,7 @@ ARG ROS_IMAGE_REPOSITORY=ros
 ARG ROS_IMAGE_TAG=jazzy-ros-base-noble
 FROM ${ROS_IMAGE_REPOSITORY}:${ROS_IMAGE_TAG}@sha256:${ROS_IMAGE_DIGEST}
 
-ARG LIVEKIT_BUILD_SDK_FROM_SOURCE=false
+ARG LIVEKIT_BUILD_SDK_FROM_SOURCE=true
 ARG INSTALL_CPP_TOOLS=true
 ARG INSTALL_SIMULATION_DEPS=true
 ARG ROS_DISTRO=jazzy
@@ -94,10 +94,10 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     ros-${ROS_DISTRO}-turtlesim \
     ros-${ROS_DISTRO}-teleop-twist-keyboard
 
-# Optional toolchain for compiling the pinned client-sdk-cpp checkout instead of
-# downloading the Ubuntu 22.04 prebuilt release. Not required for normal ROS
-# Portal builds. The same LIVEKIT_BUILD_SDK_FROM_SOURCE flag is the CMake option
-# that selects source vs prebuilt during configure.
+# Capture is temporarily consumed from the pinned SDK source checkout on every
+# supported ROS distribution. Install its native, Rust, and GStreamer toolchain.
+# The same LIVEKIT_BUILD_SDK_FROM_SOURCE flag is the CMake option that selects
+# source vs prebuilt during configure.
 RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \
@@ -109,16 +109,31 @@ RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
         libdecor-0-dev \
         libdrm-dev \
         libglib2.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libgstreamer1.0-dev \
+        libjpeg-dev \
         libprotobuf-dev \
         libssl-dev \
         libunwind-dev \
         libusb-1.0-0-dev \
         libva-dev \
         libwayland-dev \
+        lld \
         llvm-dev \
         protobuf-compiler \
+        gstreamer1.0-libav \
+        gstreamer1.0-plugins-bad \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-ugly \
+        gstreamer1.0-tools \
         xz-utils && \
-      python3 -m pip install --no-cache-dir cmake==3.31.10 && \
+      pip_break="" && \
+      if python3 -m pip install --help 2>/dev/null \
+          | grep -q -- "--break-system-packages"; then \
+        pip_break="--break-system-packages"; \
+      fi && \
+      python3 -m pip install --no-cache-dir ${pip_break} cmake==3.31.10 && \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --profile minimal --default-toolchain stable && \
        rm -rf /var/lib/apt/lists/*; \

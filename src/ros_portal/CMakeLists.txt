@@ -265,6 +265,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 # ROS Portal library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros_portal_lib SHARED
+  src/capture_source_factory.cpp
   src/connection/connection_diagnostics.cpp
   src/connection/connection_manager.cpp
   src/diagnostics/build_info.cpp
@@ -285,6 +286,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
   src/utils/video_frame_metadata.cpp
+  src/video_source_manager.cpp
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}

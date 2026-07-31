@@ -36,9 +36,6 @@ ros_portal:
   topics:
     - topic: "/camera/image_raw"
       direction: "out"
-      video_options:
-        bitrate_kbps: 3500
-        codec: "h264"
 
     - topic: "/lidar/points"
       direction: "out"
@@ -65,3 +62,34 @@ ros_portal:
     #   audio_options:
     #     bitrate_kbps: 500
     #     codec: "wav"
+
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: >-
+          videotestsrc is-live=true ! videoconvert ! x264enc name=lk_encoder
+          tune=zerolatency ! h264parse ! appsink name=lk_appsink
+        codec: "h264"
+        resolution:
+          width: 1280
+          height: 720
+        rate_control:
+          element: "lk_encoder"
+          property: "bitrate"
+          unit: "kbps"
+      publish_options:
+        max_bitrate_bps: 3500000
+        max_framerate: 30
+
+    # Pixel sources can be published as simulcast; encoded (gstreamer) sources
+    # publish the single pre-encoded layer they produce and ignore the flag.
+    - track_name: "pattern_camera"
+      simulcast: true
+      source:
+        type: "pattern"
+        pattern:
+          resolution:
+            width: 640
+            height: 480
+          framerate_fps: 30

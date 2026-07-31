@@ -260,6 +260,28 @@ protected:
     startGraphBSpin();
   }
 
+  void initializeSinglePortalRuntime(const std::string& config_yaml) {
+    ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+
+    const auto [domain_id_a, domain_id_b] = testDomainIds();
+    (void)domain_id_b;
+    graph_a_ = std::make_unique<ScopedRosGraph>(domain_id_a);
+    SCOPED_TRACE("ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()));
+
+    config_file_a_ = std::make_unique<TemporaryConfigFile>(config_yaml, "ros_portal_single_test_e2e_a_");
+    ros_portal_a_ = createRosPortal(*graph_a_, "/ros_portal_a_node", token_a_, config_file_a_->path().string());
+    ASSERT_NE(ros_portal_a_, nullptr);
+
+    graph_a_executor_ =
+        std::make_unique<rclcpp::executors::MultiThreadedExecutor>(executorOptions(graph_a_->context()), 2);
+    graph_a_executor_->add_node(ros_portal_a_);
+    graph_a_spinning_.store(true);
+    graph_a_spin_thread_ = std::thread([this]() {
+      graph_a_executor_->spin();
+      graph_a_spinning_.store(false);
+    });
+  }
+
   bool verifyDirection(const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>& publisher,
                        const std::shared_ptr<rclcpp::Node>& receiver_node, const std::string& source_topic,
                        const std::string& expected_inbound_topic, const std::string& expected_payload) {
@@ -512,6 +534,7 @@ protected:
   const std::string& identityB() const { return identity_b_; }
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
+  const std::string& tokenB() const { return token_b_; }
   std::shared_ptr<RosPortal> rosPortalA() const { return ros_portal_a_; }
   std::shared_ptr<RosPortal> rosPortalB() const { return ros_portal_b_; }
 

@@ -187,6 +187,7 @@ All config lives under `ros_portal`.
 | `enable_all_ros_topic_stats` | boolean | no | `false` | Enable ROS 2 topic statistics for every outbound topic subscription. Overrides per-topic values when true. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
+| `video_sources` | list | no | `[]` | Independent capture sources published as LiveKit video tracks. |
 
 ### Services
 
@@ -218,7 +219,6 @@ used to limit which streams cross ROS Portal for bandwidth reasons.
 | `latched` | boolean | no | `false` | Treat the topic as latched (see below). Literal topic names only. |
 | `enable_ros_topic_stats` | boolean | no | `false` | Outbound topics only. Enable ROS 2 topic statistics for subscriptions matching this topic pattern. |
 | `encoding` | string | no | `ros2msg` | Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
-| `video_options` | map | no | - | Optional video publish settings. |
 
 Outgoing topics are those with `direction: "out"` or
 `direction: "bidirectional"`. Incoming topics are those with `direction: "in"`
@@ -520,5 +520,147 @@ Notes:
 |---|---:|---:|---|
 | `bitrate_kbps` | integer | no | Target bitrate in kbps. Must be positive. |
 | `codec` | string | no | Video codec name. Must be non-empty when set. |
+
+## Video Sources
+
+`video_sources` publishes video independently of the ROS topic graph. Every
+entry owns one capture producer, one LiveKit video track, and one diagnostic
+status. Sources are created, published, and started after ROS Portal connects to
+the room. A failure affects only that entry: ROS Portal and other configured
+sources continue running, while `video_source/<track_name>/<index>` reports the
+error.
+
+```yaml
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: >-
+          v4l2src device=/dev/video0 ! videoconvert !
+          x264enc name=lk_encoder tune=zerolatency ! h264parse !
+          appsink name=lk_appsink
+        codec: "h264"
+        resolution:
+          width: 1280
+          height: 720
+        rate_control:
+          element: "lk_encoder"
+          property: "bitrate"
+          unit: "kbps"
+      publish_options:
+        max_bitrate_bps: 3500000
+        max_framerate: 30
+```
+
+### Video source entry
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `track_name` | string | yes | Non-empty LiveKit video track name. |
+| `simulcast` | boolean | no | Publish the track with simulcast enabled. Defaults to `false`. |
+| `source` | map | yes | Capture backend and its configuration. |
+| `publish_options` | map | no | Application-controlled LiveKit publish limits. |
+
+All capture-backed tracks are published with LiveKit track source `camera`.
+Capture-derived settings take precedence where required: encoded GStreamer
+ingest dictates its codec, disables simulcast, and selects the pre-encoded
+encoder backend. Because of that precedence, `simulcast` only takes effect for
+pixel sources (`pattern`); a `gstreamer` source publishes the single
+pre-encoded layer it produces regardless of the setting.
+
+### Source configuration
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `type` | string | yes | `gstreamer` or `pattern`. |
+| `pipeline` | string | GStreamer only | GStreamer launch description. Must contain `appsink name=lk_appsink` or leave exactly one encoded video source pad unlinked. |
+| `codec` | string | GStreamer only | `h264`, `h265`, `vp8`, `vp9`, or `av1`. Inferred from GStreamer caps when omitted. |
+| `resolution` | map | GStreamer only | Positive `width` and `height`. Discovered from negotiated caps when omitted; verified against the stream when supplied. |
+| `rate_control` | map | GStreamer only | Forward WebRTC bitrate targets to a GStreamer encoder property. |
+| `pattern` | map | no | Pattern-only rendering and output characteristics. Optional when `type` is `pattern`. |
+
+Each type accepts only its own fields: a `pattern` source rejects the
+GStreamer-only fields above, and a `gstreamer` source rejects the `pattern`
+block. The schema tags the union by `type` but cannot express those
+rules, so they are enforced when the source is created and reported through
+`video_source/<track_name>/<index>`.
+
+When resolution is omitted, source creation waits up to five seconds for the
+first encoded sample. Supplying it avoids that discovery wait, but the first
+sample must still match. Codec or resolution changes after capture begins end
+the source with an error because the track cannot yet be republished in place.
+
+`rate_control` has three required fields:
+
+| Field | Type | Description |
+|---|---:|---|
+| `element` | string | Name of the encoder element in the pipeline, such as `lk_encoder`. |
+| `property` | string | Writable integer bitrate property, such as `bitrate` or `target-bitrate`. |
+| `unit` | string | `bps` or `kbps`, matching the encoder property. |
+
+Without `rate_control`, the pipeline encoder retains the fixed bitrate supplied
+in the launch description. Downstream keyframe requests are still forwarded to
+the pipeline.
+
+### Publish options
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `max_bitrate_bps` | integer | no | Positive maximum advertised publish bitrate in bits per second. |
+| `max_framerate` | integer | no | Positive maximum advertised publish frame rate. |
+
+These correspond to the bitrate and frame-rate limits used by the Rust capture
+examples. They do not configure the GStreamer encoder itself; use the pipeline
+properties and optional `rate_control` binding for that.
+
+This bridge maps every capture setting currently exposed by the pinned C++ SDK:
+GStreamer pipeline, codec, resolution, encoder rate-control binding, native
+camera selection, and the capture-derived publish options. It also follows the
+Rust example's `max_bitrate` and `fps` publish limits as `max_bitrate_bps` and
+`max_framerate`. LiveKit credentials remain process environment settings, and
+source diagnostics are always enabled. Rust-only TCP/RTSP/shared-memory wire
+formats, frame metadata, simulcast, and encoder selection are not accepted until
+equivalent C++ capture APIs exist.
+
+### Pattern source
+
+The built-in deterministic pattern source renders a synthetic test pattern and
+accepts no GStreamer fields. It is intended for testing:
+
+```yaml
+video_sources:
+  - track_name: "pattern_camera"
+    source:
+      type: "pattern"
+```
+
+The rendered pattern defaults to `gradient` and output characteristics to 640x480
+at 30 fps. Override any of them with an optional `pattern` block:
+
+| Field | Type | Required | Description |
+|---|---:|---:|---|
+| `pattern` | string | no | `gradient` (animated color gradient) or `logo` (bouncing LiveKit logo). Defaults to `gradient`. |
+| `resolution` | map | no | Positive `width` and `height`. Defaults to 640x480. |
+| `framerate_fps` | integer | no | Positive frame rate. Defaults to 30. |
+
+```yaml
+video_sources:
+  - track_name: "pattern_camera"
+    source:
+      type: "pattern"
+      pattern:
+        pattern: "logo"
+        resolution: { width: 1280, height: 720 }
+        framerate_fps: 15
+```
+
+Capture requires the pinned C++ SDK source build. GStreamer is also required for
+`type: gstreamer`, but not for `pattern`. The SDK does not support native camera
+device capture. To read a camera, use a `gstreamer` source with `v4l2src`, as in
+the example at the start of this section. The tagged `source.type` is
+backend-neutral, so RTSP and other ingest backends can be added later without a
+change to the `video_sources` collection shape.
 
 Audio options are not part of config version `0.0.1`.

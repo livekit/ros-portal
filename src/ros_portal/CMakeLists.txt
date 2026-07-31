@@ -95,6 +95,15 @@ livekit_configure_sdk(
 )
 
 find_package(LiveKit CONFIG REQUIRED)
+
+# LiveKit_VERSION comes from the found package's LiveKitConfigVersion.cmake, so
+# it reflects the SDK actually linked (including "latest" resolution and source
+# builds). The requested pin is only a fallback for packages without one.
+set(LIVEKIT_SDK_REPORTED_VERSION "${LiveKit_VERSION}")
+if(NOT LIVEKIT_SDK_REPORTED_VERSION)
+  set(LIVEKIT_SDK_REPORTED_VERSION "${LIVEKIT_SDK_VERSION}")
+endif()
+
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 find_package(ros2_medkit_cmake REQUIRED)
@@ -224,6 +233,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 # ROS Portal library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros_portal_lib SHARED
+  src/diagnostics/build_info.cpp
   src/diagnostics/connection_health.cpp
   src/latched_topic_forwarder.cpp
   src/ros_portal.cpp
@@ -239,6 +249,8 @@ ament_auto_add_library(ros_portal_lib SHARED
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}
+  ROS_PORTAL_LIVEKIT_SDK_VERSION="${LIVEKIT_SDK_REPORTED_VERSION}"
+  ROS_PORTAL_PACKAGE_VERSION="${ros_portal_VERSION}"
 )
 target_link_libraries(ros_portal_lib
   introspection_lib

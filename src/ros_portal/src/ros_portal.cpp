@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "ros_portal/cli/manager.hpp"
+#include "ros_portal/diagnostics/build_info.hpp"
 #include "ros_portal/diagnostics/connection_health.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
@@ -79,9 +80,11 @@ bool RosPortal::initialize() {
   ros_threads_ = config->ros_threads;
   topic_forwarder_.reset();
   connection_diagnostics_.reset();
+  build_info_diagnostics_.reset();
   diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
   diagnostics_updater_->setHardwareID("ros_portal");
   connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(makeDiagnosticsFns());
+  build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
@@ -240,6 +243,7 @@ void RosPortal::shutdown() {
 
   topic_forwarder_.reset();
   connection_diagnostics_.reset();
+  build_info_diagnostics_.reset();
 
   // Reset diagnostics_updater_ after all its task owners are gone.
   diagnostics_updater_.reset();

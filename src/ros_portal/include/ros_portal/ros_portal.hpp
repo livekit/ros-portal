@@ -37,6 +37,7 @@
 namespace ros_portal {
 
 namespace diagnostics {
+class BuildInfoDiagnostics;
 class ConnectionHealthDiagnostics;
 } // namespace diagnostics
 namespace cli {
@@ -216,6 +217,8 @@ private:
   std::unique_ptr<ServiceForwarder> service_forwarder_;
   //! @brief LiveKit connection health diagnostic task owner.
   std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
+  //! @brief Always-OK build and dependency version diagnostic task owner.
+  std::unique_ptr<diagnostics::BuildInfoDiagnostics> build_info_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.
   rclcpp::TimerBase::SharedPtr connection_stats_timer_;
 };

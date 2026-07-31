@@ -2,8 +2,9 @@
 
 `ros_portal` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. ROS Portal currently exposes three diagnostic tasks:
+stack. ROS Portal currently exposes four diagnostic tasks:
 
+- `build_info` — always published
 - `connection_health` — always published
 - `topic_forwarder` — published when topic forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
@@ -21,6 +22,38 @@ ROS Portal polls LiveKit RTC stats from an internal 1 Hz wall timer while connec
 
 LiveKit connection callbacks update cached state only. They do not publish
 diagnostics directly from SDK callback threads.
+
+## `build_info`
+
+Reports the versions ROS Portal was built with. All values are fixed at build
+time (or read once from the environment at startup) and never change while the
+process runs, so this task always reports `OK` and exists purely to surface
+version information at the top of the diagnostics tree.
+
+| Property | Value |
+|---|---|
+| Task name | `build_info` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | Compile-time constants baked in by CMake, plus the `ROS_DISTRO` environment variable |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `LiveKit SDK <version>` | Always. The message carries the LiveKit C++ SDK version so it is visible without expanding key/value fields. |
+
+### Key/Value Fields
+
+| Key | Value |
+|---|---|
+| `livekit_sdk_version` | LiveKit C++ SDK version ROS Portal was built against, as exported by the SDK package found by CMake (falls back to the requested `LIVEKIT_SDK_VERSION` pin, then `unknown`). |
+| `ros_portal_version` | `ros_portal` package version from `package.xml`, or `unknown`. |
+| `ros_distro` | ROS distribution from the `ROS_DISTRO` environment variable at startup, or `unknown`. |
+
+The reported SDK version is resolved at build time; the prebuilt SDK exposes no
+runtime version API, so a mismatched library swapped in after the build cannot
+be detected here.
 
 ## `connection_health`
 
@@ -181,9 +214,10 @@ message with:
 
     ros2 topic echo /diagnostics
 
-Look for `connection_health`, and when those subsystems are enabled,
-`topic_forwarder` and `cli_manager` statuses. When the room is connected,
-`connection_health` should also contain the fixed `rtc.*` summary fields.
+Look for `build_info` and `connection_health`, and when those subsystems are
+enabled, `topic_forwarder` and `cli_manager` statuses. When the room is
+connected, `connection_health` should also contain the fixed `rtc.*` summary
+fields.
 
 ## Aggregating Diagnostics
 
@@ -227,6 +261,10 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
 /**:
   ros__parameters:
     path: ROS Portal
+    build_info:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Build Info
+      contains: ['build_info']
     connection_health:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Connection Health
@@ -241,8 +279,9 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
       contains: ['cli_manager']
 ```
 
-This groups ROS Portal diagnostics under `ROS Portal / Connection Health`,
-`ROS Portal / Topic Forwarder`, and `ROS Portal / CLI Manager`.
+This groups ROS Portal diagnostics under `ROS Portal / Build Info`,
+`ROS Portal / Connection Health`, `ROS Portal / Topic Forwarder`, and
+`ROS Portal / CLI Manager`.
 Omit analyzers for tasks that are not enabled in your configuration.
 
 ### Launch The Aggregator

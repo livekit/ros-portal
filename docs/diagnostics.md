@@ -2,10 +2,11 @@
 
 `ros_portal` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. ROS Portal currently exposes four diagnostic tasks:
+stack. ROS Portal currently exposes five diagnostic tasks:
 
 - `build_info` — always published
-- `connection_health` — always published
+- `ros_portal_status` — always published
+- `connection_health` — published after configuration loads
 - `topic_forwarder` — published when topic forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
 
@@ -54,6 +55,50 @@ version information at the top of the diagnostics tree.
 The reported SDK version is resolved at build time; the prebuilt SDK exposes no
 runtime version API, so a mismatched library swapped in after the build cannot
 be detected here.
+
+## `ros_portal_status`
+
+Reports the node's initialization and shutdown lifecycle, effective
+configuration, active components, shared LiveKit RPC failures, and topic polling
+health. The task exists as soon as the node is constructed, so configuration and
+credential failures remain observable.
+
+| Property | Value |
+|---|---|
+| Task name | `ros_portal_status` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | Node lifecycle, effective configuration, component ownership, shared RPC helpers, and topic polling timer |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `ROS Portal is initialized` | Initialization completed and the topic polling timer is active. |
+| `WARN` | `ROS Portal is shutting down` | Explicit or destructor-driven shutdown is in progress. |
+| `WARN` | `ROS Portal topic polling has overrun` | At least one discovery poll exceeded the configured polling period. |
+| `ERROR` | `ROS Portal is not initialized` | Initialization has not completed, including configuration, credential, or connection failures. |
+| `ERROR` | `ROS Portal is initialized without an active topic poll timer` | Lifecycle state says initialized but topic discovery polling is inactive. |
+
+### Fields
+
+| Key | Value |
+|---|---|
+| `initialized` | Whether initialization completed. |
+| `shutting_down` | Whether shutdown is in progress. |
+| `components_active` | Comma-separated active component names, or `none`. Components are `connection_health`, `topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and `cli_manager`. |
+| `config_path` | Effective configuration file path, or `unset`. |
+| `topic_polling_period_ms` | Effective topic discovery polling period. |
+| `min_qos_depth` | Effective minimum inferred QoS depth. |
+| `max_qos_depth` | Effective maximum inferred QoS depth. |
+| `ros_threads` | Effective executor thread count; zero means the system default. |
+| `livekit_url_source` | Source used to resolve the LiveKit URL, or `unset`. |
+| `token_source` | Source used to resolve the LiveKit token, or `unset`. The token value is never emitted. |
+| `local_identity` | Connected local participant identity, or `unset`. |
+| `rpc_register_failures` | Cumulative failures from the shared RPC registration helper. |
+| `rpc_perform_failures` | Cumulative failures from the shared outbound RPC helper. |
+| `poll_timer_active` | Whether the topic polling timer is active. |
+| `topic_poll_overruns` | Cumulative topic polls that exceeded `topic_polling_period_ms`. |
 
 ## `connection_health`
 
@@ -214,10 +259,10 @@ message with:
 
     ros2 topic echo /diagnostics
 
-Look for `build_info` and `connection_health`, and when those subsystems are
-enabled, `topic_forwarder` and `cli_manager` statuses. When the room is
-connected, `connection_health` should also contain the fixed `rtc.*` summary
-fields.
+Look for `build_info`, `ros_portal_status`, and, after configuration loads,
+`connection_health`. When those subsystems are enabled, look for
+`topic_forwarder` and `cli_manager` statuses. When the room is connected,
+`connection_health` should also contain the fixed `rtc.*` summary fields.
 
 ## Aggregating Diagnostics
 
@@ -265,6 +310,10 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Build Info
       contains: ['build_info']
+    ros_portal_status:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Node Status
+      contains: ['ros_portal_status']
     connection_health:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Connection Health
@@ -280,8 +329,8 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
 ```
 
 This groups ROS Portal diagnostics under `ROS Portal / Build Info`,
-`ROS Portal / Connection Health`, `ROS Portal / Topic Forwarder`, and
-`ROS Portal / CLI Manager`.
+`ROS Portal / Node Status`, `ROS Portal / Connection Health`,
+`ROS Portal / Topic Forwarder`, and `ROS Portal / CLI Manager`.
 Omit analyzers for tasks that are not enabled in your configuration.
 
 ### Launch The Aggregator

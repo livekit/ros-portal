@@ -30,8 +30,11 @@
 #include <livekit/video_source.h>
 
 #include <chrono>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
 #include <filesystem>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -48,6 +51,13 @@
 
 namespace ros_portal {
 
+namespace {
+
+/// Diagnostic task name for node lifecycle and shared infrastructure.
+constexpr char kRosPortalStatusDiagnosticTaskName[] = "ros_portal_status";
+
+} // namespace
+
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros_portal", options),
       topic_polling_period_ms_(0),
@@ -61,15 +71,29 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
   this->declare_parameter<int>("min_qos_depth", static_cast<int>(kDefaultMinQosDepth));
   this->declare_parameter<int>("max_qos_depth", static_cast<int>(kDefaultMaxQosDepth));
   this->declare_parameter("best_effort_qos_topics", rclcpp::ParameterValue(kEmptyStringVec));
+
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    const auto config_path = this->get_parameter("config_path").as_string();
+    diagnostic_state_.config_path = config_path.empty() ? "unset" : config_path;
+  }
+  initializeDiagnostics();
 }
 
 bool RosPortal::initialize() {
-  if (initialized_) {
+  if (initialized_.load(std::memory_order_relaxed)) {
     RCLCPP_WARN(this->get_logger(), "ROS Portal is already initialized");
     return true;
   }
 
+  initializeDiagnostics();
+  shutting_down_.store(false, std::memory_order_relaxed);
+
   const auto config_path = std::filesystem::path(this->get_parameter("config_path").as_string());
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    diagnostic_state_.config_path = config_path.empty() ? "unset" : config_path.string();
+  }
   const auto config = utils::parseRosPortalConfig(config_path, this->get_logger());
   if (!config) {
     RCLCPP_FATAL(this->get_logger(), "Failed to parse ROS Portal config");
@@ -78,17 +102,22 @@ bool RosPortal::initialize() {
 
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
+  diagnostic_state_.topic_polling_period_ms.store(topic_polling_period_ms_, std::memory_order_relaxed);
+  diagnostic_state_.ros_threads.store(ros_threads_, std::memory_order_relaxed);
   topic_forwarder_.reset();
+  diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   connection_diagnostics_.reset();
+  diagnostic_state_.connection_health_active.store(false, std::memory_order_relaxed);
   build_info_diagnostics_.reset();
-  diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
-  diagnostics_updater_->setHardwareID("ros_portal");
   connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(makeDiagnosticsFns());
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
+  diagnostic_state_.connection_health_active.store(connection_diagnostics_ != nullptr, std::memory_order_relaxed);
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
+  diagnostic_state_.min_qos_depth.store(min_qos_depth_, std::memory_order_relaxed);
+  diagnostic_state_.max_qos_depth.store(max_qos_depth_, std::memory_order_relaxed);
 
   RCLCPP_INFO(this->get_logger(), "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu]",
               topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_);
@@ -99,6 +128,11 @@ bool RosPortal::initialize() {
   std::string url_source, token_source;
   const std::string livekit_url = utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
   const std::string livekit_token = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    diagnostic_state_.livekit_url_source = url_source;
+    diagnostic_state_.token_source = token_source;
+  }
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s", url_source.c_str());
   RCLCPP_INFO(this->get_logger(), "LiveKit token resolved from %s", token_source.c_str());
@@ -131,7 +165,7 @@ bool RosPortal::initialize() {
   // Warning: avoid doing ROS operations in delegate callbacks
   {
     const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-    shutting_down_ = false;
+    shutting_down_.store(false, std::memory_order_relaxed);
   }
   room_->setDelegate(this);
 
@@ -157,6 +191,10 @@ bool RosPortal::initialize() {
     attributes[kRobotParticipantAttribute] = "true";
     lp->setAttributes(attributes);
 
+    {
+      const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+      diagnostic_state_.local_identity = lp->identity();
+    }
     RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
                 lp->identity().c_str());
   } else {
@@ -183,25 +221,33 @@ bool RosPortal::initialize() {
 
   poll_timer_ = this->create_wall_timer(std::chrono::milliseconds(topic_polling_period_ms_),
                                         std::bind(&RosPortal::pollTopics, this), reentrant_callback_group_);
+  diagnostic_state_.poll_timer_active.store(poll_timer_ != nullptr, std::memory_order_relaxed);
   connection_stats_timer_ = this->create_wall_timer(
       std::chrono::seconds(1), std::bind(&RosPortal::pollConnectionStats, this), reentrant_callback_group_);
 
   // ROS Portal is considered initialized only once it is connected to a room
   // (room_ is left null when credentials are absent or connection failed).
-  initialized_ = (room_ != nullptr);
-  return initialized_;
+  initialized_.store(room_ != nullptr, std::memory_order_relaxed);
+  return initialized_.load(std::memory_order_relaxed);
 }
 
 RosPortal::~RosPortal() { shutdown(); }
 
 void RosPortal::shutdown() {
   const std::lock_guard<std::mutex> shutdown_lock(shutdown_mutex_);
+  shutting_down_.store(true, std::memory_order_relaxed);
+  if (diagnostics_updater_) {
+    // Publish the lifecycle transition before the updater and component tasks
+    // are dismantled; otherwise the brief shutting-down state is rarely visible.
+    diagnostics_updater_->force_update();
+  }
 
   // Stop ROS callbacks before dismantling the objects they access.
   if (poll_timer_) {
     poll_timer_->cancel();
     poll_timer_.reset();
   }
+  diagnostic_state_.poll_timer_active.store(false, std::memory_order_relaxed);
   if (connection_stats_timer_) {
     connection_stats_timer_->cancel();
     connection_stats_timer_.reset();
@@ -218,15 +264,18 @@ void RosPortal::shutdown() {
   // flag and returns without touching the topic forwarder.
   {
     const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-    shutting_down_ = true;
+    shutting_down_.store(true, std::memory_order_relaxed);
   }
 
   // These components own RPC handlers rather than RoomDelegate callbacks.
   // Release them while the local participant is still available so they can
   // unregister cleanly.
   service_forwarder_.reset();
+  diagnostic_state_.service_forwarder_active.store(false, std::memory_order_relaxed);
   cli_manager_.reset();
+  diagnostic_state_.cli_manager_active.store(false, std::memory_order_relaxed);
   latched_topic_forwarder_.reset();
+  diagnostic_state_.latched_topic_forwarder_active.store(false, std::memory_order_relaxed);
 
   // Disconnect before destroying delegate targets. Room::disconnect() removes
   // its listener only after in-flight callbacks complete.
@@ -242,13 +291,15 @@ void RosPortal::shutdown() {
   }
 
   topic_forwarder_.reset();
+  diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   connection_diagnostics_.reset();
+  diagnostic_state_.connection_health_active.store(false, std::memory_order_relaxed);
   build_info_diagnostics_.reset();
 
   // Reset diagnostics_updater_ after all its task owners are gone.
+  initialized_.store(false, std::memory_order_relaxed);
   diagnostics_updater_.reset();
   room_.reset();
-  initialized_ = false;
 
   // Note: livekit::shutdown() is intentionally NOT called here — the SDK
   // lifecycle is owned by the process entry point (see initialize()).
@@ -278,19 +329,110 @@ diagnostics::DiagnosticsManagerFns RosPortal::makeDiagnosticsFns() {
   return fns;
 }
 
+void RosPortal::initializeDiagnostics() {
+  if (diagnostics_updater_ != nullptr) {
+    return;
+  }
+
+  diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
+  diagnostics_updater_->setHardwareID("ros_portal");
+  diagnostics_updater_->add(kRosPortalStatusDiagnosticTaskName,
+                            [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+}
+
+void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
+  std::string config_path;
+  std::string livekit_url_source;
+  std::string token_source;
+  std::string local_identity;
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    config_path = diagnostic_state_.config_path;
+    livekit_url_source = diagnostic_state_.livekit_url_source;
+    token_source = diagnostic_state_.token_source;
+    local_identity = diagnostic_state_.local_identity;
+  }
+
+  std::string components_active;
+  const auto append_component = [&components_active](const char* component) {
+    if (!components_active.empty()) {
+      components_active += ",";
+    }
+    components_active += component;
+  };
+  if (diagnostic_state_.connection_health_active.load(std::memory_order_relaxed)) {
+    append_component("connection_health");
+  }
+  if (diagnostic_state_.topic_forwarder_active.load(std::memory_order_relaxed)) {
+    append_component("topic_forwarder");
+  }
+  if (diagnostic_state_.latched_topic_forwarder_active.load(std::memory_order_relaxed)) {
+    append_component("latched_topic_forwarder");
+  }
+  if (diagnostic_state_.service_forwarder_active.load(std::memory_order_relaxed)) {
+    append_component("service_forwarder");
+  }
+  if (diagnostic_state_.cli_manager_active.load(std::memory_order_relaxed)) {
+    append_component("cli_manager");
+  }
+  if (components_active.empty()) {
+    components_active = "none";
+  }
+
+  const bool initialized = initialized_.load(std::memory_order_relaxed);
+  const bool shutting_down = shutting_down_.load(std::memory_order_relaxed);
+  const bool poll_timer_active = diagnostic_state_.poll_timer_active.load(std::memory_order_relaxed);
+  const auto topic_poll_overruns = diagnostic_state_.topic_poll_overruns.load(std::memory_order_relaxed);
+
+  status.add("initialized", initialized ? "true" : "false");
+  status.add("shutting_down", shutting_down ? "true" : "false");
+  status.add("components_active", components_active);
+  status.add("config_path", config_path);
+  status.add("topic_polling_period_ms", diagnostic_state_.topic_polling_period_ms.load(std::memory_order_relaxed));
+  status.add("min_qos_depth", diagnostic_state_.min_qos_depth.load(std::memory_order_relaxed));
+  status.add("max_qos_depth", diagnostic_state_.max_qos_depth.load(std::memory_order_relaxed));
+  status.add("ros_threads", diagnostic_state_.ros_threads.load(std::memory_order_relaxed));
+  status.add("livekit_url_source", livekit_url_source);
+  status.add("token_source", token_source);
+  status.add("local_identity", local_identity);
+  status.add("rpc_register_failures", diagnostic_state_.rpc_register_failures.load(std::memory_order_relaxed));
+  status.add("rpc_perform_failures", diagnostic_state_.rpc_perform_failures.load(std::memory_order_relaxed));
+  status.add("poll_timer_active", poll_timer_active ? "true" : "false");
+  status.add("topic_poll_overruns", topic_poll_overruns);
+
+  if (shutting_down) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "ROS Portal is shutting down");
+  } else if (!initialized) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal is not initialized");
+  } else if (!poll_timer_active) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
+                   "ROS Portal is initialized without an active topic poll timer");
+  } else if (topic_poll_overruns > 0) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "ROS Portal topic polling has overrun");
+  } else {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "ROS Portal is initialized");
+  }
+}
+
 void RosPortal::pollTopics() {
-  if (!initialized_) {
+  if (!initialized_.load(std::memory_order_relaxed)) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                          "Polling topics while ROS Portal is not initialized, skipping...");
     return;
   }
 
+  const auto poll_started = std::chrono::steady_clock::now();
   if (topic_forwarder_) {
     topic_forwarder_->pollTopics();
   }
 
   if (latched_topic_forwarder_) {
     latched_topic_forwarder_->poll();
+  }
+
+  if (std::chrono::steady_clock::now() - poll_started >
+      std::chrono::milliseconds(diagnostic_state_.topic_polling_period_ms.load(std::memory_order_relaxed))) {
+    diagnostic_state_.topic_poll_overruns.fetch_add(1, std::memory_order_relaxed);
   }
 }
 
@@ -302,7 +444,7 @@ void RosPortal::pollConnectionStats() {
 
 void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
   const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-  if (shutting_down_) {
+  if (shutting_down_.load(std::memory_order_relaxed)) {
     return;
   }
   if (!event.track) {
@@ -475,6 +617,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
                                                         this->weak_from_this(), // weak_from_this() MUST be called after
                                                                                 // constructor
                                                         std::move(forwarder_lk_methods), makeDiagnosticsFns());
+    diagnostic_state_.topic_forwarder_active.store(topic_forwarder_ != nullptr, std::memory_order_relaxed);
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder, unknown exception");
     return false;
@@ -497,6 +640,7 @@ bool RosPortal::initializeCliManager() {
     };
     cli_manager_ = std::make_unique<cli::Manager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
                                                   std::move(topic_publish_allowed), makeDiagnosticsFns());
+    diagnostic_state_.cli_manager_active.store(cli_manager_ != nullptr, std::memory_order_relaxed);
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");
     return false;
@@ -515,6 +659,7 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
     };
     service_forwarder_ = std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this,
                                                             reentrant_callback_group_, livekit_methods);
+    diagnostic_state_.service_forwarder_active.store(service_forwarder_ != nullptr, std::memory_order_relaxed);
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
     return false;
@@ -529,6 +674,7 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
 bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics) {
   auto options = utils::latchedTopicForwarderOptions(topics);
   if (options.outbound_topics.empty() && options.inbound_topics.empty()) {
+    diagnostic_state_.latched_topic_forwarder_active.store(false, std::memory_order_relaxed);
     RCLCPP_INFO(this->get_logger(), "No latched topics configured; skipping latched topic forwarder");
     return true;
   }
@@ -557,6 +703,8 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
     latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(std::move(options),
                                                                        this->weak_from_this(), // after constructor
                                                                        std::move(methods));
+    diagnostic_state_.latched_topic_forwarder_active.store(latched_topic_forwarder_ != nullptr,
+                                                           std::memory_order_relaxed);
     latched_topic_forwarder_->start();
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder: %s", error.what());
@@ -582,6 +730,7 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
                                                  const std::string& payload, std::uint8_t timeout_sec) {
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
+    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(),
                  "LiveKit RPC '%s' to participant '%s' failed: local participant "
                  "is unavailable",
@@ -592,6 +741,7 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
   try {
     return local_participant->performRpc(participant_id, method, payload, static_cast<double>(timeout_sec));
   } catch (const livekit::RpcError& error) {
+    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s", method.c_str(),
                  participant_id.c_str(), error.code(), error.message().c_str());
     return std::nullopt;
@@ -601,6 +751,7 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
 bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
+    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_WARN(this->get_logger(),
                 "Cannot register RPC method '%s': LiveKit local participant is "
                 "unavailable",
@@ -614,6 +765,7 @@ bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler)
           return handler(data.payload);
         });
   } catch (const livekit::RpcError& error) {
+    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' registration failed: code=%u message=%s", method.c_str(),
                  error.code(), error.message().c_str());
     return false;

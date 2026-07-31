@@ -19,6 +19,7 @@
 #include <livekit/room.h>
 #include <livekit/room_delegate.h>
 
+#include <atomic>
 #include <cstdint>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
@@ -33,6 +34,10 @@
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/types.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
+
+#ifdef BUILD_TESTING
+#include <gtest/gtest_prod.h>
+#endif
 
 namespace ros_portal {
 
@@ -85,6 +90,52 @@ public:
   bool hasParticipant(const std::string& participant_id) const;
 
 private:
+#ifdef BUILD_TESTING
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyOverrunAndShutdownStates);
+  FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
+#endif
+
+  /// @brief Mutable counters and state published by `ros_portal_status`.
+  struct DiagnosticState {
+    /// @brief Guards string metadata updated during initialization.
+    std::mutex metadata_mutex;
+    /// @brief Effective configuration file path, or `unset`.
+    std::string config_path{"unset"};
+    /// @brief Source used to resolve the LiveKit URL, or `unset`.
+    std::string livekit_url_source{"unset"};
+    /// @brief Source used to resolve the LiveKit token, or `unset`.
+    std::string token_source{"unset"};
+    /// @brief Connected local LiveKit identity, or `unset`.
+    std::string local_identity{"unset"};
+    /// @brief Effective topic polling period.
+    std::atomic<int> topic_polling_period_ms{0};
+    /// @brief Effective minimum inferred QoS depth.
+    std::atomic<std::size_t> min_qos_depth{0};
+    /// @brief Effective maximum inferred QoS depth.
+    std::atomic<std::size_t> max_qos_depth{0};
+    /// @brief Effective ROS executor thread count.
+    std::atomic<int> ros_threads{0};
+    /// @brief Whether connection-health diagnostics are instantiated.
+    std::atomic_bool connection_health_active{false};
+    /// @brief Whether the topic forwarder is instantiated.
+    std::atomic_bool topic_forwarder_active{false};
+    /// @brief Whether the latched-topic forwarder is instantiated.
+    std::atomic_bool latched_topic_forwarder_active{false};
+    /// @brief Whether the CLI manager is instantiated.
+    std::atomic_bool cli_manager_active{false};
+    /// @brief Whether the service forwarder is instantiated.
+    std::atomic_bool service_forwarder_active{false};
+    /// @brief Whether the topic polling timer exists and has not been canceled.
+    std::atomic_bool poll_timer_active{false};
+    /// @brief Count of topic polls that exceeded the configured period.
+    std::atomic<std::uint64_t> topic_poll_overruns{0};
+    /// @brief Count of shared LiveKit RPC method registration failures.
+    std::atomic<std::uint64_t> rpc_register_failures{0};
+    /// @brief Count of shared LiveKit outbound RPC failures.
+    std::atomic<std::uint64_t> rpc_perform_failures{0};
+  };
+
   /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
 
@@ -164,6 +215,15 @@ private:
   /// a task while the shared updater does not exist.
   diagnostics::DiagnosticsManagerFns makeDiagnosticsFns();
 
+  /// @brief Create the shared updater and register `ros_portal_status`.
+  ///
+  /// Safe to call again after shutdown; does nothing while an updater exists.
+  void initializeDiagnostics();
+
+  /// @brief Populate node lifecycle, configuration, and shared-RPC diagnostics.
+  /// @param status Diagnostic status wrapper to populate.
+  void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
+
   /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
   /// @param services Configured services; outbound routes are derived here.
   /// @return True on success, false when the service forwarder could not be initialized.
@@ -191,13 +251,13 @@ private:
   //! default)
   int ros_threads_;
   //! @brief Tracks whether ROS Portal initialization has completed.
-  bool initialized_;
+  std::atomic_bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.
   std::mutex shutdown_mutex_;
   //! @brief Quiesces data-track publication callbacks before room disconnect.
   std::mutex data_track_callback_mutex_;
   //! @brief Prevents snapshotted publication callbacks from entering during shutdown.
-  bool shutting_down_;
+  std::atomic_bool shutting_down_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics
@@ -221,6 +281,8 @@ private:
   std::unique_ptr<diagnostics::BuildInfoDiagnostics> build_info_diagnostics_;
   //! @brief Timer for best-effort LiveKit stats polling.
   rclcpp::TimerBase::SharedPtr connection_stats_timer_;
+  //! @brief Mutable state owned exclusively for node-level diagnostics.
+  DiagnosticState diagnostic_state_;
 };
 
 } // namespace ros_portal

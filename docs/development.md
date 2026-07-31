@@ -181,9 +181,9 @@ colcon build --packages-up-to ros_portal
 ./scripts/package-deb.sh
 ```
 
-The resulting fat package preserves the isolated prefixes for ROS Portal,
-config, message, and medkit packages under `/opt/livekit/ros/$ROS_DISTRO`; it
-also includes the LiveKit SDK installed by the ROS Portal build. ROS and system
-libraries remain normal APT dependencies. The package and its checksum are
-written to `artifacts/debian/`. CI installs it into a clean ROS base image,
+The resulting self-contained package preserves the isolated prefixes for ROS
+Portal, config, message, and medkit packages under `/opt/livekit/ros/$ROS_DISTRO`;
+it also includes the LiveKit SDK installed by the ROS Portal build. ROS and
+system libraries remain normal APT dependencies. The package and its checksum
+are written to `artifacts/debian/`. CI installs it into a clean ROS base image,
 then connects ROS Portal to the test LiveKit server for ten seconds.

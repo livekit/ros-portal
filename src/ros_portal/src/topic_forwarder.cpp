@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "ros_portal/introspection/introspection_utils.hpp"
+#include "ros_portal/utils/generic_subscription.hpp"
 #include "ros_portal/utils/image_conversion.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
@@ -256,7 +257,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
     auto subscription =
-        node->create_generic_subscription(topic_name, topic_type, qos, std::move(callback), sub_options);
+        utils::createGenericSubscription(node, topic_name, topic_type, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);

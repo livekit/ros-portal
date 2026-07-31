@@ -17,7 +17,6 @@ $schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_porta
 ros_portal:
   version: "0.0.1"
   topic_polling_period_ms: 500
-  ros_threads: 0
 
   topics:
     - topic: "/rgbd_camera/image"
@@ -56,3 +55,10 @@ ros_portal:
     # Allow all test topics for integration testing.
     - topic: "/test/.*"
       direction: "bidirectional"
+
+  # Independent capture sources publish directly as LiveKit video tracks.
+  # Uncomment this deterministic source for capture integration testing.
+  video_sources:
+    - track_name: "demo_camera"
+      source:
+        type: "demo"

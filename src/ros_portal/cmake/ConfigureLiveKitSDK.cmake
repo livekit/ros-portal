@@ -51,7 +51,7 @@ function(livekit_configure_sdk)
     message(FATAL_ERROR "livekit_configure_sdk requires BUILD_ROOT")
   endif()
 
-  set(_livekit_build_sdk_from_source_default OFF)
+  set(_livekit_build_sdk_from_source_default ON)
   if(DEFINED ENV{BUILD_LIVEKIT_SDK_FROM_SOURCE})
     set(_livekit_build_sdk_from_source_default
       "$ENV{BUILD_LIVEKIT_SDK_FROM_SOURCE}")

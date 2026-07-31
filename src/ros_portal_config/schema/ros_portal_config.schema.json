@@ -37,6 +37,12 @@
           "items": {
             "$ref": "#/$defs/topicConfig"
           }
+        },
+        "video_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/videoSourceConfig"
+          }
         }
       }
     }
@@ -51,6 +57,21 @@
     "encoding": {
       "enum": ["ros2msg", "ros2idl", "jsonschema"]
     },
+    "captureSourceType": {
+      "enum": ["gstreamer", "demo", "device"]
+    },
+    "videoCodec": {
+      "enum": ["h264", "h265", "vp8", "vp9", "av1"]
+    },
+    "gstreamerBitrateUnit": {
+      "enum": ["bps", "kbps"]
+    },
+    "deviceFormatStrategy": {
+      "enum": ["exact", "closest", "highest_framerate", "highest_resolution"]
+    },
+    "deviceFrameFormat": {
+      "enum": ["i420", "nv12", "bgra", "rgb24", "bgr24", "yuyv", "uyvy", "grey", "mjpeg"]
+    },
     "nonemptyString": {
       "type": "string",
       "minLength": 1
@@ -63,15 +84,157 @@
       "type": "integer",
       "minimum": 0
     },
-    "videoOptions": {
+    "captureResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "height": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "gstreamerRateControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["element", "property", "unit"],
+      "properties": {
+        "element": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "property": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "unit": {
+          "$ref": "#/$defs/gstreamerBitrateUnit"
+        }
+      }
+    },
+    "deviceFormatSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "description": "How the device picks the format it delivers. 'exact' requires the device to offer the requested resolution and frame rate; 'closest' uses the nearest supported values; 'highest_framerate' and 'highest_resolution' maximize one axis under the remaining fields as constraints.",
+          "$ref": "#/$defs/deviceFormatStrategy"
+        },
+        "resolution": {
+          "description": "Requested frame dimensions. Required for 'exact' and 'closest'; an optional constraint for 'highest_framerate'; invalid for 'highest_resolution'.",
+          "$ref": "#/$defs/captureResolution"
+        },
+        "framerate_fps": {
+          "description": "Requested frame rate. Required for 'exact' and 'closest'; an optional constraint for 'highest_resolution'; invalid for 'highest_framerate'.",
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "frame_format": {
+          "description": "Requested pixel format. Platform-specific and treated as a preference the backend may substitute: macOS accepts only 'i420', 'nv12', or 'bgra' and always delivers NV12; V4L2 rejects 'i420' and 'bgra'. Defaults to 'nv12' for 'exact' and 'closest' (the only value both backends accept); left unconstrained for 'highest_framerate' and 'highest_resolution', where naming it selects the format outright with no fallback.",
+          "$ref": "#/$defs/deviceFrameFormat"
+        }
+      }
+    },
+    "deviceSourceConfig": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "bitrate_kbps": {
+        "index": {
+          "description": "Platform enumeration position: the AVFoundation video-device index on macOS, the /dev/videoN node number on Linux. Mutually exclusive with 'id'. Not the position in 'capture_devices' output, and it can shift as devices are attached; prefer 'id'.",
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "id": {
+          "description": "Platform-stable device identifier as reported by 'ros2 run ros_portal capture_devices'. Mutually exclusive with 'index'. Stable across reboots on macOS; on V4L2 it is the node number, so re-enumerate rather than persisting it.",
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "format": {
+          "description": "Format requested from the device. Omit to accept the device's default format.",
+          "$ref": "#/$defs/deviceFormatSelection"
+        }
+      }
+    },
+    "demoSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resolution": {
+          "description": "Output resolution of the built-in test source. Defaults to 640x480 when omitted.",
+          "$ref": "#/$defs/captureResolution"
+        },
+        "framerate_fps": {
+          "description": "Output frame rate of the built-in test source. Defaults to 30 when omitted.",
           "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "captureSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/captureSourceType"
+        },
+        "pipeline": {
+          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'demo' and 'device'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
+          "$ref": "#/$defs/nonemptyString"
         },
         "codec": {
+          "description": "Expected encoded codec. GStreamer sources only; when omitted, it is inferred from negotiated pipeline caps.",
+          "$ref": "#/$defs/videoCodec"
+        },
+        "resolution": {
+          "description": "Expected encoded resolution. GStreamer sources only; when omitted, it is discovered from negotiated pipeline caps. Device sources request a resolution through 'device.format.resolution' instead.",
+          "$ref": "#/$defs/captureResolution"
+        },
+        "rate_control": {
+          "description": "Optional binding that forwards WebRTC bitrate targets to a writable GStreamer encoder property. GStreamer sources only; device sources are pixel sources encoded by WebRTC, which applies its own rate control.",
+          "$ref": "#/$defs/gstreamerRateControl"
+        },
+        "device": {
+          "description": "Camera device selection and requested format. Required when type is 'device'; invalid for 'gstreamer' and 'demo'.",
+          "$ref": "#/$defs/deviceSourceConfig"
+        },
+        "demo": {
+          "description": "Output characteristics of the built-in test source. Optional when type is 'demo'; invalid for 'gstreamer' and 'device'.",
+          "$ref": "#/$defs/demoSourceConfig"
+        }
+      }
+    },
+    "videoPublishOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_bitrate_bps": {
+          "description": "Maximum advertised publish bitrate in bits per second.",
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_framerate": {
+          "description": "Maximum advertised publish frame rate in frames per second.",
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
+    "videoSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["track_name", "source"],
+      "properties": {
+        "track_name": {
+          "description": "Name of the LiveKit video track published for this source.",
           "$ref": "#/$defs/nonemptyString"
+        },
+        "simulcast": {
+          "description": "When true, publish the track with simulcast enabled, letting the SFU forward a lower spatial layer to subscribers on constrained links. Defaults to false. Encoded sources dictate their own simulcast setting: a 'gstreamer' source publishes a single pre-encoded layer, so this field is ignored for it. See here for more details: https://livekit.com/blog/an-introduction-to-webrtc-simulcast",
+          "type": "boolean",
+          "default": false
+        },
+        "source": {
+          "$ref": "#/$defs/captureSourceConfig"
+        },
+        "publish_options": {
+          "$ref": "#/$defs/videoPublishOptions"
         }
       }
     },
@@ -124,9 +287,6 @@
           "description": "Outbound topics only. Selects how this ROS Portal node encodes and sends the topic's data on the LiveKit DataTrack, and the schema encoding it advertises to subscribers. 'ros2msg' (default) and 'ros2idl' send raw ROS CDR frames described by a Ros2Msg or Ros2Idl schema; 'jsonschema' deserializes each ROS message and sends a JSON frame described by a generated JSON Schema, easing communication with non-ROS systems. 'ros2idl' requires the local ROS type definition to be renderable as ROS 2 IDL; a topic requesting an encoding whose schema cannot be rendered is skipped with an error. Inbound decoding is unaffected: it is auto-detected from the remote track's advertised frame encoding, so this field is ignored for pure inbound topics. Matched by literal topic name, not regex.",
           "$ref": "#/$defs/encoding",
           "default": "ros2msg"
-        },
-        "video_options": {
-          "$ref": "#/$defs/videoOptions"
         }
       }
     }

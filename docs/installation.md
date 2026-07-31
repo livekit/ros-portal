@@ -9,7 +9,8 @@ CI builds Debian packages for:
 - amd64 and arm64 for each distribution
 
 The custom Debian package is named
-`ros-<distro>-livekit-portal`. CI workflow artifacts use
+`ros-<distro>-livekit-portal`. Tagged GitHub Releases provide the `.deb` and
+its `.sha256` checksum as direct downloads. CI workflow artifacts use
 `ros-<distro>-livekit-portal-<arch>-deb`; each artifact is a ZIP containing
 the versioned `.deb` and its checksum.
 
@@ -26,9 +27,9 @@ Configure the official ROS 2 APT source for your Ubuntu release before
 installing ROS Portal. ROS Portal package uses that source to install its ROS
 runtime dependencies.
 
-Download the CI workflow artifact matching the machine's ROS distribution and
-architecture. GitHub downloads the artifact as a ZIP archive containing the
-`.deb` and its `.sha256` file, so extract that archive first. Then run:
+Download the `.deb` matching the machine's ROS distribution and architecture
+from the tagged GitHub Release. For an unreleased build, download and extract
+the matching CI workflow artifact ZIP instead. Then run:
 
 ```bash
 sudo apt update
@@ -81,7 +82,16 @@ ros-portal-jazzy
 See [Running](running.md) and [Configuration](configuration.md) for launch
 arguments and route configuration.
 
-## CI Artifact Distribution
+## Package Distribution
+
+Tagged releases attach each supported `.deb` and its `.sha256` checksum directly
+to a draft GitHub Release after every package passes its build, test, and
+clean-install smoke test. Verify a downloaded package from the directory
+containing both files:
+
+```bash
+sha256sum --check ros-jazzy-livekit-portal_0.1.0-1_amd64.deb.sha256
+```
 
 CI stores the Debian packages as workflow artifacts for testing and manual
 installation. These artifacts are not an APT repository and are subject to the

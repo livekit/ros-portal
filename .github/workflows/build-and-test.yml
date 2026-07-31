@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           for tree in \
             src/externals/client-sdk-cpp/client-sdk-rust/target \
-            build/ros2_livekit_bridge/_deps
+            build/ros_portal/_deps
           do
             sudo mkdir -p "${tree}"
             sudo chown -R "$(id -u):$(id -g)" "${tree}"
@@ -99,8 +99,8 @@ jobs:
         with:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
-            build/ros2_livekit_bridge/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/cmake/ConfigureLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
+            build/ros_portal/_deps
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
           restore-keys: |
             livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-
 
@@ -117,7 +117,7 @@ jobs:
               set -eo pipefail
               source "/opt/ros/${ROS_DISTRO}/setup.bash"
               set -u
-              colcon build --packages-up-to ros2_livekit_bridge test_utilities custom_msgs
+              colcon build --packages-up-to ros_portal test_utilities custom_msgs
             '
 
       # The container writes as root; make only unreadable cache entries visible
@@ -132,7 +132,7 @@ jobs:
           set -euo pipefail
           for tree in \
             src/externals/client-sdk-cpp/client-sdk-rust/target \
-            build/ros2_livekit_bridge/_deps
+            build/ros_portal/_deps
           do
             [[ -d "${tree}" ]] || continue
             sudo find "${tree}" -type f ! -perm -o=r -exec chmod a+r {} +
@@ -150,8 +150,8 @@ jobs:
         with:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
-            build/ros2_livekit_bridge/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros2_livekit_bridge/cmake/BuildLiveKitSDK.cmake', 'src/ros2_livekit_bridge/cmake/ConfigureLiveKitSDK.cmake', 'src/ros2_livekit_bridge/CMakeLists.txt') }}
+            build/ros_portal/_deps
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
 
       - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -166,14 +166,14 @@ jobs:
               set -u
 
               # --event-handlers console_direct+ streams test output live
-              # --ctest-args -R ros2_livekit_bridge_unit_tests runs only the unit tests
+              # --ctest-args -R ros_portal_unit_tests runs only the unit tests
               test_exit=0
               GTEST_COLOR=1 colcon test \
-                --packages-up-to ros2_livekit_bridge test_utilities custom_msgs \
+                --packages-up-to ros_portal test_utilities custom_msgs \
                 --packages-skip ros2_medkit_serialization \
                 --event-handlers console_direct+ \
                 --return-code-on-test-failure \
-                --ctest-args -R ros2_livekit_bridge_unit_tests \
+                --ctest-args -R ros_portal_unit_tests \
                 || test_exit=$?
               colcon test-result --verbose --all
               exit $test_exit
@@ -199,7 +199,7 @@ jobs:
           CI: true
           GITHUB_TOKEN: ${{ github.token }}
           LIVEKIT_URL: ws://127.0.0.1:7880
-          LIVEKIT_ROOM: ros2_livekit_bridge_test_room
+          LIVEKIT_ROOM: ros_portal_test_room
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
@@ -216,10 +216,10 @@ jobs:
               # -R selects only the integration test
               test_exit=0
               GTEST_COLOR=1 colcon test \
-                --packages-select ros2_livekit_bridge \
+                --packages-select ros_portal \
                 --event-handlers console_direct+ \
                 --return-code-on-test-failure \
-                --ctest-args -R ros2_livekit_bridge_integration_tests \
+                --ctest-args -R ros_portal_integration_tests \
                 || test_exit=$?
               colcon test-result --verbose --all
               exit $test_exit
@@ -268,7 +268,7 @@ jobs:
         if: ${{ always() && !cancelled() && steps.debian_package.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ros-${{ inputs.ros_distro }}-livekit-bridge-${{ inputs.arch }}-deb
+          name: ros-${{ inputs.ros_distro }}-livekit-portal-${{ inputs.arch }}-deb
           path: |
             artifacts/debian/*.deb
             artifacts/debian/*.sha256

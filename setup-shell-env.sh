@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-cat <<EOF >/etc/profile.d/ros-livekit-bridge.sh
+cat <<EOF >/etc/profile.d/ros-portal.sh
 export ROS_DISTRO=${ROS_DISTRO}
 export WS="${WS}"
 
@@ -57,7 +57,7 @@ cbpu()
 {
     cd "\${WS}" && sros
     if [ "\$#" -eq 0 ]; then
-        colcon build --packages-up-to ros2_livekit_bridge
+        colcon build --packages-up-to ros_portal
     else
         colcon build --packages-up-to "\$@"
     fi
@@ -121,14 +121,14 @@ sdid()
 }
 
 if [ -n "\${ZSH_VERSION:-}" ]; then
-    PROMPT='(ros-livekit) %n@%m:%~ %# '
+    PROMPT='(ros-portal) %n@%m:%~ %# '
 else
-    export PS1='(ros-livekit) \u@\h:\w \$ '
+    export PS1='(ros-portal) \u@\h:\w \$ '
 fi
 EOF
 
 cat <<'EOF' >/root/.bashrc
-source /etc/profile.d/ros-livekit-bridge.sh
+source /etc/profile.d/ros-portal.sh
 EOF
 
 cat <<'EOF' >/root/.bash_profile
@@ -136,7 +136,7 @@ source /root/.bashrc
 EOF
 
 cat <<'EOF' >/root/.zshrc
-source /etc/profile.d/ros-livekit-bridge.sh
+source /etc/profile.d/ros-portal.sh
 autoload -Uz compinit
 compinit
 EOF

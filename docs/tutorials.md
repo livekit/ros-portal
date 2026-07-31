@@ -2,14 +2,14 @@
 
 ## Turtlesim over LiveKit
 
-This tutorial demonstrates the bridge capabilities by expanding upon the [ROS turtlesim beginner tutorials](https://docs.ros.org/en/foxy/Tutorials.html), running the turtlesim in one ROS graph and controlling it from a separate graph, with the two connected only through a LiveKit room.
+This tutorial demonstrates ROS Portal capabilities by expanding upon the [ROS turtlesim beginner tutorials](https://docs.ros.org/en/foxy/Tutorials.html), running the turtlesim in one ROS graph and controlling it from a separate graph, with the two connected only through a LiveKit room.
 
 You will run two ROS graphs on one machine, isolated by `ROS_DOMAIN_ID` so they
 share no DDS traffic:
 
-- **turtle_sim** (`ROS_DOMAIN_ID=42`): runs `turtlesim_node` and a bridge with
+- **turtle_sim** (`ROS_DOMAIN_ID=42`): runs `turtlesim_node` and a ROS Portal node with
   `identity:=turtle_sim`.
-- **controller** (`ROS_DOMAIN_ID=100`): runs a bridge with `identity:=controller`
+- **controller** (`ROS_DOMAIN_ID=100`): runs a ROS Portal node with `identity:=controller`
   and drives the turtle.
 
 Because the domains differ, the only path between them is the LiveKit room. Along
@@ -21,7 +21,7 @@ flowchart LR
     subgraph D42["Domain 42"]
         direction TB
         TSIM["turtlesim_node"]
-        B1["bridge · turtle_sim"]
+        B1["ROS Portal · turtle_sim"]
     end
 
     subgraph LK["LiveKit"]
@@ -31,7 +31,7 @@ flowchart LR
     subgraph D100["Domain 100"]
         direction TB
         TELEOP["teleop_twist_keyboard"]
-        B2["bridge · controller"]
+        B2["ROS Portal · controller"]
     end
 
     D42 <--> LK
@@ -41,7 +41,7 @@ flowchart LR
 ### Prerequisites
 - `turtlesim` and `teleop_twist_keyboard` ROS2 packages installed:
   `sudo apt install ros-$ROS_DISTRO-turtlesim ros-$ROS_DISTRO-teleop-twist-keyboard`.
-- `ros2_livekit_bridge_tutorials` package built with deps: `colcon build --packages-up-to ros2_livekit_bridge_tutorials`
+- `ros_portal_tutorials` package built with deps: `colcon build --packages-up-to ros_portal_tutorials`
 - A running LiveKit server. See [Running](running.md#livekit-server) for instructions.
 - __optional:__ a display to view the turtlesim window.
 
@@ -51,8 +51,8 @@ flowchart LR
 
 ### 1. Set up turtlesim across two domains
 
-The `ros2_livekit_bridge_tutorials` package
-([src/ros2_livekit_bridge_tutorials](../src/ros2_livekit_bridge_tutorials)) ships both configs, so
+The `ros_portal_tutorials` package
+([src/ros_portal_tutorials](../src/ros_portal_tutorials)) ships both configs, so
 they are ready to use after a build — no editing required. This section
 walks through what the configs contain. Credentials and room name are **not** in
 config (see [Configuration](configuration.md)); only routes are.
@@ -60,7 +60,7 @@ config (see [Configuration](configuration.md)); only routes are.
 __`turtle_sim_config.yaml`__ - the turtle receives velocity commands from LiveKit and exports its pose:
 
 ```yaml
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
   ros_threads: 4          # keep > 1 so remote CLI calls have a free executor thread
 
@@ -79,7 +79,7 @@ exposes turtle_sim's `/turtle1/teleport_absolute` service as a local one (used i
 step [3b](tutorials.md#3-spawn-a-turtle-service-call)):
 
 ```yaml
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
   ros_threads: 4
 
@@ -119,29 +119,29 @@ export ROS_DOMAIN_ID=42
 ros2 run turtlesim turtlesim_node -platform offscreen
 ```
 
-**Terminal B — start the turtle_sim bridge** on the same domain, pointed at the
+**Terminal B — start ROS Portal for turtle_sim** on the same domain, pointed at the
 installed config:
 
 ```bash
 export ROS_DOMAIN_ID=42
-ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  config_path:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_config.yaml \
+ros2 launch ros_portal ros_portal_local.launch.py \
+  config_path:=$(ros2 pkg prefix --share ros_portal_tutorials)/config/turtle_sim_config.yaml \
   identity:=turtle_sim room_name:=turtle_room
 ```
 
-**Terminal C — start the controller bridge** on the controller domain:
+**Terminal C — start ROS Portal for the controller** on the controller domain:
 
 ```bash
 export ROS_DOMAIN_ID=100
-ros2 launch ros2_livekit_bridge livekit_bridge_local.launch.py \
-  config_path:=$(ros2 pkg prefix --share ros2_livekit_bridge_tutorials)/config/turtle_sim_controller.yaml \
+ros2 launch ros_portal ros_portal_local.launch.py \
+  config_path:=$(ros2 pkg prefix --share ros_portal_tutorials)/config/turtle_sim_controller.yaml \
   identity:=controller room_name:=turtle_room
 ```
 
-Both bridges use `room_name:=turtle_room` so they meet in the same room; override
+Both ROS Portal nodes use `room_name:=turtle_room` so they meet in the same room; override
 `livekit_url:` / `token:` as needed for your server (see [Running](running.md)).
 
-__NOTE:__ on the controller graph, you don't see any pose or cmd_vel topics yet. This is because the bridge lazily publishes and subscribes to topics. You will see them in later steps.
+__NOTE:__ on the controller graph, you don't see any pose or cmd_vel topics yet. This is because ROS Portal lazily publishes and subscribes to topics. You will see them in later steps.
 
 See this for yourself, in a new terminal set the ROS_DOMAIN_ID to 42 and run `ros2 topic list`:
 
@@ -174,14 +174,14 @@ You should see topics:
 /turtle1/pose
 ```
 
-__NOTE:__ The bridge only subscribes to topics when they are first published. Since `/turtle.*/cmd_vel` direction is `out` and there are no publishers on the controller domain, the bridge does not yet have a publisher for it.
+__NOTE:__ ROS Portal only subscribes to topics when they are first published. Since `/turtle.*/cmd_vel` direction is `out` and there are no publishers on the controller domain, ROS Portal does not yet have a publisher for it.
 
 ---
 
 ### 2. Inspect the remote robot (CLI forwarding)
 
-The bridge forwards a subset of `ros2` [CLI commands](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools.html) to a remote graph
-over LiveKit RPC. Each is a local ROS service named `/ros2_livekit_bridge/ros2_*`
+ROS Portal forwards a subset of `ros2` [CLI commands](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools.html) to a remote graph
+over LiveKit RPC. Each is a local ROS service named `/ros_portal/ros2_*`
 that takes a `participant_id` (the remote identity to query). See
 [Remote ROS2 CLI calls](ros2_cli_calls.md) for the full field tables.
 
@@ -190,22 +190,22 @@ List the turtle's services
 
 ```bash
 export ROS_DOMAIN_ID=100
-ros2 service call /ros2_livekit_bridge/ros2_service_list \
-  ros2_livekit_bridge_msgs/srv/Ros2ServiceList \
+ros2 service call /ros_portal/ros2_service_list \
+  ros_portal_msgs/srv/Ros2ServiceList \
   "{participant_id: 'turtle_sim'}"
 ```
 
 <!-- TODO: currently the response field is like:
 response:
-ros2_livekit_bridge_msgs.srv.Ros2ServiceList_Response(success=True, err_msg='', output='/clear\n/kill\n/reset\n/ros2_livekit_bridge/describe_parameters\n/ros2_livekit_bridge/get_parameter_types\n/ros2_livekit_bridge/get_parameters\n/ros2_livekit_bridge/get_type_description\n/ros2_livekit_bridge/list_parameters\n/ros2_livekit_bridge/ros2_interface_show\n/ros2_livekit_bridge/ros2_service_call\n/ros2_livekit_bridge/ros2_service_list\n/ros2_livekit_bridge/ros2_topic_list\n/ros2_livekit_bridge/ros2_topic_pub\n/ros2_livekit_bridge/set_parameters\n/ros2_livekit_bridge/set_parameters_atomically\n/spawn\n/turtle1/set_pen\n/turtle1/teleport_absolute\n/turtle1/teleport_relative\n/turtlesim/describe_parameters\n/turtlesim/get_parameter_types\n/turtlesim/get_parameters\n/turtlesim/get_type_description\n/turtlesim/list_parameters\n/turtlesim/set_parameters\n/turtlesim/set_parameters_atomically\n'
+ros_portal_msgs.srv.Ros2ServiceList_Response(success=True, err_msg='', output='/clear\n/kill\n/reset\n/ros_portal/describe_parameters\n/ros_portal/get_parameter_types\n/ros_portal/get_parameters\n/ros_portal/get_type_description\n/ros_portal/list_parameters\n/ros_portal/ros2_interface_show\n/ros_portal/ros2_service_call\n/ros_portal/ros2_service_list\n/ros_portal/ros2_topic_list\n/ros_portal/ros2_topic_pub\n/ros_portal/set_parameters\n/ros_portal/set_parameters_atomically\n/spawn\n/turtle1/set_pen\n/turtle1/teleport_absolute\n/turtle1/teleport_relative\n/turtlesim/describe_parameters\n/turtlesim/get_parameter_types\n/turtlesim/get_parameters\n/turtlesim/get_type_description\n/turtlesim/list_parameters\n/turtlesim/set_parameters\n/turtlesim/set_parameters_atomically\n'
 
 do we want to make this human readable? Looks like to do this, we would need user friendly utils to wrap the response because the artifact is from ros2 service call calling repr() on the whole response message object and printing it on one line, which escapes the embedded newlines as literal \n. -->
 
 Show the `Spawn` interface ([ros2 interface show](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Services/Understanding-ROS2-Services.html#ros2-interface-show)):
 
 ```bash
-ros2 service call /ros2_livekit_bridge/ros2_interface_show \
-  ros2_livekit_bridge_msgs/srv/Ros2InterfaceShow \
+ros2 service call /ros_portal/ros2_interface_show \
+  ros_portal_msgs/srv/Ros2InterfaceShow \
   "{participant_id: 'turtle_sim', type: 'turtlesim/srv/Spawn'}"
 ```
 
@@ -213,8 +213,8 @@ Find the control topic
 ([ros2 topic list](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html#ros2-topic-list)):
 
 ```bash
-ros2 service call /ros2_livekit_bridge/ros2_topic_list \
-  ros2_livekit_bridge_msgs/srv/Ros2TopicList \
+ros2 service call /ros_portal/ros2_topic_list \
+  ros_portal_msgs/srv/Ros2TopicList \
   "{participant_id: 'turtle_sim', show_types: true}"
 ```
 
@@ -235,16 +235,16 @@ the named participant:
 
 ```bash
 export ROS_DOMAIN_ID=100
-ros2 service call /ros2_livekit_bridge/ros2_service_call \
-  ros2_livekit_bridge_msgs/srv/Ros2ServiceCall \
+ros2 service call /ros_portal/ros2_service_call \
+  ros_portal_msgs/srv/Ros2ServiceCall \
   "{participant_id: 'turtle_sim', service: '/spawn', msg_type: 'turtlesim/srv/Spawn', payload: '{x: 2.0, y: 2.0, theta: 0.0, name: \"turtle2\"}'}"
 ```
 
 Now, from the controller domain, query the robot graph's topics via CLI forwarding:
 ```bash
 export ROS_DOMAIN_ID=100
-ros2 service call /ros2_livekit_bridge/ros2_topic_list \
-  ros2_livekit_bridge_msgs/srv/Ros2TopicList \
+ros2 service call /ros_portal/ros2_topic_list \
+  ros_portal_msgs/srv/Ros2TopicList \
   "{participant_id: 'turtle_sim', show_types: true}"
 ```
 Since these `pose` and `cmd_vel` topics match the regexes in the configs, you should now see them locally on the controller graph too:
@@ -327,7 +327,7 @@ over LiveKit!
 
 ### Recap
 
-| ROS 2 tutorial step | Bridge mechanism |
+| ROS 2 tutorial step | ROS Portal mechanism |
 | --- | --- |
 | `ros2 service list` | CLI forwarding (`ros2_service_list`) |
 | `ros2 interface show` | CLI forwarding (`ros2_interface_show`) |

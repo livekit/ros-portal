@@ -44,9 +44,9 @@ jobs:
           set -euo pipefail
           mapfile -t versions < <(
             python3 - \
-              src/ros2_livekit_bridge/package.xml \
-              src/ros2_livekit_bridge_config/package.xml \
-              src/ros2_livekit_bridge_msgs/package.xml <<'PY'
+              src/ros_portal/package.xml \
+              src/ros_portal_config/package.xml \
+              src/ros_portal_msgs/package.xml <<'PY'
           import sys
           import xml.etree.ElementTree as ET
 
@@ -75,18 +75,18 @@ jobs:
             echo
             echo "No package was published and no rosdistro pull request was opened."
             echo
-            echo "Planned Debian package: \`ros-${ROS_DISTRO}-livekit-bridge\`"
-            echo "Planned repository key: \`ros2_livekit_bridge\`"
-            echo "Planned release repository: \`https://github.com/ros2-gbp/ros2_livekit_bridge-release.git\`"
+            echo "Planned Debian package: \`ros-${ROS_DISTRO}-livekit-portal\`"
+            echo "Planned repository key: \`ros_portal\`"
+            echo "Planned release repository: \`https://github.com/ros2-gbp/ros_portal-release.git\`"
             echo "Planned release tag: \`release/${ROS_DISTRO}/{package}/{version}\`"
             echo
             echo "Future bloom dry run:"
-            echo "\`bloom-release ros2_livekit_bridge --ros-distro ${ROS_DISTRO} --pretend\`"
+            echo "\`bloom-release ros_portal --ros-distro ${ROS_DISTRO} --pretend\`"
             echo
             echo "Before enabling publication, create the release repository, add the"
             echo "source/release entries to ros/rosdistro, and verify that all bundled"
             echo "first-party and ros2_medkit dependencies are available to the ROS build farm."
-            echo "The current ros2_livekit_bridge ROS package would bloom as"
-            echo "\`ros-${ROS_DISTRO}-ros2-livekit-bridge\`. Add or rename a ROS package to"
-            echo "\`livekit_bridge\` before publishing the planned Debian package name."
+            echo "The ros_portal package blooms as \`ros-${ROS_DISTRO}-ros-portal\`,"
+            echo "which differs from the custom Debian package name"
+            echo "\`ros-${ROS_DISTRO}-livekit-portal\` used by this repository."
           } | tee -a "${GITHUB_STEP_SUMMARY}"

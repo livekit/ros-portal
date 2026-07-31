@@ -1,5 +1,5 @@
 # Configuration Guide
-The bridge reads the YAML config once on node startup and builds an immutable
+ROS Portal reads the YAML config once on node startup and builds an immutable
 snapshot of the user specified config. Pass the file path with the node's
 `config_path` ROS parameter.
 
@@ -13,7 +13,7 @@ active room connection (via the token grant), not from this config.
 ## Minimal Config
 
 ```yaml
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
 ```
 
@@ -22,7 +22,7 @@ and non-positive integer values where a positive value is required.
 
 ## Top-Level Fields
 
-All config lives under `ros2_livekit_bridge`.
+All config lives under `ros_portal`.
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
@@ -52,11 +52,11 @@ All config lives under `ros2_livekit_bridge`.
 the configured LiveKit participant using `msg_type`.
 
 Services only accept `out`. `in` and `bidirectional` are **not** used for
-services: the bridge does not attempt to mirror the ROS 2 service graph in both
+services: ROS Portal does not attempt to mirror the ROS 2 service graph in both
 directions. A service is a point-to-point request/response call, so a route is
 fully described by the single participant that answers it. This is unlike
 topics (see below), where `in` / `out` / `bidirectional` are meaningful and are
-used to limit which streams cross the bridge for bandwidth reasons.
+used to limit which streams cross ROS Portal for bandwidth reasons.
 
 ## Topics
 
@@ -160,17 +160,17 @@ data-track path and onto a reliable
 [**RPC**](https://docs.livekit.io/transport/data/rpc/) push-with-ack mechanism
 instead:
 
-- **Outbound** (`out` / `bidirectional`): the bridge subscribes with
-  `TRANSIENT_LOCAL` QoS (so it captures state published before the bridge
+- **Outbound** (`out` / `bidirectional`): ROS Portal subscribes with
+  `TRANSIENT_LOCAL` QoS (so it captures state published before ROS Portal
   started), stores the topic's distinct messages, and a background worker pushes
-  them to every peer bridge in the room until each acknowledges over RPC. State
+  them to every peer ROS Portal node in the room until each acknowledges over RPC. State
   is re-pushed only when it changes or a peer rejoins, so steady-state traffic is
-  zero. A peer that keeps failing (e.g. a non-bridge participant with no handler)
+  zero. A peer that keeps failing (e.g. a participant without a ROS Portal handler)
   is dropped after a few attempts and retried only when new state arrives.
-- **Inbound** (`in` / `bidirectional`): the bridge republishes received messages
+- **Inbound** (`in` / `bidirectional`): ROS Portal republishes received messages
   on a `TRANSIENT_LOCAL` publisher, so ROS subscribers that start after the
-  bridge (RViz, Foxglove, tf listeners) still receive the latched state. The ROS
-  message type travels in the RPC payload, so the bridge creates the
+  ROS consumers (RViz, Foxglove, tf listeners) still receive the latched state. The ROS
+  message type travels in the RPC payload, so ROS Portal creates the
   republishing publisher without any additional type configuration.
 
 Like `max_rate_hz`, `latched` is matched by **literal topic name**, not regex.
@@ -197,7 +197,7 @@ topics:
     latched: true
 ```
 
-On the consuming bridge:
+On the consuming ROS Portal node:
 
 ```yaml
 topics:
@@ -209,7 +209,7 @@ topics:
 ### Data track encoding (`encoding`)
 
 `encoding` applies only to outbound (`out` / `bidirectional`) topics and selects
-how this bridge encodes the topic's messages on the LiveKit DataTrack, along
+how this ROS Portal node encodes the topic's messages on the LiveKit DataTrack, along
 with the schema it advertises to subscribers:
 
 | Value | Frame format | Advertised schema | Use case |
@@ -229,7 +229,7 @@ topics:
 Notes:
 
 - `jsonschema` deserializes each ROS message and sends a JSON frame described by
-  a JSON Schema generated from the ROS type. A peer bridge receiving the track
+  a JSON Schema generated from the ROS type. A peer ROS Portal node receiving the track
   transparently converts the JSON back into the ROS message before republishing,
   so ROS-to-ROS forwarding still works with any encoding.
 - `ros2idl` requires the local ROS type definition to be renderable as ROS 2

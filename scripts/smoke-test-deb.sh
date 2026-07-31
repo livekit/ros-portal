@@ -24,7 +24,7 @@ if [[ -z "${ros_distro}" || -z "${deb_path}" ]]; then
   exit 2
 fi
 
-readonly expected_package="ros-${ros_distro}-livekit-bridge"
+readonly expected_package="ros-${ros_distro}-livekit-portal"
 actual_package="$(dpkg-deb --field "${deb_path}" Package)"
 if [[ "${actual_package}" != "${expected_package}" ]]; then
   echo "Unexpected Debian package name: ${actual_package}" >&2
@@ -42,34 +42,34 @@ set +u
 source "${install_prefix}/setup.bash"
 set -u
 
-readonly bridge_prefix="${install_prefix}/ros2_livekit_bridge"
-actual_prefix="$(ros2 pkg prefix ros2_livekit_bridge)"
-if [[ "${actual_prefix}" != "${bridge_prefix}" ]]; then
-  echo "Unexpected bridge prefix: ${actual_prefix}" >&2
+actual_prefix="$(ros2 pkg prefix ros_portal)"
+readonly portal_prefix="${install_prefix}/ros_portal"
+if [[ "${actual_prefix}" != "${portal_prefix}" ]]; then
+  echo "Unexpected ROS Portal prefix: ${actual_prefix}" >&2
   exit 1
 fi
 
-readonly bridge_node="${bridge_prefix}/lib/ros2_livekit_bridge/ros2_livekit_bridge_node"
-if [[ ! -x "${bridge_node}" ]]; then
-  echo "Bridge node is missing: ${bridge_node}" >&2
+readonly ros_portal_node="${portal_prefix}/lib/ros_portal/ros_portal_node"
+if [[ ! -x "${ros_portal_node}" ]]; then
+  echo "ROS Portal node is missing: ${ros_portal_node}" >&2
   exit 1
 fi
 
-if ldd "${bridge_node}" | awk '/not found/ { found = 1 } END { exit !found }'; then
-  ldd "${bridge_node}" >&2
-  echo "Bridge node has unresolved shared libraries" >&2
+if ldd "${ros_portal_node}" | awk '/not found/ { found = 1 } END { exit !found }'; then
+  ldd "${ros_portal_node}" >&2
+  echo "ROS Portal node has unresolved shared libraries" >&2
   exit 1
 fi
 
 # Verify the installed launch description can be resolved and parsed.
-ros2 launch ros2_livekit_bridge livekit_bridge.launch.py --show-args >/dev/null
-"livekit-ros2-bridge-${ros_distro}" --show-args >/dev/null
+ros2 launch ros_portal ros_portal.launch.py --show-args >/dev/null
+"ros-portal-${ros_distro}" --show-args >/dev/null
 
 readonly smoke_config="$(mktemp)"
 readonly bridge_log="$(mktemp)"
 trap 'rm -f "${smoke_config}" "${bridge_log}"' EXIT
 cat >"${smoke_config}" <<'EOF'
-ros2_livekit_bridge:
+ros_portal:
   version: "0.0.1"
 EOF
 
@@ -92,7 +92,7 @@ payload = encode({
     "nbf": int(time.time()) - 1,
     "exp": int(time.time()) + 60,
     "video": {
-        "room": "ros2_livekit_bridge_debian_smoke",
+        "room": "ros_portal_debian_smoke",
         "roomJoin": True,
         "canPublish": True,
         "canSubscribe": True,
@@ -105,16 +105,16 @@ PY
 )}"
 
 set +e
-timeout 10s "${bridge_node}" --ros-args -p "config_path:=${smoke_config}" >"${bridge_log}" 2>&1
+timeout 10s "${ros_portal_node}" --ros-args -p "config_path:=${smoke_config}" >"${bridge_log}" 2>&1
 readonly bridge_status=$?
 set -e
 cat "${bridge_log}"
 if [[ "${bridge_status}" -ne 124 ]]; then
-  echo "Bridge exited before the 10-second smoke-test timeout (status ${bridge_status})" >&2
+  echo "ROS Portal exited before the 10-second smoke-test timeout (status ${bridge_status})" >&2
   exit "${bridge_status}"
 fi
 if ! grep -q "Connected to LiveKit room" "${bridge_log}"; then
-  echo "Bridge did not connect to the LiveKit smoke-test server" >&2
+  echo "ROS Portal did not connect to the LiveKit smoke-test server" >&2
   exit 1
 fi
 

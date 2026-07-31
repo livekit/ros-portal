@@ -23,9 +23,9 @@ readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ros_distro="${ROS_DISTRO:-}"
 readonly output_dir="${OUTPUT_DIR:-${repo_root}/artifacts/debian}"
 readonly packaged_packages=(
-  ros2_livekit_bridge
-  ros2_livekit_bridge_config
-  ros2_livekit_bridge_msgs
+  ros_portal
+  ros_portal_config
+  ros_portal_msgs
   ros2_medkit_cmake
   ros2_medkit_serialization
 )
@@ -53,8 +53,8 @@ for package in "${packaged_packages[@]}"; do
   fi
 done
 
-if [[ ! -x "${source_install_base}/ros2_livekit_bridge/lib/ros2_livekit_bridge/ros2_livekit_bridge_node" ]]; then
-  echo "Built bridge node is missing from ${source_install_base}" >&2
+if [[ ! -x "${source_install_base}/ros_portal/lib/ros_portal/ros_portal_node" ]]; then
+  echo "Built ROS Portal node is missing from ${source_install_base}" >&2
   exit 2
 fi
 
@@ -71,17 +71,17 @@ if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
   exit 2
 fi
 
-readonly package_xml="${source_install_base}/ros2_livekit_bridge/share/ros2_livekit_bridge/package.xml"
+readonly package_xml="${source_install_base}/ros_portal/share/ros_portal/package.xml"
 readonly upstream_version="$(sed -nE 's:.*<version>([^<]+)</version>.*:\1:p' "${package_xml}")"
 if [[ -z "${upstream_version}" ]]; then
-  echo "Unable to determine bridge version from ${package_xml}" >&2
+  echo "Unable to determine ROS Portal version from ${package_xml}" >&2
   exit 2
 fi
 
 readonly debian_version="${upstream_version}-1"
 readonly debian_arch="$(dpkg --print-architecture)"
-readonly package_name="ros-${ros_distro}-livekit-bridge"
-readonly command_name="livekit-ros2-bridge-${ros_distro}"
+readonly package_name="ros-${ros_distro}-livekit-portal"
+readonly command_name="ros-portal-${ros_distro}"
 readonly install_prefix="/opt/livekit/ros/${ros_distro}"
 readonly work_root="${repo_root}/package-deb/${ros_distro}-${debian_arch}"
 readonly package_root="${work_root}/package-root"
@@ -123,7 +123,7 @@ cat >"${package_root}/usr/bin/${command_name}" <<EOF
 set -eo pipefail
 source "${install_prefix}/setup.bash"
 set -u
-exec ros2 launch ros2_livekit_bridge livekit_bridge.launch.py "\$@"
+exec ros2 launch ros_portal ros_portal.launch.py "\$@"
 EOF
 chmod 0755 "${package_root}/usr/bin/${command_name}"
 
@@ -134,7 +134,7 @@ done
 mapfile -t rosdep_keys < <(
   sed -nE 's:.*<(depend|exec_depend)>([^<]+)</(depend|exec_depend)>.*:\2:p' \
     "${package_xmls[@]}" |
-    grep -vxE 'ros2_livekit_bridge|ros2_livekit_bridge_config|ros2_livekit_bridge_msgs|ros2_medkit_cmake|ros2_medkit_serialization' |
+    grep -vxE 'ros_portal|ros_portal_config|ros_portal_msgs|ros2_medkit_cmake|ros2_medkit_serialization' |
     LC_ALL=C sort -u
 )
 mapfile -t rosdep_packages < <(
@@ -191,10 +191,10 @@ Section: misc
 Priority: optional
 Architecture: ${debian_arch}
 Maintainer: LiveKit <sderosa@livekit.io>
-Homepage: https://github.com/livekit/ros-livekit-bridge
+Homepage: https://github.com/livekit/ros-portal
 Installed-Size: ${installed_size}
 Depends: ${depends_field}
-Description: LiveKit bridge for ROS 2 ${ros_distro}
+Description: ROS Portal for ROS 2 ${ros_distro}
  Connects a ROS 2 graph to LiveKit for remote topics, services, video,
  diagnostics, and ROS 2 CLI operations.
 EOF

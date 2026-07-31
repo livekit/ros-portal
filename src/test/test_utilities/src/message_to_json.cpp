@@ -17,13 +17,13 @@
 /// @brief Print the JSON serialization of a default-initialized ROS 2 message.
 ///
 /// Takes a message type (e.g. `geometry_msgs/msg/Twist`) and prints the JSON
-/// the bridge would produce for a default-initialized instance of it. No node,
+/// ROS Portal would produce for a default-initialized instance of it. No node,
 /// no topic, no live messages -- just the type.
 ///
-/// It reuses the bridge runtime end to end: `RuntimeMessageTypeSupport` loads
+/// It reuses ROS Portal runtime end to end: `RuntimeMessageTypeSupport` loads
 /// the introspection/serialization type support for the type, `DynamicMessage`
 /// allocates and default-initializes an instance, and the same medkit
-/// `JsonSerializer` the bridge uses renders it to JSON.
+/// `JsonSerializer` ROS Portal uses renders it to JSON.
 
 #include <exception>
 #include <iostream>
@@ -32,8 +32,8 @@
 #include <string>
 #include <string_view>
 
-#include "ros2_livekit_bridge/introspection/dynamic_message.hpp"
-#include "ros2_livekit_bridge/introspection/runtime_type_support.hpp"
+#include "ros_portal/introspection/dynamic_message.hpp"
+#include "ros_portal/introspection/runtime_type_support.hpp"
 
 namespace {
 
@@ -71,14 +71,14 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  namespace introspection = ros2_livekit_bridge::introspection;
+  namespace introspection = ros_portal::introspection;
   try {
     // Load type support for the requested type and allocate a default-
-    // initialized instance -- both straight from the bridge runtime.
+    // initialized instance -- both straight from ROS Portal runtime.
     const introspection::RuntimeMessageTypeSupport type_support(type);
     introspection::DynamicMessage message(type_support.members);
 
-    // Render with the same serializer the bridge uses for its RPC payloads.
+    // Render with the same serializer ROS Portal uses for its RPC payloads.
     const ros2_medkit_serialization::JsonSerializer serializer;
     const nlohmann::json json = serializer.to_json(type, message.data());
 

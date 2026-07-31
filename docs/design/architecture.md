@@ -1,14 +1,14 @@
 # Architecture
 
-`ros2_livekit_bridge` is a ROS2 node that bridges selected ROS2 topics and
+`ros_portal` is a ROS2 node that bridges selected ROS2 topics and
 services to other participants in a LiveKit room. It uses
 [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/) for
 ROS message streaming and [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/)
 for remote introspection and latched-topic delivery.
 
-## Bridge Node
+## ROS Portal Node
 
-The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
+ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
 
 1. Parses parameters from a YAML config declaring which topics and services to
    route.
@@ -37,12 +37,12 @@ The bridge is implemented as a single ROS2 node (`Ros2LiveKitBridge`) that:
 | Any other type | [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) | ROS 2 CDR | A generic subscription is created using the type string discovered from the ROS graph. Incoming serialized message buffers are pushed verbatim onto a `livekit::LocalDataTrack`. |
 
 The data-track payload is the unmodified CDR byte stream produced by the
-publisher. The bridge registers the matching recursive ROS message definition
+publisher. ROS Portal registers the matching recursive ROS message definition
 with LiveKit so consumers can discover the schema needed to decode it.
 
 For LiveKit-to-ROS data tracks, the track name supplies the ROS topic name and
 the schema ID supplies a candidate ROS message type. An existing local graph
-type takes precedence. Before creating an `rclcpp::GenericPublisher`, the bridge
+type takes precedence. Before creating an `rclcpp::GenericPublisher`, ROS Portal
 requires the remote schema encoding, SHA-256 hash, and exact definition text to
 match the locally rendered definition. See
 [Data Track Schema Design](schema.md) for the wire contract and validation
@@ -50,10 +50,10 @@ flow.
 
 ```text
 ROS topic publisher
-  -> Ros2LiveKitBridge subscription
+  -> RosPortal subscription
   -> LiveKit local video/data track
   -> LiveKit room
-  -> remote bridge
+  -> remote ROS Portal node
   -> ROS publisher
 ```
 
@@ -73,7 +73,7 @@ participant's sanitized identity is prepended to the local topic name. See
 
 ## Topic Direction
 
-Topic direction controls which streams cross the bridge:
+Topic direction controls which streams cross ROS Portal:
 
 - `out`: allow ROS-to-LiveKit forwarding.
 - `in`: allow LiveKit-to-ROS forwarding.
@@ -82,16 +82,16 @@ Topic direction controls which streams cross the bridge:
 Only forwarding streams that are needed keeps unnecessary traffic off the
 LiveKit connection, which matters on constrained links.
 
-Services are different. They only accept `direction: "out"` because the bridge
+Services are different. They only accept `direction: "out"` because ROS Portal
 does not mirror the ROS2 service graph in both directions. A service call is
 point-to-point, so a route is fully described by the participant that answers
 it.
 
 ## Remote ROS2 CLI Calls
 
-The bridge exposes ROS2 services backed by
+ROS Portal exposes ROS2 services backed by
 [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/) that run a subset of
-`ros2` CLI commands against other connected bridges, including:
+`ros2` CLI commands against other connected ROS Portal nodes, including:
 
 - `ros2 topic list`
 - `ros2 topic pub`
@@ -104,7 +104,7 @@ service calls.
 
 ## QoS Determination
 
-The bridge determines subscriber QoS by aggregating all publisher endpoints for
+ROS Portal determines subscriber QoS by aggregating all publisher endpoints for
 a topic, following the same approach as `ros2 topic echo` and Foxglove bridge:
 
 - **Depth:** sum each publisher's history depth, using a minimum of `1` per
@@ -117,4 +117,4 @@ a topic, following the same approach as `ros2 topic echo` and Foxglove bridge:
 - **Durability:** use `TRANSIENT_LOCAL` only when all publishers advertise
   `TRANSIENT_LOCAL`; otherwise use `VOLATILE`.
 
-The bridge does not currently register subscription QoS event callbacks.
+ROS Portal does not currently register subscription QoS event callbacks.

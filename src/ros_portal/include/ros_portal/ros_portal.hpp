@@ -92,7 +92,7 @@ public:
 private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
-  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyOverrunAndShutdownStates);
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
 #endif
 
@@ -102,20 +102,10 @@ private:
     std::mutex metadata_mutex;
     /// @brief Effective configuration file path, or `unset`.
     std::string config_path{"unset"};
-    /// @brief Source used to resolve the LiveKit URL, or `unset`.
-    std::string livekit_url_source{"unset"};
-    /// @brief Source used to resolve the LiveKit token, or `unset`.
-    std::string token_source{"unset"};
     /// @brief Connected local LiveKit identity, or `unset`.
     std::string local_identity{"unset"};
     /// @brief Effective topic polling period.
     std::atomic<int> topic_polling_period_ms{0};
-    /// @brief Effective minimum inferred QoS depth.
-    std::atomic<std::size_t> min_qos_depth{0};
-    /// @brief Effective maximum inferred QoS depth.
-    std::atomic<std::size_t> max_qos_depth{0};
-    /// @brief Effective ROS executor thread count.
-    std::atomic<int> ros_threads{0};
     /// @brief Whether connection-health diagnostics are instantiated.
     std::atomic_bool connection_health_active{false};
     /// @brief Whether the topic forwarder is instantiated.
@@ -126,8 +116,6 @@ private:
     std::atomic_bool cli_manager_active{false};
     /// @brief Whether the service forwarder is instantiated.
     std::atomic_bool service_forwarder_active{false};
-    /// @brief Whether the topic polling timer exists and has not been canceled.
-    std::atomic_bool poll_timer_active{false};
     /// @brief Count of topic polls that exceeded the configured period.
     std::atomic<std::uint64_t> topic_poll_overruns{0};
     /// @brief Count of shared LiveKit RPC method registration failures.

@@ -103,7 +103,6 @@ bool RosPortal::initialize() {
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
   diagnostic_state_.topic_polling_period_ms.store(topic_polling_period_ms_, std::memory_order_relaxed);
-  diagnostic_state_.ros_threads.store(ros_threads_, std::memory_order_relaxed);
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   connection_diagnostics_.reset();
@@ -116,11 +115,10 @@ bool RosPortal::initialize() {
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
-  diagnostic_state_.min_qos_depth.store(min_qos_depth_, std::memory_order_relaxed);
-  diagnostic_state_.max_qos_depth.store(max_qos_depth_, std::memory_order_relaxed);
 
-  RCLCPP_INFO(this->get_logger(), "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu]",
-              topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_);
+  RCLCPP_INFO(this->get_logger(),
+              "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu], ros_threads: %d",
+              topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
@@ -128,11 +126,6 @@ bool RosPortal::initialize() {
   std::string url_source, token_source;
   const std::string livekit_url = utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
   const std::string livekit_token = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
-  {
-    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
-    diagnostic_state_.livekit_url_source = url_source;
-    diagnostic_state_.token_source = token_source;
-  }
 
   RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s", url_source.c_str());
   RCLCPP_INFO(this->get_logger(), "LiveKit token resolved from %s", token_source.c_str());
@@ -217,11 +210,9 @@ bool RosPortal::initialize() {
     return false;
   }
 
-  RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
-
   poll_timer_ = this->create_wall_timer(std::chrono::milliseconds(topic_polling_period_ms_),
                                         std::bind(&RosPortal::pollTopics, this), reentrant_callback_group_);
-  diagnostic_state_.poll_timer_active.store(poll_timer_ != nullptr, std::memory_order_relaxed);
+  RCLCPP_INFO(this->get_logger(), "Topic poll timer active (period %d ms)", topic_polling_period_ms_);
   connection_stats_timer_ = this->create_wall_timer(
       std::chrono::seconds(1), std::bind(&RosPortal::pollConnectionStats, this), reentrant_callback_group_);
 
@@ -247,7 +238,6 @@ void RosPortal::shutdown() {
     poll_timer_->cancel();
     poll_timer_.reset();
   }
-  diagnostic_state_.poll_timer_active.store(false, std::memory_order_relaxed);
   if (connection_stats_timer_) {
     connection_stats_timer_->cancel();
     connection_stats_timer_.reset();
@@ -342,71 +332,58 @@ void RosPortal::initializeDiagnostics() {
 
 void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
   std::string config_path;
-  std::string livekit_url_source;
-  std::string token_source;
   std::string local_identity;
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     config_path = diagnostic_state_.config_path;
-    livekit_url_source = diagnostic_state_.livekit_url_source;
-    token_source = diagnostic_state_.token_source;
     local_identity = diagnostic_state_.local_identity;
   }
 
-  std::string components_active;
-  const auto append_component = [&components_active](const char* component) {
-    if (!components_active.empty()) {
-      components_active += ",";
+  std::string components_inactive;
+  const auto append_component = [&components_inactive](const char* component) {
+    if (!components_inactive.empty()) {
+      components_inactive += ",";
     }
-    components_active += component;
+    components_inactive += component;
   };
-  if (diagnostic_state_.connection_health_active.load(std::memory_order_relaxed)) {
+  if (!diagnostic_state_.connection_health_active.load(std::memory_order_relaxed)) {
     append_component("connection_health");
   }
-  if (diagnostic_state_.topic_forwarder_active.load(std::memory_order_relaxed)) {
+  if (!diagnostic_state_.topic_forwarder_active.load(std::memory_order_relaxed)) {
     append_component("topic_forwarder");
   }
-  if (diagnostic_state_.latched_topic_forwarder_active.load(std::memory_order_relaxed)) {
+  if (!diagnostic_state_.latched_topic_forwarder_active.load(std::memory_order_relaxed)) {
     append_component("latched_topic_forwarder");
   }
-  if (diagnostic_state_.service_forwarder_active.load(std::memory_order_relaxed)) {
+  if (!diagnostic_state_.service_forwarder_active.load(std::memory_order_relaxed)) {
     append_component("service_forwarder");
   }
-  if (diagnostic_state_.cli_manager_active.load(std::memory_order_relaxed)) {
+  if (!diagnostic_state_.cli_manager_active.load(std::memory_order_relaxed)) {
     append_component("cli_manager");
   }
-  if (components_active.empty()) {
-    components_active = "none";
-  }
+
+  const bool has_inactive_components = !components_inactive.empty();
 
   const bool initialized = initialized_.load(std::memory_order_relaxed);
-  const bool shutting_down = shutting_down_.load(std::memory_order_relaxed);
-  const bool poll_timer_active = diagnostic_state_.poll_timer_active.load(std::memory_order_relaxed);
+  const bool poll_timer_active = poll_timer_ != nullptr;
   const auto topic_poll_overruns = diagnostic_state_.topic_poll_overruns.load(std::memory_order_relaxed);
 
   status.add("initialized", initialized ? "true" : "false");
-  status.add("shutting_down", shutting_down ? "true" : "false");
-  status.add("components_active", components_active);
+  status.add("components_inactive", has_inactive_components ? components_inactive : "none");
   status.add("config_path", config_path);
   status.add("topic_polling_period_ms", diagnostic_state_.topic_polling_period_ms.load(std::memory_order_relaxed));
-  status.add("min_qos_depth", diagnostic_state_.min_qos_depth.load(std::memory_order_relaxed));
-  status.add("max_qos_depth", diagnostic_state_.max_qos_depth.load(std::memory_order_relaxed));
-  status.add("ros_threads", diagnostic_state_.ros_threads.load(std::memory_order_relaxed));
-  status.add("livekit_url_source", livekit_url_source);
-  status.add("token_source", token_source);
   status.add("local_identity", local_identity);
   status.add("rpc_register_failures", diagnostic_state_.rpc_register_failures.load(std::memory_order_relaxed));
   status.add("rpc_perform_failures", diagnostic_state_.rpc_perform_failures.load(std::memory_order_relaxed));
-  status.add("poll_timer_active", poll_timer_active ? "true" : "false");
   status.add("topic_poll_overruns", topic_poll_overruns);
 
-  if (shutting_down) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "ROS Portal is shutting down");
-  } else if (!initialized) {
+  if (!initialized) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal is not initialized");
   } else if (!poll_timer_active) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
                    "ROS Portal is initialized without an active topic poll timer");
+  } else if (has_inactive_components) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal has inactive components");
   } else if (topic_poll_overruns > 0) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "ROS Portal topic polling has overrun");
   } else {

@@ -113,47 +113,42 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(status.message, "ROS Portal is not initialized");
   EXPECT_EQ(diagnosticValueFor(status, "initialized"), "false");
-  EXPECT_EQ(diagnosticValueFor(status, "shutting_down"), "false");
-  EXPECT_EQ(diagnosticValueFor(status, "components_active"), "connection_health");
+  EXPECT_EQ(diagnosticValueFor(status, "components_inactive"),
+            "topic_forwarder,latched_topic_forwarder,service_forwarder,cli_manager");
   EXPECT_EQ(diagnosticValueFor(status, "config_path"), config.path().string());
   EXPECT_EQ(diagnosticValueFor(status, "topic_polling_period_ms"), "250");
-  EXPECT_EQ(diagnosticValueFor(status, "min_qos_depth"), "2");
-  EXPECT_EQ(diagnosticValueFor(status, "max_qos_depth"), "8");
-  EXPECT_EQ(diagnosticValueFor(status, "ros_threads"), "3");
-  EXPECT_EQ(diagnosticValueFor(status, "livekit_url_source"), "none");
-  EXPECT_EQ(diagnosticValueFor(status, "token_source"), "none");
   EXPECT_EQ(diagnosticValueFor(status, "local_identity"), "unset");
   EXPECT_EQ(diagnosticValueFor(status, "rpc_register_failures"), "0");
   EXPECT_EQ(diagnosticValueFor(status, "rpc_perform_failures"), "0");
-  EXPECT_EQ(diagnosticValueFor(status, "poll_timer_active"), "false");
   EXPECT_EQ(diagnosticValueFor(status, "topic_poll_overruns"), "0");
+  EXPECT_FALSE(diagnosticValueFor(status, "min_qos_depth").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "max_qos_depth").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "ros_threads").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "poll_timer_active").has_value());
 }
 
-TEST(RosPortalDiagnosticsTest, ReportsHealthyOverrunAndShutdownStates) {
+TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates) {
   RosPortal portal;
   portal.initialized_.store(true);
-  portal.diagnostic_state_.poll_timer_active.store(true);
+  portal.poll_timer_ = portal.create_wall_timer(std::chrono::hours(24), []() {});
   portal.diagnostic_state_.connection_health_active.store(true);
   portal.diagnostic_state_.topic_forwarder_active.store(true);
+  portal.diagnostic_state_.latched_topic_forwarder_active.store(true);
+  portal.diagnostic_state_.service_forwarder_active.store(true);
+  portal.diagnostic_state_.cli_manager_active.store(true);
 
   diagnostic_updater::DiagnosticStatusWrapper healthy_status;
   portal.populateStatus(healthy_status);
 
   EXPECT_EQ(healthy_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(healthy_status.message, "ROS Portal is initialized");
-  EXPECT_EQ(diagnosticValueFor(healthy_status, "components_active"), "connection_health,topic_forwarder");
+  EXPECT_EQ(diagnosticValueFor(healthy_status, "components_inactive"), "none");
 
   portal.diagnostic_state_.topic_poll_overruns.store(1);
   diagnostic_updater::DiagnosticStatusWrapper overrun_status;
   portal.populateStatus(overrun_status);
   EXPECT_EQ(overrun_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(overrun_status.message, "ROS Portal topic polling has overrun");
-
-  portal.shutting_down_.store(true);
-  diagnostic_updater::DiagnosticStatusWrapper shutdown_status;
-  portal.populateStatus(shutdown_status);
-  EXPECT_EQ(shutdown_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(shutdown_status.message, "ROS Portal is shutting down");
 }
 
 TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures) {

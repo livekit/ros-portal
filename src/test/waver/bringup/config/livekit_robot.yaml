@@ -72,3 +72,34 @@ ros_portal:
     - topic: "/tf_static"
       direction: "out"
       latched: true
+  video_sources:
+    - track_name: "waver_robot"
+      source:
+        type: "gstreamer"
+        # Capture directly from the physical camera via libcamerasrc and encode
+        # in-process with vp8enc. Software encode (rather than the Pi hardware
+        # H.264 encoder) is used so WebRTC can drive adaptive bitrate: the
+        # capture layer sets the encoder's `target-bitrate` property at runtime
+        # (see rate_control below). v4l2h264enc exposes bitrate only via its
+        # `extra-controls` V4L2 structure, which the capture layer cannot write
+        # as a plain integer property, so it could not be rate-controlled.
+        pipeline: >-
+          libcamerasrc
+          ! video/x-raw,width=640,height=480,format=NV12,interlace-mode=progressive,framerate=30/1
+          ! videoconvert ! video/x-raw,format=I420
+          ! videoflip method=rotate-180
+          ! vp8enc name=lk_encoder deadline=1 cpu-used=8 keyframe-max-dist=30
+          lag-in-frames=0 target-bitrate=2500000
+          ! video/x-vp8
+          ! appsink name=lk_appsink sync=false max-buffers=2 drop=true
+        codec: "vp8"
+        resolution:
+          width: 640
+          height: 480
+        rate_control:
+          element: "lk_encoder"
+          property: "target-bitrate"
+          unit: "bps"
+      publish_options:
+        max_bitrate_bps: 2500000
+        max_framerate: 30

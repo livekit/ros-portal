@@ -47,10 +47,42 @@ jobs:
         run: |
           set -euo pipefail
           matrix="$(jq -ce '
-            if (.include | type) == "array" and (.include | length) > 0 then
-              {include: .include}
+            def non_empty_string:
+              type == "string" and length > 0;
+
+            def valid_matrix_entry:
+              type == "object"
+              and (.arch | non_empty_string)
+              and (.os | non_empty_string);
+
+            def valid_distro:
+              type == "object"
+              and (.ros_distro | non_empty_string)
+              and (.ros_image_tag | non_empty_string)
+              and (.ros_image_digest | non_empty_string)
+              and (.matrix | type) == "object"
+              and (.matrix.include | type) == "array"
+              and (.matrix.include | length) > 0
+              and all(.matrix.include[]; valid_matrix_entry);
+
+            if (.distros | type) != "array" or (.distros | length) == 0 then
+              error("expected a non-empty distros array")
+            elif (all(.distros[]; valid_distro) | not) then
+              error("expected each distro to contain image settings and a non-empty matrix.include")
             else
-              error("expected a non-empty include array")
+              {
+                include: [
+                  .distros[] as $distro
+                  | $distro.matrix.include[]
+                  | {
+                      ros_distro: $distro.ros_distro,
+                      arch: .arch,
+                      os: .os,
+                      ros_image_tag: $distro.ros_image_tag,
+                      ros_image_digest: $distro.ros_image_digest
+                    }
+                ]
+              }
             end
           ' .github/ros-build-matrix.json)"
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"

@@ -1,60 +1,48 @@
 {
-  "include": [
+  "distros": [
     {
       "ros_distro": "humble",
-      "arch": "amd64",
-      "os": "ubuntu-24.04",
       "ros_image_tag": "humble-ros-base-jammy",
-      "ros_image_digest": "afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16"
-    },
-    {
-      "ros_distro": "humble",
-      "arch": "arm64",
-      "os": "ubuntu-24.04-arm",
-      "ros_image_tag": "humble-ros-base-jammy",
-      "ros_image_digest": "afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16"
+      "ros_image_digest": "afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16",
+      "matrix": {
+        "include": [
+          { "arch": "amd64", "os": "ubuntu-24.04" },
+          { "arch": "arm64", "os": "ubuntu-24.04-arm" }
+        ]
+      }
     },
     {
       "ros_distro": "jazzy",
-      "arch": "amd64",
-      "os": "ubuntu-24.04",
       "ros_image_tag": "jazzy-ros-base-noble",
-      "ros_image_digest": "31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f"
-    },
-    {
-      "ros_distro": "jazzy",
-      "arch": "arm64",
-      "os": "ubuntu-24.04-arm",
-      "ros_image_tag": "jazzy-ros-base-noble",
-      "ros_image_digest": "31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f"
+      "ros_image_digest": "31daab66eef9139933379fb67159449944f4e2dcf2e22c2d12cc715f29873e0f",
+      "matrix": {
+        "include": [
+          { "arch": "amd64", "os": "ubuntu-24.04" },
+          { "arch": "arm64", "os": "ubuntu-24.04-arm" }
+        ]
+      }
     },
     {
       "ros_distro": "kilted",
-      "arch": "amd64",
-      "os": "ubuntu-24.04",
       "ros_image_tag": "kilted-ros-base-noble",
-      "ros_image_digest": "5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702"
-    },
-    {
-      "ros_distro": "kilted",
-      "arch": "arm64",
-      "os": "ubuntu-24.04-arm",
-      "ros_image_tag": "kilted-ros-base-noble",
-      "ros_image_digest": "5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702"
+      "ros_image_digest": "5a91562b35fe8ce33082df7221ec564c0172ae9b242352a45562deb1ddbf2702",
+      "matrix": {
+        "include": [
+          { "arch": "amd64", "os": "ubuntu-24.04" },
+          { "arch": "arm64", "os": "ubuntu-24.04-arm" }
+        ]
+      }
     },
     {
       "ros_distro": "lyrical",
-      "arch": "amd64",
-      "os": "ubuntu-24.04",
       "ros_image_tag": "lyrical-ros-base-resolute",
-      "ros_image_digest": "728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f"
-    },
-    {
-      "ros_distro": "lyrical",
-      "arch": "arm64",
-      "os": "ubuntu-24.04-arm",
-      "ros_image_tag": "lyrical-ros-base-resolute",
-      "ros_image_digest": "728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f"
+      "ros_image_digest": "728bd3a5acfb689b5c80d9ba13e35b0bddbf2219ec880071304237a11447fe7f",
+      "matrix": {
+        "include": [
+          { "arch": "amd64", "os": "ubuntu-24.04" },
+          { "arch": "arm64", "os": "ubuntu-24.04-arm" }
+        ]
+      }
     }
   ]
 }

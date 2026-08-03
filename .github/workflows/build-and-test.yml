@@ -48,7 +48,7 @@ permissions:
 
 jobs:
   build:
-    name: Build, Test, Package (${{ inputs.arch }})
+    name: Build, Test, Package (${{ inputs.ros_distro }}, ${{ inputs.arch }})
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:

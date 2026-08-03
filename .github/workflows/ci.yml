@@ -42,7 +42,7 @@ jobs:
     uses: ./.github/workflows/ros-build-matrix.yml
 
   build:
-    name: ${{ matrix.ros_distro }} (${{ matrix.arch }})
+    name: Build, Test, Package (${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs: ros-build-matrix
     strategy:
       fail-fast: false

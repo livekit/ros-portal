@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Release Debian Packages
+name: Release
 
 on:
   release:
@@ -174,4 +174,61 @@ jobs:
           gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}"
           gh release upload "${RELEASE_TAG}" release-assets/*.deb \
             --clobber \
+            --repo "${GITHUB_REPOSITORY}"
+
+      - name: Append custom release Markdown
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          # This Markdown is appended after the release body. The marked block
+          # is replaced on reruns while notes entered in GitHub's UI are kept.
+          RELEASE_PAGE_MARKDOWN: |
+            ## Install
+
+            Download the `.deb` asset below that matches your ROS 2 distribution
+            and CPU architecture.
+
+            For example, on ROS 2 Jazzy / amd64:
+
+            ```bash
+            sudo apt update
+            sudo apt install ./ros-jazzy-livekit-portal_*_amd64.deb
+            ```
+
+            The matching ROS 2 underlay must already be installed. Source the
+            installed overlay before running ROS Portal:
+
+            ```bash
+            source /opt/livekit/ros/jazzy/setup.bash
+            ```
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" \
+            --json body \
+            --jq .body \
+            --repo "${GITHUB_REPOSITORY}" > current-release-notes.md
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          start = "<!-- ROS_PORTAL_RELEASE_MARKDOWN_START -->"
+          end = "<!-- ROS_PORTAL_RELEASE_MARKDOWN_END -->"
+          body = Path("current-release-notes.md").read_text()
+          custom_markdown = os.environ["RELEASE_PAGE_MARKDOWN"].strip()
+
+          if start in body:
+              before, after_start = body.split(start, maxsplit=1)
+              if end not in after_start:
+                  raise SystemExit("Custom release Markdown start marker has no end marker")
+              body = before + after_start.split(end, maxsplit=1)[1]
+
+          Path("updated-release-notes.md").write_text(
+              f"{body.rstrip()}\n\n{start}\n{custom_markdown}\n{end}\n"
+          )
+          PY
+
+          gh release edit "${RELEASE_TAG}" \
+            --notes-file updated-release-notes.md \
             --repo "${GITHUB_REPOSITORY}"

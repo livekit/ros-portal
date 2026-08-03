@@ -9,6 +9,11 @@ LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
 `LIVEKIT_TOKEN` in the node environment. The LiveKit room name comes from the
 active room connection (via the token grant), not from this config.
 
+ROS Portal advertises its LiveKit participant with the `lk.robot` attribute set
+to `"true"`. LiveKit attributes are string key/value pairs, so this is the
+string representation of a boolean value. Tokens must grant
+`canUpdateOwnMetadata` so the bridge can publish the attribute while joining.
+
 
 ## Minimal Config
 

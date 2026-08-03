@@ -18,6 +18,7 @@
 #include <livekit/data_track_options.h>
 #include <livekit/local_data_track.h>
 #include <livekit/local_participant.h>
+#include <livekit/remote_participant.h>
 #include <livekit/room.h>
 
 #include <atomic>
@@ -38,6 +39,36 @@
 
 namespace ros_portal::test {
 namespace {
+
+TEST_F(RosPortalTestE2E, AdvertisesRobotParticipantAttribute) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  initializeInboundOnlyRuntime("/participant_attributes");
+
+  livekit::Room observer_room;
+  livekit::RoomOptions room_options;
+  ASSERT_TRUE(observer_room.connect(liveKitUrl(), tokenA(), room_options));
+
+  // ROS Portal sets kRobotParticipantAttribute after connect; the observer may join first or receive
+  // the attribute update asynchronously via participant metadata sync.
+  std::optional<std::string> attribute_value;
+  ASSERT_TRUE(waitFor(
+      [&]() {
+        const auto participant = observer_room.remoteParticipant(identityB()).lock();
+        if (!participant) {
+          return false;
+        }
+        const auto attribute = participant->attributes().find(kRobotParticipantAttribute);
+        if (attribute == participant->attributes().end()) {
+          return false;
+        }
+        attribute_value = attribute->second;
+        return true;
+      },
+      kGraphTimeout))
+      << "ROS Portal did not advertise " << kRobotParticipantAttribute << " on participant " << identityB();
+
+  EXPECT_EQ(*attribute_value, "true");
+}
 
 std::optional<std::string> renderSchemaText(const std::string& topic_type) {
   SchemaManager::LiveKitMethods methods;

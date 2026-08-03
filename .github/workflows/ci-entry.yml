@@ -1,0 +1,57 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+name: CI Matrix Entry
+
+on:
+  workflow_call:
+    inputs:
+      ros_distro: {required: true, type: string}
+      arch: {required: true, type: string}
+      os: {required: true, type: string}
+      ros_image_tag: {required: true, type: string}
+      ros_image_digest: {required: true, type: string}
+      git_ref: {required: false, type: string}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      ros_distro: ${{ inputs.ros_distro }}
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+      ros_image_tag: ${{ inputs.ros_image_tag }}
+      ros_image_digest: ${{ inputs.ros_image_digest }}
+      git_ref: ${{ inputs.git_ref }}
+    secrets: inherit
+
+  test:
+    needs: build
+    uses: ./.github/workflows/tests.yml
+    with:
+      ros_distro: ${{ inputs.ros_distro }}
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+      ros_image_tag: ${{ inputs.ros_image_tag }}
+      ros_image_digest: ${{ inputs.ros_image_digest }}
+      git_ref: ${{ inputs.git_ref }}
+    secrets: inherit
+
+  package:
+    needs:
+      - build
+      - test
+    uses: ./.github/workflows/package.yml
+    with:
+      ros_distro: ${{ inputs.ros_distro }}
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+      ros_image_tag: ${{ inputs.ros_image_tag }}
+      ros_image_digest: ${{ inputs.ros_image_digest }}
+      git_ref: ${{ inputs.git_ref }}
+    secrets: inherit

@@ -9,10 +9,10 @@ CI builds Debian packages for:
 - amd64 and arm64 for each distribution
 
 The custom Debian package is named
-`ros-<distro>-livekit-portal`. Tagged GitHub Releases provide the `.deb` and
-its `.sha256` checksum as direct downloads. CI workflow artifacts use
+`ros-<distro>-livekit-portal`. Tagged GitHub Releases provide the `.deb`
+packages as direct downloads. CI workflow artifacts use
 `ros-<distro>-livekit-portal-<arch>-deb`; each artifact is a ZIP containing
-the versioned `.deb` and its checksum.
+the versioned `.deb`.
 
 Each package is a self-contained ROS Portal overlay: it includes ROS Portal, its
 config and message packages, the pinned medkit packages, and the LiveKit SDK.
@@ -84,14 +84,9 @@ arguments and route configuration.
 
 ## Package Distribution
 
-Tagged releases attach each supported `.deb` and its `.sha256` checksum directly
-to a draft GitHub Release after every package passes its build, test, and
-clean-install smoke test. Verify a downloaded package from the directory
-containing both files:
-
-```bash
-sha256sum --check ros-jazzy-livekit-portal_0.1.0-1_amd64.deb.sha256
-```
+Tagged releases attach each supported `.deb` directly to a draft GitHub Release
+after every package passes its build, test, and clean-install smoke test.
+GitHub shows a SHA-256 digest next to each release asset for integrity checks.
 
 CI stores the Debian packages as workflow artifacts for testing and manual
 installation. These artifacts are not an APT repository and are subject to the

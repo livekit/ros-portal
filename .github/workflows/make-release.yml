@@ -177,25 +177,18 @@ jobs:
           for ros_distro in humble jazzy kilted lyrical; do
             for arch in amd64 arm64; do
               deb="release-assets/ros-${ros_distro}-livekit-portal_${VERSION}-1_${arch}.deb"
-              checksum="${deb}.sha256"
-              if [[ ! -f "${deb}" || ! -f "${checksum}" ]]; then
-                echo "Missing release assets for ROS ${ros_distro} ${arch}" >&2
+              if [[ ! -f "${deb}" ]]; then
+                echo "Missing Debian package for ROS ${ros_distro} ${arch}" >&2
                 exit 1
               fi
             done
           done
 
           mapfile -t debs < <(find release-assets -maxdepth 1 -type f -name '*.deb' -print)
-          mapfile -t checksums < <(find release-assets -maxdepth 1 -type f -name '*.deb.sha256' -print)
-          if [[ "${#debs[@]}" -ne 8 || "${#checksums[@]}" -ne 8 ]]; then
-            echo "Expected 8 Debian packages and 8 checksums" >&2
+          if [[ "${#debs[@]}" -ne 8 ]]; then
+            echo "Expected 8 Debian packages, found ${#debs[@]}" >&2
             exit 1
           fi
-
-          (
-            cd release-assets
-            sha256sum --check ./*.deb.sha256
-          )
 
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -206,8 +199,6 @@ jobs:
           draft: true
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: |
-            release-assets/*.deb
-            release-assets/*.deb.sha256
+          files: release-assets/*.deb
         env:
           GITHUB_TOKEN: ${{ github.token }}

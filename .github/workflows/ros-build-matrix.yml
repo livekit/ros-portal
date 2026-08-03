@@ -1,0 +1,88 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: ROS Build Matrix
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        description: Git ref whose matrix definition should be used
+        required: false
+        type: string
+    outputs:
+      matrix:
+        description: ROS distribution and architecture build matrix
+        value: ${{ jobs.load.outputs.matrix }}
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    name: Load ROS Build Matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
+
+      - name: Load build matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(jq -ce '
+            def non_empty_string:
+              type == "string" and length > 0;
+
+            def valid_matrix_entry:
+              type == "object"
+              and (.arch | non_empty_string)
+              and (.os | non_empty_string);
+
+            def valid_distro:
+              type == "object"
+              and (.ros_distro | non_empty_string)
+              and (.ros_image_tag | non_empty_string)
+              and (.ros_image_digest | non_empty_string)
+              and (.matrix | type) == "object"
+              and (.matrix.include | type) == "array"
+              and (.matrix.include | length) > 0
+              and all(.matrix.include[]; valid_matrix_entry);
+
+            if (.distros | type) != "array" or (.distros | length) == 0 then
+              error("expected a non-empty distros array")
+            elif (all(.distros[]; valid_distro) | not) then
+              error("expected each distro to contain image settings and a non-empty matrix.include")
+            else
+              {
+                include: [
+                  .distros[] as $distro
+                  | $distro.matrix.include[]
+                  | {
+                      ros_distro: $distro.ros_distro,
+                      arch: .arch,
+                      os: .os,
+                      ros_image_tag: $distro.ros_image_tag,
+                      ros_image_digest: $distro.ros_image_digest
+                    }
+                ]
+              }
+            end
+          ' .github/ros-build-matrix.json)"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"

@@ -1,0 +1,234 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to package (for example, v0.1.0 or v0.1.1-rc1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: debian-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Release Version
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Validate release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${RELEASE_TAG}" =~ ^v(.+)$ ]]; then
+            echo "Release tag must start with v: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+
+          # SemVer 2.0.0: X.Y.Z, with optional prerelease and build metadata.
+          # The prerelease expression rejects numeric identifiers with leading
+          # zeroes while accepting identifiers such as rc1 and rc.1.
+          semver_pattern='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+)(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "${version}" =~ ${semver_pattern} ]]; then
+            echo "Release tag must use SemVer after v (for example, v0.1.0 or v0.1.1-rc1): ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          package_version="${version%%[-+]*}"
+
+          mapfile -t package_versions < <(
+            python3 - \
+              src/ros_portal/package.xml \
+              src/ros_portal_config/package.xml \
+              src/ros_portal_msgs/package.xml <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          for package_xml in sys.argv[1:]:
+              print(ET.parse(package_xml).getroot().findtext("version"))
+          PY
+          )
+
+          if [[ "${#package_versions[@]}" -ne 3 ]]; then
+            echo "Unable to read every first-party package version" >&2
+            exit 1
+          fi
+          for manifest_version in "${package_versions[@]}"; do
+            if [[ "${manifest_version}" != "${package_version}" ]]; then
+              echo "Release tag ${RELEASE_TAG} has package version ${package_version}, which does not match package.xml version ${manifest_version}" >&2
+              exit 1
+            fi
+          done
+
+          echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${package_version}" >> "${GITHUB_OUTPUT}"
+          echo "Release tag: ${RELEASE_TAG} (package version: ${package_version})"
+
+  ros-build-matrix:
+    name: Load ROS Build Matrix
+    needs: validate
+    uses: ./.github/workflows/ros-build-matrix.yml
+    with:
+      git_ref: ${{ needs.validate.outputs.tag }}
+
+  ci-matrix:
+    name: CI (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    needs:
+      - validate
+      - ros-build-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-entry.yml
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      ros_image_tag: ${{ matrix.ros_image_tag }}
+      ros_image_digest: ${{ matrix.ros_image_digest }}
+      git_ref: ${{ needs.validate.outputs.tag }}
+    secrets: inherit
+
+  release:
+    name: Upload Debian Packages to GitHub Release
+    needs:
+      - validate
+      - ros-build-matrix
+      - ci-matrix
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download Debian packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: release-assets
+          pattern: ros-*-livekit-portal-*-deb
+          merge-multiple: true
+
+      - name: Verify release assets
+        env:
+          BUILD_MATRIX: ${{ needs.ros-build-matrix.outputs.matrix }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r ros_distro arch; do
+            deb="release-assets/ros-${ros_distro}-livekit-portal_${VERSION}-1_${arch}.deb"
+            if [[ ! -f "${deb}" ]]; then
+              echo "Missing Debian package for ROS ${ros_distro} ${arch}" >&2
+              exit 1
+            fi
+          done < <(jq -r '.include[] | [.ros_distro, .arch] | @tsv' <<<"${BUILD_MATRIX}")
+
+          mapfile -t debs < <(find release-assets -maxdepth 1 -type f -name '*.deb' -print)
+          expected_debs="$(jq '.include | length' <<<"${BUILD_MATRIX}")"
+          if [[ "${#debs[@]}" -ne "${expected_debs}" ]]; then
+            echo "Expected ${expected_debs} Debian packages, found ${#debs[@]}" >&2
+            exit 1
+          fi
+
+      - name: Upload Debian packages to the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}"
+          gh release upload "${RELEASE_TAG}" release-assets/*.deb \
+            --clobber \
+            --repo "${GITHUB_REPOSITORY}"
+
+      - name: Append custom release Markdown
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          # This Markdown is appended after the release body. The marked block
+          # is replaced on reruns while notes entered in GitHub's UI are kept.
+          RELEASE_PAGE_MARKDOWN: |
+            ## Install
+
+            Download the `.deb` asset below that matches your ROS 2 distribution
+            and CPU architecture.
+
+            For example, on ROS 2 Jazzy / amd64:
+
+            ```bash
+            sudo apt update
+            sudo apt install ./ros-jazzy-livekit-portal_*_amd64.deb
+            ```
+
+            The matching ROS 2 underlay must already be installed. Source the
+            installed overlay before running ROS Portal:
+
+            ```bash
+            source /opt/livekit/ros/jazzy/setup.bash
+            ```
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" \
+            --json body \
+            --jq .body \
+            --repo "${GITHUB_REPOSITORY}" > current-release-notes.md
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          start = "<!-- ROS_PORTAL_RELEASE_MARKDOWN_START -->"
+          end = "<!-- ROS_PORTAL_RELEASE_MARKDOWN_END -->"
+          body = Path("current-release-notes.md").read_text()
+          custom_markdown = os.environ["RELEASE_PAGE_MARKDOWN"].strip()
+
+          if start in body:
+              before, after_start = body.split(start, maxsplit=1)
+              if end not in after_start:
+                  raise SystemExit("Custom release Markdown start marker has no end marker")
+              body = before + after_start.split(end, maxsplit=1)[1]
+
+          Path("updated-release-notes.md").write_text(
+              f"{body.rstrip()}\n\n{start}\n{custom_markdown}\n{end}\n"
+          )
+          PY
+
+          gh release edit "${RELEASE_TAG}" \
+            --notes-file updated-release-notes.md \
+            --repo "${GITHUB_REPOSITORY}"

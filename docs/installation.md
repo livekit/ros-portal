@@ -12,9 +12,10 @@ CI builds Debian packages for:
 - amd64 and arm64 for each distribution
 
 The custom Debian package is named
-`ros-<distro>-livekit-portal`. CI workflow artifacts use
+`ros-<distro>-livekit-portal`. Tagged GitHub Releases provide the `.deb`
+packages as direct downloads. CI workflow artifacts use
 `ros-<distro>-livekit-portal-<arch>-deb`; each artifact is a ZIP containing
-the versioned `.deb` and its checksum.
+the versioned `.deb`.
 
 Each package is a self-contained ROS Portal overlay: it includes ROS Portal, its
 config and message packages, the pinned medkit packages, and the LiveKit SDK.
@@ -29,9 +30,9 @@ Configure the official ROS 2 APT source for your Ubuntu release before
 installing ROS Portal. ROS Portal package uses that source to install its ROS
 runtime dependencies.
 
-Download the CI workflow artifact matching the machine's ROS distribution and
-architecture. GitHub downloads the artifact as a ZIP archive containing the
-`.deb` and its `.sha256` file, so extract that archive first. Then run:
+Download the `.deb` matching the machine's ROS distribution and architecture
+from the tagged GitHub Release. For an unreleased build, download and extract
+the matching CI workflow artifact ZIP instead. Then run:
 
 ```bash
 sudo apt update
@@ -84,7 +85,15 @@ ros-portal-jazzy
 See [Running](running.md) and [Configuration](configuration.md) for launch
 arguments and route configuration.
 
-## CI Artifact Distribution
+## Package Distribution
+
+Publishing a GitHub Release with a tag such as `v0.1.0` starts the Debian
+workflow. After every package passes its build, test, and clean-install smoke
+test, the workflow attaches the `.deb` files to that same published release.
+Prerelease SemVer tags such as `v0.1.1-rc1` are supported; the package versions
+must match the tag's `X.Y.Z` core version. For example, package version `0.1.0`
+matches release tag `v0.1.0-rc1`.
+GitHub shows a SHA-256 digest next to each release asset for integrity checks.
 
 CI stores the Debian packages as workflow artifacts for testing and manual
 installation. These artifacts are not an APT repository and are subject to the

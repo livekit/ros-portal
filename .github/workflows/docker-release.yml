@@ -60,7 +60,8 @@ jobs:
             exit 2
           fi
 
-          version="${GITHUB_REF_NAME#v}"
+          release_tag="${GITHUB_REF_NAME}"
+          release_version="${release_tag#v}"
           mapfile -t package_versions < <(
             python3 - \
               src/ros_portal/package.xml \
@@ -79,14 +80,14 @@ jobs:
             exit 1
           fi
           for package_version in "${package_versions[@]}"; do
-            if [[ "${package_version}" != "${version}" ]]; then
+            if [[ "${package_version}" != "${release_version}" ]]; then
               echo "Tag ${GITHUB_REF_NAME} does not match package version ${package_version}" >&2
               exit 1
             fi
           done
 
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "Publishing ROS Portal ${version}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "version=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "Publishing ROS Portal ${release_tag}" >> "${GITHUB_STEP_SUMMARY}"
 
   humble:
     name: Humble

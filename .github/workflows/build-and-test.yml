@@ -91,8 +91,8 @@ jobs:
           done
 
       # Restore after setup so vcs imports the SDK before the cache creates its
-      # target directory. Keep the Dockerfile hash in the fallback prefix so
-      # cached build trees never cross toolchain definitions.
+      # target directory. Keep the development Dockerfile hash in the fallback
+      # prefix so cached build trees never cross toolchain definitions.
       - name: Restore LiveKit SDK build cache
         id: livekit_sdk_cache
         if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
@@ -101,9 +101,9 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros_portal/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('docker/development/Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
           restore-keys: |
-            livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-
+            livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('docker/development/Dockerfile') }}-
 
       - name: Build packages
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -152,7 +152,7 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros_portal/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('docker/development/Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
 
       - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -246,8 +246,8 @@ jobs:
               exec ./scripts/package-deb.sh
             '
 
-      # The runtime image installs the same Debian package into a clean ROS base
-      # image, so this also preserves the clean-install package smoke test.
+      # Build from the packaged artifact in a clean ROS base to verify its
+      # declared runtime dependencies and installation behavior.
       - name: Build runtime Docker image
         shell: bash
         run: |

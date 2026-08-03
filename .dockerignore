@@ -1,9 +1,10 @@
 **
 
-!Dockerfile
 !setup-shell-env.sh
 
 !docker/
+!docker/development/
+!docker/development/Dockerfile
 !docker/runtime/
 !docker/runtime/**
 

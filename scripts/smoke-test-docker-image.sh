@@ -56,7 +56,9 @@ if [[ "${actual_prefix}" != "${expected_prefix}" ]]; then
   exit 1
 fi
 
+echo "======== Resolving the ROS Portal launch description in ${image_ref} ========"
 docker run --rm "${image_ref}" \
-  ros2 launch ros_portal ros_portal.launch.py --show-args >/dev/null
+  ros2 launch ros_portal ros_portal.launch.py --show-args
+echo "======== Resolved the ROS Portal launch description in ${image_ref} ========"
 
 echo "Verified ${image_ref} for ROS ${expected_distro} on ${expected_arch}"

@@ -37,24 +37,23 @@ jobs:
     name: C++ Tools
     uses: ./.github/workflows/cpp-tools.yml
 
-  humble:
-    name: Humble
-    uses: ./.github/workflows/ci-humble.yml
-    secrets: inherit
+  ros-build-matrix:
+    name: Load ROS Build Matrix
+    uses: ./.github/workflows/ros-build-matrix.yml
 
-  jazzy:
-    name: Jazzy
-    uses: ./.github/workflows/ci-jazzy.yml
-    secrets: inherit
-
-  kilted:
-    name: Kilted
-    uses: ./.github/workflows/ci-kilted.yml
-    secrets: inherit
-
-  lyrical:
-    name: Lyrical
-    uses: ./.github/workflows/ci-lyrical.yml
+  build:
+    name: ${{ matrix.ros_distro }} (${{ matrix.arch }})
+    needs: ros-build-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/build-and-test.yml
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      ros_image_tag: ${{ matrix.ros_image_tag }}
+      ros_image_digest: ${{ matrix.ros_image_digest }}
     secrets: inherit
 
   ci:
@@ -63,10 +62,7 @@ jobs:
     needs:
       - sdk-release-check
       - cpp-tools
-      - humble
-      - jazzy
-      - kilted
-      - lyrical
+      - build
     if: always()
     steps:
       - name: Verify required CI jobs

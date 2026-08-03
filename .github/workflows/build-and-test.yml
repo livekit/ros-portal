@@ -14,7 +14,7 @@
 
 name: Build and Test
 
-# Reusable worker for one ROS distro + architecture. Called by ci-<distro>.yml.
+# Reusable worker for one ROS distribution + architecture matrix entry.
 on:
   workflow_call:
     inputs:
@@ -37,6 +37,10 @@ on:
       ros_image_digest:
         description: Pin digest for the ros image tag
         required: true
+        type: string
+      git_ref:
+        description: Git ref to check out before building
+        required: false
         type: string
 
 permissions:
@@ -61,6 +65,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
 
       - name: Prepare devcontainer SSH agent mount
         run: touch /tmp/devcontainer-empty-ssh-agent

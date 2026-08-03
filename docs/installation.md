@@ -84,8 +84,11 @@ arguments and route configuration.
 
 ## Package Distribution
 
-Tagged releases attach each supported `.deb` directly to a draft GitHub Release
-after every package passes its build, test, and clean-install smoke test.
+Publishing a GitHub Release with a tag such as `v0.1.0` starts the Debian
+workflow. After every package passes its build, test, and clean-install smoke
+test, the workflow attaches the `.deb` files to that same published release.
+Prerelease SemVer tags such as `v0.1.1-rc1` are supported; the package versions
+must match the tag after the leading `v` is removed.
 GitHub shows a SHA-256 digest next to each release asset for integrity checks.
 
 CI stores the Debian packages as workflow artifacts for testing and manual

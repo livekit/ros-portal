@@ -1,0 +1,56 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: ROS Build Matrix
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        description: Git ref whose matrix definition should be used
+        required: false
+        type: string
+    outputs:
+      matrix:
+        description: ROS distribution and architecture build matrix
+        value: ${{ jobs.load.outputs.matrix }}
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    name: Load ROS Build Matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
+
+      - name: Load build matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(jq -ce '
+            if (.include | type) == "array" and (.include | length) > 0 then
+              {include: .include}
+            else
+              error("expected a non-empty include array")
+            end
+          ' .github/ros-build-matrix.json)"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"

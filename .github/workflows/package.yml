@@ -65,12 +65,23 @@ jobs:
               set -euo pipefail
               exec ./scripts/package-deb.sh
             '
+      - name: Start livekit-server
+        id: livekit_server
+        uses: livekit/dev-server-action@6562d7d9343e46c26ead1223151f64f00e4fc37f # v1.1.0
+        with:
+          github-token: ${{ github.token }}
+          version: v1.13.3
+          config: |
+            enable_participant_data_blob: true
       - name: Smoke-test Debian in ROS Image
         shell: bash
         run: |
           set -euo pipefail
           deb_path="$(compgen -G 'artifacts/debian/*.deb')"
           docker run --rm --network host --env "CI=true" --env "ROS_DISTRO=${ROS_DISTRO}" --volume "${PWD}/artifacts/debian:/packages:ro" --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" "${ROS_IMAGE}" bash -lc "/smoke-test-deb.sh /packages/$(basename "${deb_path}")"
+      - name: Dump LiveKit server log on smoke-test failure
+        if: failure()
+        run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
       - name: Upload Debian package
         if: ${{ always() && !cancelled() && steps.debian_package.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -114,7 +114,7 @@ jobs:
       matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
     permissions:
       contents: read
-    uses: ./.github/workflows/build-and-test.yml
+    uses: ./.github/workflows/ci-entry.yml
     with:
       ros_distro: ${{ matrix.ros_distro }}
       arch: ${{ matrix.arch }}

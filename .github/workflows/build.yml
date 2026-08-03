@@ -1,0 +1,120 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      ros_distro: {required: true, type: string}
+      arch: {required: true, type: string}
+      os: {required: true, type: string}
+      ros_image_tag: {required: true, type: string}
+      ros_image_digest: {required: true, type: string}
+      git_ref: {required: false, type: string}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ inputs.ros_distro }}, ${{ inputs.arch }})
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+    env:
+      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ inputs.ros_distro == 'humble' && 'true' || 'false' }}
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+      INSTALL_CPP_TOOLS: "false"
+      INSTALL_SIMULATION_DEPS: "false"
+      ROS_DISTRO: ${{ inputs.ros_distro }}
+      ROS_IMAGE_DIGEST: ${{ inputs.ros_image_digest }}
+      ROS_IMAGE_REPOSITORY: ros
+      ROS_IMAGE_TAG: ${{ inputs.ros_image_tag }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
+      - run: touch /tmp/devcontainer-empty-ssh-agent
+      - name: Setup devcontainer environment
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: /bin/true
+      - name: Prepare LiveKit SDK cache directories
+        if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tree in src/externals/client-sdk-cpp/client-sdk-rust/target build/ros_portal/_deps; do
+            sudo mkdir -p "${tree}"
+            sudo chown -R "$(id -u):$(id -g)" "${tree}"
+          done
+      - name: Restore LiveKit SDK build cache
+        id: livekit_sdk_cache
+        if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            src/externals/client-sdk-cpp/client-sdk-rust/target
+            build/ros_portal/_deps
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
+          restore-keys: |
+            livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-
+      - name: Build packages
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          DEVCONTAINER_SSH_AUTH_SOCK: /tmp/devcontainer-empty-ssh-agent
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: |
+            bash -lc '
+              set -eo pipefail
+              source "/opt/ros/${ROS_DISTRO}/setup.bash"
+              set -u
+              colcon build --packages-up-to ros_portal test_utilities custom_msgs
+            '
+      - name: Make LiveKit SDK build cache readable
+        if: >-
+          env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
+          && github.event_name != 'pull_request'
+          && steps.livekit_sdk_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tree in src/externals/client-sdk-cpp/client-sdk-rust/target build/ros_portal/_deps; do
+            [[ -d "${tree}" ]] || continue
+            sudo find "${tree}" -type f ! -perm -o=r -exec chmod a+r {} +
+            sudo find "${tree}" -type d ! -perm -o=rx -exec chmod a+rx {} +
+          done
+      - name: Save LiveKit SDK build cache
+        if: >-
+          env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
+          && github.event_name != 'pull_request'
+          && steps.livekit_sdk_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            src/externals/client-sdk-cpp/client-sdk-rust/target
+            build/ros_portal/_deps
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
+      - name: Archive colcon build output
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo tar --create --gzip --file /tmp/ros-build-output.tar.gz build install log
+          sudo chown "$(id -u):$(id -g)" /tmp/ros-build-output.tar.gz
+      - name: Upload colcon build output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ros-${{ inputs.ros_distro }}-livekit-portal-${{ inputs.arch }}-build-output
+          path: /tmp/ros-build-output.tar.gz
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error

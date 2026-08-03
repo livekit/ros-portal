@@ -65,8 +65,8 @@ jobs:
               set -euo pipefail
               exec ./scripts/package-deb.sh
             '
-      # The runtime image installs the same Debian package into a clean ROS base
-      # image, so this also preserves the clean-install package smoke test.
+      # Build from the packaged artifact in a clean ROS base to verify its
+      # declared runtime dependencies and installation behavior.
       - name: Build runtime Docker image
         shell: bash
         run: |

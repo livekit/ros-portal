@@ -17,8 +17,8 @@ Docker selects the correct architecture automatically. ROS Portal doesn't
 publish a `latest` tag because the required ROS distribution must be explicit.
 
 The moving distribution tag points to its most recent stable ROS Portal
-release. Use `<distro>-<version>`, such as `jazzy-0.1.0`, to pin an immutable
-application release.
+release. Use `<distro>-v<major>.<minor>.<patch>`, such as `jazzy-v0.1.0`, to
+pin an immutable application release.
 
 ## Run ROS Portal
 
@@ -92,8 +92,9 @@ match the requested image.
 
 Pull requests build and smoke-test every distribution and architecture without
 publishing images. A `v<major>.<minor>.<patch>` Git tag builds from the exact
-release source, publishes immutable `<distro>-<version>` images, verifies their
-amd64 and arm64 manifests, and then updates the stable distribution tags.
+release source, publishes immutable `<distro>-v<major>.<minor>.<patch>` images,
+verifies their amd64 and arm64 manifests, and then updates the stable
+distribution tags.
 
 Published images include OCI source and revision labels, an SBOM, and build
 provenance attestations.

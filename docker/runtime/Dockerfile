@@ -33,7 +33,7 @@ LABEL io.livekit.ros-distro="${ROS_DISTRO}"
 ENV ROS_DISTRO=${ROS_DISTRO}
 
 COPY ${DEB_FILE} /tmp/ros-portal.deb
-COPY docker/runtime/ros_entrypoint.sh /usr/local/bin/ros-portal-entrypoint
+COPY docker/runtime/ros-portal-entrypoint.sh /usr/local/bin/ros-portal-entrypoint.sh
 
 RUN set -eu; \
     expected_package="ros-${ROS_DISTRO}-livekit-portal"; \
@@ -52,7 +52,7 @@ RUN set -eu; \
       echo "ROS ${ROS_DISTRO} is not installed in the base image" >&2; \
       exit 1; \
     fi; \
-    chmod 0755 /usr/local/bin/ros-portal-entrypoint; \
+    chmod 0755 /usr/local/bin/ros-portal-entrypoint.sh; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive \
       apt-get install -y --no-install-recommends /tmp/ros-portal.deb; \
@@ -61,5 +61,5 @@ RUN set -eu; \
     rm -f /tmp/ros-portal.deb; \
     rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["/usr/local/bin/ros-portal-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/ros-portal-entrypoint.sh"]
 CMD ["bash"]

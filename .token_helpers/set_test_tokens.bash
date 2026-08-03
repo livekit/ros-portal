@@ -53,7 +53,7 @@ LIVEKIT_ROOM="${LIVEKIT_ROOM:-ros_portal_test_room}"
 LIVEKIT_VALID_FOR="${LIVEKIT_VALID_FOR:-99999h}"
 LIVEKIT_IDENTITY_A="${LIVEKIT_IDENTITY_A:-ros-portal-test-a}"
 LIVEKIT_IDENTITY_B="${LIVEKIT_IDENTITY_B:-ros-portal-test-b}"
-_grant_json='{"canPublish":true,"canSubscribe":true,"canPublishData":true}'
+_grant_json='{"canPublish":true,"canSubscribe":true,"canPublishData":true,"canUpdateOwnMetadata":true}'
 
 if [[ -z "${LIVEKIT_URL:-}" ]]; then
   # Linux CI jobs run LiveKit on the same host as the devcontainer.

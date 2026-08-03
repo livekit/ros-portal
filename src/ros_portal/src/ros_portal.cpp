@@ -150,6 +150,10 @@ bool RosPortal::initialize() {
   connection_diagnostics_->markConnected(*room_);
 
   if (auto lp = room_->localParticipant().lock()) {
+    auto attributes = lp->attributes();
+    attributes[kRobotParticipantAttribute] = "true";
+    lp->setAttributes(attributes);
+
     RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
                 lp->identity().c_str());
   } else {

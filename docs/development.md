@@ -64,9 +64,11 @@ ROS Portal CMake configuration to build the SDK checkout from `external.repos`.
 
 See `setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
 `cbpu` / `cbps`. `sros` sources the container's ROS installation and the
-default workspace overlay under `/livekit_ws/install`. Colcon overlays are not
-portable across ROS distributions; move or delete `build`, `install`, and
-`log`, then rebuild after switching containers.
+default workspace overlay under `/livekit_ws/install`, then enables `ros2`
+command completion. Colcon overlays are not portable across ROS distributions;
+move or delete `build`, `install`, and `log`, then rebuild after switching
+containers. With no package arguments, `cbpu` and `cbtpu` build (and, for
+`cbtpu`, test) `ros_portal` and its ROS dependencies.
 
 ## C++ Tools
 

@@ -40,12 +40,18 @@ _source_ws_overlay() {
     fi
 }
 
+_enable_ros_autocomplete() {
+    if command -v register-python-argcomplete3 >/dev/null 2>&1; then
+        eval "\$(register-python-argcomplete3 ros2)"
+    fi
+}
+
 _source_ros_env
 
 alias bros='cd "\${WS}" && colcon build'
 alias dros='cd "\${WS}" && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
 
-alias sros='_source_ros_env && _source_ws_overlay'
+alias sros='_source_ros_env && _source_ws_overlay && _enable_ros_autocomplete'
 
 # Helper for running the project clang-format wrapper within the devcontainer
 clang_format()
@@ -76,7 +82,11 @@ cbtps()
 
 cbtpu()
 {
-    cd "\${WS}" && sros && colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
+    cd "\${WS}" && sros
+    if [ "\$#" -eq 0 ]; then
+        set -- ros_portal
+    fi
+    colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
 }
 
 clean_ws()
@@ -137,8 +147,9 @@ EOF
 
 cat <<'EOF' >/root/.zshrc
 source /etc/profile.d/ros-portal.sh
-autoload -Uz compinit
+autoload -Uz compinit bashcompinit
 compinit
+bashcompinit
 EOF
 
 cat <<'EOF' >/root/.zprofile

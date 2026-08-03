@@ -105,7 +105,7 @@ jobs:
       git_ref: ${{ needs.validate.outputs.tag }}
 
   ci-matrix:
-    name: ${{ matrix.ros_distro }} (${{ matrix.arch }})${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    name: CI (${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs:
       - validate
       - ros-build-matrix
@@ -129,7 +129,7 @@ jobs:
     needs:
       - validate
       - ros-build-matrix
-      - build
+      - ci-matrix
     runs-on: ubuntu-24.04
     permissions:
       contents: write

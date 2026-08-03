@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 
-name: Test
+name: Tests
 
 on:
   workflow_call:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   test:
-    name: Test (${{ inputs.ros_distro }}, ${{ inputs.arch }})
+    name: Tests
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:

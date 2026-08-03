@@ -43,7 +43,7 @@ jobs:
 
   # Build, test, package each ROS distribution and architecture combination
   ci-matrix:
-    name: ${{ matrix.ros_distro }} (${{ matrix.arch }})${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    name: CI (${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs: ros-build-matrix
     strategy:
       fail-fast: false

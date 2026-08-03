@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 
-name: Package Debian
+name: Package
 
 on:
   workflow_call:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   package:
-    name: Package (${{ inputs.ros_distro }}, ${{ inputs.arch }})
+    name: Package
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:

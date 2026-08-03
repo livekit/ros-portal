@@ -104,8 +104,8 @@ jobs:
     with:
       git_ref: ${{ needs.validate.outputs.tag }}
 
-  build:
-    name: Build, Test, Package (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+  ci-entries:
+    name: ${{ matrix.ros_distro }} (${{ matrix.arch }})${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs:
       - validate
       - ros-build-matrix

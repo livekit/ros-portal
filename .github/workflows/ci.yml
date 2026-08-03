@@ -41,8 +41,9 @@ jobs:
     name: Load ROS Build Matrix
     uses: ./.github/workflows/ros-build-matrix.yml
 
-  build:
-    name: Build, Test, Package (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+  # Build, test, package each ROS distribution and architecture combination
+  ci-entries:
+    name: ${{ matrix.ros_distro }} (${{ matrix.arch }})${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs: ros-build-matrix
     strategy:
       fail-fast: false

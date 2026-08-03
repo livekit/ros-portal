@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "ros_portal/introspection/introspection_utils.hpp"
+#include "ros_portal/utils/generic_subscription.hpp"
 #include "ros_portal/utils/image_conversion.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
@@ -139,13 +140,6 @@ void TopicForwarder::pollTopics() {
       }
     }
 
-    {
-      std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
-      if (inbound_ros_topic_names_.count(topic_name) > 0) {
-        continue;
-      }
-    }
-
     if (!utils::matchesAnyPattern(topic_name, options_.outgoing_topic_patterns)) {
       continue;
     }
@@ -176,7 +170,12 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg,
+                                                 const rclcpp::MessageInfo& message_info) {
+    if (isInboundPublication(message_info)) {
+      return;
+    }
+
     auto& rcl_msg = msg->get_rcl_serialized_message();
 
     std::shared_ptr<DataTrackWriter> writer;
@@ -258,7 +257,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
     auto subscription =
-        node->create_generic_subscription(topic_name, topic_type, qos, std::move(callback), sub_options);
+        utils::createGenericSubscription(node, topic_name, topic_type, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);
@@ -316,7 +315,12 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     return;
   }
 
-  auto callback = [this, topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+  auto callback = [this, topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg,
+                                     const rclcpp::MessageInfo& message_info) {
+    if (isInboundPublication(message_info)) {
+      return;
+    }
+
     std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
     const auto state_it = image_topic_states_.find(topic_name);
     if (state_it == image_topic_states_.end()) {
@@ -551,7 +555,6 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     }
 
     inbound_data_track_states_[descriptor.sid] = state;
-    inbound_ros_topic_names_.insert(*ros_topic_name);
   }
 
   RCLCPP_INFO(logger_,
@@ -574,7 +577,6 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     {
       std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
       inbound_data_track_states_.erase(descriptor.sid);
-      inbound_ros_topic_names_.erase(state->ros_topic_name);
     }
   }
 }
@@ -589,7 +591,6 @@ void TopicForwarder::onDataTrackUnpublished(const std::string& sid) {
     }
     state = it->second;
     inbound_data_track_states_.erase(it);
-    inbound_ros_topic_names_.erase(state->ros_topic_name);
   }
 
   state->stop.store(true);
@@ -606,6 +607,15 @@ void TopicForwarder::onDataTrackUnpublished(const std::string& sid) {
 
 bool TopicForwarder::isIncomingTopicAllowed(const std::string& topic_name) const {
   return utils::matchesAnyPattern(topic_name, options_.incoming_topic_patterns);
+}
+
+bool TopicForwarder::isInboundPublication(const rclcpp::MessageInfo& message_info) {
+  const auto& publisher_gid = message_info.get_rmw_message_info().publisher_gid;
+  std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+  return std::any_of(inbound_data_track_states_.begin(), inbound_data_track_states_.end(), [&](const auto& entry) {
+    const auto& state = entry.second;
+    return state && state->publisher && *state->publisher == publisher_gid;
+  });
 }
 
 std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(

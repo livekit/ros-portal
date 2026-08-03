@@ -32,6 +32,7 @@
 #include <rclcpp/duration.hpp>
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/logger.hpp>
+#include <rclcpp/message_info.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/time.hpp>
@@ -39,7 +40,6 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
@@ -166,6 +166,7 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
   FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure);
+  FRIEND_TEST(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
@@ -191,6 +192,9 @@ private:
   void createDataSubscriber(const std::string& topic_name, const std::string& topic_type);
   /// @brief Subscribe to a ROS image topic and forward frames to LiveKit.
   void createImageSubscriber(const std::string& topic_name);
+  /// @brief Return whether a ROS sample originated from an inbound LiveKit
+  /// publisher owned by this forwarder.
+  bool isInboundPublication(const rclcpp::MessageInfo& message_info);
 
   /// @brief Stream returned after subscribing to an inbound LiveKit data track.
   struct RemoteDataTrackStream {
@@ -322,8 +326,6 @@ private:
   std::mutex inbound_data_track_states_mutex_;
   /// @brief Active inbound LiveKit data tracks keyed by track SID.
   std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>> inbound_data_track_states_;
-  /// @brief ROS topic names reserved by inbound LiveKit data tracks.
-  std::unordered_set<std::string> inbound_ros_topic_names_;
   /// @brief Count of inbound LiveKit tracks rejected due to invalid schemas.
   std::atomic<std::uint64_t> inbound_schemas_incorrect_{0};
 };

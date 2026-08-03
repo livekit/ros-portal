@@ -45,6 +45,9 @@ class Manager;
 class TopicForwarder;
 class LatchedTopicForwarder;
 
+/// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
+inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
+
 /// @brief The main ROS Portal node.
 ///
 /// This node is responsible for polling the ROS2 topic graph, matching topics

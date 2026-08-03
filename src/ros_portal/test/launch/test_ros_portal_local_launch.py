@@ -50,6 +50,23 @@ def _write_config(path):
     )
 
 
+def test_mint_token_allows_participant_attribute_updates(monkeypatch):
+    module = _load_launch_module()
+    token_commands = []
+
+    def fake_check_output(command, text):
+        token_commands.append((command, text))
+        return 'fake-token\n'
+
+    monkeypatch.setattr(module.subprocess, 'check_output', fake_check_output)
+
+    assert module._mint_token('launch_room', 'ros-portal-test', '10m', False) == 'fake-token'
+    assert len(token_commands) == 1
+    command, text = token_commands[0]
+    assert text is True
+    assert '--allow-update-metadata' in command
+
+
 def test_launch_setup_mints_token_and_passes_config_path(tmp_path, monkeypatch):
     module = _load_launch_module()
     config_path = tmp_path / 'ros_portal.yaml'

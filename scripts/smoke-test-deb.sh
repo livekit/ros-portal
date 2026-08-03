@@ -97,6 +97,7 @@ payload = encode({
         "canPublish": True,
         "canSubscribe": True,
         "canPublishData": True,
+        "canUpdateOwnMetadata": True,
     },
 })
 signature = hmac.new(b"secret", header + b"." + payload, hashlib.sha256).digest()

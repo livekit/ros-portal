@@ -1,6 +1,6 @@
 # Testing
 
-There are unit and integration tests which are run in CI. For more manual integration testing we have a simulation, see [`waveshare_launch`](../src/test/waveshare_launch/README.md): a package for for launching real world and simulated 4-wheeled waveshare WAVER robot.
+There are unit and integration tests which are run in CI. For more manual integration testing, see [`ros_portal_tutorials`](../src/ros_portal_tutorials/README.md), which drives ROS Portal against turtlesim. For a full robot in simulation and on hardware, see [`waver_ros`](https://github.com/livekit-examples/waver_ros).
 
 ## Unit Tests
 

@@ -165,6 +165,32 @@ bool RosPortal::initialize() {
     return false;
   }
 
+  if (!room_->connect(livekit_url, livekit_token, room_options)) {
+    connection_diagnostics_->markDisconnected();
+    room_.reset();
+    RCLCPP_FATAL(this->get_logger(), "Failed to connect to LiveKit room.");
+    return false;
+  }
+
+  connection_diagnostics_->markConnected(*room_);
+
+  if (auto lp = room_->localParticipant().lock()) {
+    auto attributes = lp->attributes();
+    attributes[kRobotParticipantAttribute] = "true";
+    lp->setAttributes(attributes);
+
+    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
+                lp->identity().c_str());
+  } else {
+    RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
+    return false;
+  }
+
+  if (!initializeCliManager()) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
+    return false;
+  }
+
   if (!initializeServiceForwarder(config->services)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder");
     return false;

@@ -46,7 +46,10 @@ class RoomConnectionManager;
 class TopicForwarder;
 class LatchedTopicForwarder;
 
-/// @brief The main bridge node for the ROS2 LiveKit bridge.
+/// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
+inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
+
+/// @brief The main ROS Portal node.
 ///
 /// This node is responsible for polling the ROS2 topic graph, matching topics
 /// against user-defined patterns, and creating subscribers for the allowed

@@ -43,6 +43,7 @@ def _mint_token(room_name: str, identity: str, valid_for: str, use_dev_credentia
         identity,
         '--name',
         identity,
+        '--allow-update-metadata',
         '--valid-for',
         valid_for,
         '--grant',

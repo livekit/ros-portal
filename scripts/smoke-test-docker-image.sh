@@ -50,7 +50,7 @@ if [[ "${actual_distro}" != "${expected_distro}" ]]; then
 fi
 
 actual_prefix="$(docker run --rm "${image_ref}" ros2 pkg prefix ros_portal)"
-expected_prefix="/opt/livekit/ros/${expected_distro}"
+expected_prefix="/opt/livekit/ros/${expected_distro}/ros_portal"
 if [[ "${actual_prefix}" != "${expected_prefix}" ]]; then
   echo "Expected ROS Portal prefix ${expected_prefix}, got ${actual_prefix}" >&2
   exit 1

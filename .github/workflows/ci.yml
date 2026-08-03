@@ -42,7 +42,7 @@ jobs:
     uses: ./.github/workflows/ros-build-matrix.yml
 
   # Build, test, package each ROS distribution and architecture combination
-  ci-entries:
+  ci-matrix:
     name: ${{ matrix.ros_distro }} (${{ matrix.arch }})${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs: ros-build-matrix
     strategy:
@@ -64,7 +64,7 @@ jobs:
       - sdk-release-check
       - cpp-tools
       - ros-build-matrix
-      - build
+      - ci-matrix
     if: always()
     steps:
       - name: Verify required CI jobs

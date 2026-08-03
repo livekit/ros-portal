@@ -104,7 +104,7 @@ jobs:
     with:
       git_ref: ${{ needs.validate.outputs.tag }}
 
-  ci-entries:
+  ci-matrix:
     name: ${{ matrix.ros_distro }} (${{ matrix.arch }})${{ matrix.ros_distro }}, ${{ matrix.arch }})
     needs:
       - validate

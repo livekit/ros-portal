@@ -2,7 +2,9 @@
 
 ## Turtlesim over LiveKit
 
-This tutorial demonstrates ROS Portal capabilities by expanding upon the [ROS turtlesim beginner tutorials](https://docs.ros.org/en/foxy/Tutorials.html), running the turtlesim in one ROS graph and controlling it from a separate graph, with the two connected only through a LiveKit room.
+This tutorial builds on the [ROS turtlesim beginner tutorials](https://docs.ros.org/en/foxy/Tutorials.html).
+It runs turtlesim in one ROS graph and controls it from another, with a LiveKit
+room as their only connection.
 
 You will run two ROS graphs on one machine, isolated by `ROS_DOMAIN_ID` so they
 share no DDS traffic:
@@ -39,13 +41,16 @@ flowchart LR
 ```
 
 ### Prerequisites
-- `turtlesim` and `teleop_twist_keyboard` ROS2 packages installed:
-  `sudo apt install ros-$ROS_DISTRO-turtlesim ros-$ROS_DISTRO-teleop-twist-keyboard`.
-- `ros_portal_tutorials` package built with deps: `colcon build --packages-up-to ros_portal_tutorials`
-- A running LiveKit server. See [Running](running.md#livekit-server) for instructions.
-- __optional:__ a display to view the turtlesim window.
 
->__Reminder:__ In every new shell, source your workspace: `source install/setup.bash`. If you are in the devcontainer, use `sros`.
+- `turtlesim` and `teleop_twist_keyboard` ROS 2 packages installed:
+  `sudo apt install ros-$ROS_DISTRO-turtlesim ros-$ROS_DISTRO-teleop-twist-keyboard`.
+- `ros_portal_tutorials` built with its dependencies:
+  `colcon build --packages-up-to ros_portal_tutorials`.
+- A running LiveKit server. See [Running](running.md#livekit-server) for instructions.
+- An optional display to view the turtlesim window.
+
+> **Reminder:** In every new shell, source your workspace with
+> `source install/setup.bash`. In the devcontainer, use `sros`.
 
 ---
 
@@ -57,7 +62,8 @@ they are ready to use after a build — no editing required. This section
 walks through what the configs contain. Credentials and room name are **not** in
 config (see [Configuration](configuration.md)); only routes are.
 
-__`turtle_sim_config.yaml`__ - the turtle receives velocity commands from LiveKit and exports its pose:
+**`turtle_sim_config.yaml`** receives velocity commands from LiveKit and
+exports the turtle's pose:
 
 ```yaml
 ros_portal:
@@ -74,9 +80,9 @@ ros_portal:
       direction: "out"
 ```
 
-__`turtle_sim_controller.yaml`__ - the mirror image, plus a service route that
-exposes turtle_sim's `/turtle1/teleport_absolute` service as a local one (used in
-step [3b](tutorials.md#3-spawn-a-turtle-service-call)):
+**`turtle_sim_controller.yaml`** mirrors those topic routes and adds a service
+route. The route exposes turtle_sim's `/turtle1/teleport_absolute` service
+locally for use in [step 3b](#3-spawn-a-turtle-service-call):
 
 ```yaml
 ros_portal:
@@ -138,12 +144,16 @@ ros2 launch ros_portal ros_portal_local.launch.py \
   identity:=controller room_name:=turtle_room
 ```
 
-Both ROS Portal nodes use `room_name:=turtle_room` so they meet in the same room; override
-`livekit_url:` / `token:` as needed for your server (see [Running](running.md)).
+Both ROS Portal nodes use `room_name:=turtle_room` to join the same room.
+Override `livekit_url:` or `token:` for your server as needed; see
+[Running](running.md).
 
-__NOTE:__ on the controller graph, you don't see any pose or cmd_vel topics yet. This is because ROS Portal lazily publishes and subscribes to topics. You will see them in later steps.
+> **Note:** The controller graph does not yet show pose or `cmd_vel` topics.
+> ROS Portal creates publishers and subscriptions lazily; later steps create
+> the endpoints that make these topics visible.
 
-See this for yourself, in a new terminal set the ROS_DOMAIN_ID to 42 and run `ros2 topic list`:
+To see this, open a new terminal, set `ROS_DOMAIN_ID` to 42, and run
+`ros2 topic list`:
 
 ```bash
 export ROS_DOMAIN_ID=42
@@ -160,7 +170,8 @@ You should see topics:
 /turtle1/pose
 ```
 
-Now, set the ROS_DOMAIN_ID to 100 and run `ros2 topic list` in the controller terminal. :
+Now set `ROS_DOMAIN_ID` to 100 and run `ros2 topic list` in the controller
+terminal:
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 topic list
@@ -174,16 +185,19 @@ You should see topics:
 /turtle1/pose
 ```
 
-__NOTE:__ ROS Portal only subscribes to topics when they are first published. Since `/turtle.*/cmd_vel` direction is `out` and there are no publishers on the controller domain, ROS Portal does not yet have a publisher for it.
+> **Note:** ROS Portal discovers an outbound topic only after it is first
+> published. Because the controller domain has no publisher for
+> `/turtle.*/cmd_vel` yet, ROS Portal has not created its LiveKit publisher.
 
 ---
 
 ### 2. Inspect the remote robot (CLI forwarding)
 
-ROS Portal forwards a subset of `ros2` [CLI commands](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools.html) to a remote graph
-over LiveKit RPC. Each is a local ROS service named `/ros_portal/ros2_*`
+ROS Portal forwards a subset of [`ros2` CLI commands](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools.html)
+to a remote graph over LiveKit RPC. Each command is available through a local
+ROS service named `/ros_portal/ros2_*`
 that takes a `participant_id` (the remote identity to query). See
-[Remote ROS2 CLI calls](ros2_cli_calls.md) for the full field tables.
+[Remote ROS 2 CLI calls](ros2_cli_calls.md) for the full field tables.
 
 List the turtle's services
 ([ros2 service list](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Services/Understanding-ROS2-Services.html#ros2-service-list)):
@@ -194,12 +208,6 @@ ros2 service call /ros_portal/ros2_service_list \
   ros_portal_msgs/srv/Ros2ServiceList \
   "{participant_id: 'turtle_sim'}"
 ```
-
-<!-- TODO: currently the response field is like:
-response:
-ros_portal_msgs.srv.Ros2ServiceList_Response(success=True, err_msg='', output='/clear\n/kill\n/reset\n/ros_portal/describe_parameters\n/ros_portal/get_parameter_types\n/ros_portal/get_parameters\n/ros_portal/get_type_description\n/ros_portal/list_parameters\n/ros_portal/ros2_interface_show\n/ros_portal/ros2_service_call\n/ros_portal/ros2_service_list\n/ros_portal/ros2_topic_list\n/ros_portal/ros2_topic_pub\n/ros_portal/set_parameters\n/ros_portal/set_parameters_atomically\n/spawn\n/turtle1/set_pen\n/turtle1/teleport_absolute\n/turtle1/teleport_relative\n/turtlesim/describe_parameters\n/turtlesim/get_parameter_types\n/turtlesim/get_parameters\n/turtlesim/get_type_description\n/turtlesim/list_parameters\n/turtlesim/set_parameters\n/turtlesim/set_parameters_atomically\n'
-
-do we want to make this human readable? Looks like to do this, we would need user friendly utils to wrap the response because the artifact is from ros2 service call calling repr() on the whole response message object and printing it on one line, which escapes the embedded newlines as literal \n. -->
 
 Show the `Spawn` interface ([ros2 interface show](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Services/Understanding-ROS2-Services.html#ros2-interface-show)):
 
@@ -240,21 +248,23 @@ ros2 service call /ros_portal/ros2_service_call \
   "{participant_id: 'turtle_sim', service: '/spawn', msg_type: 'turtlesim/srv/Spawn', payload: '{x: 2.0, y: 2.0, theta: 0.0, name: \"turtle2\"}'}"
 ```
 
-Now, from the controller domain, query the robot graph's topics via CLI forwarding:
+From the controller domain, query the robot graph's topics through CLI
+forwarding:
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 service call /ros_portal/ros2_topic_list \
   ros_portal_msgs/srv/Ros2TopicList \
   "{participant_id: 'turtle_sim', show_types: true}"
 ```
-Since these `pose` and `cmd_vel` topics match the regexes in the configs, you should now see them locally on the controller graph too:
+Because these `pose` and `cmd_vel` topics match the config patterns, you should
+now see them on the controller graph as well:
 
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 topic list
 ```
 
-result:
+Expected output:
 ```bash
 /diagnostics
 /parameter_events
@@ -263,7 +273,7 @@ result:
 /turtle2/pose
 ```
 
-Let's make sure `turtle2` is where we spawned it:
+Confirm that `turtle2` is at the requested position:
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 topic echo /turtle2/pose --once
@@ -278,7 +288,7 @@ wrapper type. Let's set the pose of `turtle2` to (5.0, 5.0, 0.0):
 export ROS_DOMAIN_ID=100
 ros2 service call /turtle2/teleport_absolute turtlesim/srv/TeleportAbsolute "{x: 5.0, y: 5.0, theta: 0.0}"
 ```
-Now let's confirm it's moved to (5.0, 5.0, 0.0):
+Confirm that it moved to (5.0, 5.0, 0.0):
 
 ```bash
 export ROS_DOMAIN_ID=100
@@ -292,33 +302,39 @@ workflow and you want it to look local.
 
 ### 4. Drive the turtle
 
-Because `/turtle.*/cmd_vel` is bridged (controller: `out`, turtle_sim: `in`), publishing to it on the controller is carried to turtle_sim — so the standard `ros2 topic` interfaces just work.
+Because `/turtle.*/cmd_vel` is bridged (controller: `out`, turtle_sim: `in`),
+messages published from the controller reach turtle_sim. The standard
+`ros2 topic` interfaces therefore work without modification.
 
-**[Publish](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html#ros2-topic-pub)** a constant command velocity for the turtle from the controller domain:
+**[Publish](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html#ros2-topic-pub)**
+a constant command velocity for the turtle from the controller domain:
 
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 topic pub /turtle1/cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 2.0}, angular: {z: 1.8}}"
 ```
-in another terminal, **[Echo](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html#ros2-topic-echo)** the turtle's pose from the controller domain:
+In another terminal, **[echo](https://docs.ros.org/en/foxy/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html#ros2-topic-echo)**
+the turtle's pose from the controller domain:
 
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 topic echo /turtle1/pose
 ```
-you should see the turtle moving!
+The turtle should now be moving.
 
 #### See [ros2_cli_calls.md](ros2_cli_calls.md) for the full suite of CLI commands.
 
 ### Teleop
-Lets take driving one step further and use the [`teleop_twist_keyboard`](https://index.ros.org/r/teleop_twist_keyboard/) package:
+
+Take driving a step further with the [`teleop_twist_keyboard`](https://index.ros.org/r/teleop_twist_keyboard/)
+package:
 
 ```bash
 export ROS_DOMAIN_ID=100
 ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/turtle1/cmd_vel
 ```
-(be sure to spam q a couple times to have some fun!)
+Press `q` a few times to increase the speed.
 
 Keystrokes on the controller now steer the turtle on the other domain, entirely
 over LiveKit!

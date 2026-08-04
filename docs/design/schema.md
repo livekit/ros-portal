@@ -2,7 +2,9 @@
 
 ## Context
 
-A message *schema* is a formal set of rules that defines the structure, data types, and constraints of a message payload in software systems. A ROS message schema is the recursive concatenation of all the `.msg` files/types into a single definition. For example:
+A message *schema* formally defines a message payload's structure, data types,
+and constraints. A ROS message schema recursively concatenates all referenced
+`.msg` files into one definition. For example:
 
 `robot_interfaces/msg/RobotState.msg`:
 
@@ -32,18 +34,22 @@ float64 y
 float64 theta
 ```
 
-The LiveKit SDK / server infrastructure supports schema definitions and retrievals. This functionality is used to enable the following features in ROS Portal:
+The LiveKit SDK and server support schema definition and retrieval. ROS Portal
+uses that support for the following features:
 
-- **Schema hash validation**: two ROS Portal participants may have different schema versions of the same topic/type. Schemas are used to verify alignment before bridging topics
-- **JSON to CDR**: enables translation from JSON into CDR, such as from a web participant into a ROS graph
-- **MCAP export**: natively, `ros2 bag record` embeds the schema text into `.mcap` files. Recording bridged ROS data out LiveKit can be written to MCAPs in conjunction with the schema to mirror this
+- **Schema-hash validation:** Confirms that two ROS Portal participants use
+  compatible schemas for the same topic and type before bridging messages.
+- **JSON-to-CDR conversion:** Converts JSON from, for example, a web
+  participant into CDR for a ROS graph.
+- **MCAP export:** Lets recordings of bridged ROS data include the schema text,
+  mirroring the schemas that `ros2 bag record` embeds in `.mcap` files.
 
 ## Design
 
 Schemas protect each ordinary data track from being interpreted as the wrong
-ROS message type. The sending ROS Portal node publishes the complete ROS definition;
-the receiving ROS Portal node validates it against the same interface installed locally
-before accepting any frames. External publishers using `JsonSchema` follow a
+ROS message type. The sending ROS Portal node publishes the complete ROS
+definition, and the receiving node validates it against its locally installed
+interface before accepting frames. External publishers using `JsonSchema` follow a
 relaxed path that validates only the schema name and local type availability.
 
 ```mermaid
@@ -59,8 +65,8 @@ transports and do not follow this design.
 
 ### Sending
 
-The sending ROS Portal node creates a LiveKit track lazily, when the first eligible ROS
-message arrives:
+The sending ROS Portal node creates a LiveKit track lazily when the first
+eligible ROS message arrives:
 
 1. Render the ROS type's complete definition, including recursive dependencies.
 2. Hash the exact definition bytes with SHA-256.
@@ -127,11 +133,13 @@ An ordinary data track carries:
   `Ros2Msg` and `Ros2Idl` (not required for `JsonSchema`); and
 - a `Cdr` or `Json` frame encoding.
 
-ROS Portal-produced tracks use CDR with a `Ros2Msg` or `Ros2Idl` schema. An external
-publisher may instead use `JsonSchema` with JSON frames: the receiving ROS Portal node
-accepts the track when the schema name matches the resolved ROS type and
-converts each JSON frame with local ROS introspection. Schemas IDs for json encodings are not validated to local schema IDs. If conversion to ROS messages fail, errors are logged. External publishers that
-do provide a ROS definition should still use `Ros2Msg` or `Ros2Idl` with the
+ROS Portal-produced tracks use CDR with a `Ros2Msg` or `Ros2Idl` schema. An
+external publisher may instead use `JsonSchema` with JSON frames. The receiving
+ROS Portal node accepts the track when its schema name matches the resolved ROS
+type and converts each JSON frame through local ROS introspection. For JSON
+encodings, schema IDs are not validated against local schema IDs. Conversion
+failures are logged. External publishers that provide a ROS definition should
+still use `Ros2Msg` or `Ros2Idl` with the
 complete definition for strict byte-for-byte validation.
 
 The server must enable participant data blobs with

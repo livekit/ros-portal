@@ -166,6 +166,8 @@ protected:
 
   std::unique_ptr<TcpFaultProxy> proxy_;
 
+  /// @brief Initialize the test by configuring a TCP fault proxy and connecting to a LiveKit server.
+  /// @return True if the test was initialized successfully, false otherwise.
   bool initializeThroughProxy() {
     if (!configured()) {
       ADD_FAILURE() << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
@@ -247,7 +249,7 @@ TEST_F(ConnectionFaultE2E, TopicListFailsDuringReconnect) {
   // Topic list should fail while server is reconnecting
   TopicListServiceOptions paused_cli_options;
   paused_cli_options.timeout_sec = 1;
-  const auto paused_topic_list = callTopicListService(robotANode(), identityB(), {paused_cli_options});
+  const auto paused_topic_list = callTopicListService(robotANode(), identityB(), paused_cli_options);
   ASSERT_NE(paused_topic_list, nullptr);
   EXPECT_FALSE(paused_topic_list->success);
 

@@ -252,5 +252,44 @@ TEST_F(ConnectionFaultE2E, PausesAndRecoversThroughIsolatedSignalingFault) {
   EXPECT_TRUE(recovered_topic_list->success);
 }
 
+TEST_F(ConnectionFaultE2E, ContinuesForwardingTopicsAfterReconnect) {
+  if (!connectionFaultTestsEnabled()) {
+    GTEST_SKIP() << "Set " << kEnableEnvironmentVariable << "=1 to run the isolated connection-fault test";
+  }
+
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  const auto upstream = parseWebSocketEndpoint(liveKitUrl());
+  ASSERT_TRUE(upstream.has_value()) << "Connection-fault test currently requires a ws:// LiveKit URL with an IPv4 or "
+                                       "DNS hostname: "
+                                    << liveKitUrl();
+
+  proxy_ = std::make_unique<TcpFaultProxy>(upstream->host, upstream->port);
+  ASSERT_NO_THROW(proxy_->start());
+  setLiveKitUrl("ws://127.0.0.1:" + std::to_string(proxy_->listenPort()));
+  initializeRuntime(kBidirectionalTopic);
+  ASSERT_FALSE(HasFatalFailure());
+  ASSERT_NE(rosPortalA(), nullptr);
+
+  ConnectionDiagnosticObserver diagnostics(robotANode());
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s));
+  ASSERT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic,
+                              "message before reconnect"));
+
+  proxy_->pause();
+  proxy_->resetConnections();
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s));
+  ASSERT_FALSE(rosPortalA()->hasParticipant(identityB()));
+
+  proxy_->resume();
+  ASSERT_TRUE(waitFor(
+      [this, &diagnostics]() {
+        return diagnostics.snapshot().state == "connected" && rosPortalA()->hasParticipant(identityB());
+      },
+      30s));
+
+  EXPECT_TRUE(
+      verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic, "message after reconnect"));
+}
+
 } // namespace
 } // namespace ros_portal::test

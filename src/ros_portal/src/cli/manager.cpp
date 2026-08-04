@@ -157,7 +157,7 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   diagnostics_.add(kCliManagerDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 
-  // RCLCPP_INFO(logger_, "CLI Manager is ready to rock!");
+  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(), "CLI Manager initialized");
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,

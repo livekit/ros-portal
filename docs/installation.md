@@ -1,4 +1,10 @@
-# Installing Debian Packages
+# Installation
+
+## Docker
+
+<!-- TODO: document running ROS Portal from Docker directly. -->
+
+## Debian Packages
 
 CI builds Debian packages for:
 
@@ -21,15 +27,14 @@ normal APT dependencies.
 
 <!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
-## Install
+### Install
 
 Configure the official ROS 2 APT source for your Ubuntu release before
 installing ROS Portal. ROS Portal package uses that source to install its ROS
 runtime dependencies.
 
 Download the `.deb` matching the machine's ROS distribution and architecture
-from the tagged GitHub Release. For an unreleased build, download and extract
-the matching CI workflow artifact ZIP instead. Then run:
+from the tagged GitHub Release, then run:
 
 ```bash
 sudo apt update
@@ -50,7 +55,7 @@ ros2 pkg prefix ros_portal
 
 The overlay setup chains the matching ROS underlay automatically.
 
-## Run
+### Run
 
 For a self-hosted LiveKit server, enable participant data blobs in its
 configuration before starting ROS Portal:
@@ -81,22 +86,3 @@ ros-portal-jazzy
 
 See [Running](running.md) and [Configuration](configuration.md) for launch
 arguments and route configuration.
-
-## Package Distribution
-
-Publishing a GitHub Release with a tag such as `v0.1.0` starts the Debian
-workflow. After every package passes its build, test, and clean-install smoke
-test, the workflow attaches the `.deb` files to that same published release.
-Prerelease SemVer tags such as `v0.1.1-rc1` are supported; the package versions
-must match the tag's `X.Y.Z` core version. For example, package version `0.1.0`
-matches release tag `v0.1.0-rc1`.
-GitHub shows a SHA-256 digest next to each release asset for integrity checks.
-
-CI stores the Debian packages as workflow artifacts for testing and manual
-installation. These artifacts are not an APT repository and are subject to the
-repository's Actions artifact retention policy.
-
-Installing a downloaded file with `apt install ./file.deb` resolves its
-dependencies and records it with dpkg, but `apt update` cannot discover ROS Portal
-updates. A future signed APT repository would be required for package-name
-installs and automatic upgrades.

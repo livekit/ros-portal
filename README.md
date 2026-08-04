@@ -9,16 +9,12 @@
 <!--END_BANNER_IMAGE-->
 
 [![CI](https://github.com/livekit/ros-portal/actions/workflows/ci.yml/badge.svg)](https://github.com/livekit/ros-portal/actions/workflows/ci.yml)
-[![Humble](https://img.shields.io/badge/ROS_2-Humble-blue)](https://github.com/livekit/ros-portal/actions/workflows/ci-humble.yml)
-[![Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-blue)](https://github.com/livekit/ros-portal/actions/workflows/ci-jazzy.yml)
-[![Kilted](https://img.shields.io/badge/ROS_2-Kilted-blue)](https://github.com/livekit/ros-portal/actions/workflows/ci-kilted.yml)
-[![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros-portal/actions/workflows/ci-lyrical.yml)
+[![Humble](https://img.shields.io/badge/ROS_2-Humble-blue)](https://github.com/livekit/ros-portal/releases/latest)
+[![Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-blue)](https://github.com/livekit/ros-portal/releases/latest)
+[![Kilted](https://img.shields.io/badge/ROS_2-Kilted-blue)](https://github.com/livekit/ros-portal/releases/latest)
+[![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros-portal/releases/latest)
 
 # ROS Portal
-
-ROS2 workspace for ROS Portal. This repository is used as both the
-development environment and build environment for the `ros_portal` node and its
-supporting packages.
 
 ROS Portal connects a ROS 2 graph to other LiveKit participants (ROS 2 or not)
 through LiveKit's real-time network, enabling access to a ROS graph from
@@ -32,25 +28,20 @@ networks.
 
 ## Quick Start
 
-Open the repository in the devcontainer, then build from `/livekit_ws`:
+1. **Install the latest release.** Download the `.deb` for your ROS 2 distro and
+   architecture from the
+   [latest GitHub Release](https://github.com/livekit/ros-portal/releases/latest),
+   then follow [Installation](docs/installation.md).
+2. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
+   project, set credentials, and launch. See [Running](docs/running.md).
 
-    colcon build --packages-up-to ros_portal
-
-Run ROS Portal with LiveKit credentials:
-
-```bash
-source install/setup.bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
-ros2 launch ros_portal ros_portal.launch.py
-```
-
-To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutorials.md).
+To get familiar with using ROS Portal after that, follow the
+[tutorials](docs/tutorials.md).
 
 ## User Guides
 
-- [Installing Debian packages](docs/installation.md): supported ROS and Ubuntu
-  versions, local package installation, and the installed overlay.
+- [Installation](docs/installation.md): Docker (TODO), Debian packages, supported
+  ROS and Ubuntu versions, and the installed overlay.
 - [Running](docs/running.md): launch commands, credentials, local development launch,
   and simulation examples.
 - [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,
@@ -63,10 +54,10 @@ To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutor
 
 ## Developer Guides
 
+- [Development](docs/development.md): devcontainer layout, SSH agent
+  forwarding, Docker image caching, and C++ tooling.
 - [Testing](docs/testing.md): unit and integration test commands and required
   LiveKit test environment.
-- [Development environment](docs/development.md): devcontainer layout, SSH agent
-  forwarding, Docker image caching, and C++ tooling.
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
 
@@ -89,7 +80,8 @@ To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutor
 - [`ros_portal_tutorials`](src/ros_portal_tutorials/README.md):
   tutorials for using ROS Portal in a variety of scenarios.
 
-Other package READMEs under `src/` document package-specific setup, fixtures, or examples.
+Other package READMEs under `src/` document package-specific setup, fixtures,
+and examples.
 
 ## Robots
 

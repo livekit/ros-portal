@@ -128,26 +128,16 @@ void RoomConnectionManager::onConnectionStateChanged(livekit::ConnectionState st
 }
 
 void RoomConnectionManager::onReconnecting() {
-  State previous = state_.load();
-  while (previous != State::Stopped && previous != State::Reconnecting &&
-         !state_.compare_exchange_weak(previous, State::Reconnecting)) {
-  }
-
-  if (previous != State::Stopped && previous != State::Reconnecting) {
-    if (previous == State::Connected) {
-      RCLCPP_WARN(logger_, "LiveKit room connection lost; SDK reconnecting");
-    }
+  State expected = State::Connected;
+  if (state_.compare_exchange_strong(expected, State::Reconnecting)) {
+    RCLCPP_WARN(logger_, "LiveKit room connection lost; SDK reconnecting");
     reportTransition(methods_.report_reconnecting);
   }
 }
 
 void RoomConnectionManager::onReconnected() {
-  State previous = state_.load();
-  while (previous != State::Stopped && previous != State::Connected &&
-         !state_.compare_exchange_weak(previous, State::Connected)) {
-  }
-
-  if (previous != State::Stopped && previous != State::Connected) {
+  State expected = State::Reconnecting;
+  if (state_.compare_exchange_strong(expected, State::Connected)) {
     markConnectionGained();
     reportTransition(methods_.report_connected);
   }
@@ -155,7 +145,7 @@ void RoomConnectionManager::onReconnected() {
 
 void RoomConnectionManager::onDisconnected(livekit::DisconnectReason reason) {
   State previous = state_.load();
-  while (previous != State::Stopped && previous != State::WaitingForRoomEos &&
+  while (previous != State::Stopped && previous != State::Disconnected && previous != State::WaitingForRoomEos &&
          !state_.compare_exchange_weak(previous, State::WaitingForRoomEos)) {
   }
 

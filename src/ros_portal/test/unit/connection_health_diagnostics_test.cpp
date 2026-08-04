@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <livekit/room.h>
 
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -161,6 +162,7 @@ TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {
   state.room_name = "diagnostics_room";
   state.num_peers = 3;
   state.reconnect_count = 1;
+  state.connection_loss_count = 2;
   diagnostic_updater::DiagnosticStatusWrapper status;
 
   populateConnectionHealthStatus(state, status);
@@ -171,6 +173,7 @@ TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {
   EXPECT_EQ(valueFor(status, "state"), "connected");
   EXPECT_EQ(valueFor(status, "num_peers"), "3");
   EXPECT_EQ(valueFor(status, "reconnect_count"), "1");
+  EXPECT_EQ(valueFor(status, "connection_loss_count"), "2");
   EXPECT_EQ(valueFor(status, "room_name"), "diagnostics_room");
   EXPECT_EQ(valueFor(status, "rtc.publisher.0.type"), std::nullopt);
   EXPECT_EQ(valueFor(status, "rtc.stats_available"), "false");
@@ -213,7 +216,31 @@ TEST(ConnectionHealthDiagnosticsTest, DisconnectedStateEmitsErrorStatus) {
   EXPECT_EQ(status.message, "Disconnected from LiveKit room");
   EXPECT_EQ(valueFor(status, "connected"), "false");
   EXPECT_EQ(valueFor(status, "state"), "disconnected");
+  EXPECT_EQ(valueFor(status, "connection_loss_count"), "0");
   EXPECT_EQ(valueFor(status, "rtc.stats_available"), std::nullopt);
+}
+
+TEST(ConnectionHealthDiagnosticsTest, CountsEachConnectedToUnavailableTransitionOnce) {
+  auto node = std::make_shared<rclcpp::Node>("connection_loss_count_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  ConnectionHealthDiagnostics connection_health(test::makeDiagnosticsFns(diagnostics_updater));
+  livekit::Room room;
+
+  connection_health.markConnected(room);
+  connection_health.markReconnecting(room);
+  connection_health.markDisconnected();
+
+  auto state = connection_health.snapshot();
+  EXPECT_EQ(state.connection_loss_count, 1U);
+  EXPECT_EQ(state.reconnect_count, 1U);
+
+  connection_health.markConnected(room);
+  connection_health.markDisconnected();
+  connection_health.markDisconnected();
+
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.connection_loss_count, 2U);
+  EXPECT_EQ(state.reconnect_count, 1U);
 }
 
 TEST(ConnectionHealthDiagnosticsTest, EmitsCompactRtcSummary) {

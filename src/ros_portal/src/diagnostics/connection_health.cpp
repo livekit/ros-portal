@@ -362,6 +362,7 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
   status.add("state", stateToString(state.kind));
   status.add("num_peers", state.num_peers);
   status.add("reconnect_count", state.reconnect_count);
+  status.add("connection_loss_count", state.connection_loss_count);
   status.add("room_name", state.room_name);
   if (connected) {
     addRtcSummaryFields(status, state.rtc_summary);
@@ -369,7 +370,7 @@ void populateConnectionHealthStatus(const ConnectionHealthState& state,
 }
 
 ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManagerFns diagnostics)
-    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt},
+    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, 0, {}, std::nullopt},
       diagnostics_(std::move(diagnostics)) {
   if (!diagnostics_.add || !diagnostics_.remove) {
     throw std::invalid_argument("ConnectionHealthDiagnostics requires fully populated DiagnosticsManagerFns");
@@ -392,6 +393,9 @@ void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
 
 void ConnectionHealthDiagnostics::markDisconnected() {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (state_.kind == ConnectionHealthStateKind::Connected) {
+    ++state_.connection_loss_count;
+  }
   state_.kind = ConnectionHealthStateKind::Disconnected;
   state_.room_name.clear();
   state_.num_peers = 0;
@@ -483,6 +487,9 @@ void ConnectionHealthDiagnostics::populateStatus(diagnostic_updater::DiagnosticS
 void ConnectionHealthDiagnostics::markReconnecting(livekit::Room& room) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (state_.kind == ConnectionHealthStateKind::Connected) {
+      ++state_.connection_loss_count;
+    }
     if (state_.kind != ConnectionHealthStateKind::Reconnecting) {
       ++state_.reconnect_count;
     }

@@ -42,8 +42,10 @@ small RTC transport and traffic summary.
 | `WARN` | `Reconnecting to LiveKit room` | The LiveKit SDK is attempting to restore an interrupted connection. |
 | `ERROR` | `Disconnected from LiveKit room` | ROS Portal is not connected to the LiveKit room. |
 
-If startup fails before the node remains alive, ROS Portal may exit before it can
-publish an `ERROR` diagnostic.
+With valid credentials, ROS Portal remains alive while the LiveKit server is
+unavailable and retries at 1 Hz. During that interval it publishes the
+`disconnected` state. Missing credentials or invalid local configuration still
+prevent node initialization.
 
 ### Base Key/Value Fields
 
@@ -55,6 +57,7 @@ Every `connection_health` status includes these fields:
 | `state` | `connected`, `reconnecting`, or `disconnected`. |
 | `num_peers` | Current number of known remote LiveKit participants. |
 | `reconnect_count` | Number of times the SDK has entered reconnecting state. |
+| `connection_loss_count` | Number of transitions from connected to unavailable, including both SDK reconnects and direct terminal disconnects. |
 | `room_name` | LiveKit room name from the active room connection. |
 
 ### RTC Summary Fields

@@ -114,6 +114,28 @@ TEST(RoomConnectionManagerTest, DefersToSdkDuringInSessionReconnect) {
   EXPECT_EQ(attempts, 1);
 }
 
+TEST(RoomConnectionManagerTest, IgnoresReconnectNotificationsDuringInitialJoin) {
+  int connected_reports = 0;
+  int reconnecting_reports = 0;
+  RoomConnectionManager* manager_ptr = nullptr;
+  RoomConnectionManager::Methods methods;
+  methods.try_connect = [&manager_ptr]() {
+    manager_ptr->onConnectionStateChanged(livekit::ConnectionState::Reconnecting);
+    manager_ptr->onConnectionStateChanged(livekit::ConnectionState::Connected);
+    return true;
+  };
+  methods.report_connected = [&connected_reports]() { ++connected_reports; };
+  methods.report_reconnecting = [&reconnecting_reports]() { ++reconnecting_reports; };
+  RoomConnectionManager manager(std::move(methods), rclcpp::get_logger("room_connection_manager_test"));
+  manager_ptr = &manager;
+
+  manager.poll();
+
+  EXPECT_TRUE(manager.isConnected());
+  EXPECT_EQ(connected_reports, 1);
+  EXPECT_EQ(reconnecting_reports, 0);
+}
+
 TEST(RoomConnectionManagerTest, StopSuppressesFurtherAttemptsAndCallbacks) {
   int attempts = 0;
   int connected_reports = 0;

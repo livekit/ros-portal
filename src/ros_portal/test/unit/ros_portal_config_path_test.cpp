@@ -69,8 +69,7 @@ public:
 private:
   static std::filesystem::path makePath() {
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
-    return std::filesystem::temp_directory_path() /
-           ("ros_portal_config_path_test_" + std::to_string(unique) + ".yaml");
+    return std::filesystem::temp_directory_path() / ("ros_portal_config_path_test_" + std::to_string(unique) + ".yaml");
   }
 
   std::filesystem::path path_;
@@ -133,8 +132,7 @@ TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
-  const auto missing_path =
-      std::filesystem::temp_directory_path() / "ros_portal_config_path_test_missing.yaml";
+  const auto missing_path = std::filesystem::temp_directory_path() / "ros_portal_config_path_test_missing.yaml";
   std::error_code error;
   std::filesystem::remove(missing_path, error);
 

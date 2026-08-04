@@ -43,9 +43,11 @@ using PerformRpcFn =
 //! unavailable).
 using RegisterRpcMethodFn = std::function<bool(const std::string& method, RpcHandler handler)>;
 
-//! @brief Remove a previously registered local RPC method. Returns false when
-//! the method could not be unregistered (for example, the local participant is
-//! unavailable).
+//! @brief Remove a previously registered local RPC method.
+//!
+//! Returns true when the method was removed or its room session has already
+//! ended, since destroying the local participant also removes its RPC handlers.
+//! Returns false only when cleanup fails while the room session is still active.
 using UnregisterRpcMethodFn = std::function<bool(const std::string& method)>;
 
 } // namespace ros_portal

@@ -118,6 +118,9 @@ struct ConnectionHealthState {
   /// Number of times the SDK has entered a reconnecting state.
   std::uint64_t reconnect_count{0};
 
+  /// Number of effective transitions from connected to unavailable.
+  std::uint64_t connection_loss_count{0};
+
   /// Latest compact RTC stats summary rendered by diagnostics.
   ConnectionHealthRtcSummary rtc_summary;
 
@@ -169,10 +172,12 @@ public:
   /// Mark ROS Portal connected, capture the LiveKit room name, and refresh peers.
   void markConnected(livekit::Room& room);
 
-  /// Mark ROS Portal disconnected and clear cached RTC summary.
+  /// Mark ROS Portal disconnected, count a direct connection loss, and clear
+  /// cached RTC summary.
   void markDisconnected();
 
-  /// Mark ROS Portal reconnecting, increment the reconnect count, and refresh peers.
+  /// Mark ROS Portal reconnecting, count the connection loss and reconnect
+  /// attempt, and refresh peers.
   void markReconnecting(livekit::Room& room);
 
   /// Update the diagnostic updater and poll LiveKit stats when appropriate.

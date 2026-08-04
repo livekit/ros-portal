@@ -119,6 +119,8 @@ public:
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
   struct LiveKitMethods {
+    /// @brief Return whether the current room session allows forwarding work.
+    std::function<bool()> is_room_available;
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
     std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&,
                                                                                  const livekit::DataTrackSchemaId&)>

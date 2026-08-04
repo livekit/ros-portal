@@ -28,8 +28,8 @@ namespace ros_portal {
 
 /// @brief Owns the bridge's room connection state and retry decisions.
 ///
-/// The bridge invokes @ref poll from its main polling loop and forwards LiveKit
-/// room lifecycle callbacks to this class.
+/// The bridge invokes @ref poll from its fixed-rate connection timer and
+/// forwards LiveKit room lifecycle callbacks to this class.
 class RoomConnectionManager {
 public:
   using Clock = std::chrono::steady_clock;

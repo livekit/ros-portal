@@ -75,6 +75,7 @@ TopicForwarder::Options makeOptions() {
 // construct; these tests never publish to a LiveKit track.
 TopicForwarder::LiveKitMethods makeLiveKitMethods() {
   TopicForwarder::LiveKitMethods livekit_methods;
+  livekit_methods.is_room_available = []() { return true; };
   livekit_methods.publish_data_track = [](const std::string&, const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure("unused");
@@ -362,6 +363,7 @@ TopicForwarder::Options makeRateCapOptions(std::optional<double> max_rate_hz) {
 // LiveKit callbacks whose data-track writer counts every forwarded payload.
 TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count) {
   TopicForwarder::LiveKitMethods livekit_methods;
+  livekit_methods.is_room_available = []() { return true; };
   livekit_methods.publish_data_track = [push_count](const std::string&, const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
@@ -386,6 +388,7 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
 TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count,
                                                        std::shared_ptr<std::atomic<int>> remaining_failures) {
   TopicForwarder::LiveKitMethods livekit_methods;
+  livekit_methods.is_room_available = []() { return true; };
   livekit_methods.publish_data_track = [push_count, remaining_failures](const std::string&,
                                                                         const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
@@ -417,6 +420,7 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
 TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::atomic<int>> push_count,
                                                            std::shared_ptr<std::vector<std::uint8_t>> last_payload) {
   TopicForwarder::LiveKitMethods livekit_methods;
+  livekit_methods.is_room_available = []() { return true; };
   livekit_methods.publish_data_track = [push_count, last_payload](const std::string&, const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
@@ -606,6 +610,30 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
 
   ASSERT_TRUE(spinUntil([&]() { return publish_attempts->load() >= 1; }));
   EXPECT_EQ(publish_attempts->load(), 1);
+}
+
+TEST_F(TopicForwarderTest, OutboundPausesWhileRoomIsUnavailable) {
+  auto room_available = std::make_shared<std::atomic_bool>(false);
+  auto push_count = std::make_shared<std::atomic<int>>(0);
+  auto methods = makeCountingLiveKitMethods(push_count);
+  methods.is_room_available = [room_available]() { return room_available->load(); };
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  std_msgs::msg::String msg;
+  msg.data = "paused";
+  publisher->publish(msg);
+  spinUntil([]() { return false; }, 100ms);
+  EXPECT_EQ(push_count->load(), 0);
+
+  room_available->store(true);
+  msg.data = "connected";
+  publisher->publish(msg);
+  ASSERT_TRUE(spinUntil([&]() { return push_count->load() == 1; }));
 }
 
 // Without a configured cap, every delivered sample is forwarded. Publishing one

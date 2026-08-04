@@ -78,6 +78,10 @@ bool RosPortal::initialize() {
 
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
+  room_operations_enabled_->store(false);
+  room_session_ended_.store(false);
+  room_session_prepared_ = false;
+  room_components_started_ = false;
   topic_forwarder_.reset();
   connection_diagnostics_.reset();
   diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
@@ -140,16 +144,19 @@ bool RosPortal::initialize() {
     return room_ && room_->connect(livekit_url, livekit_token, room_options);
   };
   connection_methods.report_connected = [this]() {
+    room_operations_enabled_->store(true);
     if (connection_diagnostics_ && room_) {
       connection_diagnostics_->markConnected(*room_);
     }
   };
   connection_methods.report_reconnecting = [this]() {
+    room_operations_enabled_->store(false);
     if (connection_diagnostics_ && room_) {
       connection_diagnostics_->markReconnecting(*room_);
     }
   };
   connection_methods.report_disconnected = [this]() {
+    room_operations_enabled_->store(false);
     if (connection_diagnostics_) {
       connection_diagnostics_->markDisconnected();
     }
@@ -165,32 +172,6 @@ bool RosPortal::initialize() {
     return false;
   }
 
-  if (!room_->connect(livekit_url, livekit_token, room_options)) {
-    connection_diagnostics_->markDisconnected();
-    room_.reset();
-    RCLCPP_FATAL(this->get_logger(), "Failed to connect to LiveKit room.");
-    return false;
-  }
-
-  connection_diagnostics_->markConnected(*room_);
-
-  if (auto lp = room_->localParticipant().lock()) {
-    auto attributes = lp->attributes();
-    attributes[kRobotParticipantAttribute] = "true";
-    lp->setAttributes(attributes);
-
-    RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
-                lp->identity().c_str());
-  } else {
-    RCLCPP_FATAL(this->get_logger(), "Failed to get local participant");
-    return false;
-  }
-
-  if (!initializeCliManager()) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager");
-    return false;
-  }
-
   if (!initializeServiceForwarder(config->services)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder");
     return false;
@@ -200,6 +181,8 @@ bool RosPortal::initialize() {
 
   poll_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(topic_polling_period_ms_), [this]() { pollTopics(); }, reentrant_callback_group_);
+  connection_timer_ = this->create_wall_timer(
+      RoomConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
   connection_stats_timer_ =
       this->create_wall_timer(std::chrono::seconds(1), [this]() { pollConnectionStats(); }, reentrant_callback_group_);
 
@@ -218,10 +201,15 @@ void RosPortal::shutdown() {
     poll_timer_->cancel();
     poll_timer_.reset();
   }
+  if (connection_timer_) {
+    connection_timer_->cancel();
+    connection_timer_.reset();
+  }
   if (connection_stats_timer_) {
     connection_stats_timer_->cancel();
     connection_stats_timer_.reset();
   }
+  room_operations_enabled_->store(false);
   if (room_connection_manager_) {
     room_connection_manager_->stop();
   }
@@ -303,6 +291,10 @@ bool RosPortal::startRoomComponents() {
     return true;
   }
 
+  if (!prepareRoomSession()) {
+    stopRoomComponents();
+    return false;
+  }
   if (!topic_forwarder_ && !initializeTopicForwarder(topics_)) {
     stopRoomComponents();
     return false;
@@ -326,12 +318,57 @@ void RosPortal::stopRoomComponents() {
   latched_topic_forwarder_.reset();
   topic_forwarder_.reset();
   room_components_started_ = false;
+  room_session_prepared_ = false;
 }
 
-void RosPortal::pollTopics() {
+bool RosPortal::prepareRoomSession() {
+  if (room_session_prepared_) {
+    return true;
+  }
+
+  if (!roomOperationsEnabled() || !room_) {
+    return false;
+  }
+
+  const auto local_participant = room_->localParticipant().lock();
+  if (!local_participant) {
+    RCLCPP_ERROR(this->get_logger(), "Cannot prepare room session: local participant is unavailable");
+    return false;
+  }
+
+  try {
+    auto attributes = local_participant->attributes();
+    attributes[kRobotParticipantAttribute] = "true";
+    local_participant->setAttributes(attributes);
+  } catch (const std::exception& error) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to set local participant attributes: %s", error.what());
+    return false;
+  } catch (...) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to set local participant attributes");
+    return false;
+  }
+
+  RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
+              local_participant->identity().c_str());
+  room_session_prepared_ = true;
+  return true;
+}
+
+void RosPortal::processEndedRoomSession() {
+  if (!room_session_ended_.exchange(false)) {
+    return;
+  }
+
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  stopRoomComponents();
+}
+
+bool RosPortal::roomOperationsEnabled() const { return room_operations_enabled_->load(); }
+
+void RosPortal::pollConnection() {
   if (!initialized_) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "Polling topics while bridge is not initialized, skipping...");
+                         "Polling connection while bridge is not initialized, skipping...");
     return;
   }
 
@@ -340,10 +377,7 @@ void RosPortal::pollTopics() {
     return;
   }
 
-  if (room_session_ended_.exchange(false)) {
-    const std::lock_guard<std::mutex> lock(room_components_mutex_);
-    stopRoomComponents();
-  }
+  processEndedRoomSession();
 
   if (!room_connection_manager_->isConnected()) {
     const std::lock_guard<std::mutex> lock(room_components_mutex_);
@@ -361,6 +395,23 @@ void RosPortal::pollTopics() {
   const std::lock_guard<std::mutex> lock(room_components_mutex_);
   if (!startRoomComponents()) {
     RCLCPP_ERROR(this->get_logger(), "Failed to start room-bound bridge components; retrying");
+  }
+}
+
+void RosPortal::pollTopics() {
+  if (!initialized_) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "Polling topics while bridge is not initialized, skipping...");
+    return;
+  }
+
+  processEndedRoomSession();
+  if (!roomOperationsEnabled()) {
+    return;
+  }
+
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  if (!room_components_started_) {
     return;
   }
 
@@ -374,7 +425,7 @@ void RosPortal::pollTopics() {
 }
 
 void RosPortal::pollConnectionStats() {
-  if (room_connection_manager_ && room_connection_manager_->isConnected() && room_ && connection_diagnostics_) {
+  if (roomOperationsEnabled() && room_ && connection_diagnostics_) {
     connection_diagnostics_->pollStats(*room_);
   }
 }
@@ -408,8 +459,7 @@ void RosPortal::onParticipantConnected(livekit::Room& room, const livekit::Parti
   }
 }
 
-void RosPortal::onParticipantDisconnected(livekit::Room& room,
-                                                  const livekit::ParticipantDisconnectedEvent& event) {
+void RosPortal::onParticipantDisconnected(livekit::Room& room, const livekit::ParticipantDisconnectedEvent& event) {
   if (connection_diagnostics_) {
     connection_diagnostics_->onParticipantDisconnected(room, event);
   }
@@ -467,9 +517,16 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
                                                           best_effort_qos_topics, this->get_logger());
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
+    forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
+      return operations_enabled->load();
+    };
     forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name,
                                                      const livekit::DataTrackSchemaId& schema_id)
         -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
+      if (!roomOperationsEnabled()) {
+        return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
+            "room connection is unavailable");
+      }
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
         return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
@@ -499,8 +556,9 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
       }
 
       auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-      writer->try_push = [this, track = std::move(track)](std::vector<std::uint8_t> payload) {
-        if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+      writer->try_push = [operations_enabled = room_operations_enabled_,
+                          track = std::move(track)](std::vector<std::uint8_t> payload) {
+        if (!operations_enabled->load()) {
           return livekit::Result<void, std::string>::success();
         }
         const auto push_result = track->tryPush(std::move(payload));
@@ -516,6 +574,9 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 
     forwarder_lk_methods.schema.define_schema = [this](const livekit::DataTrackSchemaId& schema_id,
                                                        const std::string& schema_text) {
+      if (!roomOperationsEnabled()) {
+        return false;
+      }
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
         return false;
@@ -526,6 +587,9 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     forwarder_lk_methods.schema.get_schema =
         [this](const livekit::DataTrackSchemaId& schema_id,
                const std::string& participant_identity) -> std::optional<std::string> {
+      if (!roomOperationsEnabled()) {
+        return std::nullopt;
+      }
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
         return std::nullopt;
@@ -536,6 +600,10 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     forwarder_lk_methods.publish_video_track =
         [this](const std::string& topic_name, int width,
                int height) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
+      if (!roomOperationsEnabled()) {
+        return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure(
+            "room connection is unavailable");
+      }
       const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
       if (!participant) {
         return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure(
@@ -552,9 +620,9 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
         auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
         sink->width = width;
         sink->height = height;
-        sink->capture_frame = [this, source = std::move(source), track = std::move(track)](
-                                  const livekit::VideoFrame& frame, std::int64_t timestamp_us) {
-          if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+        sink->capture_frame = [operations_enabled = room_operations_enabled_, source = std::move(source),
+                               track = std::move(track)](const livekit::VideoFrame& frame, std::int64_t timestamp_us) {
+          if (!operations_enabled->load()) {
             return;
           }
           (void)track;
@@ -600,8 +668,7 @@ bool RosPortal::initializeCliManager() {
   return cli_manager_ != nullptr;
 }
 
-bool RosPortal::initializeServiceForwarder(
-    const std::vector<ros_portal_config::ServiceConfig>& services) {
+bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::ServiceConfig>& services) {
   try {
     const ServiceForwarder::LiveKitMethods livekit_methods{
         [this](const std::string& id) { return hasParticipant(id); },
@@ -622,8 +689,7 @@ bool RosPortal::initializeServiceForwarder(
   return service_forwarder_ != nullptr;
 }
 
-bool RosPortal::initializeLatchedTopicForwarder(
-    const std::vector<ros_portal_config::TopicConfig>& topics) {
+bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics) {
   auto options = utils::latchedTopicForwarderOptions(topics);
   if (options.outbound_topics.empty() && options.inbound_topics.empty()) {
     RCLCPP_INFO(this->get_logger(), "No latched topics configured; skipping latched topic forwarder");
@@ -640,7 +706,7 @@ bool RosPortal::initializeLatchedTopicForwarder(
                                  std::uint8_t timeout_sec) { return rpcPerform(id, method, payload, timeout_sec); };
     methods.list_remote_identities = [this]() {
       std::vector<std::string> identities;
-      if (!room_connection_manager_ || !room_connection_manager_->isConnected() || !room_) {
+      if (!roomOperationsEnabled() || !room_) {
         return identities;
       }
       for (const auto& weak_participant : room_->remoteParticipants()) {
@@ -667,7 +733,7 @@ bool RosPortal::initializeLatchedTopicForwarder(
 }
 
 bool RosPortal::hasParticipant(const std::string& participant_id) const {
-  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+  if (!roomOperationsEnabled()) {
     return false;
   }
   if (!room_) {
@@ -679,8 +745,8 @@ bool RosPortal::hasParticipant(const std::string& participant_id) const {
 }
 
 std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_id, const std::string& method,
-                                                         const std::string& payload, std::uint8_t timeout_sec) {
-  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+                                                 const std::string& payload, std::uint8_t timeout_sec) {
+  if (!roomOperationsEnabled()) {
     return std::nullopt;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
@@ -702,7 +768,7 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
 }
 
 bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
-  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
+  if (!roomOperationsEnabled()) {
     return false;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
@@ -715,10 +781,14 @@ bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler)
   }
 
   try {
-    local_participant->registerRpcMethod(
-        method, [handler = std::move(handler)](const livekit::RpcInvocationData& data) -> std::optional<std::string> {
-          return handler(data.payload);
-        });
+    local_participant->registerRpcMethod(method,
+                                         [operations_enabled = room_operations_enabled_, handler = std::move(handler)](
+                                             const livekit::RpcInvocationData& data) -> std::optional<std::string> {
+                                           if (!operations_enabled->load()) {
+                                             return std::nullopt;
+                                           }
+                                           return handler(data.payload);
+                                         });
   } catch (const livekit::RpcError& error) {
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' registration failed: code=%u message=%s", method.c_str(),
                  error.code(), error.message().c_str());
@@ -728,11 +798,14 @@ bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler)
 }
 
 bool RosPortal::rpcUnregisterMethod(const std::string& method) {
-  if (!room_connection_manager_ || !room_connection_manager_->isConnected()) {
-    return false;
-  }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
+    if (!roomOperationsEnabled()) {
+      RCLCPP_DEBUG(this->get_logger(),
+                   "Skipping RPC method '%s' unregistration: room session has already released its local participant",
+                   method.c_str());
+      return true;
+    }
     RCLCPP_WARN(this->get_logger(),
                 "Cannot unregister RPC method '%s': LiveKit local participant "
                 "is unavailable",
@@ -743,8 +816,31 @@ bool RosPortal::rpcUnregisterMethod(const std::string& method) {
   try {
     local_participant->unregisterRpcMethod(method);
   } catch (const livekit::RpcError& error) {
+    if (!roomOperationsEnabled()) {
+      RCLCPP_DEBUG(this->get_logger(), "RPC method '%s' was released with the ended room session: code=%u message=%s",
+                   method.c_str(), error.code(), error.message().c_str());
+      return true;
+    }
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' unregistration failed: code=%u message=%s",
                  method.c_str(), error.code(), error.message().c_str());
+    return false;
+  } catch (const std::exception& error) {
+    // A terminal disconnect can invalidate the participant handle between the
+    // weak-pointer promotion above and this call. LocalParticipant::shutdown()
+    // already clears every RPC handler in that case.
+    if (!roomOperationsEnabled()) {
+      RCLCPP_DEBUG(this->get_logger(), "RPC method '%s' was released with the ended room session: %s", method.c_str(),
+                   error.what());
+      return true;
+    }
+    RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' unregistration failed: %s", method.c_str(), error.what());
+    return false;
+  } catch (...) {
+    if (!roomOperationsEnabled()) {
+      RCLCPP_DEBUG(this->get_logger(), "RPC method '%s' was released with the ended room session", method.c_str());
+      return true;
+    }
+    RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' unregistration failed", method.c_str());
     return false;
   }
   return true;

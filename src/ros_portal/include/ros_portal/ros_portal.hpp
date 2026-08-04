@@ -86,6 +86,10 @@ public:
   bool hasParticipant(const std::string& participant_id) const;
 
 private:
+  /// @brief Poll the room connection state and make a scheduled connection
+  /// attempt when needed.
+  void pollConnection();
+
   /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
 
@@ -100,6 +104,17 @@ private:
   /// @brief Destroy components whose LiveKit state belonged to the previous
   /// room session.
   void stopRoomComponents();
+
+  /// @brief Apply participant metadata required for a newly connected room
+  /// session.
+  /// @return True when the local participant is ready for bridge operations.
+  bool prepareRoomSession();
+
+  /// @brief Tear down a terminal room session after the SDK event stream ends.
+  void processEndedRoomSession();
+
+  /// @brief Return whether room-facing bridge operations are currently allowed.
+  bool roomOperationsEnabled() const;
 
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
@@ -157,7 +172,8 @@ private:
   /// @brief Unregister a local LiveKit RPC handler from the room's local
   /// participant.
   /// @param method LiveKit RPC method name.
-  /// @return True on success, false when the local participant is unavailable.
+  /// @return True when removed or the room session has already ended; false on
+  /// an active-session cleanup failure.
   bool rpcUnregisterMethod(const std::string& method);
 
   /// @brief Create TopicForwarder after LiveKit room connection succeeds.
@@ -215,6 +231,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics
   rclcpp::TimerBase::SharedPtr poll_timer_;
+  //! @brief Fixed-rate timer for LiveKit room connection attempts.
+  rclcpp::TimerBase::SharedPtr connection_timer_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
@@ -222,8 +240,12 @@ private:
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   //! @brief Room connection lifecycle and retry state.
   std::unique_ptr<RoomConnectionManager> room_connection_manager_;
+  //! @brief Lifetime-safe state gate shared with room-bound callbacks.
+  std::shared_ptr<std::atomic_bool> room_operations_enabled_{std::make_shared<std::atomic_bool>(false)};
   //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
   std::atomic_bool room_session_ended_{false};
+  //! @brief Whether participant metadata was applied for the current session.
+  bool room_session_prepared_{false};
   //! @brief Whether room-session-bound forwarding components are active.
   bool room_components_started_{false};
   //! @brief Serializes room component start, stop, polling, and delegate access.

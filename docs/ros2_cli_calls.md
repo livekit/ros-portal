@@ -2,12 +2,12 @@
 
 The `CLI Manager` ([src/ros_portal/src/cli/manager.cpp](../src/ros_portal/src/cli/manager.cpp))
 lets you run a subset of the `ros2` CLI introspection commands against a
-**remote** robot's ROS graph that is connected to the same LiveKit room. It is ROS Portal
-component that makes commands like `ros2 topic list` work across the network.
+**remote** robot's ROS graph in the same LiveKit room. It is the ROS Portal
+component that makes commands such as `ros2 topic list` work across the network.
 
 Remote calls use [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/) to
-reach the peer ROS Portal node's registered RPC handlers. See the LiveKit docs for method
-registration, payload limits, and timeout behavior.
+reach the peer ROS Portal node's registered RPC handlers. See the LiveKit
+documentation for method registration, payload limits, and timeout behavior.
 
 ## How it works
 
@@ -24,8 +24,8 @@ The two halves connect across the network:
 
 - When you call the **local ROS service**, the manager validates the request,
   serializes it to JSON, and performs a **LiveKit RPC** to the
-  `participant_id` named in the request. The remote ROS Portal node's RPC handler runs
-  the actual ROS graph query locally and returns the formatted text.
+  `participant_id` named in the request. The remote ROS Portal node's RPC
+  handler runs the ROS graph query locally and returns the formatted text.
 - The result is returned to you in the service response's `output` field, with
   `success` / `err_msg` indicating whether the RPC round-trip succeeded.
 
@@ -35,15 +35,15 @@ ros2 service call  ──>  ROS Portal  ──> LiveKit RPC  ──>  remote ROS
 ```
 
 Every request takes a `participant_id` (the LiveKit identity of the remote
-ROS Portal node to query) and a `timeout_sec`. A `timeout_sec` of `0` means "use the
-default", which is **10 seconds**. If the participant is unknown or
+ROS Portal node to query) and a `timeout_sec`. A `timeout_sec` of `0` means
+"use the default," which is **10 seconds**. If the participant is unknown or
 `participant_id` is empty, the call fails fast with an error message before any
 RPC is attempted.
 
 For `ros2 service call` only, the LiveKit RPC timeout is the requested
-service-call timeout plus a **1 second** margin. That lets the remote ROS Portal node
-return service-level errors such as `Service call timed out.` before the RPC
-layer aborts the round-trip.
+service-call timeout plus a **one-second** margin. That lets the remote ROS
+Portal node return service-level errors such as `Service call timed out.` before
+the RPC layer aborts the round-trip.
 
 The remaining request fields mirror the flags of the corresponding native
 `ros2` CLI command 1:1, so output matches what you'd see running the command
@@ -97,14 +97,14 @@ Request fields (beyond `participant_id` / `timeout_sec`):
 
 | Field | Maps to `ros2 topic pub` argument |
 | --- | --- |
-| `topic` | topic name, such as `/cmd_vel`; relative names resolve in the remote ROS Portal node node context |
+| `topic` | Topic name, such as `/cmd_vel`. Relative names resolve in the remote ROS Portal node's namespace. |
 | `msg_type` | message type, such as `geometry_msgs/msg/Twist` |
 | `payload` | native YAML message payload, such as `{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}` |
 
 This command accepts the same YAML-style message payload that native
 `ros2 topic pub` accepts. The LiveKit RPC payload carries the YAML string to the
-remote ROS Portal node, where it is converted into the requested ROS message type and
-published:
+remote ROS Portal node, which converts it into the requested ROS message type
+and publishes it:
 
 ```json
 {
@@ -173,25 +173,28 @@ Request fields (beyond `participant_id` / `timeout_sec`):
 
 | Field | Maps to `ros2 service call` argument |
 | --- | --- |
-| `service` | service name, such as `/set_bool`; relative names resolve in the remote ROS Portal node node context |
+| `service` | Service name, such as `/set_bool`. Relative names resolve in the remote ROS Portal node's namespace. |
 | `msg_type` | required service type, such as `std_srvs/srv/SetBool` |
 | `payload` | native YAML request payload, such as `{data: true}` |
 
-The local ROS Portal node forwards the service name, type, and native YAML payload over
-LiveKit RPC; the remote participant serializes the YAML into the request type
-and dispatches the ROS service call (the same way `ros2 topic pub` is handled).
+The local ROS Portal node forwards the service name, type, and native YAML
+payload over LiveKit RPC. The remote participant serializes the YAML into the
+request type and dispatches the ROS service call (the same way `ros2 topic pub`
+is handled).
 The JSON payload carries the requested `timeout_sec` for the remote ROS service
 wait; the LiveKit RPC itself waits one second longer so timeout responses can
 propagate back to the caller.
 
 Unlike `ros2 topic pub`, a remote service call requires a matching ROS service
-server to already exist in the target ROS Portal node's graph. For local two-ROS-Portal
-testing, see the [test_utilities service stub README](../src/test/test_utilities/README.md).
+server to already exist in the target ROS Portal node's graph. For local
+two-ROS-Portal testing, see the
+[test_utilities service stub README](../../../test/test_utilities/README.md).
 
 ---
 
 ## `ros2 interface`
-- currently only supports interface show
+
+Only `ros2 interface show` is supported.
 ### `ros2 interface show`
 
 **ROS service:** `/ros_portal/ros2_interface_show`

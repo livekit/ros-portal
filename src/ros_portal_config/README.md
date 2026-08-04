@@ -4,8 +4,8 @@ Schema-driven YAML configuration parser and config type definitions for
 `ros_portal`.
 
 The JSON schema is the source of truth for the C++ config structs used by
-ROS Portal. `RosPortalConfig`, its nested structs, enums, and parser are generated from
-`schema/ros_portal_config.schema.json`; the main ROS Portal package depends
+ROS Portal. `RosPortalConfig`, its nested structs, enums, and parser are
+generated from `schema/ros_portal_config.schema.json`; the main ROS Portal package depends
 on this package and consumes those generated types directly.
 
 ## Package Layout
@@ -58,8 +58,8 @@ as:
 - converting scalar values
 - rejecting unknown fields
 
-These helpers do not know about `RosPortalConfig`; schema-specific behavior belongs
-in the generator/templates.
+These helpers do not know about `RosPortalConfig`; schema-specific behavior
+belongs in the generator and templates.
 
 ## Tests
 

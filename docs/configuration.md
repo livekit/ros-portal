@@ -1,6 +1,6 @@
 # Configuration Guide
-ROS Portal reads the YAML config once on node startup and builds an immutable
-snapshot of the user specified config. Pass the file path with the node's
+ROS Portal reads the YAML configuration once at node startup and builds an
+immutable snapshot. Pass the file path through the node's
 `config_path` ROS parameter.
 
 ## Credentials
@@ -33,7 +33,7 @@ All config lives under `ros_portal`.
 |---|---:|---:|---:|---|
 | `version` | string | yes | - | Must be `"0.0.1"`. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
-| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` will use the number of cpu cores found, matching rclcpp default thread count. |
+| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching rclcpp's default. |
 | `room_options` | map | no | `{}` | LiveKit room connection options. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
@@ -88,8 +88,9 @@ connection, which matters for bandwidth on constrained links.
 ### Preserving the publisher identity
 
 `preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is
-ignored for outbound topics. It defaults to `false` (as to preserve the original topic name), which republishes an
-inbound data track under its own topic name (e.g. `/imu` stays `/imu`). When set
+ignored for outbound topics. It defaults to `false` to preserve the original
+topic name, so an inbound data track is republished under its own name (for
+example, `/imu` stays `/imu`). When set
 to `true`, the publishing participant's identity is prepended to the
 republished ROS topic name, which prevents collisions when multiple
 participants publish the same topic:
@@ -168,14 +169,15 @@ instead:
 - **Outbound** (`out` / `bidirectional`): ROS Portal subscribes with
   `TRANSIENT_LOCAL` QoS (so it captures state published before ROS Portal
   started), stores the topic's distinct messages, and a background worker pushes
-  them to every peer ROS Portal node in the room until each acknowledges over RPC. State
-  is re-pushed only when it changes or a peer rejoins, so steady-state traffic is
-  zero. A peer that keeps failing (e.g. a participant without a ROS Portal handler)
-  is dropped after a few attempts and retried only when new state arrives.
+  them to every peer ROS Portal node in the room until each acknowledges them
+  over RPC. State is re-pushed only when it changes or a peer rejoins, so
+  steady-state traffic is zero. A peer that repeatedly fails (for example, a
+  participant without a ROS Portal handler) is dropped after a few attempts and
+  retried only when new state arrives.
 - **Inbound** (`in` / `bidirectional`): ROS Portal republishes received messages
-  on a `TRANSIENT_LOCAL` publisher, so ROS subscribers that start after the
-  ROS consumers (RViz, Foxglove, tf listeners) still receive the latched state. The ROS
-  message type travels in the RPC payload, so ROS Portal creates the
+  on a `TRANSIENT_LOCAL` publisher, so ROS subscribers that start after ROS
+  Portal (RViz, Foxglove, and tf listeners) still receive the latched state.
+  The ROS message type travels in the RPC payload, so ROS Portal creates the
   republishing publisher without any additional type configuration.
 
 Like `max_rate_hz`, `latched` is matched by **literal topic name**, not regex.
@@ -214,8 +216,8 @@ topics:
 ### Data track encoding (`encoding`)
 
 `encoding` applies only to outbound (`out` / `bidirectional`) topics and selects
-how this ROS Portal node encodes the topic's messages on the LiveKit DataTrack, along
-with the schema it advertises to subscribers:
+how this ROS Portal node encodes a topic's messages on the LiveKit DataTrack
+and which schema it advertises to subscribers:
 
 | Value | Frame format | Advertised schema | Use case |
 |---|---|---|---|
@@ -234,9 +236,9 @@ topics:
 Notes:
 
 - `jsonschema` deserializes each ROS message and sends a JSON frame described by
-  a JSON Schema generated from the ROS type. A peer ROS Portal node receiving the track
-  transparently converts the JSON back into the ROS message before republishing,
-  so ROS-to-ROS forwarding still works with any encoding.
+  a JSON Schema generated from the ROS type. A peer ROS Portal node receiving
+  the track transparently converts the JSON back into the ROS message before
+  republishing, so ROS-to-ROS forwarding still works with any encoding.
 - `ros2idl` requires the local ROS type definition to be renderable as ROS 2
   IDL. A topic requesting an encoding whose schema cannot be rendered is skipped
   with an error.

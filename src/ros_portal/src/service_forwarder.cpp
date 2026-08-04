@@ -171,7 +171,7 @@ ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, NodeInterfa
   if (!callback_group) {
     throw std::invalid_argument("ServiceForwarder requires a callback group");
   }
-  if (!livekit_methods_.has_participant || !livekit_methods_.perform_rpc) {
+  if (!livekit_methods_.is_room_available || !livekit_methods_.has_participant || !livekit_methods_.perform_rpc) {
     throw std::invalid_argument("ServiceForwarder requires fully populated LiveKitMethods");
   }
 
@@ -235,6 +235,15 @@ void ServiceForwarder::createService(const ServiceRoute& route, rclcpp::Callback
 }
 
 void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data) const {
+  if (!livekit_methods_.is_room_available()) {
+    std::string ignored_error;
+    (void)introspection::populateMessageFromYaml(
+        route.msg_type + "_Response", std::string("success: false\nmessage: ") + kRoomNotConnectedError + "\n",
+        response_data, ignored_error);
+    RCLCPP_WARN(logger_, "Cannot forward service '%s': %s", route.service.c_str(), kRoomNotConnectedError);
+    return;
+  }
+
   if (!livekit_methods_.has_participant(route.participant)) {
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
                  route.participant.c_str());

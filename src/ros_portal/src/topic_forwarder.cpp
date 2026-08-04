@@ -285,6 +285,10 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
     return true;
   }
 
+  if (!livekit_methods_.is_room_available()) {
+    return false;
+  }
+
   const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type, state.encoding);
   if (!schema_result) {
     return false;
@@ -330,6 +334,10 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     auto& state = state_it->second;
 
     if (!state.sink) {
+      if (!livekit_methods_.is_room_available()) {
+        return;
+      }
+
       const auto sink_result =
           livekit_methods_.publish_video_track(topic_name, static_cast<int>(msg->width), static_cast<int>(msg->height));
       if (!sink_result) {

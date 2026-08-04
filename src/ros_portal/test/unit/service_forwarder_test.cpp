@@ -70,6 +70,7 @@ private:
 };
 
 struct FakeLiveKit {
+  bool room_available{true};
   bool has_participant{true};
   int rpc_calls{0};
   std::string last_participant;
@@ -81,6 +82,7 @@ struct FakeLiveKit {
 
   ServiceForwarder::LiveKitMethods methods() {
     ServiceForwarder::LiveKitMethods methods;
+    methods.is_room_available = [this]() { return room_available; };
     methods.has_participant = [this](const std::string&) { return has_participant; };
     methods.perform_rpc = [this](const std::string& participant, const std::string& method, const std::string& payload,
                                  std::uint8_t) -> std::optional<std::string> {
@@ -170,6 +172,30 @@ TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
   ASSERT_NE(response, nullptr);
   EXPECT_FALSE(response->success);
   EXPECT_EQ(response->message, "");
+  EXPECT_EQ(livekit.rpc_calls, 0);
+}
+
+TEST_F(ServiceForwarderTest, RoomUnavailableReturnsExplicitFailureWhenRepresentable) {
+  auto server_node = std::make_shared<rclcpp::Node>("service_forwarder_room_unavailable_server_node");
+  auto client_node = std::make_shared<rclcpp::Node>("service_forwarder_room_unavailable_client_node");
+  auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeLiveKit livekit;
+  livekit.room_available = false;
+
+  ServiceForwarder forwarder({setBoolRoute("/service_forwarder/room_unavailable")}, *server_node, callback_group,
+                             livekit.methods());
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(server_node);
+  executor.add_node(client_node);
+  ScopedExecutorSpin spin_guard(executor);
+
+  ASSERT_TRUE(waitForService(*client_node, "/service_forwarder/room_unavailable"));
+  const auto response = callSetBool(*client_node, "/service_forwarder/room_unavailable", true);
+
+  ASSERT_NE(response, nullptr);
+  EXPECT_FALSE(response->success);
+  EXPECT_EQ(response->message, kRoomNotConnectedError);
   EXPECT_EQ(livekit.rpc_calls, 0);
 }
 

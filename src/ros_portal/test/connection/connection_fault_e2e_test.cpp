@@ -252,6 +252,7 @@ TEST_F(ConnectionFaultE2E, TopicListFailsDuringReconnect) {
   const auto paused_topic_list = callTopicListService(robotANode(), identityB(), paused_cli_options);
   ASSERT_NE(paused_topic_list, nullptr);
   EXPECT_FALSE(paused_topic_list->success);
+  EXPECT_EQ(paused_topic_list->err_msg, kRoomNotConnectedError);
 
   // Resume the connection
   proxy_->resume();

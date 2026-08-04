@@ -78,8 +78,8 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
 
   logger_ = node_interfaces_.node_logging->get_logger().get_child("cli_manager");
 
-  if (!livekit_methods_.has_participant || !livekit_methods_.perform_rpc || !livekit_methods_.register_rpc_method ||
-      !livekit_methods_.unregister_rpc_method) {
+  if (!livekit_methods_.is_room_available || !livekit_methods_.has_participant || !livekit_methods_.perform_rpc ||
+      !livekit_methods_.register_rpc_method || !livekit_methods_.unregister_rpc_method) {
     throw std::invalid_argument("Manager requires fully populated LiveKitMethods");
   }
 
@@ -300,6 +300,10 @@ TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request&
     return makeCliResponse<TopicListSrv::Response>(false, "participant_id must be non-empty");
   }
 
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<TopicListSrv::Response>(false, kRoomNotConnectedError);
+  }
+
   if (!livekit_methods_.has_participant(request.participant_id)) {
     ++remote_participant_not_found_;
     return makeCliResponse<TopicListSrv::Response>(
@@ -314,6 +318,10 @@ TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request&
 TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& request) const {
   if (request.participant_id.empty()) {
     return makeCliResponse<TopicPubSrv::Response>(false, "participant_id must be non-empty");
+  }
+
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<TopicPubSrv::Response>(false, kRoomNotConnectedError);
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
@@ -336,6 +344,10 @@ TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& re
 ServiceListSrv::Response Manager::callRemoteServiceList(const ServiceListSrv::Request& request) const {
   if (request.participant_id.empty()) {
     return makeCliResponse<ServiceListSrv::Response>(false, "participant_id must be non-empty");
+  }
+
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<ServiceListSrv::Response>(false, kRoomNotConnectedError);
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
@@ -367,6 +379,10 @@ ServiceCallSrv::Response Manager::callRemoteServiceCall(const ServiceCallSrv::Re
     return makeCliResponse<ServiceCallSrv::Response>(false, "payload must be non-empty");
   }
 
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<ServiceCallSrv::Response>(false, kRoomNotConnectedError);
+  }
+
   if (!livekit_methods_.has_participant(request.participant_id)) {
     ++remote_participant_not_found_;
     return makeCliResponse<ServiceCallSrv::Response>(
@@ -388,6 +404,10 @@ InterfaceShowSrv::Response Manager::callRemoteInterfaceShow(const InterfaceShowS
 
   if (request.all_comments && request.no_comments) {
     return makeCliResponse<InterfaceShowSrv::Response>(false, "all_comments and no_comments are mutually exclusive");
+  }
+
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<InterfaceShowSrv::Response>(false, kRoomNotConnectedError);
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {

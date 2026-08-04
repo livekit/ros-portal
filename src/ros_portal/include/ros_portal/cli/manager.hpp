@@ -56,6 +56,8 @@ public:
   /// unit-tested without connecting to a LiveKit room. ROS Portal populates each
   /// callback from its own room and passes the struct in at construction.
   struct LiveKitMethods {
+    /// @brief Return whether the local room session can perform RPC work.
+    IsRoomAvailableFn is_room_available;
     HasParticipantFn has_participant;
     PerformRpcFn perform_rpc;
     RegisterRpcMethodFn register_rpc_method;

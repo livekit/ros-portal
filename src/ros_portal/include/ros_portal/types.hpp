@@ -32,6 +32,12 @@ using RpcHandler = std::function<std::string(const std::string&)>;
 //! @brief Return true when a remote participant identity is present.
 using HasParticipantFn = std::function<bool(const std::string& participant_id)>;
 
+//! @brief Return true when the current room session can perform room operations.
+using IsRoomAvailableFn = std::function<bool()>;
+
+//! @brief Canonical local failure when a room-scoped operation is requested while disconnected.
+inline constexpr const char* kRoomNotConnectedError = "room not connected";
+
 //! @brief Invoke an RPC method on a remote participant and return its JSON
 //! response. Returns std::nullopt when the RPC call fails.
 using PerformRpcFn =

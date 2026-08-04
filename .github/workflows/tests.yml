@@ -97,6 +97,29 @@ jobs:
               colcon test-result --verbose --all
               exit $test_exit
             '
+      - name: "colcon test: connection faults"
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          CI: true
+          GITHUB_TOKEN: ${{ github.token }}
+          LIVEKIT_URL: ws://127.0.0.1:7880
+          LIVEKIT_ROOM: ros_portal_test_room
+          ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS: 1
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: |
+            bash -lc '
+              set -eo pipefail
+              source "/opt/ros/${ROS_DISTRO}/setup.bash"
+              source install/setup.bash
+              set -u
+              source .token_helpers/set_test_tokens.bash
+              test_exit=0
+              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_connection_fault_tests || test_exit=$?
+              colcon test-result --verbose --all
+              exit $test_exit
+            '
       - name: Dump LiveKit server log on failure
         if: failure()
         run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true

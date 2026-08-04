@@ -80,7 +80,8 @@ To get familiar with using ROS Portal after that, follow the
 - [`ros_portal_tutorials`](src/ros_portal_tutorials/README.md):
   tutorials for using ROS Portal in a variety of scenarios.
 
-Other package READMEs under `src/` document package-specific setup, fixtures, or examples.
+Other package READMEs under `src/` document package-specific setup, fixtures,
+and examples.
 
 ## Robots
 

@@ -93,6 +93,7 @@ std::optional<WebSocketEndpoint> parseWebSocketEndpoint(const std::string& url) 
 
 struct ConnectionDiagnosticSnapshot {
   std::string state;
+  std::uint8_t level{diagnostic_msgs::msg::DiagnosticStatus::STALE};
   std::uint64_t reconnect_count{0};
   std::uint64_t connection_loss_count{0};
 };
@@ -108,6 +109,7 @@ public:
             }
 
             ConnectionDiagnosticSnapshot next;
+            next.level = status.level;
             for (const auto& value : status.values) {
               if (value.key == "state") {
                 next.state = value.value;
@@ -206,19 +208,31 @@ TEST_F(ConnectionFaultE2E, ContinuesForwardingTopicsAfterReconnect) {
   ASSERT_TRUE(initializeThroughProxy());
 
   ConnectionDiagnosticObserver diagnostics(robotANode());
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s));
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "connected" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::OK;
+      },
+      5s));
   ASSERT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic,
                               "message before reconnect"));
 
   proxy_->pause();
   proxy_->resetConnections();
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s));
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "reconnecting" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      },
+      20s));
   ASSERT_FALSE(rosPortalA()->hasParticipant(identityB()));
 
   proxy_->resume();
   ASSERT_TRUE(waitFor(
       [this, &diagnostics]() {
-        return diagnostics.snapshot().state == "connected" && rosPortalA()->hasParticipant(identityB());
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "connected" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::OK &&
+               rosPortalA()->hasParticipant(identityB());
       },
       30s));
 
@@ -234,7 +248,12 @@ TEST_F(ConnectionFaultE2E, TopicListFailsDuringReconnect) {
   ASSERT_TRUE(initializeThroughProxy());
 
   ConnectionDiagnosticObserver diagnostics(robotANode());
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s));
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "connected" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::OK;
+      },
+      5s));
 
   // Topic list should succeed while server is connected
   const auto connected_topic_list = callTopicListService(robotANode(), identityB());
@@ -244,7 +263,12 @@ TEST_F(ConnectionFaultE2E, TopicListFailsDuringReconnect) {
   // Interrupt the connection
   proxy_->pause();
   proxy_->resetConnections();
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s));
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "reconnecting" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      },
+      20s));
 
   // Topic list should fail while server is reconnecting
   TopicListServiceOptions paused_cli_options;
@@ -260,7 +284,9 @@ TEST_F(ConnectionFaultE2E, TopicListFailsDuringReconnect) {
   // Wait for the server to reconnect
   ASSERT_TRUE(waitFor(
       [this, &diagnostics]() {
-        return diagnostics.snapshot().state == "connected" && rosPortalA()->hasParticipant(identityB());
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "connected" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::OK &&
+               rosPortalA()->hasParticipant(identityB());
       },
       30s));
 
@@ -278,24 +304,42 @@ TEST_F(ConnectionFaultE2E, ConnectionDiagnosticsReporting) {
   ASSERT_TRUE(initializeThroughProxy());
 
   ConnectionDiagnosticObserver diagnostics(robotANode());
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s))
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "connected" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::OK;
+      },
+      5s))
       << "ROS connection diagnostics did not report the initial connected state";
   const auto baseline_diagnostics = diagnostics.snapshot();
+  EXPECT_EQ(baseline_diagnostics.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
 
   proxy_->pause();
   proxy_->resetConnections();
 
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s))
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "reconnecting" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      },
+      20s))
       << "ROS connection diagnostics did not report SDK reconnecting state";
   const auto reconnecting_diagnostics = diagnostics.snapshot();
+  EXPECT_EQ(reconnecting_diagnostics.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(reconnecting_diagnostics.reconnect_count, baseline_diagnostics.reconnect_count + 1U);
   EXPECT_EQ(reconnecting_diagnostics.connection_loss_count, baseline_diagnostics.connection_loss_count + 1U);
 
   proxy_->resume();
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 30s))
+  ASSERT_TRUE(waitFor(
+      [&diagnostics]() {
+        const auto snapshot = diagnostics.snapshot();
+        return snapshot.state == "connected" && snapshot.level == diagnostic_msgs::msg::DiagnosticStatus::OK;
+      },
+      30s))
       << "ROS Portal did not recover after signaling traffic resumed";
 
   const auto recovered_diagnostics = diagnostics.snapshot();
+  EXPECT_EQ(recovered_diagnostics.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(recovered_diagnostics.reconnect_count, reconnecting_diagnostics.reconnect_count);
   EXPECT_EQ(recovered_diagnostics.connection_loss_count, reconnecting_diagnostics.connection_loss_count);
 }

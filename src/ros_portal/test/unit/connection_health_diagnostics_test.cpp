@@ -169,7 +169,6 @@ TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(status.message, "Connected to LiveKit room");
-  EXPECT_EQ(valueFor(status, "connected"), "true");
   EXPECT_EQ(valueFor(status, "state"), "connected");
   EXPECT_EQ(valueFor(status, "num_peers"), "3");
   EXPECT_EQ(valueFor(status, "reconnect_count"), "1");
@@ -194,7 +193,6 @@ TEST(ConnectionHealthDiagnosticsTest, ReconnectingStateEmitsWarnStatus) {
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(status.message, "Reconnecting to LiveKit room");
-  EXPECT_EQ(valueFor(status, "connected"), "false");
   EXPECT_EQ(valueFor(status, "state"), "reconnecting");
   EXPECT_EQ(valueFor(status, "num_peers"), "2");
   EXPECT_EQ(valueFor(status, "reconnect_count"), "2");
@@ -214,7 +212,6 @@ TEST(ConnectionHealthDiagnosticsTest, DisconnectedStateEmitsErrorStatus) {
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(status.message, "Disconnected from LiveKit room");
-  EXPECT_EQ(valueFor(status, "connected"), "false");
   EXPECT_EQ(valueFor(status, "state"), "disconnected");
   EXPECT_EQ(valueFor(status, "connection_loss_count"), "0");
   EXPECT_EQ(valueFor(status, "rtc.stats_available"), std::nullopt);

@@ -185,22 +185,7 @@ jobs:
           RELEASE_PAGE_MARKDOWN: |
             ## Install
 
-            Download the `.deb` asset below that matches your ROS 2 distribution
-            and CPU architecture.
-
-            For example, on ROS 2 Jazzy / amd64:
-
-            ```bash
-            sudo apt update
-            sudo apt install ./ros-jazzy-livekit-portal_*_amd64.deb
-            ```
-
-            The matching ROS 2 underlay must already be installed. Source the
-            installed overlay before running ROS Portal:
-
-            ```bash
-            source /opt/livekit/ros/jazzy/setup.bash
-            ```
+            Download the `.deb` asset below that matches your ROS 2 distribution and CPU architecture, then follow the [installation guide](https://github.com/${{ github.repository }}/blob/main/docs/installation.md).
         shell: bash
         run: |
           set -euo pipefail

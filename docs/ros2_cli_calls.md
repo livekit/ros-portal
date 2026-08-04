@@ -1,6 +1,6 @@
 # ROS2 CLI Manager
 
-The `Manager` ([src/cli/manager.cpp](../src/cli/manager.cpp))
+The `CLI Manager` ([src/ros_portal/src/cli/manager.cpp](../src/ros_portal/src/cli/manager.cpp))
 lets you run a subset of the `ros2` CLI introspection commands against a
 **remote** robot's ROS graph that is connected to the same LiveKit room. It is ROS Portal
 component that makes commands like `ros2 topic list` work across the network.
@@ -186,7 +186,7 @@ propagate back to the caller.
 
 Unlike `ros2 topic pub`, a remote service call requires a matching ROS service
 server to already exist in the target ROS Portal node's graph. For local two-ROS-Portal
-testing, see the [test_utilities service stub README](../../../test/test_utilities/README.md).
+testing, see the [test_utilities service stub README](../src/test/test_utilities/README.md).
 
 ---
 

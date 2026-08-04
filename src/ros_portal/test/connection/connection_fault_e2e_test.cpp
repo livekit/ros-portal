@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -164,111 +165,43 @@ protected:
   }
 
   std::unique_ptr<TcpFaultProxy> proxy_;
-};
 
-TEST_F(ConnectionFaultE2E, PausesAndRecoversThroughIsolatedSignalingFault) {
-  if (!connectionFaultTestsEnabled()) {
-    GTEST_SKIP() << "Set " << kEnableEnvironmentVariable << "=1 to run the isolated connection-fault test";
+  bool initializeThroughProxy() {
+    if (!configured()) {
+      ADD_FAILURE() << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+      return false;
+    }
+    const auto upstream = parseWebSocketEndpoint(liveKitUrl());
+    if (!upstream.has_value()) {
+      ADD_FAILURE() << "Connection-fault test currently requires a ws:// LiveKit URL with an IPv4 or DNS hostname: "
+                    << liveKitUrl();
+      return false;
+    }
+
+    proxy_ = std::make_unique<TcpFaultProxy>(upstream->host, upstream->port);
+    try {
+      proxy_->start();
+    } catch (const std::exception& error) {
+      ADD_FAILURE() << "Failed to start the isolated TCP fault proxy: " << error.what();
+      return false;
+    }
+    if (proxy_->listenPort() == 0U) {
+      ADD_FAILURE() << "Isolated TCP fault proxy did not bind a loopback port";
+      return false;
+    }
+
+    setLiveKitUrl("ws://127.0.0.1:" + std::to_string(proxy_->listenPort()));
+    initializeRuntime(kBidirectionalTopic);
+    return !HasFatalFailure() && rosPortalA() != nullptr;
   }
-
-  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
-  const auto upstream = parseWebSocketEndpoint(liveKitUrl());
-  ASSERT_TRUE(upstream.has_value()) << "Connection-fault test currently requires a ws:// LiveKit URL with an IPv4 or "
-                                       "DNS hostname: "
-                                    << liveKitUrl();
-
-  proxy_ = std::make_unique<TcpFaultProxy>(upstream->host, upstream->port);
-  ASSERT_NO_THROW(proxy_->start());
-  ASSERT_NE(proxy_->listenPort(), 0U);
-  setLiveKitUrl("ws://127.0.0.1:" + std::to_string(proxy_->listenPort()));
-
-  initializeRuntime(kBidirectionalTopic);
-  ASSERT_FALSE(HasFatalFailure());
-  ASSERT_NE(rosPortalA(), nullptr);
-
-  ConnectionDiagnosticObserver diagnostics(robotANode());
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s))
-      << "ROS connection diagnostics did not report the initial connected state";
-  const auto baseline_diagnostics = diagnostics.snapshot();
-
-  ASSERT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic,
-                              "message before signaling fault"));
-  const auto baseline_topic_list = callTopicListService(robotANode(), identityB());
-  ASSERT_NE(baseline_topic_list, nullptr);
-  ASSERT_TRUE(baseline_topic_list->success);
-
-  const auto baseline_outbound_subscriptions = publisherA()->get_subscription_count();
-  const auto baseline_inbound_publishers = robotBNode()->count_publishers(kBidirectionalTopic);
-  const auto accepted_connections_before_fault = proxy_->acceptedConnectionCount();
-
-  // Freeze replacement handshakes before resetting existing signaling sockets.
-  // The external LiveKit server and every connection not using this loopback
-  // proxy remain untouched.
-  proxy_->pause();
-  proxy_->resetConnections();
-
-  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s))
-      << "ROS connection diagnostics did not report SDK reconnecting state";
-  const auto reconnecting_diagnostics = diagnostics.snapshot();
-  EXPECT_EQ(reconnecting_diagnostics.reconnect_count, baseline_diagnostics.reconnect_count + 1U);
-  EXPECT_EQ(reconnecting_diagnostics.connection_loss_count, baseline_diagnostics.connection_loss_count + 1U);
-  EXPECT_FALSE(rosPortalA()->hasParticipant(identityB()));
-  EXPECT_EQ(publisherA()->get_subscription_count(), baseline_outbound_subscriptions);
-  EXPECT_EQ(robotBNode()->count_publishers(kBidirectionalTopic), baseline_inbound_publishers);
-
-  TopicListServiceOptions paused_cli_options;
-  paused_cli_options.timeout_sec = 1;
-  const auto paused_topic_list = callTopicListService(robotANode(), identityB(), paused_cli_options);
-  ASSERT_NE(paused_topic_list, nullptr);
-  EXPECT_FALSE(paused_topic_list->success);
-  EXPECT_TRUE(verifyDirectionNotForwarded(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic,
-                                          "message while signaling is unavailable"));
-
-  ASSERT_TRUE(waitFor(
-      [this, accepted_connections_before_fault]() {
-        return proxy_->acceptedConnectionCount() > accepted_connections_before_fault;
-      },
-      5s))
-      << "LiveKit SDK did not attempt a replacement signaling connection through the proxy";
-
-  proxy_->resume();
-  ASSERT_TRUE(waitFor(
-      [this, &diagnostics]() {
-        return diagnostics.snapshot().state == "connected" && rosPortalA()->hasParticipant(identityB());
-      },
-      30s))
-      << "ROS Portal did not recover after signaling traffic resumed";
-
-  const auto recovered_diagnostics = diagnostics.snapshot();
-  EXPECT_EQ(recovered_diagnostics.reconnect_count, reconnecting_diagnostics.reconnect_count);
-  EXPECT_EQ(recovered_diagnostics.connection_loss_count, reconnecting_diagnostics.connection_loss_count);
-  EXPECT_EQ(publisherA()->get_subscription_count(), baseline_outbound_subscriptions);
-  EXPECT_EQ(robotBNode()->count_publishers(kBidirectionalTopic), baseline_inbound_publishers);
-
-  EXPECT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic,
-                              "message after signaling recovery"));
-  const auto recovered_topic_list = callTopicListService(robotANode(), identityB());
-  ASSERT_NE(recovered_topic_list, nullptr);
-  EXPECT_TRUE(recovered_topic_list->success);
-}
+};
 
 TEST_F(ConnectionFaultE2E, ContinuesForwardingTopicsAfterReconnect) {
   if (!connectionFaultTestsEnabled()) {
     GTEST_SKIP() << "Set " << kEnableEnvironmentVariable << "=1 to run the isolated connection-fault test";
   }
 
-  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
-  const auto upstream = parseWebSocketEndpoint(liveKitUrl());
-  ASSERT_TRUE(upstream.has_value()) << "Connection-fault test currently requires a ws:// LiveKit URL with an IPv4 or "
-                                       "DNS hostname: "
-                                    << liveKitUrl();
-
-  proxy_ = std::make_unique<TcpFaultProxy>(upstream->host, upstream->port);
-  ASSERT_NO_THROW(proxy_->start());
-  setLiveKitUrl("ws://127.0.0.1:" + std::to_string(proxy_->listenPort()));
-  initializeRuntime(kBidirectionalTopic);
-  ASSERT_FALSE(HasFatalFailure());
-  ASSERT_NE(rosPortalA(), nullptr);
+  ASSERT_TRUE(initializeThroughProxy());
 
   ConnectionDiagnosticObserver diagnostics(robotANode());
   ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s));
@@ -289,6 +222,79 @@ TEST_F(ConnectionFaultE2E, ContinuesForwardingTopicsAfterReconnect) {
 
   EXPECT_TRUE(
       verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic, "message after reconnect"));
+}
+
+TEST_F(ConnectionFaultE2E, TopicListFailsDuringReconnect) {
+  if (!connectionFaultTestsEnabled()) {
+    GTEST_SKIP() << "Set " << kEnableEnvironmentVariable << "=1 to run the isolated connection-fault test";
+  }
+
+  ASSERT_TRUE(initializeThroughProxy());
+
+  ConnectionDiagnosticObserver diagnostics(robotANode());
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s));
+
+  // Topic list should succeed while server is connected
+  const auto connected_topic_list = callTopicListService(robotANode(), identityB());
+  ASSERT_NE(connected_topic_list, nullptr);
+  ASSERT_TRUE(connected_topic_list->success);
+
+  // Interrupt the connection
+  proxy_->pause();
+  proxy_->resetConnections();
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s));
+
+  // Topic list should fail while server is reconnecting
+  TopicListServiceOptions paused_cli_options;
+  paused_cli_options.timeout_sec = 1;
+  const auto paused_topic_list = callTopicListService(robotANode(), identityB(), {paused_cli_options});
+  ASSERT_NE(paused_topic_list, nullptr);
+  EXPECT_FALSE(paused_topic_list->success);
+
+  // Resume the connection
+  proxy_->resume();
+
+  // Wait for the server to reconnect
+  ASSERT_TRUE(waitFor(
+      [this, &diagnostics]() {
+        return diagnostics.snapshot().state == "connected" && rosPortalA()->hasParticipant(identityB());
+      },
+      30s));
+
+  // Topic list should succeed again after the server reconnects
+  const auto recovered_topic_list = callTopicListService(robotANode(), identityB());
+  ASSERT_NE(recovered_topic_list, nullptr);
+  EXPECT_TRUE(recovered_topic_list->success);
+}
+
+TEST_F(ConnectionFaultE2E, ConnectionDiagnosticsReporting) {
+  if (!connectionFaultTestsEnabled()) {
+    GTEST_SKIP() << "Set " << kEnableEnvironmentVariable << "=1 to run the isolated connection-fault test";
+  }
+
+  ASSERT_TRUE(initializeThroughProxy());
+
+  ConnectionDiagnosticObserver diagnostics(robotANode());
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 5s))
+      << "ROS connection diagnostics did not report the initial connected state";
+  const auto baseline_diagnostics = diagnostics.snapshot();
+
+  proxy_->pause();
+  proxy_->resetConnections();
+
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "reconnecting"; }, 20s))
+      << "ROS connection diagnostics did not report SDK reconnecting state";
+  const auto reconnecting_diagnostics = diagnostics.snapshot();
+  EXPECT_EQ(reconnecting_diagnostics.reconnect_count, baseline_diagnostics.reconnect_count + 1U);
+  EXPECT_EQ(reconnecting_diagnostics.connection_loss_count, baseline_diagnostics.connection_loss_count + 1U);
+
+  proxy_->resume();
+  ASSERT_TRUE(waitFor([&diagnostics]() { return diagnostics.snapshot().state == "connected"; }, 30s))
+      << "ROS Portal did not recover after signaling traffic resumed";
+
+  const auto recovered_diagnostics = diagnostics.snapshot();
+  EXPECT_EQ(recovered_diagnostics.reconnect_count, reconnecting_diagnostics.reconnect_count);
+  EXPECT_EQ(recovered_diagnostics.connection_loss_count, reconnecting_diagnostics.connection_loss_count);
 }
 
 } // namespace

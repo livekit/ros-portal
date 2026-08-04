@@ -103,7 +103,7 @@ endif()
 # enabled through ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1.
 # ---------------------------------------------------------------------------
 ament_auto_add_gtest(ros_portal_connection_fault_tests
-  system/connection_fault_e2e_test.cpp
+  connection/connection_fault_e2e_test.cpp
 )
 if(TARGET ros_portal_connection_fault_tests)
   target_include_directories(ros_portal_connection_fault_tests PRIVATE

@@ -14,15 +14,21 @@
 [![Kilted](https://img.shields.io/badge/ROS_2-Kilted-blue)](https://github.com/livekit/ros-portal/releases/latest)
 [![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros-portal/releases/latest)
 
+> [!IMPORTANT]
+> This repository is currently in Developer Preview mode and not ready for production use.
+> There may be bugs, and APIs and configuration options are subject to change during this period.
+
 # ROS Portal
 
 ROS Portal connects a ROS 2 graph to other LiveKit participants (ROS 2 or not)
 through LiveKit's real-time network, enabling access to a ROS graph from
-anywhere in the world. It streams camera feeds as video, transports arbitrary
-ROS messages as schema-described data, republishes remote tracks into ROS, and
-forwards service calls over LiveKit RPC—enabling low-latency teleoperation,
-monitoring, and robot-to-cloud communication without exposing DDS across
-networks.
+anywhere in the world. It forwards configured ROS topics as schema-described
+[LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
+republishes allowed remote tracks back into ROS, forwards configured service
+calls over [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), and
+streams `sensor_msgs/msg/Image` topics as LiveKit video. ROS Portal enables
+low-latency teleoperation, monitoring, and robot-to-cloud communication
+without exposing DDS across networks.
 
 <img style="width:100%;height:100%;" alt="ROS Portal architecture" src="docs/assets/ros-portal-overview.png">
 
@@ -106,7 +112,8 @@ To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutor
   launch files, default config, and ROS Portal-specific tests.
 - [`ros_portal_config`](src/ros_portal_config/README.md):
   schema-driven YAML config parser and generated C++ config types.
-- `ros_portal_msgs`: custom message definitions for ROS Portal.
+- [`ros_portal_msgs`](src/ros_portal_msgs/README.md): custom service interfaces
+  for remote `ros2` CLI operations.
 - [`ros_portal_tutorials`](src/ros_portal_tutorials/README.md):
   tutorials for using ROS Portal in a variety of scenarios.
 
@@ -119,5 +126,7 @@ Complete robot stacks that consume ROS Portal live in their own repositories, so
 that hardware-specific drivers, launch trees, and container images stay out of
 this one:
 
+- [`cobra_flex_ros`](https://github.com/livekit-examples/cobra_flex_ros):
+  teleoperation for the Waveshare Cobra Flex rover.
 - [`waver_ros`](https://github.com/livekit-examples/waver_ros): teleoperation and
   autonomous navigation for the 4-wheeled Waveshare WAVE ROVER on a Raspberry Pi.

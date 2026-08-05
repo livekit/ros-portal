@@ -91,10 +91,21 @@ match the requested image.
 ## Image releases
 
 Pull requests build and smoke-test every distribution and architecture without
-publishing images. A `v<major>.<minor>.<patch>` Git tag builds from the exact
-release source, publishes immutable `<distro>-v<major>.<minor>.<patch>` images,
-verifies their amd64 and arm64 manifests, and then updates the stable
-distribution tags.
+publishing images. Publishing a GitHub Release for a final
+`v<major>.<minor>.<patch>` tag runs the unified Release workflow, which:
+
+1. Builds and tests every matrix cell from that tag
+2. Uploads Debian packages to the GitHub Release
+3. Publishes immutable `<distro>-v<major>.<minor>.<patch>` images to Docker Hub
+4. Verifies their multi-architecture manifests
+5. Updates the stable distribution tags (unless the GitHub Release is marked
+   prerelease)
+
+Prerelease tags such as `v0.1.1-rc1` still upload Debian packages, but skip
+Docker Hub publication. Re-running the Release workflow via
+`workflow_dispatch` can rebuild packages and images for an existing tag; set
+**Update moving Docker Hub distro tags** when you also want the stable
+`humble` / `jazzy` / `kilted` / `lyrical` tags refreshed.
 
 Published images include OCI source and revision labels, an SBOM, and build
 provenance attestations.
@@ -108,4 +119,5 @@ Maintainers must configure the `docker-hub` GitHub environment with:
 
 The workflow doesn't overwrite an existing versioned image, which makes a
 partially completed release safe to retry. The moving distribution tags update
-only after all four versioned multi-architecture images pass verification.
+only after every versioned multi-architecture image for the release passes
+verification.

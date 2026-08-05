@@ -30,17 +30,17 @@ env:
   IMAGE_NAME: docker.io/livekit/ros-portal
 
 jobs:
+  ros-build-matrix:
+    name: Load ROS Build Matrix
+    uses: ./.github/workflows/ros-build-matrix.yml
+
   verify-manifests:
     name: Manifest (${{ matrix.ros_distro }})
+    needs: ros-build-matrix
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      matrix:
-        ros_distro:
-          - humble
-          - jazzy
-          - kilted
-          - lyrical
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.distros) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,35 +55,11 @@ jobs:
 
   smoke-test:
     name: Smoke Test (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    needs: ros-build-matrix
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - ros_distro: humble
-            arch: amd64
-            os: ubuntu-24.04
-          - ros_distro: humble
-            arch: arm64
-            os: ubuntu-24.04-arm
-          - ros_distro: jazzy
-            arch: amd64
-            os: ubuntu-24.04
-          - ros_distro: jazzy
-            arch: arm64
-            os: ubuntu-24.04-arm
-          - ros_distro: kilted
-            arch: amd64
-            os: ubuntu-24.04
-          - ros_distro: kilted
-            arch: arm64
-            os: ubuntu-24.04-arm
-          - ros_distro: lyrical
-            arch: amd64
-            os: ubuntu-24.04
-          - ros_distro: lyrical
-            arch: arm64
-            os: ubuntu-24.04-arm
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

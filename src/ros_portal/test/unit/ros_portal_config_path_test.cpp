@@ -104,10 +104,10 @@ TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
       rclcpp::Parameter("config_path", config.path().string()),
   });
 
-  auto bridge = std::make_shared<RosPortal>(options);
+  auto ros_portal = std::make_shared<RosPortal>(options);
 
-  EXPECT_FALSE(bridge->initialize());
-  EXPECT_EQ(bridge->ros_threads(), 3);
+  EXPECT_FALSE(ros_portal->initialize());
+  EXPECT_EQ(ros_portal->rosThreads(), 3);
 }
 
 TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
@@ -122,10 +122,10 @@ TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
       rclcpp::Parameter("config_path", config.path().string()),
   });
 
-  auto bridge = std::make_shared<RosPortal>(options);
+  auto ros_portal = std::make_shared<RosPortal>(options);
 
-  EXPECT_TRUE(bridge->initialize());
-  EXPECT_EQ(bridge->ros_threads(), 3);
+  EXPECT_TRUE(ros_portal->initialize());
+  EXPECT_EQ(ros_portal->rosThreads(), 3);
 }
 
 TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
@@ -141,10 +141,10 @@ TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
       rclcpp::Parameter("config_path", missing_path.string()),
   });
 
-  auto bridge = std::make_shared<RosPortal>(options);
+  auto ros_portal = std::make_shared<RosPortal>(options);
 
-  EXPECT_FALSE(bridge->initialize());
-  EXPECT_EQ(bridge->ros_threads(), 0);
+  EXPECT_FALSE(ros_portal->initialize());
+  EXPECT_EQ(ros_portal->rosThreads(), 0);
 }
 
 } // namespace

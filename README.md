@@ -9,8 +9,8 @@
 <!--END_BANNER_IMAGE-->
 
 > [!IMPORTANT]
-> This SDK is currently in Developer Preview mode and not ready for production use.
-> There may be bugs and APIs are subject to change during this period.
+> This repository is currently in Developer Preview mode and not ready for production use.
+> There may be bugs, and APIs and configuration options are subject to change during this period.
 
 [![CI](https://github.com/livekit/ros-portal/actions/workflows/ci.yml/badge.svg)](https://github.com/livekit/ros-portal/actions/workflows/ci.yml)
 [![Humble](https://img.shields.io/badge/ROS_2-Humble-blue)](https://github.com/livekit/ros-portal/releases/latest)

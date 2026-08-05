@@ -56,6 +56,12 @@ The reported SDK version is resolved at build time; the prebuilt SDK exposes no
 runtime version API, so a mismatched library swapped in after the build cannot
 be detected here.
 
+Both versions come from `ros_portal/version.hpp`, which CMake renders from
+`src/ros_portal/cmake/version.hpp.in` during the build. The header is installed
+with the package, so downstream code can read `ROS_PORTAL_VERSION`,
+`ROS_PORTAL_LIVEKIT_SDK_VERSION`, and the `ROS_PORTAL_VERSION_AT_LEAST()` guard
+directly instead of going through diagnostics.
+
 ## `ros_portal_status`
 
 Reports the node's initialization lifecycle, effective

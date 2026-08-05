@@ -21,14 +21,7 @@
 #include <stdexcept>
 #include <utility>
 
-// Injected by CMake from the resolved LiveKit package version and package.xml;
-// guarded so tooling that compiles this file without CMake still parses it.
-#ifndef ROS_PORTAL_LIVEKIT_SDK_VERSION
-#define ROS_PORTAL_LIVEKIT_SDK_VERSION ""
-#endif
-#ifndef ROS_PORTAL_PACKAGE_VERSION
-#define ROS_PORTAL_PACKAGE_VERSION ""
-#endif
+#include "ros_portal/version.hpp"
 
 namespace ros_portal::diagnostics {
 
@@ -44,7 +37,7 @@ std::string valueOrUnknown(const char* value) { return (value != nullptr && valu
 BuildInfo collectBuildInfo() {
   BuildInfo info;
   info.livekit_sdk_version = valueOrUnknown(ROS_PORTAL_LIVEKIT_SDK_VERSION);
-  info.ros_portal_version = valueOrUnknown(ROS_PORTAL_PACKAGE_VERSION);
+  info.ros_portal_version = valueOrUnknown(ROS_PORTAL_VERSION);
   info.ros_distro = valueOrUnknown(std::getenv("ROS_DISTRO"));
   return info;
 }

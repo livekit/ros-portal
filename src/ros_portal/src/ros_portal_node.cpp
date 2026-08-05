@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
       exit_code = EXIT_FAILURE;
     } else {
       rclcpp::ExecutorOptions exec_options;
-      const size_t num_threads = node->ros_threads() > 0 ? static_cast<size_t>(node->ros_threads()) : 0;
+      const size_t num_threads = node->rosThreads() > 0 ? static_cast<size_t>(node->rosThreads()) : 0;
 
       std::cout << "Starting executor with " << num_threads << " threads" << std::endl;
       rclcpp::executors::MultiThreadedExecutor executor(exec_options, num_threads);

@@ -72,7 +72,7 @@ public:
   /// not disconnect a room from one of its delegate callbacks.
   void shutdown();
 
-  int ros_threads() const { return ros_threads_; }
+  int rosThreads() const { return ros_threads_; }
 
   /// @brief Check whether a remote participant identity is present in the room.
   /// @param participant_id LiveKit participant identity to look up.

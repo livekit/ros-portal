@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros_portal/diagnostics/connection_health.hpp"
+#include "ros_portal/connection/connection_diagnostics.hpp"
 
 #include <livekit/room.h>
 

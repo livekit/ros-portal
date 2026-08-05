@@ -36,10 +36,9 @@
 #include <vector>
 
 #include "ros_portal/cli/manager.hpp"
-#include "ros_portal/diagnostics/connection_health.hpp"
+#include "ros_portal/connection/connection_manager.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
-#include "ros_portal/room_connection_manager.hpp"
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
@@ -82,10 +81,8 @@ bool RosPortal::initialize() {
   room_session_prepared_ = false;
   room_components_started_ = false;
   topic_forwarder_.reset();
-  connection_diagnostics_.reset();
   diagnostics_updater_ = std::make_unique<diagnostic_updater::Updater>(this);
   diagnostics_updater_->setHardwareID("ros_portal");
-  connection_diagnostics_ = std::make_unique<diagnostics::ConnectionHealthDiagnostics>(makeDiagnosticsFns());
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
@@ -138,28 +135,13 @@ bool RosPortal::initialize() {
   // retries so each 1 Hz manager tick represents one connection attempt.
   room_options.join_retries = 0U;
 
-  RoomConnectionManager::Methods connection_methods;
+  ConnectionManager::Methods connection_methods;
   connection_methods.try_connect = [this, livekit_url, livekit_token, room_options]() {
     return room_ && room_->connect(livekit_url, livekit_token, room_options);
   };
-  connection_methods.report_connected = [this]() {
-    if (connection_diagnostics_ && room_) {
-      connection_diagnostics_->markConnected(*room_);
-    }
-  };
-  connection_methods.report_reconnecting = [this]() {
-    if (connection_diagnostics_ && room_) {
-      connection_diagnostics_->markReconnecting(*room_);
-    }
-  };
-  connection_methods.report_disconnected = [this]() {
-    if (connection_diagnostics_) {
-      connection_diagnostics_->markDisconnected();
-    }
-  };
-  room_connection_manager_ = std::make_unique<RoomConnectionManager>(std::move(connection_methods),
-                                                                     this->get_logger().get_child("connection"));
-  room_operations_enabled_ = room_connection_manager_->operationsEnabledFlag();
+  connection_manager_ = std::make_unique<ConnectionManager>(
+      std::move(connection_methods), this->get_logger().get_child("connection"), makeDiagnosticsFns());
+  room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
   // Room::connect() may emit events for data tracks that were already
   // published. Install the forwarder before the first connection attempt so
@@ -179,9 +161,7 @@ bool RosPortal::initialize() {
   poll_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(topic_polling_period_ms_), [this]() { pollTopics(); }, reentrant_callback_group_);
   connection_timer_ = this->create_wall_timer(
-      RoomConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
-  connection_stats_timer_ =
-      this->create_wall_timer(std::chrono::seconds(1), [this]() { pollConnectionStats(); }, reentrant_callback_group_);
+      ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
 
   RCLCPP_INFO(this->get_logger(), "Bridge initialized; attempting LiveKit room connection at 1 Hz");
   initialized_ = true;
@@ -202,14 +182,10 @@ void RosPortal::shutdown() {
     connection_timer_->cancel();
     connection_timer_.reset();
   }
-  if (connection_stats_timer_) {
-    connection_stats_timer_->cancel();
-    connection_stats_timer_.reset();
-  }
   // Close the session barrier before detaching the delegate so any
   // onDataTrackPublished waiter unblocks instead of hanging across teardown.
-  if (room_connection_manager_) {
-    room_connection_manager_->stop();
+  if (connection_manager_) {
+    connection_manager_->stop();
   }
 
   // The SDK stores a raw delegate pointer. Detach it before disconnecting so
@@ -249,12 +225,11 @@ void RosPortal::shutdown() {
   }
 
   topic_forwarder_.reset();
-  connection_diagnostics_.reset();
+  connection_manager_.reset();
 
   // Reset diagnostics_updater_ after all its task owners are gone.
   diagnostics_updater_.reset();
   room_.reset();
-  room_connection_manager_.reset();
   initialized_ = false;
   // Note: livekit::shutdown() is intentionally NOT called here — the SDK
   // lifecycle is owned by the process entry point (see initialize()).
@@ -362,8 +337,7 @@ void RosPortal::processEndedRoomSession() {
 }
 
 bool RosPortal::roomOperationsEnabled() const {
-  return room_connection_manager_ ? room_connection_manager_->isOperationsEnabled()
-                                  : room_operations_enabled_->load();
+  return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_->load();
 }
 
 void RosPortal::pollConnection() {
@@ -373,14 +347,14 @@ void RosPortal::pollConnection() {
     return;
   }
 
-  if (!room_connection_manager_) {
+  if (!connection_manager_) {
     RCLCPP_ERROR(this->get_logger(), "Room connection manager is not initialized");
     return;
   }
 
   processEndedRoomSession();
 
-  if (!room_connection_manager_->isConnected()) {
+  if (!connection_manager_->isConnected()) {
     const std::lock_guard<std::mutex> lock(room_components_mutex_);
     if (!topic_forwarder_ && !initializeTopicForwarder(topics_)) {
       RCLCPP_ERROR(this->get_logger(), "Failed to initialize topic forwarder before room connection; retrying");
@@ -388,8 +362,13 @@ void RosPortal::pollConnection() {
     }
   }
 
-  room_connection_manager_->poll();
-  if (!room_connection_manager_->isConnected()) {
+  if (!room_) {
+    RCLCPP_ERROR(this->get_logger(), "LiveKit room is not initialized");
+    return;
+  }
+
+  connection_manager_->poll(*room_);
+  if (!connection_manager_->isConnected()) {
     return;
   }
 
@@ -425,12 +404,6 @@ void RosPortal::pollTopics() {
   }
 }
 
-void RosPortal::pollConnectionStats() {
-  if (roomOperationsEnabled() && room_ && connection_diagnostics_) {
-    connection_diagnostics_->pollStats(*room_);
-  }
-}
-
 void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
   {
     const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
@@ -446,9 +419,8 @@ void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPub
   // Room::connect() can deliver already-published tracks before the connection
   // manager enables operations. Wait on that barrier so schema lookup runs only
   // after connect has finished enabling the session.
-  if (!room_connection_manager_ || !room_connection_manager_->waitForOperations()) {
-    RCLCPP_DEBUG(this->get_logger(),
-                 "Dropping LiveKit data track '%s' because the room session became unavailable",
+  if (!connection_manager_ || !connection_manager_->waitForOperations()) {
+    RCLCPP_DEBUG(this->get_logger(), "Dropping LiveKit data track '%s' because the room session became unavailable",
                  event.track->info().name.c_str());
     return;
   }
@@ -474,57 +446,57 @@ void RosPortal::onDataTrackUnpublished(livekit::Room&, const livekit::DataTrackU
 }
 
 void RosPortal::onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event) {
-  if (connection_diagnostics_) {
-    connection_diagnostics_->onParticipantConnected(room, event);
+  if (connection_manager_) {
+    connection_manager_->onParticipantConnected(room, event);
   }
 }
 
 void RosPortal::onParticipantDisconnected(livekit::Room& room, const livekit::ParticipantDisconnectedEvent& event) {
-  if (connection_diagnostics_) {
-    connection_diagnostics_->onParticipantDisconnected(room, event);
+  if (connection_manager_) {
+    connection_manager_->onParticipantDisconnected(room, event);
   }
 }
 
-void RosPortal::onConnectionStateChanged(livekit::Room&, const livekit::ConnectionStateChangedEvent& event) {
-  if (room_connection_manager_) {
-    room_connection_manager_->onConnectionStateChanged(event.state);
+void RosPortal::onConnectionStateChanged(livekit::Room& room, const livekit::ConnectionStateChangedEvent& event) {
+  if (connection_manager_) {
+    connection_manager_->onConnectionStateChanged(room, event);
   }
 }
 
-void RosPortal::onDisconnected(livekit::Room&, const livekit::DisconnectedEvent& event) {
-  if (room_connection_manager_) {
-    room_connection_manager_->onDisconnected(event.reason);
+void RosPortal::onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event) {
+  if (connection_manager_) {
+    connection_manager_->onDisconnected(room, event);
   }
 }
 
 void RosPortal::onRoomEos(livekit::Room&, const livekit::RoomEosEvent&) {
   room_session_ended_.store(true);
-  if (room_connection_manager_) {
-    room_connection_manager_->onRoomEos();
+  if (connection_manager_) {
+    connection_manager_->onRoomEos();
   }
 }
 
-void RosPortal::onReconnecting(livekit::Room&, const livekit::ReconnectingEvent&) {
-  if (room_connection_manager_) {
-    room_connection_manager_->onReconnecting();
+void RosPortal::onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event) {
+  if (connection_manager_) {
+    connection_manager_->onReconnecting(room, event);
   }
 }
 
-void RosPortal::onReconnected(livekit::Room&, const livekit::ReconnectedEvent&) {
-  if (room_connection_manager_) {
-    room_connection_manager_->onReconnected();
+void RosPortal::onReconnected(livekit::Room& room, const livekit::ReconnectedEvent& event) {
+  if (connection_manager_) {
+    connection_manager_->onReconnected(room, event);
   }
 }
 
 void RosPortal::onRoomUpdated(livekit::Room& room, const livekit::RoomUpdatedEvent& event) {
-  if (connection_diagnostics_) {
-    connection_diagnostics_->onRoomUpdated(room, event);
+  if (connection_manager_) {
+    connection_manager_->onRoomUpdated(room, event);
   }
 }
 
 void RosPortal::onParticipantsUpdated(livekit::Room& room, const livekit::ParticipantsUpdatedEvent& event) {
-  if (connection_diagnostics_) {
-    connection_diagnostics_->onParticipantsUpdated(room, event);
+  if (connection_manager_) {
+    connection_manager_->onParticipantsUpdated(room, event);
   }
 }
 

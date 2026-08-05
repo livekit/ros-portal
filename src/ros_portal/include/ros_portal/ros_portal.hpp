@@ -36,13 +36,10 @@
 
 namespace ros_portal {
 
-namespace diagnostics {
-class ConnectionHealthDiagnostics;
-} // namespace diagnostics
 namespace cli {
 class Manager;
 } // namespace cli
-class RoomConnectionManager;
+class ConnectionManager;
 class TopicForwarder;
 class LatchedTopicForwarder;
 
@@ -92,9 +89,6 @@ private:
 
   /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
-
-  /// @brief Poll LiveKit stats used by connection-health diagnostics.
-  void pollConnectionStats();
 
   /// @brief Create components whose LiveKit state belongs to the current room
   /// session.
@@ -238,11 +232,11 @@ private:
   std::unique_ptr<livekit::Room> room_;
   //! @brief Shared diagnostics updater for all bridge diagnostic tasks.
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
-  //! @brief Room connection lifecycle, retry state, and session-readiness barrier.
-  std::unique_ptr<RoomConnectionManager> room_connection_manager_;
+  //! @brief Connection lifecycle, retry state, and session-readiness barrier.
+  std::unique_ptr<ConnectionManager> connection_manager_;
   //! @brief Lifetime-safe state gate shared with room-bound callbacks.
   //!
-  //! Points at the flag owned by @ref room_connection_manager_ once that manager
+  //! Points at the flag owned by @ref connection_manager_ once that manager
   //! exists.
   std::shared_ptr<std::atomic_bool> room_operations_enabled_{std::make_shared<std::atomic_bool>(false)};
   //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
@@ -263,10 +257,6 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
-  //! @brief LiveKit connection health diagnostic task owner.
-  std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
-  //! @brief Timer for best-effort LiveKit stats polling.
-  rclcpp::TimerBase::SharedPtr connection_stats_timer_;
 };
 
 } // namespace ros_portal

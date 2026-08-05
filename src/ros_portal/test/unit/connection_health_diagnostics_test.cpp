@@ -26,7 +26,7 @@
 #include <utility>
 
 #include "diagnostics_test_utils.hpp"
-#include "ros_portal/diagnostics/connection_health.hpp"
+#include "ros_portal/connection/connection_diagnostics.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 
 namespace ros_portal::diagnostics {

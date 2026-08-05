@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros_portal/room_connection_manager.hpp"
+#include "ros_portal/connection/connection_manager.hpp"
 
 #include <exception>
 #include <rclcpp/logging.hpp>
@@ -67,14 +67,17 @@ constexpr std::string_view disconnectReasonName(livekit::DisconnectReason reason
 
 } // namespace
 
-RoomConnectionManager::RoomConnectionManager(Methods methods, rclcpp::Logger logger)
-    : methods_(std::move(methods)), logger_(std::move(logger)) {
+ConnectionManager::ConnectionManager(Methods methods, rclcpp::Logger logger,
+                                     diagnostics::DiagnosticsManagerFns diagnostics)
+    : methods_(std::move(methods)), logger_(std::move(logger)), connection_diagnostics_(std::move(diagnostics)) {
   if (!methods_.try_connect || !methods_.now) {
-    throw std::invalid_argument("RoomConnectionManager requires try_connect and now methods");
+    throw std::invalid_argument("ConnectionManager requires try_connect and now methods");
   }
 }
 
-void RoomConnectionManager::poll() {
+void ConnectionManager::poll(livekit::Room& room) {
+  connection_diagnostics_.pollStats(room);
+
   if (state_.load() != State::Disconnected) {
     return;
   }
@@ -114,59 +117,72 @@ void RoomConnectionManager::poll() {
   if (state_.compare_exchange_strong(expected, State::Connected)) {
     markConnectionGained();
     enableOperations();
-    reportTransition(methods_.report_connected);
+    connection_diagnostics_.markConnected(room);
   } else {
     closeSession();
   }
 }
 
-bool RoomConnectionManager::isConnected() const { return state_.load() == State::Connected; }
+bool ConnectionManager::isConnected() const { return state_.load() == State::Connected; }
 
-bool RoomConnectionManager::isOperationsEnabled() const { return operations_enabled_->load(); }
+bool ConnectionManager::isOperationsEnabled() const { return operations_enabled_->load(); }
 
-std::shared_ptr<std::atomic_bool> RoomConnectionManager::operationsEnabledFlag() const {
-  return operations_enabled_;
-}
+std::shared_ptr<std::atomic_bool> ConnectionManager::operationsEnabledFlag() const { return operations_enabled_; }
 
-bool RoomConnectionManager::waitForOperations() {
+bool ConnectionManager::waitForOperations() {
   std::unique_lock<std::mutex> lock(session_mutex_);
   session_cv_.wait(lock, [this]() { return operations_enabled_->load() || session_closed_; });
   return operations_enabled_->load();
 }
 
-void RoomConnectionManager::onConnectionStateChanged(livekit::ConnectionState state) {
-  switch (state) {
+void ConnectionManager::onConnectionStateChanged(livekit::Room& room,
+                                                 const livekit::ConnectionStateChangedEvent& event) {
+  switch (event.state) {
     case livekit::ConnectionState::Connected:
-      onReconnected();
+      transitionToReconnected();
       break;
     case livekit::ConnectionState::Reconnecting:
-      onReconnecting();
+      transitionToReconnecting();
       break;
     case livekit::ConnectionState::Disconnected:
-      onDisconnected(livekit::DisconnectReason::Unknown);
+      transitionToDisconnected(livekit::DisconnectReason::Unknown);
       break;
   }
+  connection_diagnostics_.onConnectionStateChanged(room, event);
 }
 
-void RoomConnectionManager::onReconnecting() {
+void ConnectionManager::onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event) {
+  transitionToReconnecting();
+  connection_diagnostics_.onReconnecting(room, event);
+}
+
+void ConnectionManager::onReconnected(livekit::Room& room, const livekit::ReconnectedEvent& event) {
+  transitionToReconnected();
+  connection_diagnostics_.onReconnected(room, event);
+}
+
+void ConnectionManager::onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event) {
+  transitionToDisconnected(event.reason);
+  connection_diagnostics_.onDisconnected(room, event);
+}
+
+void ConnectionManager::transitionToReconnecting() {
   State expected = State::Connected;
   if (state_.compare_exchange_strong(expected, State::Reconnecting)) {
     RCLCPP_WARN(logger_, "LiveKit room connection lost; SDK reconnecting");
     disableOperations();
-    reportTransition(methods_.report_reconnecting);
   }
 }
 
-void RoomConnectionManager::onReconnected() {
+void ConnectionManager::transitionToReconnected() {
   State expected = State::Reconnecting;
   if (state_.compare_exchange_strong(expected, State::Connected)) {
     markConnectionGained();
     enableOperations();
-    reportTransition(methods_.report_connected);
   }
 }
 
-void RoomConnectionManager::onDisconnected(livekit::DisconnectReason reason) {
+void ConnectionManager::transitionToDisconnected(livekit::DisconnectReason reason) {
   State previous = state_.load();
   while (previous != State::Stopped && previous != State::Disconnected && previous != State::WaitingForRoomEos &&
          !state_.compare_exchange_weak(previous, State::WaitingForRoomEos)) {
@@ -186,11 +202,10 @@ void RoomConnectionManager::onDisconnected(livekit::DisconnectReason reason) {
 
   if (previous != State::Stopped && previous != State::WaitingForRoomEos && previous != State::Disconnected) {
     closeSession();
-    reportTransition(methods_.report_disconnected);
   }
 }
 
-void RoomConnectionManager::onRoomEos() {
+void ConnectionManager::onRoomEos() {
   State previous = state_.load();
   while (previous != State::Stopped && previous != State::Disconnected &&
          !state_.compare_exchange_weak(previous, State::Disconnected)) {
@@ -201,22 +216,39 @@ void RoomConnectionManager::onRoomEos() {
   }
   if (previous != State::Stopped && previous != State::Disconnected && previous != State::WaitingForRoomEos) {
     closeSession();
-    reportTransition(methods_.report_disconnected);
+    connection_diagnostics_.markDisconnected();
   }
 }
 
-void RoomConnectionManager::stop() {
+void ConnectionManager::onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event) {
+  connection_diagnostics_.onParticipantConnected(room, event);
+}
+
+void ConnectionManager::onParticipantDisconnected(livekit::Room& room,
+                                                  const livekit::ParticipantDisconnectedEvent& event) {
+  connection_diagnostics_.onParticipantDisconnected(room, event);
+}
+
+void ConnectionManager::onRoomUpdated(livekit::Room& room, const livekit::RoomUpdatedEvent& event) {
+  connection_diagnostics_.onRoomUpdated(room, event);
+}
+
+void ConnectionManager::onParticipantsUpdated(livekit::Room& room, const livekit::ParticipantsUpdatedEvent& event) {
+  connection_diagnostics_.onParticipantsUpdated(room, event);
+}
+
+void ConnectionManager::stop() {
   state_.store(State::Stopped);
   closeSession();
 }
 
-void RoomConnectionManager::beginSessionAttempt() {
+void ConnectionManager::beginSessionAttempt() {
   const std::lock_guard<std::mutex> lock(session_mutex_);
   operations_enabled_->store(false);
   session_closed_ = false;
 }
 
-void RoomConnectionManager::enableOperations() {
+void ConnectionManager::enableOperations() {
   {
     const std::lock_guard<std::mutex> lock(session_mutex_);
     session_closed_ = false;
@@ -225,13 +257,13 @@ void RoomConnectionManager::enableOperations() {
   session_cv_.notify_all();
 }
 
-void RoomConnectionManager::disableOperations() {
+void ConnectionManager::disableOperations() {
   const std::lock_guard<std::mutex> lock(session_mutex_);
   operations_enabled_->store(false);
   session_closed_ = false;
 }
 
-void RoomConnectionManager::closeSession() {
+void ConnectionManager::closeSession() {
   {
     const std::lock_guard<std::mutex> lock(session_mutex_);
     operations_enabled_->store(false);
@@ -240,25 +272,11 @@ void RoomConnectionManager::closeSession() {
   session_cv_.notify_all();
 }
 
-void RoomConnectionManager::markConnectionGained() {
+void ConnectionManager::markConnectionGained() {
   if (has_connected_.exchange(true)) {
     RCLCPP_INFO(logger_, "LiveKit room connection restored");
   } else {
     RCLCPP_INFO(logger_, "Connected to LiveKit room");
-  }
-}
-
-void RoomConnectionManager::reportTransition(const std::function<void()>& reporter) {
-  if (!reporter) {
-    return;
-  }
-
-  try {
-    reporter();
-  } catch (const std::exception& error) {
-    RCLCPP_ERROR(logger_, "Connection-state reporter threw: %s", error.what());
-  } catch (...) {
-    RCLCPP_ERROR(logger_, "Connection-state reporter threw an unknown exception");
   }
 }
 

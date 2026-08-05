@@ -27,6 +27,9 @@
 #include <mutex>
 #include <rclcpp/logger.hpp>
 
+#include "ros_portal/connection/connection_diagnostics.hpp"
+#include "ros_portal/diagnostics/diagnostics_fns.hpp"
+
 namespace ros_portal {
 
 /// @brief Owns the bridge's room connection state, retry decisions, and the
@@ -40,7 +43,7 @@ namespace ros_portal {
 /// opens the barrier around @ref Methods::try_connect, enables operations only
 /// after a successful connect/reconnect transition, and closes the session on
 /// failure, disconnect, or @ref stop so waiters never hang.
-class RoomConnectionManager {
+class ConnectionManager {
 public:
   using Clock = std::chrono::steady_clock;
 
@@ -53,29 +56,25 @@ public:
     std::function<bool()> try_connect;
     /// @brief Return the current monotonic time for retry scheduling.
     std::function<Clock::time_point()> now = []() { return Clock::now(); };
-    /// @brief Report an effective transition to the connected state.
-    std::function<void()> report_connected{};
-    /// @brief Report an effective transition to the reconnecting state.
-    std::function<void()> report_reconnecting{};
-    /// @brief Report an effective transition to the disconnected state.
-    std::function<void()> report_disconnected{};
   };
 
-  /// @brief Construct a room connection manager.
+  /// @brief Construct a connection manager.
   /// @param methods Connection operation supplied by the bridge.
   /// @param logger Logger used for connection lifecycle messages.
-  /// @throws std::invalid_argument when @p methods is incomplete.
-  RoomConnectionManager(Methods methods, rclcpp::Logger logger);
+  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// connection-health diagnostic task.
+  /// @throws std::invalid_argument when @p methods or @p diagnostics is incomplete.
+  ConnectionManager(Methods methods, rclcpp::Logger logger, diagnostics::DiagnosticsManagerFns diagnostics);
 
-  RoomConnectionManager(const RoomConnectionManager&) = delete;
-  RoomConnectionManager& operator=(const RoomConnectionManager&) = delete;
+  ConnectionManager(const ConnectionManager&) = delete;
+  ConnectionManager& operator=(const ConnectionManager&) = delete;
 
   /// @brief Make one connection attempt when the room is disconnected.
   ///
   /// Calls are ignored while connected, while the SDK is reconnecting, while a
   /// previous attempt is active, and after a terminal disconnect until
   /// @ref onRoomEos confirms that the room has been cleaned up.
-  void poll();
+  void poll(livekit::Room& room);
 
   /// @brief Return whether the manager is in the connected state.
   bool isConnected() const;
@@ -95,23 +94,41 @@ public:
   bool waitForOperations();
 
   /// @brief Handle a LiveKit connection-state notification.
-  /// @param state State reported by the LiveKit room.
-  void onConnectionStateChanged(livekit::ConnectionState state);
+  /// @param room LiveKit room that emitted the event.
+  /// @param event State change reported by the LiveKit room.
+  void onConnectionStateChanged(livekit::Room& room, const livekit::ConnectionStateChangedEvent& event);
 
   /// @brief Handle notification that an established connection was lost and
   /// the SDK is attempting an in-session reconnect.
-  void onReconnecting();
+  /// @param room LiveKit room that emitted the event.
+  /// @param event Reconnecting event reported by the LiveKit room.
+  void onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event);
 
   /// @brief Handle a successful in-session reconnect.
-  void onReconnected();
+  /// @param room LiveKit room that emitted the event.
+  /// @param event Reconnected event reported by the LiveKit room.
+  void onReconnected(livekit::Room& room, const livekit::ReconnectedEvent& event);
 
   /// @brief Handle a terminal room disconnect.
-  /// @param reason LiveKit disconnect reason.
-  void onDisconnected(livekit::DisconnectReason reason);
+  /// @param room LiveKit room that emitted the event.
+  /// @param event Terminal disconnect event reported by the LiveKit room.
+  void onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event);
 
   /// @brief Handle room event-stream completion and permit fresh connection
   /// attempts on the next timer tick.
   void onRoomEos();
+
+  /// @brief Forward participant-connected events to connection diagnostics.
+  void onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event);
+
+  /// @brief Forward participant-disconnected events to connection diagnostics.
+  void onParticipantDisconnected(livekit::Room& room, const livekit::ParticipantDisconnectedEvent& event);
+
+  /// @brief Forward room-updated events to connection diagnostics.
+  void onRoomUpdated(livekit::Room& room, const livekit::RoomUpdatedEvent& event);
+
+  /// @brief Forward participants-updated events to connection diagnostics.
+  void onParticipantsUpdated(livekit::Room& room, const livekit::ParticipantsUpdatedEvent& event);
 
   /// @brief Stop retries, close the session barrier, and suppress shutdown-time
   /// lifecycle transitions.
@@ -142,13 +159,19 @@ private:
   /// @brief Mark a connection as available and log the transition.
   void markConnectionGained();
 
-  /// @brief Report an effective connection-state transition without allowing
-  /// reporter failures to escape an SDK lifecycle callback.
-  /// @param reporter Bridge-supplied diagnostics reporting function.
-  void reportTransition(const std::function<void()>& reporter);
+  /// @brief Handle notification that the SDK is attempting an in-session reconnect.
+  void transitionToReconnecting();
+
+  /// @brief Handle notification that the SDK recovered an in-session reconnect.
+  void transitionToReconnected();
+
+  /// @brief Handle notification that the room terminally disconnected.
+  /// @param reason LiveKit disconnect reason.
+  void transitionToDisconnected(livekit::DisconnectReason reason);
 
   Methods methods_;
   rclcpp::Logger logger_;
+  diagnostics::ConnectionHealthDiagnostics connection_diagnostics_;
   std::atomic<State> state_{State::Disconnected};
   std::atomic_bool has_connected_{false};
   Clock::time_point next_attempt_at_{Clock::time_point::min()};

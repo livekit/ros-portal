@@ -43,8 +43,10 @@ colcon test-result --verbose
 An opt-in integration test routes only its ROS Portal participants through a
 test-owned loopback TCP proxy. The proxy resets and freezes their LiveKit
 signaling connections, verifies that bridge operations pause, and then restores
-traffic to verify SDK recovery. It does not stop or reconfigure the LiveKit
-server and does not affect other clients connected to that server.
+traffic to verify SDK in-session recovery. That path must increment
+`reconnect_count` once while entering `reconnecting`, and leave the counter
+unchanged after the same session recovers. It does not stop or reconfigure the
+LiveKit server and does not affect other clients connected to that server.
 
 After sourcing the test tokens, enable and select the dedicated CTest target:
 

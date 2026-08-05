@@ -313,7 +313,12 @@ TEST_F(ConnectionFaultE2E, ConnectionDiagnosticsReporting) {
       << "ROS connection diagnostics did not report the initial connected state";
   const auto baseline_diagnostics = diagnostics.snapshot();
   EXPECT_EQ(baseline_diagnostics.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(baseline_diagnostics.state, "connected");
+  EXPECT_EQ(baseline_diagnostics.reconnect_count, 0U);
+  EXPECT_EQ(baseline_diagnostics.connection_loss_count, 0U);
 
+  // Freeze signaling so the LiveKit SDK enters an in-session reconnect without
+  // tearing down the room. reconnect_count must increment only for this path.
   proxy_->pause();
   proxy_->resetConnections();
 
@@ -326,9 +331,13 @@ TEST_F(ConnectionFaultE2E, ConnectionDiagnosticsReporting) {
       << "ROS connection diagnostics did not report SDK reconnecting state";
   const auto reconnecting_diagnostics = diagnostics.snapshot();
   EXPECT_EQ(reconnecting_diagnostics.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(reconnecting_diagnostics.reconnect_count, baseline_diagnostics.reconnect_count + 1U);
-  EXPECT_EQ(reconnecting_diagnostics.connection_loss_count, baseline_diagnostics.connection_loss_count + 1U);
+  EXPECT_EQ(reconnecting_diagnostics.state, "reconnecting");
+  EXPECT_EQ(reconnecting_diagnostics.reconnect_count, 1U);
+  EXPECT_EQ(reconnecting_diagnostics.connection_loss_count, 1U);
 
+  // Resume the same session. Successful SDK recovery must not bump either
+  // counter again; a later terminal disconnect + Room::connect would bump
+  // connection_loss_count only.
   proxy_->resume();
   ASSERT_TRUE(waitFor(
       [&diagnostics]() {
@@ -340,8 +349,9 @@ TEST_F(ConnectionFaultE2E, ConnectionDiagnosticsReporting) {
 
   const auto recovered_diagnostics = diagnostics.snapshot();
   EXPECT_EQ(recovered_diagnostics.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(recovered_diagnostics.reconnect_count, reconnecting_diagnostics.reconnect_count);
-  EXPECT_EQ(recovered_diagnostics.connection_loss_count, reconnecting_diagnostics.connection_loss_count);
+  EXPECT_EQ(recovered_diagnostics.state, "connected");
+  EXPECT_EQ(recovered_diagnostics.reconnect_count, 1U);
+  EXPECT_EQ(recovered_diagnostics.connection_loss_count, 1U);
 }
 
 } // namespace

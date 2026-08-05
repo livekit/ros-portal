@@ -488,10 +488,10 @@ void ConnectionHealthDiagnostics::populateStatus(diagnostic_updater::DiagnosticS
 void ConnectionHealthDiagnostics::markReconnecting(livekit::Room& room) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Only count SDK in-session reconnects that start from an established
+    // connection. Terminal disconnect + later Room::connect is not a reconnect.
     if (state_.kind == ConnectionHealthStateKind::Connected) {
       ++state_.connection_loss_count;
-    }
-    if (state_.kind != ConnectionHealthStateKind::Reconnecting) {
       ++state_.reconnect_count;
     }
     state_.kind = ConnectionHealthStateKind::Reconnecting;

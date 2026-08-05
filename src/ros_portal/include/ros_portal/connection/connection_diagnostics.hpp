@@ -115,7 +115,9 @@ struct ConnectionHealthState {
   /// Number of currently known remote participants.
   std::size_t num_peers{0};
 
-  /// Number of times the SDK has entered a reconnecting state.
+  /// Number of times the LiveKit SDK entered an in-session reconnecting state
+  /// after an established connection dropped. Terminal disconnect followed by a
+  /// new Room::connect does not increment this counter.
   std::uint64_t reconnect_count{0};
 
   /// Number of effective transitions from connected to unavailable.
@@ -174,10 +176,16 @@ public:
 
   /// Mark ROS Portal disconnected, count a direct connection loss, and clear
   /// cached RTC summary.
+  ///
+  /// Does not increment @ref ConnectionHealthState::reconnect_count. A later
+  /// successful Room::connect is a new connect, not an SDK reconnect.
   void markDisconnected();
 
-  /// Mark ROS Portal reconnecting, count the connection loss and reconnect
-  /// attempt, and refresh peers.
+  /// Mark ROS Portal reconnecting after an established connection drops.
+  ///
+  /// Increments @ref ConnectionHealthState::reconnect_count and
+  /// @ref ConnectionHealthState::connection_loss_count only on the
+  /// Connected -> Reconnecting transition.
   void markReconnecting(livekit::Room& room);
 
   /// Update the diagnostic updater and poll LiveKit stats when appropriate.

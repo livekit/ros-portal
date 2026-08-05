@@ -231,13 +231,63 @@ TEST(ConnectionHealthDiagnosticsTest, CountsEachConnectedToUnavailableTransition
   EXPECT_EQ(state.connection_loss_count, 1U);
   EXPECT_EQ(state.reconnect_count, 1U);
 
+  // Terminal disconnect + later Room::connect is a new connect, not an SDK reconnect.
   connection_health.markConnected(room);
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.connection_loss_count, 1U);
+  EXPECT_EQ(state.reconnect_count, 1U);
+
   connection_health.markDisconnected();
   connection_health.markDisconnected();
 
   state = connection_health.snapshot();
   EXPECT_EQ(state.connection_loss_count, 2U);
   EXPECT_EQ(state.reconnect_count, 1U);
+}
+
+TEST(ConnectionHealthDiagnosticsTest, TerminalDisconnectAndNewConnectDoesNotCountAsReconnect) {
+  auto node = std::make_shared<rclcpp::Node>("terminal_disconnect_reconnect_count_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  ConnectionHealthDiagnostics connection_health(test::makeDiagnosticsFns(diagnostics_updater));
+  livekit::Room room;
+
+  connection_health.markConnected(room);
+  auto state = connection_health.snapshot();
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 0U);
+
+  connection_health.markDisconnected();
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 1U);
+
+  connection_health.markConnected(room);
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.kind, ConnectionHealthStateKind::Connected);
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 1U);
+}
+
+TEST(ConnectionHealthDiagnosticsTest, OnlyCountsSdkReconnectFromConnectedState) {
+  auto node = std::make_shared<rclcpp::Node>("sdk_reconnect_from_connected_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  ConnectionHealthDiagnostics connection_health(test::makeDiagnosticsFns(diagnostics_updater));
+  livekit::Room room;
+
+  // Reconnecting before an established connection must not count.
+  connection_health.markReconnecting(room);
+  connection_health.markReconnecting(room);
+  auto state = connection_health.snapshot();
+  EXPECT_EQ(state.kind, ConnectionHealthStateKind::Reconnecting);
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 0U);
+
+  connection_health.markConnected(room);
+  connection_health.markReconnecting(room);
+  connection_health.markReconnecting(room);
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.reconnect_count, 1U);
+  EXPECT_EQ(state.connection_loss_count, 1U);
 }
 
 TEST(ConnectionHealthDiagnosticsTest, EmitsCompactRtcSummary) {

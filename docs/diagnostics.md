@@ -59,7 +59,7 @@ Every `connection_health` status includes these fields:
 |---|---|
 | `state` | `connected`, `reconnecting`, or `disconnected`. |
 | `num_peers` | Current number of known remote LiveKit participants. |
-| `reconnect_count` | Number of times the SDK has entered reconnecting state. |
+| `reconnect_count` | Number of times the LiveKit SDK entered an in-session reconnecting state after an established connection dropped. A terminal disconnect followed by a new `Room::connect` does not increment this counter. |
 | `connection_loss_count` | Number of transitions from connected to unavailable, including both SDK reconnects and direct terminal disconnects. |
 | `room_name` | LiveKit room name from the active room connection. |
 

@@ -107,7 +107,7 @@ TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
   auto ros_portal = std::make_shared<RosPortal>(options);
 
   EXPECT_FALSE(ros_portal->initialize());
-  EXPECT_EQ(ros_portal->ros_threads(), 3);
+  EXPECT_EQ(ros_portal->rosThreads(), 3);
 }
 
 TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
@@ -126,7 +126,7 @@ TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
   auto ros_portal = std::make_shared<RosPortal>(options);
 
   EXPECT_FALSE(ros_portal->initialize());
-  EXPECT_EQ(ros_portal->ros_threads(), 0);
+  EXPECT_EQ(ros_portal->rosThreads(), 0);
 }
 
 } // namespace

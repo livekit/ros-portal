@@ -22,7 +22,9 @@ anywhere in the world. It forwards configured ROS topics as schema-described
 [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),
 republishes allowed remote tracks back into ROS, forwards configured service
 calls over [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/), and
-streams `sensor_msgs/msg/Image` topics as LiveKit video.
+streams `sensor_msgs/msg/Image` topics as LiveKit video. ROS Portal enables
+low-latency teleoperation, monitoring, and robot-to-cloud communication
+without exposing DDS across networks.
 
 <img style="width:100%;height:100%;" alt="ROS Portal architecture" src="docs/assets/ros-portal-overview.png">
 

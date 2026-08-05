@@ -20,6 +20,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import ExecuteProcess
 from launch.actions import OpaqueFunction
+from launch.actions import SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 
 _STUB_SCRIPT = """
@@ -77,6 +78,7 @@ def _launch_setup(context, *args, **kwargs):
                 'ROS2_LK_STUB_GET_SERVICE_NAME': get_service_name,
             },
             output='screen',
+            emulate_tty=True,
             name='set_bool_stub',
         ),
     ]
@@ -84,6 +86,7 @@ def _launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
+        SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'),
         DeclareLaunchArgument(
             'service_name',
             default_value='/test/set_bool',

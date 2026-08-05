@@ -19,9 +19,11 @@
 #include <gtest/gtest.h>
 #include <livekit/room_event_types.h>
 
+#include <atomic>
 #include <chrono>
 #include <rclcpp/logger.hpp>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace ros_portal {
@@ -194,6 +196,116 @@ TEST(RoomConnectionManagerTest, ReporterFailureDoesNotEscapeLifecycleCallback) {
 
   EXPECT_NO_THROW(manager.poll());
   EXPECT_TRUE(manager.isConnected());
+}
+
+TEST(RoomConnectionManagerTest, WaitForOperationsUnblocksAfterSuccessfulConnect) {
+  std::atomic_bool waiter_started{false};
+  std::atomic_bool waiter_finished{false};
+  std::atomic_bool saw_ready{false};
+  std::thread waiter;
+  RoomConnectionManager* manager_ptr = nullptr;
+
+  RoomConnectionManager::Methods methods;
+  methods.try_connect = [&]() {
+    waiter = std::thread([&]() {
+      waiter_started.store(true);
+      saw_ready.store(manager_ptr->waitForOperations());
+      waiter_finished.store(true);
+    });
+    while (!waiter_started.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_FALSE(waiter_finished.load());
+    EXPECT_FALSE(manager_ptr->isOperationsEnabled());
+    return true;
+  };
+  RoomConnectionManager manager(std::move(methods), rclcpp::get_logger("room_connection_manager_test"));
+  manager_ptr = &manager;
+
+  manager.poll();
+  waiter.join();
+
+  EXPECT_TRUE(manager.isConnected());
+  EXPECT_TRUE(manager.isOperationsEnabled());
+  EXPECT_TRUE(saw_ready.load());
+  EXPECT_TRUE(waiter_finished.load());
+}
+
+TEST(RoomConnectionManagerTest, FailedConnectClosesSessionForWaiters) {
+  std::atomic_bool waiter_started{false};
+  std::atomic_bool saw_ready{true};
+  std::thread waiter;
+  RoomConnectionManager* manager_ptr = nullptr;
+
+  RoomConnectionManager::Methods methods;
+  methods.try_connect = [&]() {
+    waiter = std::thread([&]() {
+      waiter_started.store(true);
+      saw_ready.store(manager_ptr->waitForOperations());
+    });
+    while (!waiter_started.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    return false;
+  };
+  RoomConnectionManager manager(std::move(methods), rclcpp::get_logger("room_connection_manager_test"));
+  manager_ptr = &manager;
+
+  manager.poll();
+  waiter.join();
+
+  EXPECT_FALSE(manager.isConnected());
+  EXPECT_FALSE(manager.isOperationsEnabled());
+  EXPECT_FALSE(saw_ready.load());
+}
+
+TEST(RoomConnectionManagerTest, ReconnectKeepsWaitersBlockedUntilRestored) {
+  RoomConnectionManager::Methods methods;
+  methods.try_connect = []() { return true; };
+  RoomConnectionManager manager(std::move(methods), rclcpp::get_logger("room_connection_manager_test"));
+
+  manager.poll();
+  ASSERT_TRUE(manager.isOperationsEnabled());
+
+  manager.onReconnecting();
+  EXPECT_FALSE(manager.isOperationsEnabled());
+
+  std::atomic_bool waiter_finished{false};
+  std::atomic_bool saw_ready{false};
+  std::thread waiter([&]() {
+    saw_ready.store(manager.waitForOperations());
+    waiter_finished.store(true);
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  EXPECT_FALSE(waiter_finished.load());
+
+  manager.onReconnected();
+  waiter.join();
+
+  EXPECT_TRUE(manager.isOperationsEnabled());
+  EXPECT_TRUE(saw_ready.load());
+}
+
+TEST(RoomConnectionManagerTest, StopClosesSessionForWaiters) {
+  RoomConnectionManager::Methods methods;
+  methods.try_connect = []() { return true; };
+  RoomConnectionManager manager(std::move(methods), rclcpp::get_logger("room_connection_manager_test"));
+
+  manager.poll();
+  ASSERT_TRUE(manager.isOperationsEnabled());
+
+  manager.onReconnecting();
+  std::atomic_bool saw_ready{true};
+  std::thread waiter([&]() { saw_ready.store(manager.waitForOperations()); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+  manager.stop();
+  waiter.join();
+
+  EXPECT_FALSE(manager.isOperationsEnabled());
+  EXPECT_FALSE(saw_ready.load());
 }
 
 } // namespace

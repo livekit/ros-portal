@@ -20,16 +20,26 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <rclcpp/logger.hpp>
 
 namespace ros_portal {
 
-/// @brief Owns the bridge's room connection state and retry decisions.
+/// @brief Owns the bridge's room connection state, retry decisions, and the
+/// session-readiness barrier used by inbound room callbacks.
 ///
 /// The bridge invokes @ref poll from its fixed-rate connection timer and
 /// forwards LiveKit room lifecycle callbacks to this class.
+///
+/// Inbound callbacks that must not run until join has finished (for example
+/// data-track schema lookup) should call @ref waitForOperations. The manager
+/// opens the barrier around @ref Methods::try_connect, enables operations only
+/// after a successful connect/reconnect transition, and closes the session on
+/// failure, disconnect, or @ref stop so waiters never hang.
 class RoomConnectionManager {
 public:
   using Clock = std::chrono::steady_clock;
@@ -67,8 +77,22 @@ public:
   /// @ref onRoomEos confirms that the room has been cleaned up.
   void poll();
 
-  /// @brief Return whether bridge components may use the LiveKit room.
+  /// @brief Return whether the manager is in the connected state.
   bool isConnected() const;
+
+  /// @brief Return whether bridge components may use the LiveKit room.
+  bool isOperationsEnabled() const;
+
+  /// @brief Lifetime-safe flag mirrored by readiness transitions.
+  ///
+  /// Captured by room-bound callbacks that need a lock-free availability check
+  /// without calling back into this manager.
+  std::shared_ptr<std::atomic_bool> operationsEnabledFlag() const;
+
+  /// @brief Block until room operations are enabled, or until the session is
+  /// closed.
+  /// @return True when room operations are enabled.
+  bool waitForOperations();
 
   /// @brief Handle a LiveKit connection-state notification.
   /// @param state State reported by the LiveKit room.
@@ -89,7 +113,8 @@ public:
   /// attempts on the next timer tick.
   void onRoomEos();
 
-  /// @brief Stop retries and suppress shutdown-time lifecycle transitions.
+  /// @brief Stop retries, close the session barrier, and suppress shutdown-time
+  /// lifecycle transitions.
   void stop();
 
 private:
@@ -101,6 +126,18 @@ private:
     WaitingForRoomEos,
     Stopped,
   };
+
+  /// @brief Open the session barrier for an in-flight join attempt.
+  void beginSessionAttempt();
+
+  /// @brief Enable room operations and wake waiters.
+  void enableOperations();
+
+  /// @brief Disable room operations while keeping the session open.
+  void disableOperations();
+
+  /// @brief Close the session barrier and wake waiters so they can drop work.
+  void closeSession();
 
   /// @brief Mark a connection as available and log the transition.
   void markConnectionGained();
@@ -115,6 +152,10 @@ private:
   std::atomic<State> state_{State::Disconnected};
   std::atomic_bool has_connected_{false};
   Clock::time_point next_attempt_at_{Clock::time_point::min()};
+  std::shared_ptr<std::atomic_bool> operations_enabled_{std::make_shared<std::atomic_bool>(false)};
+  std::mutex session_mutex_;
+  std::condition_variable session_cv_;
+  bool session_closed_{true};
 };
 
 } // namespace ros_portal

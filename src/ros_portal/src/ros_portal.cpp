@@ -78,7 +78,6 @@ bool RosPortal::initialize() {
 
   topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
-  room_operations_enabled_->store(false);
   room_session_ended_.store(false);
   room_session_prepared_ = false;
   room_components_started_ = false;
@@ -144,25 +143,23 @@ bool RosPortal::initialize() {
     return room_ && room_->connect(livekit_url, livekit_token, room_options);
   };
   connection_methods.report_connected = [this]() {
-    room_operations_enabled_->store(true);
     if (connection_diagnostics_ && room_) {
       connection_diagnostics_->markConnected(*room_);
     }
   };
   connection_methods.report_reconnecting = [this]() {
-    room_operations_enabled_->store(false);
     if (connection_diagnostics_ && room_) {
       connection_diagnostics_->markReconnecting(*room_);
     }
   };
   connection_methods.report_disconnected = [this]() {
-    room_operations_enabled_->store(false);
     if (connection_diagnostics_) {
       connection_diagnostics_->markDisconnected();
     }
   };
   room_connection_manager_ = std::make_unique<RoomConnectionManager>(std::move(connection_methods),
                                                                      this->get_logger().get_child("connection"));
+  room_operations_enabled_ = room_connection_manager_->operationsEnabledFlag();
 
   // Room::connect() may emit events for data tracks that were already
   // published. Install the forwarder before the first connection attempt so
@@ -209,7 +206,8 @@ void RosPortal::shutdown() {
     connection_stats_timer_->cancel();
     connection_stats_timer_.reset();
   }
-  room_operations_enabled_->store(false);
+  // Close the session barrier before detaching the delegate so any
+  // onDataTrackPublished waiter unblocks instead of hanging across teardown.
   if (room_connection_manager_) {
     room_connection_manager_->stop();
   }
@@ -363,7 +361,10 @@ void RosPortal::processEndedRoomSession() {
   stopRoomComponents();
 }
 
-bool RosPortal::roomOperationsEnabled() const { return room_operations_enabled_->load(); }
+bool RosPortal::roomOperationsEnabled() const {
+  return room_connection_manager_ ? room_connection_manager_->isOperationsEnabled()
+                                  : room_operations_enabled_->load();
+}
 
 void RosPortal::pollConnection() {
   if (!initialized_) {
@@ -431,13 +432,32 @@ void RosPortal::pollConnectionStats() {
 }
 
 void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
-  const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-  if (shutting_down_) {
-    return;
+  {
+    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
+    if (shutting_down_) {
+      return;
+    }
   }
   if (!event.track) {
     RCLCPP_ERROR(this->get_logger(), "Ignoring data track published event with null track pointer");
     return;
+  }
+
+  // Room::connect() can deliver already-published tracks before the connection
+  // manager enables operations. Wait on that barrier so schema lookup runs only
+  // after connect has finished enabling the session.
+  if (!room_connection_manager_ || !room_connection_manager_->waitForOperations()) {
+    RCLCPP_DEBUG(this->get_logger(),
+                 "Dropping LiveKit data track '%s' because the room session became unavailable",
+                 event.track->info().name.c_str());
+    return;
+  }
+
+  {
+    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
+    if (shutting_down_) {
+      return;
+    }
   }
 
   const std::lock_guard<std::mutex> lock(room_components_mutex_);

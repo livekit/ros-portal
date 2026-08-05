@@ -238,9 +238,12 @@ private:
   std::unique_ptr<livekit::Room> room_;
   //! @brief Shared diagnostics updater for all bridge diagnostic tasks.
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
-  //! @brief Room connection lifecycle and retry state.
+  //! @brief Room connection lifecycle, retry state, and session-readiness barrier.
   std::unique_ptr<RoomConnectionManager> room_connection_manager_;
   //! @brief Lifetime-safe state gate shared with room-bound callbacks.
+  //!
+  //! Points at the flag owned by @ref room_connection_manager_ once that manager
+  //! exists.
   std::shared_ptr<std::atomic_bool> room_operations_enabled_{std::make_shared<std::atomic_bool>(false)};
   //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
   std::atomic_bool room_session_ended_{false};

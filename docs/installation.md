@@ -4,18 +4,12 @@
 
 ## LiveKit
 
-### LiveKit Server
+| Component | Purpose | Documentation |
+|---|---|---|
+| LiveKit Server | Host rooms that ROS Portal connects to | [LiveKit Cloud](https://cloud.livekit.io/) or [local install](https://docs.livekit.io/transport/self-hosting/local/) |
+| LiveKit CLI | Mint access tokens for ROS Portal | [LiveKit CLI guide](https://docs.livekit.io/reference/developer-tools/livekit-cli/) |
 
-Setup a [LiveKit Cloud](https://cloud.livekit.io/) project or follow the [install docs](https://docs.livekit.io/transport/self-hosting/local/) to install LiveKit server locally.
-
-### LiveKit CLI
-
-The [LiveKit CLI](https://docs.livekit.io/intro/basics/cli/) (`lk`) mints access tokens
-that ROS Portal uses to connect to LiveKit Server. See the
-[CLI setup guide](https://docs.livekit.io/reference/developer-tools/livekit-cli/) for
-installation, authentication, and project configuration.
-
-## Debian Packages
+## ROS Portal (Debian)
 
 [ROS Portal releases](https://github.com/livekit/ros-portal/releases/latest) provide the `.deb` packages as direct downloads for each supported ROS distribution and platform architecture combination, in the following format:
 

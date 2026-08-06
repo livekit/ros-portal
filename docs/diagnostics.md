@@ -2,9 +2,11 @@
 
 `ros_portal` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. ROS Portal currently exposes three diagnostic tasks:
+stack. ROS Portal currently exposes five diagnostic tasks:
 
-- `connection_health` — always published
+- `build_info` — always published
+- `ros_portal_status` — always published
+- `connection_health` — published after configuration loads
 - `topic_forwarder` — published when topic forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
 
@@ -21,6 +23,81 @@ ROS Portal polls LiveKit RTC stats from an internal 1 Hz wall timer while connec
 
 LiveKit connection callbacks update cached state only. They do not publish
 diagnostics directly from SDK callback threads.
+
+## `build_info`
+
+Reports the versions ROS Portal was built with. All values are fixed at build
+time (or read once from the environment at startup) and never change while the
+process runs, so this task always reports `OK` and exists purely to surface
+version information at the top of the diagnostics tree.
+
+| Property | Value |
+|---|---|
+| Task name | `build_info` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | Compile-time constants baked in by CMake, plus the `ROS_DISTRO` environment variable |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `LiveKit SDK <version>` | Always. The message carries the LiveKit C++ SDK version so it is visible without expanding key/value fields. |
+
+### Key/Value Fields
+
+| Key | Value |
+|---|---|
+| `livekit_sdk_version` | LiveKit C++ SDK version ROS Portal was built against, as exported by the SDK package found by CMake (falls back to the requested `LIVEKIT_SDK_VERSION` pin, then `unknown`). |
+| `ros_portal_version` | `ros_portal` package version from `package.xml`, or `unknown`. |
+| `ros_distro` | ROS distribution from the `ROS_DISTRO` environment variable at startup, or `unknown`. |
+
+The reported SDK version is resolved at build time; the prebuilt SDK exposes no
+runtime version API, so a mismatched library swapped in after the build cannot
+be detected here.
+
+Both versions come from `ros_portal/version.hpp`, which CMake renders from
+`src/ros_portal/cmake/version.hpp.in` during the build. The header is installed
+with the package, so downstream code can read `ROS_PORTAL_VERSION`,
+`ROS_PORTAL_LIVEKIT_SDK_VERSION`, and the `ROS_PORTAL_VERSION_AT_LEAST()` guard
+directly instead of going through diagnostics.
+
+## `ros_portal_status`
+
+Reports the node's initialization lifecycle, effective
+configuration, component health, shared LiveKit RPC failures, and topic polling
+health. The task exists as soon as the node is constructed, so configuration and
+credential failures remain observable.
+
+| Property | Value |
+|---|---|
+| Task name | `ros_portal_status` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | Node lifecycle, effective configuration, component ownership, shared RPC helpers, and topic polling timer |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `ROS Portal is initialized` | Initialization completed and the topic polling timer is active. |
+| `WARN` | `ROS Portal topic polling has overrun` | At least one discovery poll exceeded the configured polling period. |
+| `ERROR` | `ROS Portal is not initialized` | Initialization has not completed, including configuration, credential, or connection failures. |
+| `ERROR` | `ROS Portal is initialized without an active topic poll timer` | Lifecycle state says initialized but topic discovery polling is inactive. |
+| `ERROR` | `ROS Portal has inactive components` | At least one expected component is not active. |
+
+### Fields
+
+| Key | Value |
+|---|---|
+| `initialized` | Whether initialization completed. |
+| `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_health`, `topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and `cli_manager`. Any inactive component triggers an `ERROR` status. |
+| `config_path` | Effective configuration file path, or `unset`. |
+| `topic_polling_period_ms` | Effective topic discovery polling period. |
+| `local_identity` | Connected local participant identity, or `unset`. |
+| `rpc_register_failures` | Cumulative failures from the shared RPC registration helper. |
+| `rpc_perform_failures` | Cumulative failures from the shared outbound RPC helper. |
+| `topic_poll_overruns` | Cumulative topic polls that exceeded `topic_polling_period_ms`. |
 
 ## `connection_health`
 
@@ -181,7 +258,8 @@ message with:
 
     ros2 topic echo /diagnostics
 
-Look for `connection_health`, and when those subsystems are enabled,
+Look for `build_info`, `ros_portal_status`, and, after configuration loads,
+`connection_health`. When those subsystems are enabled, look for
 `topic_forwarder` and `cli_manager` statuses. When the room is connected,
 `connection_health` should also contain the fixed `rtc.*` summary fields.
 
@@ -227,6 +305,14 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
 /**:
   ros__parameters:
     path: ROS Portal
+    build_info:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Build Info
+      contains: ['build_info']
+    ros_portal_status:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Node Status
+      contains: ['ros_portal_status']
     connection_health:
       type: diagnostic_aggregator/GenericAnalyzer
       path: Connection Health
@@ -241,7 +327,8 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
       contains: ['cli_manager']
 ```
 
-This groups ROS Portal diagnostics under `ROS Portal / Connection Health`,
+This groups ROS Portal diagnostics under `ROS Portal / Build Info`,
+`ROS Portal / Node Status`, `ROS Portal / Connection Health`,
 `ROS Portal / Topic Forwarder`, and `ROS Portal / CLI Manager`.
 Omit analyzers for tasks that are not enabled in your configuration.
 

@@ -266,8 +266,6 @@ private:
   std::atomic_bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.
   std::mutex shutdown_mutex_;
-  //! @brief Quiesces data-track publication callbacks before room disconnect.
-  std::mutex data_track_callback_mutex_;
   //! @brief Prevents snapshotted publication callbacks from entering during shutdown.
   std::atomic_bool shutting_down_;
   //! @brief Reentrant callback group shared by all subscriptions

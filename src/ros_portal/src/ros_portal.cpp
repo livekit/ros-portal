@@ -150,10 +150,7 @@ bool RosPortal::initialize() {
     return false;
   }
   // Warning: avoid doing ROS operations in delegate callbacks
-  {
-    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-    shutting_down_.store(false, std::memory_order_relaxed);
-  }
+  shutting_down_.store(false, std::memory_order_relaxed);
   room_->setDelegate(this);
 
   livekit::RoomOptions room_options;
@@ -186,14 +183,18 @@ bool RosPortal::initialize() {
   }
 
   RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
-
   poll_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(topic_polling_period_ms_), [this]() { pollTopics(); }, reentrant_callback_group_);
+
   connection_timer_ = this->create_wall_timer(
       ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
 
-  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized; attempting LiveKit room connection at 1 Hz");
+  // Intentionally mark as initialized here so pollConnection() can run immediately below
   initialized_.store(true, std::memory_order_relaxed);
+  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
+
+  // Call once to immediately connect, avoiding 1 second delay before the first connection attempt in the timer
+  pollConnection();
   return true;
 }
 
@@ -232,10 +233,7 @@ void RosPortal::shutdown() {
   // Let an in-flight data-track publication finish while the room is usable.
   // A callback captured just before setDelegate(nullptr) observes the shutdown
   // flag and returns without touching the topic forwarder.
-  {
-    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-    shutting_down_.store(true, std::memory_order_relaxed);
-  }
+  shutting_down_.store(true, std::memory_order_relaxed);
 
   // These components own RPC handlers rather than RoomDelegate callbacks.
   // Release them while the local participant is still available so they can
@@ -529,11 +527,8 @@ void RosPortal::pollTopics() {
 }
 
 void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
-  {
-    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-    if (shutting_down_.load(std::memory_order_relaxed)) {
-      return;
-    }
+  if (shutting_down_.load(std::memory_order_relaxed)) {
+    return;
   }
   if (!event.track) {
     RCLCPP_ERROR(this->get_logger(), "Ignoring data track published event with null track pointer");
@@ -549,11 +544,9 @@ void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPub
     return;
   }
 
-  {
-    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-    if (shutting_down_.load(std::memory_order_relaxed)) {
-      return;
-    }
+  // Shutdown could have started while waiting for operations, check again to be sure
+  if (shutting_down_.load(std::memory_order_relaxed)) {
+    return;
   }
 
   const std::lock_guard<std::mutex> lock(room_components_mutex_);

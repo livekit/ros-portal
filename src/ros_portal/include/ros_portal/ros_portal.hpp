@@ -42,7 +42,6 @@ namespace ros_portal {
 
 namespace diagnostics {
 class BuildInfoDiagnostics;
-class ConnectionHealthDiagnostics;
 } // namespace diagnostics
 namespace cli {
 class Manager;
@@ -307,12 +306,8 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
-  //! @brief LiveKit connection health diagnostic task owner.
-  std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Always-OK build and dependency version diagnostic task owner.
   std::unique_ptr<diagnostics::BuildInfoDiagnostics> build_info_diagnostics_;
-  //! @brief Timer for best-effort LiveKit stats polling.
-  rclcpp::TimerBase::SharedPtr connection_stats_timer_;
   //! @brief Mutable state owned exclusively for node-level diagnostics.
   DiagnosticState diagnostic_state_;
 };

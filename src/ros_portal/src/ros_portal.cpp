@@ -529,9 +529,11 @@ void RosPortal::pollTopics() {
 }
 
 void RosPortal::onDataTrackPublished(livekit::Room&, const livekit::DataTrackPublishedEvent& event) {
-  const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
-  if (shutting_down_.load(std::memory_order_relaxed)) {
-    return;
+  {
+    const std::lock_guard<std::mutex> callback_lock(data_track_callback_mutex_);
+    if (shutting_down_.load(std::memory_order_relaxed)) {
+      return;
+    }
   }
   if (!event.track) {
     RCLCPP_ERROR(this->get_logger(), "Ignoring data track published event with null track pointer");

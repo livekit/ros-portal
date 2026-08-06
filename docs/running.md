@@ -1,7 +1,8 @@
 # Running
 
 ## LiveKit Server
-To start a LiveKit server, follow the [install docs](https://docs.livekit.io/transport/self-hosting/local/). Be sure to enable the `enable_participant_data_blob` option.
+
+. Be sure to enable the `enable_participant_data_blob` option.
 ```bash
 livekit-server --dev --enable_participant_data_blob
 ```
@@ -18,9 +19,7 @@ export LIVEKIT_TOKEN=<token>
 Self-hosted LiveKit servers must enable participant data blobs so ROS Portal can
 store and retrieve ROS schema definitions:
 
-```bash
-LIVEKIT_CONFIG="enable_participant_data_blob: true" livekit-server
-```
+
 
 Launch with the installed default config:
 

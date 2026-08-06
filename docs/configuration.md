@@ -1,9 +1,16 @@
 # Configuration Guide
-ROS Portal reads the YAML configuration once at node startup and builds an
-immutable snapshot. Pass the file path through the node's
-`config_path` ROS parameter.
 
-## Credentials
+ROS Portal is configured via environment variables for LiveKit parameters and
+a YAML configuration file for everything else.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---:|---|
+| `LIVEKIT_URL` | yes | WebSocket URL of the LiveKit server (for example, `wss://<project>.livekit.cloud` or `ws://127.0.0.1:7880` for local development). |
+| `LIVEKIT_TOKEN` | yes | LiveKit access JWT for the ROS Portal participant. Room name, identity, and permissions come from the token grant, not the YAML config. |
+
+### Credentials
 
 LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
 `LIVEKIT_TOKEN` in the node environment. The LiveKit room name comes from the
@@ -14,6 +21,9 @@ to `"true"`. LiveKit attributes are string key/value pairs, so this is the
 string representation of a boolean value. Tokens must grant
 `canUpdateOwnMetadata` so the bridge can publish the attribute while joining.
 
+## YAML Configuration File
+
+The configuration file path is resolved through the node's `config_path` ROS parameter.
 
 ## Minimal Config
 
@@ -34,15 +44,8 @@ All config lives under `ros_portal`.
 | `version` | string | yes | - | Must be `"0.0.1"`. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching rclcpp's default. |
-| `room_options` | map | no | `{}` | LiveKit room connection options. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
-
-## Room Options
-
-| Field | Type | Required | Description |
-|---|---:|---:|---|
-| `join_retries` | integer | no | Number of join retries. Must be positive. |
 
 ## Services
 

@@ -1,9 +1,12 @@
-# Configuration Guide
+# Configuration
 
 ROS Portal is configured via environment variables for LiveKit parameters and
 a YAML configuration file for runtime parameters.
 
 ## Environment Variables
+
+Environment variables are used to configure ROS Portal's connection and access to a
+LiveKit server.
 
 | Variable | Required | Description |
 |---|---:|---|
@@ -71,7 +74,32 @@ export LIVEKIT_TOKEN="$(lk token create \
 
 ## Configuration File
 
-The configuration file path is resolved through the node's `config_path` ROS parameter.
+The YAML configuration file defines which ROS topics and services ROS Portal
+forwards through LiveKit, in which direction, and related runtime options.
+The configuration file path is resolved through the node's `config_path` ROS
+parameter. See [Running](./running.md) for more information.
+
+Follow the examples below to get started quickly, or use the field reference
+further down to build out a full configuration file.
+
+### Examples
+
+Complete configs in this repository:
+
+- [`ros_portal.yaml`](../src/ros_portal/config/ros_portal.yaml) — default package config used for development and integration testing.
+- [`turtle_sim_config.yaml`](../src/ros_portal_tutorials/config/turtle_sim_config.yaml)
+  and
+  [`turtle_sim_controller.yaml`](../src/ros_portal_tutorials/config/turtle_sim_controller.yaml) —
+  paired turtlesim tutorial configs (see [Tutorials](./tutorials.md)).
+
+Full robot stacks with ROS Portal configs:
+
+- `cobra_flex_ros` [`livekit.yaml`](https://github.com/livekit-examples/cobra_flex_ros/blob/main/bringup/config/livekit.yaml) —
+  Waveshare Cobra Flex teleoperation.
+- `waver_ros` [`livekit_robot.yaml`](https://github.com/livekit-examples/waver_ros/blob/main/src/waver_bringup/config/livekit_robot.yaml)
+  and
+  [`livekit_controller.yaml`](https://github.com/livekit-examples/waver_ros/blob/main/src/waver_bringup/config/livekit_controller.yaml) —
+  WAVE ROVER robot and controller sides.
 
 ### Minimal Config
 
@@ -79,9 +107,6 @@ The configuration file path is resolved through the node's `config_path` ROS par
 ros_portal:
   version: "0.0.1"
 ```
-
-The parser rejects unknown fields, empty required strings, invalid enum values,
-and non-positive integer values where a positive value is required.
 
 ### Top-Level Fields
 

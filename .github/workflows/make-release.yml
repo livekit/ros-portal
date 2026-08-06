@@ -81,39 +81,34 @@ jobs:
           fi
           package_version="${version%%[-+]*}"
 
-          mapfile -t package_versions < <(
-            python3 - \
-              src/ros_portal/package.xml \
-              src/ros_portal_config/package.xml \
-              src/ros_portal_msgs/package.xml <<'PY'
+          manifest_version="$(
+            python3 - src/ros_portal/package.xml <<'PY'
           import sys
           import xml.etree.ElementTree as ET
 
-          for package_xml in sys.argv[1:]:
-              print(ET.parse(package_xml).getroot().findtext("version"))
+          print(ET.parse(sys.argv[1]).getroot().findtext("version"))
           PY
-          )
-
-          if [[ "${#package_versions[@]}" -ne 3 ]]; then
-            echo "Unable to read every first-party package version" >&2
+          )"
+          if [[ -z "${manifest_version}" ]]; then
+            echo "Unable to read src/ros_portal/package.xml version" >&2
             exit 1
           fi
-          for manifest_version in "${package_versions[@]}"; do
-            if [[ "${manifest_version}" != "${package_version}" ]]; then
-              echo "Release tag ${RELEASE_TAG} has package version ${package_version}, which does not match package.xml version ${manifest_version}" >&2
-              exit 1
-            fi
-          done
-
-          # Docker Hub publishes immutable <distro>-vX.Y.Z tags for final
-          # releases only. Prerelease tags still upload Debian packages.
-          if [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            publish_docker=true
-          else
-            publish_docker=false
+          if [[ "${manifest_version}" != "${package_version}" ]]; then
+            echo "Release tag ${RELEASE_TAG} has package version ${package_version}, which does not match src/ros_portal/package.xml version ${manifest_version}" >&2
+            exit 1
           fi
 
-          if [[ "${publish_docker}" != "true" ]]; then
+          # Publish versioned Docker Hub images for every validated release tag,
+          # including SemVer prereleases (for example, v0.2.0-rc1). Moving
+          # distro tags stay reserved for final releases.
+          publish_docker=true
+          if [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            is_final_tag=true
+          else
+            is_final_tag=false
+          fi
+
+          if [[ "${is_final_tag}" != "true" ]]; then
             update_distro_tags=false
           elif [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
             if [[ "${RELEASE_PRERELEASE}" == "true" ]]; then

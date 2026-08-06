@@ -91,21 +91,22 @@ match the requested image.
 ## Image releases
 
 Pull requests build and smoke-test every distribution and architecture without
-publishing images. Publishing a GitHub Release for a final
-`v<major>.<minor>.<patch>` tag runs the unified Release workflow, which:
+publishing images. Publishing a GitHub Release for a SemVer tag (including
+prereleases such as `v0.2.0-rc1`) runs the unified Release workflow, which:
 
 1. Builds and tests every matrix cell from that tag
 2. Uploads Debian packages to the GitHub Release
-3. Publishes immutable `<distro>-v<major>.<minor>.<patch>` images to Docker Hub
+3. Publishes immutable `<distro>-<tag>` images to Docker Hub (for example,
+   `jazzy-v0.2.0` or `jazzy-v0.2.0-rc1`)
 4. Verifies their multi-architecture manifests
-5. Updates the stable distribution tags (unless the GitHub Release is marked
-   prerelease)
+5. For final `v<major>.<minor>.<patch>` releases that are not marked
+   prerelease, updates the stable distribution tags
 
-Prerelease tags such as `v0.1.1-rc1` still upload Debian packages, but skip
-Docker Hub publication. Re-running the Release workflow via
+Moving `humble` / `jazzy` / `kilted` / `lyrical` tags are never updated from
+SemVer prerelease tags. Re-running the Release workflow via
 `workflow_dispatch` can rebuild packages and images for an existing tag; set
-**Update moving Docker Hub distro tags** when you also want the stable
-`humble` / `jazzy` / `kilted` / `lyrical` tags refreshed.
+**Update moving Docker Hub distro tags** when you also want those stable tags
+refreshed (final tags only).
 
 Published images include OCI source and revision labels, an SBOM, and build
 provenance attestations.

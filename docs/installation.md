@@ -2,11 +2,13 @@
 
 <!-- TODO: document running ROS Portal from Docker directly. -->
 
-## LiveKit Server
+## LiveKit
+
+### LiveKit Server
 
 Setup a [LiveKit Cloud](https://cloud.livekit.io/) project or follow the [install docs](https://docs.livekit.io/transport/self-hosting/local/) to install LiveKit server locally.
 
-## LiveKit CLI
+### LiveKit CLI
 
 The [LiveKit CLI](https://docs.livekit.io/intro/basics/cli/) (`lk`) mints access tokens
 that ROS Portal uses to connect to LiveKit Server. See the
@@ -24,9 +26,6 @@ ros-<distro>-livekit-portal_<version>-<revision>_<arch>.deb
 The package installs to `/opt/livekit/ros/<distro>` without
 modifying files owned by the ROS installation under `/opt/ros/<distro>`.
 
-> [!NOTE]
-> Future versions of ROS Portal will be available via `apt` installation and will follow standard ROS installation locations.
-
 The following ROS packages are installed:
 
 - `ros_portal`
@@ -36,12 +35,12 @@ The following ROS packages are installed:
 
 The remaining dependent packages are leveraged from the native ROS installation.
 
+> [!NOTE]
+> Future versions of ROS Portal will be available via `apt` installation and will follow standard ROS installation locations.
+
 <!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
 ### Install
-
-> [!NOTE]
-> Wild cards are used for commands in this section such they can be run on any distro/architecture combination.
 
 Ensure the matching ROS release is installed prior to installing ROS Portal.
 
@@ -52,7 +51,7 @@ sudo apt update
 sudo apt install ./ros-$ROS_DISTRO-livekit-portal*.deb
 ```
 
-Source the installed overlay and check that ROS can find ROS Portal:
+Source the setup script and check that ROS can find ROS Portal:
 
 ```bash
 # bash
@@ -71,7 +70,7 @@ ros2 pkg prefix ros_portal
 Each package also installs a distro-specific convenience command:
 
 ```bash
-ros-portal-jazzy
+which type ros-portal-$ROS_DISTRO
 ```
 
 ### Troubleshooting

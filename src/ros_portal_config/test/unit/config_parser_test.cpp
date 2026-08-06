@@ -474,7 +474,7 @@ ros_portal: {}
 
 TEST(ConfigParserTest, RejectsUnknownRoomNameField) {
   expectInvalid(
-    R"(
+      R"(
 ros_portal:
   version: "0.0.1"
   room_name: "robo_room"

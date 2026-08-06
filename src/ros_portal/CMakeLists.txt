@@ -273,6 +273,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/topic_forwarder.cpp
   src/utils/base64.cpp
   src/utils/config_mapping.cpp
+  src/utils/graph_snapshot_cache.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp

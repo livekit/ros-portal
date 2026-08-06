@@ -40,7 +40,6 @@ def _write_config(path):
     path.write_text(
         """ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 500
   ros_threads: 0
   topics:
     - topic: "/camera/image_raw"

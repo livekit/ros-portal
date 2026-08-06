@@ -29,6 +29,7 @@
 #include <livekit/rpc_error.h>
 #include <livekit/video_source.h>
 
+#include <algorithm>
 #include <chrono>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -46,6 +47,7 @@
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
+#include "ros_portal/utils/graph_snapshot_cache.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
 
@@ -60,7 +62,6 @@ constexpr char kRosPortalStatusDiagnosticTaskName[] = "ros_portal_status";
 
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros_portal", options),
-      topic_polling_period_ms_(0),
       min_qos_depth_(0),
       max_qos_depth_(0),
       ros_threads_(0),
@@ -100,25 +101,23 @@ bool RosPortal::initialize() {
     return false;
   }
 
-  topic_polling_period_ms_ = config->topic_polling_period_ms;
   ros_threads_ = config->ros_threads;
   room_session_ended_.store(false);
   room_session_prepared_ = false;
   room_components_started_ = false;
   topic_forwarder_.reset();
-  diagnostic_state_.topic_polling_period_ms.store(topic_polling_period_ms_, std::memory_order_relaxed);
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   build_info_diagnostics_.reset();
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  graph_snapshot_cache_ = std::make_shared<utils::GraphSnapshotCache>(this->get_node_graph_interface());
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   topics_ = config->topics;
 
-  RCLCPP_INFO(this->get_logger(),
-              "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu], ros_threads: %d",
-              topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
+  RCLCPP_INFO(this->get_logger(), "%zu configured topics, QoS depth range: [%zu, %zu], ros_threads: %d",
+              config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
@@ -182,9 +181,10 @@ bool RosPortal::initialize() {
     return false;
   }
 
-  RCLCPP_INFO(this->get_logger(), "Creating timer for polling topics at rate %d ms", topic_polling_period_ms_);
-  poll_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(topic_polling_period_ms_), [this]() { pollTopics(); }, reentrant_callback_group_);
+  if (!startGraphDiscovery()) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to start ROS graph discovery");
+    return false;
+  }
 
   connection_timer_ = this->create_wall_timer(
       ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
@@ -210,10 +210,7 @@ void RosPortal::shutdown() {
   }
 
   // Stop ROS callbacks before dismantling the objects they access.
-  if (poll_timer_) {
-    poll_timer_->cancel();
-    poll_timer_.reset();
-  }
+  stopGraphDiscovery();
   if (connection_timer_) {
     connection_timer_->cancel();
     connection_timer_.reset();
@@ -260,6 +257,7 @@ void RosPortal::shutdown() {
 
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
+  graph_snapshot_cache_.reset();
   connection_manager_.reset();
   diagnostic_state_.connection_manager_active.store(false, std::memory_order_relaxed);
   build_info_diagnostics_.reset();
@@ -468,39 +466,114 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   const bool has_inactive_components = !components_inactive.empty();
 
   const bool initialized = initialized_.load(std::memory_order_relaxed);
-  const bool poll_timer_active = poll_timer_ != nullptr;
-  const auto topic_poll_overruns = diagnostic_state_.topic_poll_overruns.load(std::memory_order_relaxed);
+  const bool graph_discovery_active = diagnostic_state_.graph_discovery_active.load(std::memory_order_relaxed);
 
   status.add("initialized", initialized ? "true" : "false");
   status.add("components_inactive", has_inactive_components ? components_inactive : "none");
   status.add("config_path", config_path);
-  status.add("topic_polling_period_ms", diagnostic_state_.topic_polling_period_ms.load(std::memory_order_relaxed));
+  status.add("graph_discovery_active", graph_discovery_active ? "true" : "false");
   status.add("local_identity", local_identity);
   status.add("rpc_register_failures", diagnostic_state_.rpc_register_failures.load(std::memory_order_relaxed));
   status.add("rpc_perform_failures", diagnostic_state_.rpc_perform_failures.load(std::memory_order_relaxed));
-  status.add("topic_poll_overruns", topic_poll_overruns);
 
   if (!initialized) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal is not initialized");
-  } else if (!poll_timer_active) {
+  } else if (!graph_discovery_active) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
-                   "ROS Portal is initialized without an active topic poll timer");
+                   "ROS Portal is initialized without an active graph discovery worker");
   } else if (has_inactive_components) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal has inactive components");
-  } else if (topic_poll_overruns > 0) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "ROS Portal topic polling has overrun");
   } else {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "ROS Portal is initialized");
   }
 }
 
-void RosPortal::pollTopics() {
-  if (!initialized_.load(std::memory_order_relaxed)) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "Polling topics while ROS Portal is not initialized, skipping...");
-    return;
+bool RosPortal::startGraphDiscovery() {
+  try {
+    graph_event_ = this->get_graph_event();
+    graph_snapshot_cache_->invalidate();
+    stop_graph_discovery_.store(false);
+    graph_discovery_thread_ = std::thread(&RosPortal::graphDiscoveryLoop, this);
+    diagnostic_state_.graph_discovery_active.store(true, std::memory_order_relaxed);
+    RCLCPP_INFO(this->get_logger(), "ROS graph discovery is event-driven");
+    return true;
+  } catch (const std::exception& error) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to start graph discovery: %s", error.what());
+    graph_event_.reset();
+    diagnostic_state_.graph_discovery_active.store(false, std::memory_order_relaxed);
+    return false;
+  }
+}
+
+void RosPortal::stopGraphDiscovery() {
+  stop_graph_discovery_.store(true);
+  if (graph_event_) {
+    try {
+      this->get_node_graph_interface()->notify_graph_change();
+    } catch (const std::exception& error) {
+      RCLCPP_WARN(this->get_logger(), "Failed to wake graph discovery during shutdown: %s", error.what());
+    }
+  }
+  if (graph_discovery_thread_.joinable()) {
+    graph_discovery_thread_.join();
+  }
+  graph_event_.reset();
+  diagnostic_state_.graph_discovery_active.store(false, std::memory_order_relaxed);
+}
+
+void RosPortal::graphDiscoveryLoop() {
+  try {
+    reconcileGraphTopics();
+    constexpr auto kDebounce = std::chrono::milliseconds(20);
+
+    while (!stop_graph_discovery_.load() && rclcpp::ok(this->get_node_base_interface()->get_context())) {
+      this->wait_for_graph_change(graph_event_, nextGraphWait());
+      if (stop_graph_discovery_.load()) {
+        break;
+      }
+      if (!graph_event_->check_and_clear()) {
+        if (topic_forwarder_) {
+          topic_forwarder_->reapExpiredSubscriptions();
+        }
+        continue;
+      }
+
+      std::this_thread::sleep_for(kDebounce);
+      graph_event_->check_and_clear();
+      graph_snapshot_cache_->invalidate();
+      reconcileGraphTopics();
+      if (topic_forwarder_) {
+        topic_forwarder_->reapExpiredSubscriptions();
+      }
+    }
+  } catch (const std::exception& error) {
+    if (!stop_graph_discovery_.load()) {
+      RCLCPP_ERROR(this->get_logger(), "ROS graph discovery stopped after an error: %s", error.what());
+    }
+  } catch (...) {
+    if (!stop_graph_discovery_.load()) {
+      RCLCPP_ERROR(this->get_logger(), "ROS graph discovery stopped after an unknown error");
+    }
+  }
+}
+
+std::chrono::nanoseconds RosPortal::nextGraphWait() const {
+  if (!topic_forwarder_) {
+    return kMaxGraphWait;
   }
 
+  const auto deadline = topic_forwarder_->nextExpiryDeadline();
+  if (!deadline.has_value()) {
+    return kMaxGraphWait;
+  }
+
+  // An elapsed deadline still needs a zero wait rather than a negative one:
+  // the reap that follows clears the entry, so the next wait is a full one.
+  const auto remaining = *deadline - std::chrono::steady_clock::now();
+  return std::clamp<std::chrono::nanoseconds>(remaining, std::chrono::nanoseconds::zero(), kMaxGraphWait);
+}
+
+void RosPortal::reconcileGraphTopics() {
   processEndedRoomSession();
   if (!roomOperationsEnabled()) {
     return;
@@ -511,18 +584,18 @@ void RosPortal::pollTopics() {
     return;
   }
 
-  const auto poll_started = std::chrono::steady_clock::now();
-  if (topic_forwarder_) {
-    topic_forwarder_->pollTopics();
+  const bool topic_discovery = topic_forwarder_ && topic_forwarder_->needsGraphDiscovery();
+  const bool latched_discovery = latched_topic_forwarder_ && latched_topic_forwarder_->needsGraphDiscovery();
+  if (!topic_discovery && !latched_discovery) {
+    return;
   }
 
-  if (latched_topic_forwarder_) {
-    latched_topic_forwarder_->poll();
+  const auto topics = graph_snapshot_cache_->topics();
+  if (topic_discovery) {
+    topic_forwarder_->reconcileTopics(*topics);
   }
-
-  if (std::chrono::steady_clock::now() - poll_started >
-      std::chrono::milliseconds(diagnostic_state_.topic_polling_period_ms.load(std::memory_order_relaxed))) {
-    diagnostic_state_.topic_poll_overruns.fetch_add(1, std::memory_order_relaxed);
+  if (latched_discovery) {
+    latched_topic_forwarder_->reconcileTopics(*topics);
   }
 }
 
@@ -624,6 +697,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     const auto best_effort_qos_topics = this->get_parameter("best_effort_qos_topics").as_string_array();
     auto forwarder_options = utils::topicForwarderOptions(topics, min_qos_depth_, max_qos_depth_,
                                                           best_effort_qos_topics, this->get_logger());
+    forwarder_options.topic_snapshot = [cache = graph_snapshot_cache_]() { return cache->topics(); };
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
     forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
@@ -769,8 +843,18 @@ bool RosPortal::initializeCliManager() {
     const auto topic_publish_allowed = [this](const std::string& topic_name) {
       return topic_forwarder_ && topic_forwarder_->isIncomingTopicAllowed(topic_name);
     };
-    cli_manager_ = std::make_unique<cli::Manager>(*this, reentrant_callback_group_, std::move(cli_lk_methods),
-                                                  std::move(topic_publish_allowed), makeDiagnosticsFns());
+    cli::Manager::NodeInterfaces node_interfaces{
+        this->get_node_base_interface(),
+        this->get_node_services_interface(),
+        this->get_node_graph_interface(),
+        this->get_node_topics_interface(),
+        this->get_node_logging_interface(),
+        [cache = graph_snapshot_cache_]() { return cache->topics(); },
+        [cache = graph_snapshot_cache_]() { return cache->services(); },
+    };
+    cli_manager_ =
+        std::make_unique<cli::Manager>(std::move(node_interfaces), reentrant_callback_group_, std::move(cli_lk_methods),
+                                       std::move(topic_publish_allowed), makeDiagnosticsFns());
     diagnostic_state_.cli_manager_active.store(cli_manager_ != nullptr, std::memory_order_relaxed);
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize ROS2 CLI manager, unknown exception");

@@ -47,8 +47,12 @@ std::string formatServiceList(const std::vector<ServiceInfo>& services, const Se
 
 std::vector<ServiceInfo> collectServiceInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
                                             const ServiceListOptions& options) {
+  return collectServiceInfo(graph.get_service_names_and_types(), options);
+}
+
+std::vector<ServiceInfo> collectServiceInfo(const ServiceNamesAndTypes& service_names_and_types,
+                                            const ServiceListOptions& options) {
   std::vector<ServiceInfo> services;
-  const auto service_names_and_types = graph.get_service_names_and_types();
   services.reserve(service_names_and_types.size());
 
   for (const auto& [service_name, service_types] : service_names_and_types) {

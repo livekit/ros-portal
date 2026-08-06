@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "ros_portal/cli/types.hpp"
+#include "ros_portal/graph_types.hpp"
 
 namespace ros_portal::cli {
 
@@ -43,6 +44,15 @@ std::string formatTopicList(const std::vector<TopicInfo>& topics, const TopicLis
 /// verbose publisher/subscriber counts.
 /// @return Topic metadata sorted by topic name.
 std::vector<TopicInfo> collectTopicInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
+                                        const TopicListOptions& options);
+
+/// @brief Collect visible topic metadata from a shared names/types snapshot.
+/// @param topics Cached topic names and types.
+/// @param graph Node graph interface used only for verbose endpoint counts.
+/// @param options Discovery and formatting options.
+/// @return Topic metadata sorted by topic name.
+std::vector<TopicInfo> collectTopicInfo(const TopicNamesAndTypes& topics,
+                                        const rclcpp::node_interfaces::NodeGraphInterface& graph,
                                         const TopicListOptions& options);
 
 } // namespace ros_portal::cli

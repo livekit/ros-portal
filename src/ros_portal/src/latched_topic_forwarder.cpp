@@ -125,16 +125,18 @@ void LatchedTopicForwarder::start() {
   worker_ = std::thread(&LatchedTopicForwarder::runWorker, this);
 }
 
+bool LatchedTopicForwarder::needsGraphDiscovery() const { return !options_.outbound_topics.empty(); }
+
 rclcpp::QoS LatchedTopicForwarder::latchedQoS() const {
   return rclcpp::QoS(rclcpp::KeepLast(kLatchedQosDepth)).reliable().transient_local();
 }
 
 void LatchedTopicForwarder::poll() {
-  if (options_.outbound_topics.empty()) {
+  if (!needsGraphDiscovery()) {
     return;
   }
 
-  std::map<std::string, std::vector<std::string>> topic_names_and_types;
+  TopicNamesAndTypes topic_names_and_types;
   {
     const auto node = node_.lock();
     if (!node) {
@@ -144,6 +146,10 @@ void LatchedTopicForwarder::poll() {
     topic_names_and_types = node->get_topic_names_and_types();
   }
 
+  reconcileTopics(topic_names_and_types);
+}
+
+void LatchedTopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_types) {
   for (const auto& topic_name : options_.outbound_topics) {
     {
       std::lock_guard<std::mutex> lock(subscriptions_mutex_);

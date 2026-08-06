@@ -20,6 +20,7 @@
 #include <livekit/room_delegate.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
@@ -27,6 +28,8 @@
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
@@ -47,15 +50,25 @@ namespace cli {
 class Manager;
 } // namespace cli
 class ConnectionManager;
+namespace utils {
+class GraphSnapshotCache;
+} // namespace utils
 class TopicForwarder;
 class LatchedTopicForwarder;
 
 /// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
 inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
 
+/// @brief Upper bound on a single graph-event wait.
+///
+/// Not a discovery interval: graph changes and context shutdown wake the wait
+/// on their own. This only keeps an idle worker from blocking indefinitely, so
+/// a missed notification cannot wedge it for the process lifetime.
+inline constexpr std::chrono::seconds kMaxGraphWait{5};
+
 /// @brief The main ROS Portal node.
 ///
-/// This node is responsible for polling the ROS2 topic graph, matching topics
+/// This node is responsible for reacting to ROS2 graph events, matching topics
 /// against user-defined patterns, and creating subscribers for the allowed
 /// topics. ROS Portal treats video and audio as LK video/audio tracks and other
 /// topics as data tracks.
@@ -67,7 +80,7 @@ public:
   ~RosPortal() override;
 
   /// @brief Initialize ROS Portal configuration, LiveKit connection management,
-  /// and polling.
+  /// and graph discovery.
   /// @return True if initialization completed, false for expected startup
   /// failures that have already been logged.
   bool initialize();
@@ -95,7 +108,7 @@ private:
   void pollConnection();
 #ifdef BUILD_TESTING
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
-  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates);
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
 #endif
 
@@ -107,8 +120,8 @@ private:
     std::string config_path{"unset"};
     /// @brief Connected local LiveKit identity, or `unset`.
     std::string local_identity{"unset"};
-    /// @brief Effective topic polling period.
-    std::atomic<int> topic_polling_period_ms{0};
+    /// @brief Whether the graph-event discovery worker is running.
+    std::atomic_bool graph_discovery_active{false};
     /// @brief Whether the connection manager is instantiated.
     std::atomic_bool connection_manager_active{false};
     /// @brief Whether the topic forwarder is instantiated.
@@ -119,16 +132,33 @@ private:
     std::atomic_bool cli_manager_active{false};
     /// @brief Whether the service forwarder is instantiated.
     std::atomic_bool service_forwarder_active{false};
-    /// @brief Count of topic polls that exceeded the configured period.
-    std::atomic<std::uint64_t> topic_poll_overruns{0};
     /// @brief Count of shared LiveKit RPC method registration failures.
     std::atomic<std::uint64_t> rpc_register_failures{0};
     /// @brief Count of shared LiveKit outbound RPC failures.
     std::atomic<std::uint64_t> rpc_perform_failures{0};
   };
 
-  /// @brief Poll the topics and create subscribers for the allowed topics
-  void pollTopics();
+  /// @brief Start the graph-event discovery worker.
+  /// @return True when the event and worker were created successfully.
+  bool startGraphDiscovery();
+
+  /// @brief Stop and join the graph-event discovery worker.
+  void stopGraphDiscovery();
+
+  /// @brief Wait for graph events and reconcile dynamic topic subscriptions.
+  void graphDiscoveryLoop();
+
+  /// @brief Compute how long the discovery worker should wait for the next
+  /// graph event.
+  ///
+  /// Graph changes and context shutdown both wake the wait on their own, so
+  /// the only wake-up a timeout owes is an inactive subscription whose grace
+  /// period is about to elapse. The wait collapses to that deadline when one is
+  /// pending and falls back to @ref kMaxGraphWait otherwise.
+  std::chrono::nanoseconds nextGraphWait() const;
+
+  /// @brief Reconcile all graph-dependent forwarders from one shared snapshot.
+  void reconcileGraphTopics();
 
   /// @brief Create components whose LiveKit state belongs to the current room
   /// session.
@@ -252,9 +282,6 @@ private:
   /// the forwarder could not be initialized.
   bool initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics);
 
-  //! @brief The period for polling the topics
-  int topic_polling_period_ms_;
-
   //! @brief The minimum QoS depth
   size_t min_qos_depth_;
   //! @brief The maximum QoS depth
@@ -270,10 +297,16 @@ private:
   std::atomic_bool shutting_down_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
-  //! @brief The timer for the polling for new topics
-  rclcpp::TimerBase::SharedPtr poll_timer_;
   //! @brief Fixed-rate timer for LiveKit room connection attempts.
   rclcpp::TimerBase::SharedPtr connection_timer_;
+  //! @brief Lazily shared topic/service graph snapshots invalidated by events.
+  std::shared_ptr<utils::GraphSnapshotCache> graph_snapshot_cache_;
+  //! @brief Graph event registered before the discovery worker starts.
+  rclcpp::Event::SharedPtr graph_event_;
+  //! @brief Requests graph-discovery worker shutdown.
+  std::atomic_bool stop_graph_discovery_{false};
+  //! @brief Dedicated worker that waits without occupying an executor thread.
+  std::thread graph_discovery_thread_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;

@@ -187,6 +187,52 @@ TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears
   EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", conflicting_schema), "std_msgs/msg/String");
 }
 
+TEST_F(TopicForwarderTest, SubscriptionIsRemovedAfterPublisherGracePeriod) {
+  auto options = makeOptions();
+  options.inactive_subscription_grace = 0ms;
+  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/ephemeral", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 1U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() == 1U; }));
+
+  publisher.reset();
+  ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 0U));
+  forwarder.pollTopics();
+  EXPECT_TRUE(forwarder.reapExpiredSubscriptions());
+  ASSERT_TRUE(spinUntil([&]() { return node_->count_subscribers("/allowed/ephemeral") == 0U; }));
+}
+
+TEST_F(TopicForwarderTest, ExpiryDeadlineIsOnlyReportedWhilePublishersAreAbsent) {
+  auto options = makeOptions();
+  options.inactive_subscription_grace = 10s;
+  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  // Nothing subscribed yet, so the discovery worker is owed no timed wake-up.
+  EXPECT_FALSE(forwarder.nextExpiryDeadline().has_value());
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/ephemeral", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 1U));
+  forwarder.pollTopics();
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() == 1U; }));
+
+  // A live publisher keeps the subscription off the clock.
+  EXPECT_FALSE(forwarder.nextExpiryDeadline().has_value());
+
+  publisher.reset();
+  ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 0U));
+  const auto before = std::chrono::steady_clock::now();
+  forwarder.pollTopics();
+
+  // The grace period starts on the reconcile that observed zero publishers, so
+  // the worker can sleep until it elapses instead of polling for it.
+  const auto deadline = forwarder.nextExpiryDeadline();
+  ASSERT_TRUE(deadline.has_value());
+  EXPECT_GE(*deadline, before + 10s);
+  EXPECT_FALSE(forwarder.reapExpiredSubscriptions());
+}
+
 TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) {
   auto subscription = node_->create_subscription<std_msgs::msg::String>(
       "/remote/schema_mismatch", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});

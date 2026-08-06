@@ -4,6 +4,8 @@
 
 ## LiveKit
 
+ROS Portal depends on [LiveKit](https://livekit.com) server and CLI. The following table below is a quick reference for installing these components if not already present.
+
 | Component | Purpose | Documentation |
 |---|---|---|
 | LiveKit Server | Host rooms that ROS Portal connects to | [LiveKit Cloud](https://cloud.livekit.io/) or [local install](https://docs.livekit.io/transport/self-hosting/local/) |
@@ -44,6 +46,9 @@ Download the `.deb` matching the machine's ROS distribution and architecture, th
 sudo apt update
 sudo apt install ./ros-$ROS_DISTRO-livekit-portal*.deb
 ```
+
+> [!NOTE]
+> Use apt install over alternatives to ensure additional third-party dependencies are installed if not already present.
 
 Source the setup script and check that ROS can find ROS Portal:
 

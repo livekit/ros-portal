@@ -1,31 +1,79 @@
 # Configuration Guide
 
 ROS Portal is configured via environment variables for LiveKit parameters and
-a YAML configuration file for everything else.
+a YAML configuration file for runtime parameters.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---:|---|
-| `LIVEKIT_URL` | yes | WebSocket URL of the LiveKit server (for example, `wss://<project>.livekit.cloud` or `ws://127.0.0.1:7880` for local development). |
-| `LIVEKIT_TOKEN` | yes | LiveKit access JWT for the ROS Portal participant. Room name, identity, and permissions come from the token grant, not the YAML config. |
+| `LIVEKIT_URL` | yes | WebSocket URL of the LiveKit server. |
+| `LIVEKIT_TOKEN` | yes | LiveKit access JWT for the ROS Portal participant. |
+| `LIVEKIT_API_KEY` | no | LiveKit Cloud only: API key used to mint `LIVEKIT_TOKEN` with LiveKit CLI (not read by ROS Portal). |
+| `LIVEKIT_API_SECRET` | no | LiveKit Cloud only: API secret used to mint `LIVEKIT_TOKEN` with LiveKit CLI (not read by ROS Portal). |
 
-### Credentials
+### Token Configuration
 
-LiveKit credentials are not read from the config file. Set `LIVEKIT_URL` and
-`LIVEKIT_TOKEN` in the node environment. The LiveKit room name comes from the
-active room connection (via the token grant), not from this config.
+`LIVEKIT_TOKEN` allows ROS Portal to connect to the LiveKit room and is minted
+using `lk token create`. The following table lists the required token options:
 
-ROS Portal advertises its LiveKit participant with the `lk.robot` attribute set
-to `"true"`. LiveKit attributes are string key/value pairs, so this is the
-string representation of a boolean value. Tokens must grant
-`canUpdateOwnMetadata` so the bridge can publish the attribute while joining.
+| Option/Grant | `lk` flag | Why ROS Portal needs it |
+|---|---|---|
+| Room join | `--join` | Connect to the LiveKit room. |
+| Room name | `--room <name>` | Identifies the room to join. |
+| Identity | `--identity <identity>` | Identifies the ROS Portal participant. |
+| `canUpdateOwnMetadata` | `--allow-update-metadata` | ROS Portal advertises its LiveKit participant with the `lk.robot` attribute set to `"true"`. |
 
-## YAML Configuration File
+### Development Server Examples
+
+Use the following two example commands to quickly configure the environment for a local
+LiveKit server instance (started using `--dev`):
+
+```bash
+export LIVEKIT_URL=ws://127.0.0.1:7880
+```
+
+```bash
+export LIVEKIT_TOKEN="$(lk token create \
+  --join \
+  --room robo_room \
+  --identity ros-portal \
+  --allow-update-metadata \
+  --valid-for 24h \
+  --token-only \
+  --yes \
+  --dev)"
+```
+
+### LiveKit Cloud Examples
+
+Use the following commands as reference for configuring the environment for a LiveKit Cloud
+project:
+
+```bash
+export LIVEKIT_URL=wss://<project details>.livekit.cloud
+```
+
+Export `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` from the project before minting `LIVEKIT_TOKEN`:
+
+```bash
+export LIVEKIT_API_KEY=<api-key>
+export LIVEKIT_API_SECRET=<api-secret>
+export LIVEKIT_TOKEN="$(lk token create \
+  --join \
+  --room robo_room \
+  --identity ros-portal \
+  --allow-update-metadata \
+  --valid-for 24h \
+  --token-only \
+  --yes)"
+```
+
+## Configuration File
 
 The configuration file path is resolved through the node's `config_path` ROS parameter.
 
-## Minimal Config
+### Minimal Config
 
 ```yaml
 ros_portal:
@@ -35,19 +83,19 @@ ros_portal:
 The parser rejects unknown fields, empty required strings, invalid enum values,
 and non-positive integer values where a positive value is required.
 
-## Top-Level Fields
+### Top-Level Fields
 
 All config lives under `ros_portal`.
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
-| `version` | string | yes | - | Must be `"0.0.1"`. |
+| `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
-| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching rclcpp's default. |
+| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
 
-## Services
+### Services
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
@@ -66,7 +114,7 @@ fully described by the single participant that answers it. This is unlike
 topics (see below), where `in` / `out` / `bidirectional` are meaningful and are
 used to limit which streams cross ROS Portal for bandwidth reasons.
 
-## Topics
+### Topics
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
@@ -88,7 +136,7 @@ forwarded and in which direction. Only forwarding the streams you actually need
 (and only in the required direction) keeps unnecessary traffic off the LiveKit
 connection, which matters for bandwidth on constrained links.
 
-### Preserving the publisher identity
+#### Preserving the publisher identity
 
 `preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is
 ignored for outbound topics. It defaults to `false` to preserve the original
@@ -113,7 +161,7 @@ ROS topic:          /robot_1/imu
 The identity is sanitized into a legal ROS name token, so any character that is
 not alphanumeric or `_` becomes `_` (e.g. `robot-1` → `robot_1`).
 
-### Capping the outbound forward rate
+#### Capping the outbound forward rate
 
 `max_rate_hz` applies only to outbound (`out` / `bidirectional`) topics and is
 ignored for inbound topics. The behavior mirrors
@@ -154,7 +202,7 @@ Unlike `topic` (an ECMAScript regex), `max_rate_hz` is matched by **literal
 topic name** — the cap applies to a discovered topic only when its name equals
 the configured `topic` string exactly.
 
-### Latched topics (`latched: true`)
+#### Latched topics (`latched: true`)
 
 Some ROS topics are **latched**: they are published once (or rarely) with
 `RELIABLE` + `TRANSIENT_LOCAL` durability, and DDS replays the last sample to
@@ -216,7 +264,7 @@ topics:
     latched: true
 ```
 
-### Data track encoding (`encoding`)
+#### Data track encoding (`encoding`)
 
 `encoding` applies only to outbound (`out` / `bidirectional`) topics and selects
 how this ROS Portal node encodes a topic's messages on the LiveKit DataTrack
@@ -251,7 +299,7 @@ Notes:
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
 
-## Video Options
+### Video Options
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|

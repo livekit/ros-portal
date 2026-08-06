@@ -61,10 +61,16 @@ source /opt/livekit/ros/$ROS_DISTRO/setup.zsh
 ros2 pkg prefix ros_portal
 ```
 
+If successful, outputs:
+
+```log
+/opt/livekit/ros/<distro>/ros_portal
+```
+
 Each package also installs a distro-specific convenience command:
 
 ```bash
-which type ros-portal-$ROS_DISTRO
+ros-portal-$ROS_DISTRO
 ```
 
 ### Troubleshooting
@@ -73,7 +79,7 @@ Missing `diagnostic-updater` package:
 
 ```bash
 sudo apt update
-sudo apt install ros-${ROS_DISTRO}-diagnostic-updater
+sudo apt install ros-$ROS_DISTRO-diagnostic-updater
 ```
 
 ## Next Steps

@@ -50,22 +50,22 @@ inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
 ///
 /// This node is responsible for polling the ROS2 topic graph, matching topics
 /// against user-defined patterns, and creating subscribers for the allowed
-/// topics. The bridge treats video and audio as LK video/audio tracks and other
+/// topics. ROS Portal treats video and audio as LK video/audio tracks and other
 /// topics as data tracks.
 class RosPortal : public rclcpp::Node, public livekit::RoomDelegate {
 public:
-  /// @brief Constructor for the ROS2 LiveKit bridge.
+  /// @brief Constructor for the ROS Portal.
   /// @param options The options for the node
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   ~RosPortal() override;
 
-  /// @brief Initialize bridge configuration, LiveKit connection management,
+  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
   /// and polling.
   /// @return True if initialization completed, false for expected startup
   /// failures that have already been logged.
   bool initialize();
 
-  /// @brief Disconnect LiveKit and release bridge resources.
+  /// @brief Disconnect LiveKit and release ROS Portal resources.
   ///
   /// Call this before releasing the final shared owner. The LiveKit SDK must
   /// not disconnect a room from one of its delegate callbacks.
@@ -101,13 +101,13 @@ private:
 
   /// @brief Apply participant metadata required for a newly connected room
   /// session.
-  /// @return True when the local participant is ready for bridge operations.
+  /// @return True when the local participant is ready for ROS Portal operations.
   bool prepareRoomSession();
 
   /// @brief Tear down a terminal room session after the SDK event stream ends.
   void processEndedRoomSession();
 
-  /// @brief Return whether room-facing bridge operations are currently allowed.
+  /// @brief Return whether room-facing ROS Portal operations are currently allowed.
   bool roomOperationsEnabled() const;
 
   /// @brief Handle a remote LiveKit data track being published.
@@ -116,7 +116,7 @@ private:
   /// @brief Stop republishing a remote LiveKit data track when it is removed.
   void onDataTrackUnpublished(livekit::Room& room, const livekit::DataTrackUnpublishedEvent& event) override;
 
-  // The LiveKit room exposes a single delegate, so the bridge owns it and
+  // The LiveKit room exposes a single delegate, so ROS Portal owns it and
   // forwards lifecycle events to the connection manager and diagnostics.
 
   /// @brief Forward participant-connected events to connection diagnostics.
@@ -213,7 +213,7 @@ private:
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
   int ros_threads_;
-  //! @brief Tracks whether bridge initialization has completed.
+  //! @brief Tracks whether ROS Portal initialization has completed.
   bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.
   std::mutex shutdown_mutex_;
@@ -230,7 +230,7 @@ private:
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
-  //! @brief Shared diagnostics updater for all bridge diagnostic tasks.
+  //! @brief Shared diagnostics updater for all ROS Portal diagnostic tasks.
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   //! @brief Connection lifecycle, retry state, and session-readiness barrier.
   std::unique_ptr<ConnectionManager> connection_manager_;

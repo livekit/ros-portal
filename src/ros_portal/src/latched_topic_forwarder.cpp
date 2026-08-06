@@ -198,6 +198,7 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
 void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, const std::string& topic_type,
                                                  const std::uint8_t* data, std::size_t size) {
   if (!livekit_methods_.is_room_available()) {
+    RCLCPP_DEBUG(logger_, "Skipping latched message store for '%s'; room is unavailable", topic_name.c_str());
     return;
   }
 
@@ -265,6 +266,7 @@ void LatchedTopicForwarder::runWorker() {
 
 void LatchedTopicForwarder::pushToPeers() {
   if (!livekit_methods_.is_room_available()) {
+    RCLCPP_DEBUG(logger_, "Skipping latched topic push; room is unavailable");
     return;
   }
 

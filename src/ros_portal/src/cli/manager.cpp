@@ -67,7 +67,7 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
                  LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
                  diagnostics::DiagnosticsManagerFns diagnostics)
     : node_interfaces_(std::move(node_interfaces)),
-      logger_(rclcpp::get_logger("cli_manager")),
+      logger_(node_interfaces_.node_logging->get_logger()),
       livekit_methods_(std::move(livekit_methods)),
       topic_publish_allowed_(std::move(topic_publish_allowed)),
       diagnostics_(std::move(diagnostics)) {
@@ -157,7 +157,7 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   diagnostics_.add(kCliManagerDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 
-  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(), "CLI Manager initialized");
+  RCLCPP_DEBUG(logger_, "CLI Manager initialized");
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,

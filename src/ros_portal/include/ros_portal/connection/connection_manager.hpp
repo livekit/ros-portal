@@ -32,10 +32,10 @@
 
 namespace ros_portal {
 
-/// @brief Owns the bridge's room connection state, retry decisions, and the
+/// @brief Owns ROS Portal's room connection state, retry decisions, and the
 /// session-readiness barrier used by inbound room callbacks.
 ///
-/// The bridge invokes @ref poll from its fixed-rate connection timer and
+/// ROS Portal invokes @ref poll from its fixed-rate connection timer and
 /// forwards LiveKit room lifecycle callbacks to this class.
 ///
 /// Inbound callbacks that must not run until join has finished (for example
@@ -50,7 +50,7 @@ public:
   /// @brief Minimum interval between room connection attempts.
   inline static constexpr std::chrono::seconds kRetryInterval{1};
 
-  /// @brief LiveKit-facing operation supplied by the bridge.
+  /// @brief LiveKit-facing operation supplied by ROS Portal.
   struct Methods {
     /// @brief Make one room connection attempt.
     std::function<bool()> try_connect;
@@ -59,9 +59,9 @@ public:
   };
 
   /// @brief Construct a connection manager.
-  /// @param methods Connection operation supplied by the bridge.
+  /// @param methods Connection operation supplied by ROS Portal.
   /// @param logger Logger used for connection lifecycle messages.
-  /// @param diagnostics Bridge-owned diagnostics functions used to register the
+  /// @param diagnostics ROS Portal-owned diagnostics functions used to register the
   /// connection-health diagnostic task.
   /// @throws std::invalid_argument when @p methods or @p diagnostics is incomplete.
   ConnectionManager(Methods methods, rclcpp::Logger logger, diagnostics::DiagnosticsManagerFns diagnostics);
@@ -79,7 +79,7 @@ public:
   /// @brief Return whether the manager is in the connected state.
   bool isConnected() const;
 
-  /// @brief Return whether bridge components may use the LiveKit room.
+  /// @brief Return whether ROS Portal components may use the LiveKit room.
   bool isOperationsEnabled() const;
 
   /// @brief Lifetime-safe flag mirrored by readiness transitions.

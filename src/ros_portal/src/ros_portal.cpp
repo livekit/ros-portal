@@ -64,14 +64,14 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
 
 bool RosPortal::initialize() {
   if (initialized_) {
-    RCLCPP_WARN(this->get_logger(), "Bridge is already initialized");
+    RCLCPP_WARN(this->get_logger(), "ROS Portal is already initialized");
     return true;
   }
 
   const auto config_path = std::filesystem::path(this->get_parameter("config_path").as_string());
   const auto config = utils::parseRosPortalConfig(config_path, this->get_logger());
   if (!config) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to parse bridge config");
+    RCLCPP_FATAL(this->get_logger(), "Failed to parse ROS Portal config");
     return false;
   }
 
@@ -104,7 +104,7 @@ bool RosPortal::initialize() {
 
   if (livekit_url.empty() || livekit_token.empty()) {
     RCLCPP_WARN(this->get_logger(),
-                "LiveKit credentials not fully provided — bridge will not connect.\n"
+                "LiveKit credentials not fully provided — ROS Portal will not connect.\n"
                 "  livekit_url   : %s\n"
                 "  livekit_token : %s\n"
                 "Set them via environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
@@ -131,7 +131,7 @@ bool RosPortal::initialize() {
   livekit::RoomOptions room_options;
   room_options.auto_subscribe = true;
   room_options.dynacast = true;
-  // The bridge owns retry cadence. Disable the Rust SDK's immediate inner join
+  // ROS Portal owns retry cadence. Disable the Rust SDK's immediate inner join
   // retries so each 1 Hz manager tick represents one connection attempt.
   room_options.join_retries = 0U;
 
@@ -163,7 +163,7 @@ bool RosPortal::initialize() {
   connection_timer_ = this->create_wall_timer(
       ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
 
-  RCLCPP_INFO(this->get_logger(), "Bridge initialized; attempting LiveKit room connection at 1 Hz");
+  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized; attempting LiveKit room connection at 1 Hz");
   initialized_ = true;
   return true;
 }
@@ -189,7 +189,7 @@ void RosPortal::shutdown() {
   }
 
   // The SDK stores a raw delegate pointer. Detach it before disconnecting so
-  // teardown events cannot call back into a partially destroyed bridge.
+  // teardown events cannot call back into a partially destroyed ROS Portal node.
   if (room_) {
     room_->setDelegate(nullptr);
   }
@@ -343,7 +343,7 @@ bool RosPortal::roomOperationsEnabled() const {
 void RosPortal::pollConnection() {
   if (!initialized_) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "Polling connection while bridge is not initialized, skipping...");
+                         "Polling connection while ROS Portal is not initialized, skipping...");
     return;
   }
 
@@ -374,14 +374,14 @@ void RosPortal::pollConnection() {
 
   const std::lock_guard<std::mutex> lock(room_components_mutex_);
   if (!startRoomComponents()) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to start room-bound bridge components; retrying");
+    RCLCPP_ERROR(this->get_logger(), "Failed to start room-bound ROS Portal components; retrying");
   }
 }
 
 void RosPortal::pollTopics() {
   if (!initialized_) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "Polling topics while bridge is not initialized, skipping...");
+                         "Polling topics while ROS Portal is not initialized, skipping...");
     return;
   }
 

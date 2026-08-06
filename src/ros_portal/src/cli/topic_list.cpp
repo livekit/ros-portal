@@ -74,8 +74,13 @@ std::string formatTopicList(const std::vector<TopicInfo>& topics, const TopicLis
 
 std::vector<TopicInfo> collectTopicInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
                                         const TopicListOptions& options) {
+  return collectTopicInfo(graph.get_topic_names_and_types(), graph, options);
+}
+
+std::vector<TopicInfo> collectTopicInfo(const TopicNamesAndTypes& topic_names_and_types,
+                                        const rclcpp::node_interfaces::NodeGraphInterface& graph,
+                                        const TopicListOptions& options) {
   std::vector<TopicInfo> topics;
-  const auto topic_names_and_types = graph.get_topic_names_and_types();
   topics.reserve(topic_names_and_types.size());
 
   for (const auto& [topic_name, topic_types] : topic_names_and_types) {

@@ -37,6 +37,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ros_portal/graph_types.hpp"
 #include "ros_portal/types.hpp"
 
 #ifdef BUILD_TESTING
@@ -118,6 +119,13 @@ public:
 
   /// @brief Start the background push worker (no-op without outbound topics).
   void start();
+
+  /// @brief Return whether any outbound latched topic still needs graph discovery.
+  bool needsGraphDiscovery() const;
+
+  /// @brief Reconcile outbound latched subscriptions against a shared snapshot.
+  /// @param topics Current ROS topic names and types.
+  void reconcileTopics(const TopicNamesAndTypes& topics);
 
   /// @brief Discover configured outbound latched topics on the ROS graph and
   /// create subscriptions for new matches. Safe to call repeatedly.

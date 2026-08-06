@@ -122,7 +122,6 @@ inline std::string rosPortalConfigYaml(const std::string& topic_pattern, bool pr
   std::ostringstream stream;
   stream << "ros_portal:\n"
          << "  version: \"0.0.1\"\n"
-         << "  topic_polling_period_ms: 50\n"
          << "  ros_threads: 4\n"
          << "  topics:\n"
          << "    - topic: \"" << topic_pattern << "\"\n"

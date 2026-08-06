@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "ros_portal/cli/types.hpp"
+#include "ros_portal/graph_types.hpp"
 
 namespace ros_portal::cli {
 
@@ -42,5 +43,11 @@ std::string formatServiceList(const std::vector<ServiceInfo>& services, const Se
 /// @return Service metadata sorted by service name.
 std::vector<ServiceInfo> collectServiceInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
                                             const ServiceListOptions& options);
+
+/// @brief Collect visible service metadata from a shared names/types snapshot.
+/// @param services Cached service names and types.
+/// @param options Discovery options, including hidden-service filtering.
+/// @return Service metadata sorted by service name.
+std::vector<ServiceInfo> collectServiceInfo(const ServiceNamesAndTypes& services, const ServiceListOptions& options);
 
 } // namespace ros_portal::cli

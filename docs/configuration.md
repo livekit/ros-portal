@@ -130,7 +130,6 @@ All config lives under `ros_portal`.
 |---|---:|---:|---:|---|
 | `$schema` | string | no | - | Link to JSON schema. Use `https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json` and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
-| `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
@@ -176,7 +175,18 @@ forwarded and in which direction. Only forwarding the streams you actually need
 (and only in the required direction) keeps unnecessary traffic off the LiveKit
 connection, which matters for bandwidth on constrained links.
 
-#### Preserving the publisher identity
+### Topic discovery
+
+Outbound `topic` is an ECMAScript regex. ROS Portal waits for ROS graph-change
+events, takes one shared topic snapshot, and creates subscriptions for new
+matches. Subscriptions whose publishers remain absent for 30 seconds are
+removed; they are recreated if a matching publisher later reappears.
+
+Discovery has no tuning knob. Graph changes wake it immediately, and the only
+timed wake-up it needs — revisiting a subscription whose 30-second grace is
+about to elapse — is derived from that grace rather than configured.
+
+### Preserving the publisher identity
 
 `preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is
 ignored for outbound topics. It defaults to `false` to preserve the original

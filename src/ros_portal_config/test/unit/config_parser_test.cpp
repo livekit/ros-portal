@@ -44,7 +44,6 @@ ros_portal:
 )");
 
   EXPECT_EQ(config.version, "0.0.1");
-  EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 0);
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());
@@ -66,7 +65,6 @@ TEST(ConfigParserTest, ParsesFullConfig) {
       R"(
 ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 500
   ros_threads: 4
   services:
     - service: "/go_to_pose"
@@ -92,7 +90,6 @@ ros_portal:
       preserve_id: true
 )");
 
-  EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
 
   ASSERT_EQ(config.services.size(), 2u);
@@ -383,7 +380,6 @@ TEST(ConfigParserTest, ParsesFile) {
   const auto config = ConfigParser{}.parseFile(path);
 
   EXPECT_EQ(config.version, "0.0.1");
-  EXPECT_EQ(config.topic_polling_period_ms, 500);
   EXPECT_EQ(config.ros_threads, 4);
   ASSERT_EQ(config.services.size(), 2u);
   ASSERT_EQ(config.topics.size(), 6u);
@@ -558,9 +554,9 @@ TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {
       R"(
 ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 0
+  topic_polling_period_ms: 500
 )",
-      "expected positive integer");
+      "unknown field 'topic_polling_period_ms'");
 }
 
 TEST(ConfigParserTest, RejectsInvalidRosThreads) {

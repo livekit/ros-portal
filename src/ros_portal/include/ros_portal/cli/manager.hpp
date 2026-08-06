@@ -34,6 +34,7 @@
 #include "ros_portal/cli/topic_pub.hpp"
 #include "ros_portal/cli/types.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/graph_types.hpp"
 #include "ros_portal/types.hpp"
 
 #ifdef BUILD_TESTING
@@ -80,6 +81,10 @@ public:
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics;
     //! @brief Node logger used to create the manager's child logger.
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
+    //! @brief Shared/cached topic graph snapshot provider.
+    TopicGraphSnapshotFn topic_snapshot;
+    //! @brief Shared/cached service graph snapshot provider.
+    ServiceGraphSnapshotFn service_snapshot;
   };
 
   /// @brief Construct the manager, create the ROS services, and register RPC.

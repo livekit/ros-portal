@@ -1,8 +1,8 @@
 # Running with Docker
 
-ROS Portal publishes runtime images to `docker.io/livekit/ros-portal`. Each
-distribution tag is a multi-architecture image containing native amd64 and
-arm64 variants.
+ROS Portal publishes runtime images to `docker.io/livekit/ros-portal`.
+Each distribution tag is a multi-architecture image containing native
+amd64 and arm64 variants.
 
 ## Supported images
 
@@ -26,6 +26,7 @@ Define a configuration file as described in [Configuration](configuration.md),
 then run:
 
 ```bash
+docker login
 docker pull livekit/ros-portal:jazzy
 
 docker run --rm \
@@ -88,37 +89,16 @@ Use the base image tag and digest from `.github/ros-build-matrix.json`. The
 Dockerfile rejects a Debian package whose distribution or architecture doesn't
 match the requested image.
 
-## Image releases
+## Image tags
 
-Pull requests build and smoke-test every distribution and architecture without
-publishing images. Publishing a GitHub Release for a SemVer tag (including
-prereleases such as `v0.2.0-rc1`) runs the unified Release workflow, which:
+Every SemVer release tag publishes immutable `<distro>-<tag>` images, such as
+`jazzy-v0.2.0` or `jazzy-v0.2.0-rc1`.
 
-1. Builds and tests every matrix cell from that tag
-2. Uploads Debian packages to the GitHub Release
-3. Publishes immutable `<distro>-<tag>` images to Docker Hub (for example,
-   `jazzy-v0.2.0` or `jazzy-v0.2.0-rc1`)
-4. Verifies their multi-architecture manifests
-5. For final `v<major>.<minor>.<patch>` releases that are not marked
-   prerelease, updates the stable distribution tags
+For final `v<major>.<minor>.<patch>` releases, the moving distribution tags
+(`humble`, `jazzy`, `kilted`, and `lyrical`) point to the most recent stable ROS
+Portal release for that ROS distribution. Moving distribution tags are not
+updated for prereleases.
 
-Moving `humble` / `jazzy` / `kilted` / `lyrical` tags are never updated from
-SemVer prerelease tags. Re-running the Release workflow via
-`workflow_dispatch` can rebuild packages and images for an existing tag; set
-**Update moving Docker Hub distro tags** when you also want those stable tags
-refreshed (final tags only).
-
-Published images include OCI source and revision labels, an SBOM, and build
-provenance attestations.
-
-Maintainers must configure the `docker-hub` GitHub environment with:
-
-- A `DOCKERHUB_USERNAME` variable for an account that can publish to
-  `livekit/ros-portal`.
-- A `DOCKERHUB_TOKEN` secret containing a scoped Docker Hub access token with
-  write access to that repository.
-
-The workflow doesn't overwrite an existing versioned image, which makes a
-partially completed release safe to retry. The moving distribution tags update
-only after every versioned multi-architecture image for the release passes
-verification.
+Use a moving distribution tag when you want the latest stable ROS Portal image
+for a ROS distribution. Use an immutable `<distro>-<tag>` image when you need to
+pin a specific ROS Portal release.

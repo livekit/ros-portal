@@ -51,25 +51,6 @@ jobs:
       publish_docker: ${{ steps.version.outputs.publish_docker }}
       update_distro_tags: ${{ steps.version.outputs.update_distro_tags }}
     steps:
-      - name: Verify Docker Hub credentials
-        env:
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          set -euo pipefail
-          [[ -n "${DOCKERHUB_USERNAME}" ]] || {
-            echo "DOCKERHUB_USERNAME is not configured" >&2
-            exit 1
-          }
-          if [[ "${DOCKERHUB_USERNAME}" != "livekit" && "${DOCKERHUB_USERNAME}" != "livekitbuild" ]]; then
-            echo "DOCKERHUB_USERNAME must be livekit or livekitbuild" >&2
-            exit 1
-          fi
-          [[ -n "${DOCKERHUB_TOKEN}" ]] || {
-            echo "DOCKERHUB_TOKEN is not configured" >&2
-            exit 1
-          }
-
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

@@ -50,16 +50,12 @@ sudo apt install ./ros-$ROS_DISTRO-livekit-portal*.deb
 > [!NOTE]
 > Use apt install over alternatives to ensure additional third-party dependencies are installed if not already present.
 
-Source the setup script and check that ROS can find ROS Portal:
+Source the setup script and check that ROS can find ROS Portal. This guide assumes `bash`, but use
+the script for your shell:
 
 ```bash
 # bash
 source /opt/livekit/ros/$ROS_DISTRO/setup.bash
-```
-
-```bash
-# zsh
-source /opt/livekit/ros/$ROS_DISTRO/setup.zsh
 ```
 
 ```bash

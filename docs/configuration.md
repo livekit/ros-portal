@@ -3,6 +3,15 @@
 ROS Portal is configured via environment variables for LiveKit parameters and
 a YAML configuration file for runtime parameters.
 
+## Prerequisites
+
+Follow [Installation](./installation.md) before this guide.
+
+This guide assumes the following:
+
+- LiveKit CLI is installed and can be run via `lk`
+- If using LiveKit Cloud, a project is setup with an API key and secret available
+
 ## Environment Variables
 
 Environment variables are used to configure ROS Portal's connection and access to a

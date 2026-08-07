@@ -1,43 +1,52 @@
 # Running
 
-## LiveKit Server
+## Prerequisites
 
-. Be sure to enable the `enable_participant_data_blob` option.
+Follow the [Installation](./installation.md) and [Configuration](./configuration.md) guides first.
+
+This guide assumes the following:
+
+- ROS Portal is installed via a Debian and is available at `/opt/livekit/ros/$ROS_DISTRO`.
+- `LIVEKIT_URL` and `LIVEKIT_TOKEN` environment variables are set appropriately.
+- YAML configuration file is setup, at least minimally with required fields (can iterate on later).
+
+## Running LiveKit Server
+
+If running LiveKit server locally, start as follows in `--dev` mode using the participant data blob option, which allows schema defining and retrieval for message validation and translation:
+
 ```bash
 livekit-server --dev --enable_participant_data_blob
 ```
 
-ROS Portal reads LiveKit credentials from the environment:
+## Running ROS Portal
+
+To run using the bundled launch file:
 
 ```bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+source /opt/livekit/ros/$ROS_DISTRO/setup.bash
+ros2 launch ros_portal ros_portal.launch.py config_path:=/path/to/config.yaml
 ```
 
-## LiveKit Server Requirement
-
-Self-hosted LiveKit servers must enable participant data blobs so ROS Portal can
-store and retrieve ROS schema definitions:
-
-
-
-Launch with the installed default config:
+Or run using the helper alias:
 
 ```bash
-source install/setup.bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
-ros2 launch ros_portal ros_portal.launch.py
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+source /opt/livekit/ros/$ROS_DISTRO/setup.bash
+ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 ```
 
-Or use the launch file (the `config_path` argument is required):
+## Forwarding Custom Topics
 
-```bash
-source install/setup.bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
-ros2 launch ros_portal ros_portal.launch.py config_path:=/path/to/custom_config.yaml
-```
+Forwarding custom message types work like any other ROS type:
+
+1. Build and install the interface package in or system.
+2. Source the setup script in the same environment before launching ROS Portal
+   (e.g. `source install/setup.bash`).
+3. Add the topic pattern to your YAML config like any topic.
+
+The message type is discovered from the ROS graph at runtime.
+On the receiving side, source the same interface package so schemas match.
 
 ## Local Development Launch
 

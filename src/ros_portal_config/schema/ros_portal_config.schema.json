@@ -22,9 +22,6 @@
           "$ref": "#/$defs/nonNegativeInteger",
           "default": 0
         },
-        "room_options": {
-          "$ref": "#/$defs/roomOptions"
-        },
         "services": {
           "type": "array",
           "items": {
@@ -61,15 +58,6 @@
     "nonNegativeInteger": {
       "type": "integer",
       "minimum": 0
-    },
-    "roomOptions": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "join_retries": {
-          "$ref": "#/$defs/positiveInteger"
-        }
-      }
     },
     "videoOptions": {
       "type": "object",

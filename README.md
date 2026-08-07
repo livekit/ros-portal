@@ -34,12 +34,11 @@ without exposing DDS across networks.
 
 ## Quick Start
 
-1. **Install the latest release.** Download the `.deb` for your ROS 2 distro and
-   architecture from the
-   [latest GitHub Release](https://github.com/livekit/ros-portal/releases/latest),
-   then follow [Installation](docs/installation.md).
-2. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
-   project, set credentials, and launch. See [Running](docs/running.md).
+1. **Install ROS Portal.** [Download the `.deb`](https://github.com/livekit/ros-portal/releases/latest) for your ROS 2 distro and architecture and install. See [Installation](docs/installation.md).
+2. **Configure ROS Portal.** Set LiveKit credentials and a YAML config for the
+   topics and services to forward. See [Configuration](docs/configuration.md).
+3. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
+   project, then run. See [Running](docs/running.md).
 
     colcon build --packages-up-to ros_portal
 
@@ -97,7 +96,7 @@ To get familiar with using ROS Portal, you can follow the [tutorials](docs/tutor
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
 
-## Design Guides
+## Design Reference
 
 - [Architecture](docs/design/architecture.md): ROS Portal data flow,
   [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),

@@ -40,5 +40,6 @@ ros_portal:
       direction: "out"
       latched: true
 
+    # Allow all test topics for integration testing.
     - topic: "/test/.*"
       direction: "bidirectional"

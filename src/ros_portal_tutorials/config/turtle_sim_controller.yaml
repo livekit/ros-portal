@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../ros_portal_config/schema/ros_portal_config.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
 # Copyright 2026 LiveKit
 #
 # Turtlesim tutorial — controller side. See docs/tutorials.md.

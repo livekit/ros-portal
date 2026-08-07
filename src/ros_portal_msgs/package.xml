@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>ros_portal_msgs</name>
-  <version>0.2.0</version>
+  <version>0.1.0</version>
   <description>Custom ROS 2 interfaces for ros_portal.</description>
   <maintainer email="sderosa@livekit.io">sderosa</maintainer>
   <license>Apache-2.0</license>

@@ -37,11 +37,7 @@ docker run --rm --network host \
   config_path:=/config/ros_portal.yaml
 ```
 
-A note on image tag versions:
-
-- `latest` is not tagged. Distro tags are moved forward as functional latest, e.g. `ros-portal:humble`, `ros-portal:jazzy`, `ros-portal:kilted`, `ros-portal:lyrical`
-- If a specific version is needed, use `<distro>-<tag>`, e.g. `ros-portal:humble-v0.1.0`
-- For production use, it is recommended to pin the desired tag to avoid undesired version changes
+See [Docker](./docker.md) for more details.
 
 ## Running ROS Portal (Installed from Debian)
 
@@ -110,3 +106,22 @@ ros2 launch ros_portal ros_portal.launch.py
 
 ## Next Steps
 
+Once ROS Portal is running, consider the following as possible next-steps:
+
+- Refine your YAML configuration file further. Start from the
+  [configuration examples](./configuration.md#examples), add a topic or service
+  pattern, restart ROS Portal, and confirm the expected ROS graph changes with
+  `ros2 topic list`, `ros2 topic echo`, `ros2 service list`, and
+  `ros2 service call`.
+- Try the [turtlesim over LiveKit tutorial](./tutorials.md#turtlesim-over-livekit)
+  to see a complete two-graph setup with topic forwarding, service forwarding,
+  and remote ROS CLI calls.
+- Use the [teleop step](./tutorials.md#teleop) to drive turtlesim through
+  `teleop_twist_keyboard`, which mirrors the command-velocity pattern used by
+  many robots.
+- Explore [remote ROS 2 CLI calls](./ros2_cli_calls.md) for ad-hoc inspection
+  and debugging of a remote participant's ROS graph.
+- Compare against full robot examples such as
+  [`cobra_flex_ros`](https://github.com/livekit-examples/cobra_flex_ros) and
+  [`waver_ros`](https://github.com/livekit-examples/waver_ros) when adapting ROS
+  Portal to a hardware stack.

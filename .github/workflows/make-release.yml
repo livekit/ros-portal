@@ -221,9 +221,9 @@ jobs:
           # This Markdown is appended after the release body. The marked block
           # is replaced on reruns while notes entered in GitHub's UI are kept.
           RELEASE_PAGE_MARKDOWN: |
-            ## Install
+            ## Quick Start
 
-            Download the `.deb` asset below that matches your ROS 2 distribution and CPU architecture, then follow the [installation guide](https://github.com/${{ github.repository }}/blob/main/docs/installation.md).
+            Download the `.deb` asset below that matches your ROS 2 distribution and CPU architecture, then follow the guides below.
 
             Or run the multi-architecture Docker image for your distribution:
 
@@ -231,7 +231,11 @@ jobs:
             docker run --rm --network host livekit/ros-portal:<distro>
             ```
 
-            See [Running with Docker](https://github.com/${{ github.repository }}/blob/main/docs/docker.md).
+            See next:
+              - [Installation](https://github.com/${{ github.repository }}/blob/main/docs/installation.md)
+              - [Running ROS Portal](https://github.com/${{ github.repository }}/blob/main/docs/running.md)
+              - [Configuration](https://github.com/${{ github.repository }}/blob/main/docs/configuration.md)
+              - [Docker](https://github.com/${{ github.repository }}/blob/main/docs/docker.md)
         shell: bash
         run: |
           set -euo pipefail

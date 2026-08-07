@@ -19,6 +19,7 @@ from pathlib import Path
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import OpaqueFunction
+from launch.actions import SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -38,6 +39,7 @@ def _launch_setup(context, *args, **kwargs):
             executable='ros_portal_node',
             name='ros_portal',
             output='screen',
+            emulate_tty=True,
             parameters=[{'config_path': str(config_path)}],
         ),
     ]
@@ -45,6 +47,7 @@ def _launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
+        SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'),
         DeclareLaunchArgument(
             'config_path',
             description='Path to ROS Portal config YAML file.',

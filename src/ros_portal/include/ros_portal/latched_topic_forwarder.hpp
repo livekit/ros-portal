@@ -74,6 +74,8 @@ class LatchedTopicForwarder {
 public:
   /// @brief LiveKit-facing callbacks supplied by ROS Portal.
   struct LiveKitMethods {
+    /// @brief Return whether the current room session can perform room operations.
+    IsRoomAvailableFn is_room_available;
     /// @brief Register the inbound latched-state RPC handler.
     RegisterRpcMethodFn register_rpc_method;
     /// @brief Unregister the inbound latched-state RPC handler.
@@ -134,6 +136,7 @@ private:
   FRIEND_TEST(LatchedTopicForwarderTest, PushesStoredStateToPeers);
   FRIEND_TEST(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion);
   FRIEND_TEST(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves);
+  FRIEND_TEST(LatchedTopicForwarderTest, IdlesQuietlyWhileRoomUnavailable);
 #endif
 
   /// @brief A distinct stored outbound message, prebuilt as its RPC payload.

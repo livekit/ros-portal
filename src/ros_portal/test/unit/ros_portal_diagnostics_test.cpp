@@ -114,7 +114,7 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   EXPECT_EQ(status.message, "ROS Portal is not initialized");
   EXPECT_EQ(diagnosticValueFor(status, "initialized"), "false");
   EXPECT_EQ(diagnosticValueFor(status, "components_inactive"),
-            "topic_forwarder,latched_topic_forwarder,service_forwarder,cli_manager");
+            "connection_manager,topic_forwarder,latched_topic_forwarder,service_forwarder,cli_manager");
   EXPECT_EQ(diagnosticValueFor(status, "config_path"), config.path().string());
   EXPECT_EQ(diagnosticValueFor(status, "topic_polling_period_ms"), "250");
   EXPECT_EQ(diagnosticValueFor(status, "local_identity"), "unset");
@@ -131,7 +131,7 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates) {
   RosPortal portal;
   portal.initialized_.store(true);
   portal.poll_timer_ = portal.create_wall_timer(std::chrono::hours(24), []() {});
-  portal.diagnostic_state_.connection_health_active.store(true);
+  portal.diagnostic_state_.connection_manager_active.store(true);
   portal.diagnostic_state_.topic_forwarder_active.store(true);
   portal.diagnostic_state_.latched_topic_forwarder_active.store(true);
   portal.diagnostic_state_.service_forwarder_active.store(true);

@@ -54,6 +54,7 @@ using cli::TopicPubSrv;
 // instead of a polymorphic interface.
 class FakeRpcClient {
 public:
+  bool room_available{true};
   bool has_participant{true};
   std::string response_json{R"({"success":true,"err_msg":"","output":"/remote_topic\n"})"};
   std::optional<livekit::RpcError> rpc_error;
@@ -76,6 +77,8 @@ public:
   // lifetime (the manager is reset before rpc_client in TearDown).
   cli::Manager::LiveKitMethods makeLiveKitMethods() {
     cli::Manager::LiveKitMethods livekit_methods;
+
+    livekit_methods.is_room_available = [this]() { return room_available; };
 
     livekit_methods.has_participant = [this](const std::string&) { return has_participant; };
 
@@ -337,6 +340,33 @@ TEST_F(ManagerTest, MissingParticipantFailsForInterfaceShow) {
   EXPECT_FALSE(response.success);
   EXPECT_NE(response.err_msg.find("missing"), std::string::npos);
   EXPECT_TRUE(response.output.empty());
+}
+
+TEST_F(ManagerTest, RoomUnavailableFailsRemoteServicesWithoutRpc) {
+  rpc_client->room_available = false;
+
+  const auto topic_list = manager->callRemoteTopicList(makeRequest());
+  const auto service_list = manager->callRemoteServiceList(makeServiceRequest());
+  const auto service_call = manager->callRemoteServiceCall(makeServiceCallRequest());
+  const auto topic_pub = manager->callRemoteTopicPub(makeTopicPubRequest());
+  const auto interface_show = manager->callRemoteInterfaceShow(makeInterfaceRequest());
+
+  EXPECT_FALSE(topic_list.success);
+  EXPECT_EQ(topic_list.err_msg, kRoomNotConnectedError);
+  EXPECT_TRUE(topic_list.output.empty());
+  EXPECT_FALSE(service_list.success);
+  EXPECT_EQ(service_list.err_msg, kRoomNotConnectedError);
+  EXPECT_TRUE(service_list.output.empty());
+  EXPECT_FALSE(service_call.success);
+  EXPECT_EQ(service_call.err_msg, kRoomNotConnectedError);
+  EXPECT_TRUE(service_call.output.empty());
+  EXPECT_FALSE(topic_pub.success);
+  EXPECT_EQ(topic_pub.err_msg, kRoomNotConnectedError);
+  EXPECT_TRUE(topic_pub.output.empty());
+  EXPECT_FALSE(interface_show.success);
+  EXPECT_EQ(interface_show.err_msg, kRoomNotConnectedError);
+  EXPECT_TRUE(interface_show.output.empty());
+  EXPECT_TRUE(rpc_client->last_method.empty());
 }
 
 TEST_F(ManagerTest, SuccessfulRpcMapsResponseAndDefaultTimeout) {

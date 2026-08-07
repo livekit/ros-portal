@@ -95,6 +95,34 @@ if(TARGET ros_portal_integration_tests)
 endif()
 
 # ---------------------------------------------------------------------------
+# Opt-in connection-fault integration test
+#
+# This target deliberately disrupts only connections routed through its own
+# loopback proxy. It is named separately so the existing unit/integration CTest
+# regexes and CI jobs do not select it. The test also skips unless explicitly
+# enabled through ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1.
+# ---------------------------------------------------------------------------
+ament_auto_add_gtest(ros_portal_connection_fault_tests
+  connection/connection_fault_e2e_test.cpp
+)
+if(TARGET ros_portal_connection_fault_tests)
+  target_include_directories(ros_portal_connection_fault_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/common"
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration"
+  )
+  medkit_target_dependencies(ros_portal_connection_fault_tests diagnostic_msgs std_srvs)
+  target_link_libraries(ros_portal_connection_fault_tests
+    ros_portal_lib
+  )
+  livekit_set_runtime_rpath(ros_portal_connection_fault_tests)
+  set_tests_properties(ros_portal_connection_fault_tests PROPERTIES
+    LABELS "integration;connection_fault;opt_in"
+    RUN_SERIAL TRUE
+    TIMEOUT 120
+  )
+endif()
+
+# ---------------------------------------------------------------------------
 # Standalone integration executable
 # ---------------------------------------------------------------------------
 ament_auto_add_executable(livekit_connect_node

@@ -1,0 +1,75 @@
+name: Bug Report
+description: File a bug report.
+labels: [triage]
+assignees: [alan-george-lk, stephen-derosa]
+body:
+  - type: input
+    id: sdk-version
+    validations: { required: true }
+    attributes:
+      label: ROS Portal Version
+      description: What version (or commit SHA) of ROS Portal are you using?
+      placeholder: "v1.0.0"
+  - type: input
+    id: os
+    validations: { required: true }
+    attributes:
+      label: Operating System
+      description: Which operating system are you using?
+      placeholder: "Ubuntu 22.04"
+  - type: dropdown
+    id: ros-distro
+    validations: { required: true }
+    attributes:
+      label: ROS Distro
+      description: Which ROS Distro are you using?
+      options:
+        - Humble
+        - Jazzy
+        - Kilted
+        - Lyrical
+  - type: dropdown
+    id: platform
+    validations: { required: true }
+    attributes:
+      label: Platform
+      description: Which platform are you running?
+      options:
+        - Linux x86_64
+        - Linux arm64
+        - Other (describe below)
+  - type: dropdown
+    id: consumption
+    validations: { required: true }
+    attributes:
+      label: How are you using ROS Portal?
+      description: Are you building from source or consuming a pre-built release?
+      options:
+        - Building from source
+        - Pre-built debian
+        - Docker
+        - Other (describe below)
+  - type: textarea
+    id: description
+    validations: { required: true }
+    attributes:
+      label: Issue Description
+      description: |
+        Please describe the issue, including what you expected to happen and what
+        actually happened. Provide any relevant logs and code snippets.
+  - type: textarea
+    id: reproduction
+    validations: { required: false }
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        A minimal set of steps (and, if possible, a code snippet) that reliably
+        reproduces the issue.
+  - type: textarea
+    id: logs
+    validations: { required: false }
+    attributes:
+      label: Logs
+      description: |
+        Relevant ROS Portal logs.
+      render: shell

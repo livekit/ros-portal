@@ -1,0 +1,7 @@
+ros_portal:
+  version: "0.0.1"
+  topic_polling_period_ms: 500
+
+  topics:
+    - topic: ".*"
+      direction: "bidirectional"

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../schema/ros_portal_config.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
 # Copyright 2026 LiveKit
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

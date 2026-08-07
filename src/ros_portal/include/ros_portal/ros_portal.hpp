@@ -27,7 +27,6 @@
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
@@ -43,11 +42,11 @@ namespace ros_portal {
 
 namespace diagnostics {
 class BuildInfoDiagnostics;
-class ConnectionHealthDiagnostics;
 } // namespace diagnostics
 namespace cli {
 class Manager;
 } // namespace cli
+class ConnectionManager;
 class TopicForwarder;
 class LatchedTopicForwarder;
 
@@ -67,7 +66,8 @@ public:
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   ~RosPortal() override;
 
-  /// @brief Initialize ROS Portal configuration, LiveKit connection, and polling.
+  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
+  /// and polling.
   /// @return True if initialization completed, false for expected startup
   /// failures that have already been logged.
   bool initialize();
@@ -90,6 +90,9 @@ public:
   bool hasParticipant(const std::string& participant_id) const;
 
 private:
+  /// @brief Poll the room connection state and make a scheduled connection
+  /// attempt when needed.
+  void pollConnection();
 #ifdef BUILD_TESTING
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates);
@@ -106,8 +109,8 @@ private:
     std::string local_identity{"unset"};
     /// @brief Effective topic polling period.
     std::atomic<int> topic_polling_period_ms{0};
-    /// @brief Whether connection-health diagnostics are instantiated.
-    std::atomic_bool connection_health_active{false};
+    /// @brief Whether the connection manager is instantiated.
+    std::atomic_bool connection_manager_active{false};
     /// @brief Whether the topic forwarder is instantiated.
     std::atomic_bool topic_forwarder_active{false};
     /// @brief Whether the latched-topic forwarder is instantiated.
@@ -127,8 +130,25 @@ private:
   /// @brief Poll the topics and create subscribers for the allowed topics
   void pollTopics();
 
-  /// @brief Poll LiveKit stats used by connection-health diagnostics.
-  void pollConnectionStats();
+  /// @brief Create components whose LiveKit state belongs to the current room
+  /// session.
+  /// @return True when all room-bound components are ready.
+  bool startRoomComponents();
+
+  /// @brief Destroy components whose LiveKit state belonged to the previous
+  /// room session.
+  void stopRoomComponents();
+
+  /// @brief Apply participant metadata required for a newly connected room
+  /// session.
+  /// @return True when the local participant is ready for ROS Portal operations.
+  bool prepareRoomSession();
+
+  /// @brief Tear down a terminal room session after the SDK event stream ends.
+  void processEndedRoomSession();
+
+  /// @brief Return whether room-facing ROS Portal operations are currently allowed.
+  bool roomOperationsEnabled() const;
 
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
@@ -137,7 +157,7 @@ private:
   void onDataTrackUnpublished(livekit::Room& room, const livekit::DataTrackUnpublishedEvent& event) override;
 
   // The LiveKit room exposes a single delegate, so ROS Portal owns it and
-  // forwards connection-health events to the diagnostics helper below.
+  // forwards lifecycle events to the connection manager and diagnostics.
 
   /// @brief Forward participant-connected events to connection diagnostics.
   void onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event) override;
@@ -150,6 +170,9 @@ private:
 
   /// @brief Forward terminal disconnect events to connection diagnostics.
   void onDisconnected(livekit::Room& room, const livekit::DisconnectedEvent& event) override;
+
+  /// @brief Report when the LiveKit room session reaches end-of-stream.
+  void onRoomEos(livekit::Room& room, const livekit::RoomEosEvent& event) override;
 
   /// @brief Forward reconnecting events to connection diagnostics.
   void onReconnecting(livekit::Room& room, const livekit::ReconnectingEvent& event) override;
@@ -183,7 +206,8 @@ private:
   /// @brief Unregister a local LiveKit RPC handler from the room's local
   /// participant.
   /// @param method LiveKit RPC method name.
-  /// @return True on success, false when the local participant is unavailable.
+  /// @return True when removed or the room session has already ended; false on
+  /// an active-session cleanup failure.
   bool rpcUnregisterMethod(const std::string& method);
 
   /// @brief Create TopicForwarder after LiveKit room connection succeeds.
@@ -212,7 +236,7 @@ private:
   /// @param status Diagnostic status wrapper to populate.
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
-  /// @brief Create ServiceForwarder after LiveKit room connection succeeds.
+  /// @brief Create ServiceForwarder independently of LiveKit room availability.
   /// @param services Configured services; outbound routes are derived here.
   /// @return True on success, false when the service forwarder could not be initialized.
   bool initializeServiceForwarder(const std::vector<ros_portal_config::ServiceConfig>& services);
@@ -242,19 +266,36 @@ private:
   std::atomic_bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.
   std::mutex shutdown_mutex_;
-  //! @brief Quiesces data-track publication callbacks before room disconnect.
-  std::mutex data_track_callback_mutex_;
   //! @brief Prevents snapshotted publication callbacks from entering during shutdown.
   std::atomic_bool shutting_down_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief The timer for the polling for new topics
   rclcpp::TimerBase::SharedPtr poll_timer_;
+  //! @brief Fixed-rate timer for LiveKit room connection attempts.
+  rclcpp::TimerBase::SharedPtr connection_timer_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
   //! @brief Shared diagnostics updater for all ROS Portal diagnostic tasks.
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
+  //! @brief Connection lifecycle, retry state, and session-readiness barrier.
+  std::unique_ptr<ConnectionManager> connection_manager_;
+  //! @brief Lifetime-safe state gate shared with room-bound callbacks.
+  //!
+  //! Points at the flag owned by @ref connection_manager_ once that manager
+  //! exists.
+  std::shared_ptr<std::atomic_bool> room_operations_enabled_{std::make_shared<std::atomic_bool>(false)};
+  //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
+  std::atomic_bool room_session_ended_{false};
+  //! @brief Whether participant metadata was applied for the current session.
+  bool room_session_prepared_{false};
+  //! @brief Whether room-session-bound forwarding components are active.
+  bool room_components_started_{false};
+  //! @brief Serializes room component start, stop, polling, and delegate access.
+  std::mutex room_components_mutex_;
+  //! @brief Stored topic configuration used to recreate components after reconnect.
+  std::vector<ros_portal_config::TopicConfig> topics_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.
   std::unique_ptr<TopicForwarder> topic_forwarder_;
   //! @brief Latched-topic (e.g. /tf_static) forwarding over LiveKit RPC.
@@ -263,12 +304,8 @@ private:
   std::unique_ptr<cli::Manager> cli_manager_;
   //! @brief ROS service forwarding component for local proxy services.
   std::unique_ptr<ServiceForwarder> service_forwarder_;
-  //! @brief LiveKit connection health diagnostic task owner.
-  std::unique_ptr<diagnostics::ConnectionHealthDiagnostics> connection_diagnostics_;
   //! @brief Always-OK build and dependency version diagnostic task owner.
   std::unique_ptr<diagnostics::BuildInfoDiagnostics> build_info_diagnostics_;
-  //! @brief Timer for best-effort LiveKit stats polling.
-  rclcpp::TimerBase::SharedPtr connection_stats_timer_;
   //! @brief Mutable state owned exclusively for node-level diagnostics.
   DiagnosticState diagnostic_state_;
 };

@@ -20,6 +20,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
+from launch.actions import SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -52,10 +53,12 @@ def generate_launch_description():
         package='ros_gz_image',
         executable='image_bridge',
         arguments=['camera', 'depth_camera', 'rgbd_camera/image', 'rgbd_camera/depth_image'],
-        output='screen'
+        output='screen',
+        emulate_tty=True,
     )
 
     return LaunchDescription([
+        SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'),
         gz_sim,
         DeclareLaunchArgument('rqt', default_value='true',
                               description='Open RQt.'),

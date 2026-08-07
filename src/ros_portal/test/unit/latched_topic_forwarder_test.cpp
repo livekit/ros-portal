@@ -55,6 +55,7 @@ protected:
 
   LatchedTopicForwarder::LiveKitMethods makeMethods() {
     LatchedTopicForwarder::LiveKitMethods methods;
+    methods.is_room_available = [this]() { return room_available_; };
     methods.register_rpc_method = [this](const std::string& method, RpcHandler handler) {
       registered_method_ = method;
       registered_handler_ = std::move(handler);
@@ -81,6 +82,7 @@ protected:
   // Stub state observed/controlled by tests.
   std::vector<std::string> roster_;
   std::vector<std::pair<std::string, std::string>> rpc_calls_;
+  bool room_available_ = true;
   bool rpc_should_succeed_ = true;
   std::string registered_method_;
   std::string unregistered_method_;
@@ -181,6 +183,21 @@ TEST_F(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves) {
   roster_.clear();
   forwarder.pushToPeers();
   EXPECT_EQ(forwarder.participant_states_.count("peerA"), 0u);
+}
+
+TEST_F(LatchedTopicForwarderTest, IdlesQuietlyWhileRoomUnavailable) {
+  room_available_ = false;
+  roster_ = {"peerA"};
+  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods());
+  const std::vector<std::uint8_t> a = {1, 2, 3};
+
+  forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
+  EXPECT_TRUE(forwarder.messages_.empty());
+  EXPECT_EQ(forwarder.version_, 0u);
+
+  forwarder.pushToPeers();
+  EXPECT_TRUE(rpc_calls_.empty());
+  EXPECT_TRUE(forwarder.participant_states_.empty());
 }
 
 TEST_F(LatchedTopicForwarderTest, InboundHandlerValidatesTopic) {

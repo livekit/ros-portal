@@ -45,7 +45,8 @@ constexpr char kCliManagerDiagnosticTaskName[] = "cli_manager";
 template <typename SrvT, typename CallbackT>
 typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeInterfaces& node_interfaces,
                                                            const char* service_name, CallbackT callback,
-                                                           const rclcpp::CallbackGroup::SharedPtr& callback_group) {
+                                                           const rclcpp::CallbackGroup::SharedPtr& callback_group,
+                                                           const rclcpp::Logger& logger) {
   try {
 #ifdef ROS_DISTRO_HUMBLE
     const auto services_qos = rmw_qos_profile_services_default;
@@ -55,8 +56,7 @@ typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeIn
     return rclcpp::create_service<SrvT>(node_interfaces.node_base, node_interfaces.node_services, service_name,
                                         std::move(callback), services_qos, callback_group);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(node_interfaces.node_logging->get_logger(), "Failed to create ROS service '%s': %s", service_name,
-                 error.what());
+    RCLCPP_ERROR(logger, "Failed to create ROS service '%s': %s", service_name, error.what());
     return nullptr;
   }
 }
@@ -67,6 +67,7 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
                  LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
                  diagnostics::DiagnosticsManagerFns diagnostics)
     : node_interfaces_(std::move(node_interfaces)),
+      logger_(node_interfaces_.node_logging->get_logger()),
       livekit_methods_(std::move(livekit_methods)),
       topic_publish_allowed_(std::move(topic_publish_allowed)),
       diagnostics_(std::move(diagnostics)) {
@@ -75,8 +76,10 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
     throw std::invalid_argument("Manager requires fully populated NodeInterfaces");
   }
 
-  if (!livekit_methods_.has_participant || !livekit_methods_.perform_rpc || !livekit_methods_.register_rpc_method ||
-      !livekit_methods_.unregister_rpc_method) {
+  logger_ = node_interfaces_.node_logging->get_logger().get_child("cli_manager");
+
+  if (!livekit_methods_.is_room_available || !livekit_methods_.has_participant || !livekit_methods_.perform_rpc ||
+      !livekit_methods_.register_rpc_method || !livekit_methods_.unregister_rpc_method) {
     throw std::invalid_argument("Manager requires fully populated LiveKitMethods");
   }
 
@@ -90,8 +93,7 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
 
   topic_publisher_ =
       std::make_unique<TopicPub>(node_interfaces_.node_topics, node_interfaces_.node_graph, topic_publish_allowed_);
-  service_caller_ = std::make_unique<ServiceCall>(node_interfaces_.node_base, node_interfaces_.node_graph,
-                                                  node_interfaces_.node_logging->get_logger());
+  service_caller_ = std::make_unique<ServiceCall>(node_interfaces_.node_base, node_interfaces_.node_graph, logger_);
 
   // Service and RPC creation are best-effort: on failure we log and continue so
   // ROS Portal stays up in a degraded state, and the diagnostic task reports
@@ -101,26 +103,26 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
       [this](const std::shared_ptr<TopicListSrv::Request> request, std::shared_ptr<TopicListSrv::Response> response) {
         handleTopicListRosService(request, response);
       },
-      callback_group);
+      callback_group, logger_);
 
   topic_pub_service_ = tryCreateService<TopicPubSrv>(
       node_interfaces_, kTopicPubServiceName,
       [this](const std::shared_ptr<TopicPubSrv::Request> request, std::shared_ptr<TopicPubSrv::Response> response) {
         handleTopicPubRosService(request, response);
       },
-      callback_group);
+      callback_group, logger_);
 
   service_list_service_ = tryCreateService<ServiceListSrv>(
       node_interfaces_, kServiceListServiceName,
       [this](const std::shared_ptr<ServiceListSrv::Request> request,
              std::shared_ptr<ServiceListSrv::Response> response) { handleServiceListRosService(request, response); },
-      callback_group);
+      callback_group, logger_);
 
   service_call_service_ = tryCreateService<ServiceCallSrv>(
       node_interfaces_, kServiceCallServiceName,
       [this](const std::shared_ptr<ServiceCallSrv::Request> request,
              std::shared_ptr<ServiceCallSrv::Response> response) { handleServiceCallRosService(request, response); },
-      callback_group);
+      callback_group, logger_);
 
   interface_show_service_ = tryCreateService<InterfaceShowSrv>(
       node_interfaces_, kInterfaceShowServiceName,
@@ -128,13 +130,13 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
              std::shared_ptr<InterfaceShowSrv::Response> response) {
         handleInterfaceShowRosService(request, response);
       },
-      callback_group);
+      callback_group, logger_);
 
   const auto register_rpc = [this](const char* method, auto handler) {
     if (livekit_methods_.register_rpc_method(method, std::move(handler))) {
       registered_rpc_methods_.emplace_back(method);
     } else {
-      RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to register LiveKit RPC method '%s'", method);
+      RCLCPP_ERROR(logger_, "Failed to register LiveKit RPC method '%s'", method);
     }
   };
 
@@ -144,10 +146,9 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   register_rpc(kServiceCallRpcMethod, [this](const std::string& payload) { return handleServiceCallRpc(payload); });
   register_rpc(kInterfaceShowRpcMethod, [this](const std::string& payload) { return handleInterfaceShowRpc(payload); });
 
-  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(),
-               "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s", kTopicListServiceName,
+  RCLCPP_DEBUG(logger_, "Registered ROS services:\n   - %s\n   - %s\n   - %s\n   - %s\n   - %s", kTopicListServiceName,
                kTopicPubServiceName, kServiceListServiceName, kServiceCallServiceName, kInterfaceShowServiceName);
-  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(),
+  RCLCPP_DEBUG(logger_,
                "Registered LiveKit RPC methods:\n   - %s\n   - %s\n   - %s\n   - %s\n"
                "   - %s",
                kTopicListRpcMethod, kTopicPubRpcMethod, kServiceListRpcMethod, kServiceCallRpcMethod,
@@ -156,7 +157,7 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   diagnostics_.add(kCliManagerDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
 
-  RCLCPP_DEBUG(node_interfaces_.node_logging->get_logger(), "CLI Manager initialized");
+  RCLCPP_DEBUG(logger_, "CLI Manager initialized");
 }
 
 Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
@@ -279,8 +280,7 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
   const auto rpc_response = livekit_methods_.perform_rpc(participant_id, rpc_method, request_payload, timeout_sec);
   if (!rpc_response) {
     ++remote_transport_failures_;
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "LiveKit RPC '%s' to participant '%s' failed", rpc_method,
-                 participant_id.c_str());
+    RCLCPP_ERROR(logger_, "LiveKit RPC '%s' to participant '%s' failed", rpc_method, participant_id.c_str());
     return makeCliResponse<ResponseT>(false, std::string("remote ") + rpc_method + " RPC failed");
   }
 
@@ -288,8 +288,7 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
   auto response = cliResponseFromJson<ResponseT>(*rpc_response, parse_error);
   if (!response) {
     ++remote_malformed_responses_;
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(),
-                 "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s", rpc_method,
+    RCLCPP_ERROR(logger_, "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s", rpc_method,
                  participant_id.c_str(), parse_error.c_str());
     return makeCliResponse<ResponseT>(false, std::string("remote ") + rpc_method + " returned malformed JSON");
   }
@@ -299,6 +298,10 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
 TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request& request) const {
   if (request.participant_id.empty()) {
     return makeCliResponse<TopicListSrv::Response>(false, "participant_id must be non-empty");
+  }
+
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<TopicListSrv::Response>(false, kRoomNotConnectedError);
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
@@ -315,6 +318,10 @@ TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request&
 TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& request) const {
   if (request.participant_id.empty()) {
     return makeCliResponse<TopicPubSrv::Response>(false, "participant_id must be non-empty");
+  }
+
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<TopicPubSrv::Response>(false, kRoomNotConnectedError);
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
@@ -337,6 +344,10 @@ TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& re
 ServiceListSrv::Response Manager::callRemoteServiceList(const ServiceListSrv::Request& request) const {
   if (request.participant_id.empty()) {
     return makeCliResponse<ServiceListSrv::Response>(false, "participant_id must be non-empty");
+  }
+
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<ServiceListSrv::Response>(false, kRoomNotConnectedError);
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
@@ -368,6 +379,10 @@ ServiceCallSrv::Response Manager::callRemoteServiceCall(const ServiceCallSrv::Re
     return makeCliResponse<ServiceCallSrv::Response>(false, "payload must be non-empty");
   }
 
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<ServiceCallSrv::Response>(false, kRoomNotConnectedError);
+  }
+
   if (!livekit_methods_.has_participant(request.participant_id)) {
     ++remote_participant_not_found_;
     return makeCliResponse<ServiceCallSrv::Response>(
@@ -391,6 +406,10 @@ InterfaceShowSrv::Response Manager::callRemoteInterfaceShow(const InterfaceShowS
     return makeCliResponse<InterfaceShowSrv::Response>(false, "all_comments and no_comments are mutually exclusive");
   }
 
+  if (!livekit_methods_.is_room_available()) {
+    return makeCliResponse<InterfaceShowSrv::Response>(false, kRoomNotConnectedError);
+  }
+
   if (!livekit_methods_.has_participant(request.participant_id)) {
     ++remote_participant_not_found_;
     return makeCliResponse<InterfaceShowSrv::Response>(
@@ -406,8 +425,7 @@ InterfaceShowSrv::Response Manager::callRemoteInterfaceShow(const InterfaceShowS
 std::string Manager::handleTopicListRpc(const std::string& payload) const {
   const auto options = topicListOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kTopicListRpcMethod, options.error().c_str());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicListRpcMethod, options.error().c_str());
     return cliResponseToJson(false, options.error(), "");
   }
 
@@ -416,8 +434,7 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
         formatTopicList(collectTopicInfo(*node_interfaces_.node_graph, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kTopicListRpcMethod, error.what());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicListRpcMethod, error.what());
     return cliResponseToJson(false, error.what(), "");
   }
 }
@@ -425,8 +442,7 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
 std::string Manager::handleTopicPubRpc(const std::string& payload) const {
   const auto options = topicPubOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kTopicPubRpcMethod, options.error().c_str());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicPubRpcMethod, options.error().c_str());
     return cliResponseToJson(false, options.error(), "");
   }
 
@@ -434,8 +450,7 @@ std::string Manager::handleTopicPubRpc(const std::string& payload) const {
     const auto response = topic_publisher_->publish(options.value());
     return cliResponseToJson(response.success, response.err_msg, response.output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kTopicPubRpcMethod, error.what());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicPubRpcMethod, error.what());
     return cliResponseToJson(false, error.what(), "");
   }
 }
@@ -443,8 +458,7 @@ std::string Manager::handleTopicPubRpc(const std::string& payload) const {
 std::string Manager::handleServiceListRpc(const std::string& payload) const {
   const auto options = serviceListOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kServiceListRpcMethod, options.error().c_str());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceListRpcMethod, options.error().c_str());
     return cliResponseToJson(false, options.error(), "");
   }
 
@@ -453,8 +467,7 @@ std::string Manager::handleServiceListRpc(const std::string& payload) const {
         formatServiceList(collectServiceInfo(*node_interfaces_.node_graph, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kServiceListRpcMethod, error.what());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceListRpcMethod, error.what());
     return cliResponseToJson(false, error.what(), "");
   }
 }
@@ -463,8 +476,7 @@ std::string Manager::handleServiceCallRpc(const std::string& payload) const {
   std::string options_error;
   const auto options = serviceCallOptionsFromJson(payload, options_error);
   if (!options) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kServiceCallRpcMethod, options_error.c_str());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceCallRpcMethod, options_error.c_str());
     return cliResponseToJson(false, options_error, "");
   }
 
@@ -475,8 +487,7 @@ std::string Manager::handleServiceCallRpc(const std::string& payload) const {
 std::string Manager::handleInterfaceShowRpc(const std::string& payload) const {
   const auto options = interfaceShowOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kInterfaceShowRpcMethod, options.error().c_str());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kInterfaceShowRpcMethod, options.error().c_str());
     return cliResponseToJson(false, options.error(), "");
   }
 
@@ -493,14 +504,12 @@ std::string Manager::handleInterfaceShowRpc(const std::string& payload) const {
       } else {
         error_message = "Could not find interface '" + options.value().type + "'";
       }
-      RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                   kInterfaceShowRpcMethod, error_message.c_str());
+      RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kInterfaceShowRpcMethod, error_message.c_str());
       return cliResponseToJson(false, error_message, "");
     }
     return cliResponseToJson(true, "", *output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(node_interfaces_.node_logging->get_logger(), "Failed to handle LiveKit RPC '%s': %s",
-                 kInterfaceShowRpcMethod, error.what());
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kInterfaceShowRpcMethod, error.what());
     return cliResponseToJson(false, error.what(), "");
   }
 }

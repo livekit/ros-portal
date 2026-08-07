@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <livekit/room.h>
 
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -25,7 +26,7 @@
 #include <utility>
 
 #include "diagnostics_test_utils.hpp"
-#include "ros_portal/diagnostics/connection_health.hpp"
+#include "ros_portal/connection/connection_diagnostics.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 
 namespace ros_portal::diagnostics {
@@ -161,16 +162,17 @@ TEST(ConnectionHealthDiagnosticsTest, ConnectedStateEmitsOkStatus) {
   state.room_name = "diagnostics_room";
   state.num_peers = 3;
   state.reconnect_count = 1;
+  state.connection_loss_count = 2;
   diagnostic_updater::DiagnosticStatusWrapper status;
 
   populateConnectionHealthStatus(state, status);
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(status.message, "Connected to LiveKit room");
-  EXPECT_EQ(valueFor(status, "connected"), "true");
   EXPECT_EQ(valueFor(status, "state"), "connected");
   EXPECT_EQ(valueFor(status, "num_peers"), "3");
   EXPECT_EQ(valueFor(status, "reconnect_count"), "1");
+  EXPECT_EQ(valueFor(status, "connection_loss_count"), "2");
   EXPECT_EQ(valueFor(status, "room_name"), "diagnostics_room");
   EXPECT_EQ(valueFor(status, "rtc.publisher.0.type"), std::nullopt);
   EXPECT_EQ(valueFor(status, "rtc.stats_available"), "false");
@@ -191,7 +193,6 @@ TEST(ConnectionHealthDiagnosticsTest, ReconnectingStateEmitsWarnStatus) {
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(status.message, "Reconnecting to LiveKit room");
-  EXPECT_EQ(valueFor(status, "connected"), "false");
   EXPECT_EQ(valueFor(status, "state"), "reconnecting");
   EXPECT_EQ(valueFor(status, "num_peers"), "2");
   EXPECT_EQ(valueFor(status, "reconnect_count"), "2");
@@ -211,9 +212,82 @@ TEST(ConnectionHealthDiagnosticsTest, DisconnectedStateEmitsErrorStatus) {
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(status.message, "Disconnected from LiveKit room");
-  EXPECT_EQ(valueFor(status, "connected"), "false");
   EXPECT_EQ(valueFor(status, "state"), "disconnected");
+  EXPECT_EQ(valueFor(status, "connection_loss_count"), "0");
   EXPECT_EQ(valueFor(status, "rtc.stats_available"), std::nullopt);
+}
+
+TEST(ConnectionHealthDiagnosticsTest, CountsEachConnectedToUnavailableTransitionOnce) {
+  auto node = std::make_shared<rclcpp::Node>("connection_loss_count_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  ConnectionHealthDiagnostics connection_health(test::makeDiagnosticsFns(diagnostics_updater));
+  livekit::Room room;
+
+  connection_health.markConnected(room);
+  connection_health.markReconnecting(room);
+  connection_health.markDisconnected();
+
+  auto state = connection_health.snapshot();
+  EXPECT_EQ(state.connection_loss_count, 1U);
+  EXPECT_EQ(state.reconnect_count, 1U);
+
+  // Terminal disconnect + later Room::connect is a new connect, not an SDK reconnect.
+  connection_health.markConnected(room);
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.connection_loss_count, 1U);
+  EXPECT_EQ(state.reconnect_count, 1U);
+
+  connection_health.markDisconnected();
+  connection_health.markDisconnected();
+
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.connection_loss_count, 2U);
+  EXPECT_EQ(state.reconnect_count, 1U);
+}
+
+TEST(ConnectionHealthDiagnosticsTest, TerminalDisconnectAndNewConnectDoesNotCountAsReconnect) {
+  auto node = std::make_shared<rclcpp::Node>("terminal_disconnect_reconnect_count_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  ConnectionHealthDiagnostics connection_health(test::makeDiagnosticsFns(diagnostics_updater));
+  livekit::Room room;
+
+  connection_health.markConnected(room);
+  auto state = connection_health.snapshot();
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 0U);
+
+  connection_health.markDisconnected();
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 1U);
+
+  connection_health.markConnected(room);
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.kind, ConnectionHealthStateKind::Connected);
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 1U);
+}
+
+TEST(ConnectionHealthDiagnosticsTest, OnlyCountsSdkReconnectFromConnectedState) {
+  auto node = std::make_shared<rclcpp::Node>("sdk_reconnect_from_connected_unit_test");
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  ConnectionHealthDiagnostics connection_health(test::makeDiagnosticsFns(diagnostics_updater));
+  livekit::Room room;
+
+  // Reconnecting before an established connection must not count.
+  connection_health.markReconnecting(room);
+  connection_health.markReconnecting(room);
+  auto state = connection_health.snapshot();
+  EXPECT_EQ(state.kind, ConnectionHealthStateKind::Reconnecting);
+  EXPECT_EQ(state.reconnect_count, 0U);
+  EXPECT_EQ(state.connection_loss_count, 0U);
+
+  connection_health.markConnected(room);
+  connection_health.markReconnecting(room);
+  connection_health.markReconnecting(room);
+  state = connection_health.snapshot();
+  EXPECT_EQ(state.reconnect_count, 1U);
+  EXPECT_EQ(state.connection_loss_count, 1U);
 }
 
 TEST(ConnectionHealthDiagnosticsTest, EmitsCompactRtcSummary) {

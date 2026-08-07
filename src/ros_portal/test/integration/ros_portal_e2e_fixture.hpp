@@ -517,6 +517,9 @@ protected:
   const std::string& identityB() const { return identity_b_; }
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
+  std::shared_ptr<RosPortal> rosPortalA() const { return ros_portal_a_; }
+
+  void setLiveKitUrl(std::string livekit_url) { livekit_url_ = std::move(livekit_url); }
 
   // Park graph B's spin thread before removing the node: a live executor may
   // still wait on its rmw entities (use-after-free on Humble). Replace the

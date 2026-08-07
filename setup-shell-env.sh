@@ -40,12 +40,18 @@ _source_ws_overlay() {
     fi
 }
 
+_enable_ros_autocomplete() {
+    if command -v register-python-argcomplete3 >/dev/null 2>&1; then
+        eval "\$(register-python-argcomplete3 ros2)"
+    fi
+}
+
 _source_ros_env
 
 alias bros='cd "\${WS}" && colcon build'
 alias dros='cd "\${WS}" && rosdep update && rosdep install --from-paths src --ignore-src -r -y'
 
-alias sros='_source_ros_env && _source_ws_overlay'
+alias sros='_source_ros_env && _source_ws_overlay && _enable_ros_autocomplete'
 
 # Helper for running the project clang-format wrapper within the devcontainer
 clang_format()
@@ -76,7 +82,71 @@ cbtps()
 
 cbtpu()
 {
-    cd "\${WS}" && sros && colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
+    cd "\${WS}" && sros
+    if [ "\$#" -eq 0 ]; then
+        set -- ros_portal
+    fi
+    colcon build --packages-up-to "\$@" && colcon test --packages-up-to "\$@" && colcon test-result --verbose
+}
+
+_prepare_test_env()
+{
+    cd "\${WS}" && _source_ros_env && _source_ws_overlay
+}
+
+_source_test_tokens_if_needed()
+{
+    if [ -n "\${LIVEKIT_URL:-}" ] && [ -n "\${LIVEKIT_TOKEN_A:-}" ] && [ -n "\${LIVEKIT_TOKEN_B:-}" ]; then
+        return 0
+    fi
+    if [ -f "\${WS}/.token_helpers/set_test_tokens.bash" ]; then
+        source "\${WS}/.token_helpers/set_test_tokens.bash"
+    fi
+}
+
+# Run unit tests
+test_unit()
+{
+    _prepare_test_env
+    test_exit=0
+    GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs \
+        --packages-skip ros2_medkit_serialization \
+        --event-handlers console_direct+ \
+        --return-code-on-test-failure \
+        --ctest-args -R ros_portal_unit_tests || test_exit=\$?
+    colcon test-result --verbose --all
+    return "\${test_exit}"
+}
+
+# Run integration tests
+test_int()
+{
+    _prepare_test_env
+    export CI="\${CI:-true}"
+    _source_test_tokens_if_needed
+    test_exit=0
+    GTEST_COLOR=1 colcon test --packages-select ros_portal \
+        --event-handlers console_direct+ \
+        --return-code-on-test-failure \
+        --ctest-args -R ros_portal_integration_tests || test_exit=\$?
+    colcon test-result --verbose --all
+    return "\${test_exit}"
+}
+
+# Run connection fault tests
+test_conn()
+{
+    _prepare_test_env
+    export CI="\${CI:-true}"
+    _source_test_tokens_if_needed
+    export ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1
+    test_exit=0
+    GTEST_COLOR=1 colcon test --packages-select ros_portal \
+        --event-handlers console_direct+ \
+        --return-code-on-test-failure \
+        --ctest-args -R ros_portal_connection_fault_tests || test_exit=\$?
+    colcon test-result --verbose --all
+    return "\${test_exit}"
 }
 
 clean_ws()
@@ -137,8 +207,9 @@ EOF
 
 cat <<'EOF' >/root/.zshrc
 source /etc/profile.d/ros-portal.sh
-autoload -Uz compinit
+autoload -Uz compinit bashcompinit
 compinit
+bashcompinit
 EOF
 
 cat <<'EOF' >/root/.zprofile

@@ -90,6 +90,7 @@ def _launch_setup(context, *args, **kwargs):
         name='ros_portal',
         namespace=LaunchConfiguration('ns'),
         output='screen',
+        emulate_tty=True,
         parameters=[{'config_path': str(config_path)}],
         arguments=['--ros-args', '--disable-external-lib-logs'],
     )
@@ -110,6 +111,7 @@ def generate_launch_description():
     ])
 
     return LaunchDescription([
+        SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'),
         DeclareLaunchArgument('config_path', default_value=default_config),
         DeclareLaunchArgument('livekit_url', default_value='ws://host.docker.internal:7880'),
         DeclareLaunchArgument('identity', default_value='ros-portal'),

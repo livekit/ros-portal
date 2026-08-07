@@ -44,6 +44,7 @@
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/schema/manager.hpp"
+#include "ros_portal/types.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -119,6 +120,8 @@ public:
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
   struct LiveKitMethods {
+    /// @brief Return whether the current room session allows forwarding work.
+    IsRoomAvailableFn is_room_available;
     /// @brief Create or reuse an outbound LiveKit data track for a ROS topic.
     std::function<livekit::Result<std::shared_ptr<DataTrackWriter>, std::string>(const std::string&,
                                                                                  const livekit::DataTrackSchemaId&)>

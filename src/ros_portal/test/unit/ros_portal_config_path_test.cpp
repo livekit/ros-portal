@@ -94,10 +94,10 @@ constexpr const char* kGoodConfig =
 )";
 
 TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
-  TemporaryConfigFile config{kGoodConfig};
+  const TemporaryConfigFile config{kGoodConfig};
 
   rclcpp::NodeOptions options;
   options.parameter_overrides({
@@ -110,9 +110,27 @@ TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
   EXPECT_EQ(ros_portal->rosThreads(), 3);
 }
 
+TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
+  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-until-connection-timer-runs", 1), 0);
+  const TemporaryConfigFile config{kGoodConfig};
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+      rclcpp::Parameter("config_path", config.path().string()),
+  });
+
+  auto ros_portal = std::make_shared<RosPortal>(options);
+
+  EXPECT_TRUE(ros_portal->initialize());
+  EXPECT_EQ(ros_portal->rosThreads(), 3);
+}
+
 TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   hideLiveKitCredentials();
   const auto missing_path = std::filesystem::temp_directory_path() / "ros_portal_config_path_test_missing.yaml";
   std::error_code error;

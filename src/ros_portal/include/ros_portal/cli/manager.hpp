@@ -56,6 +56,8 @@ public:
   /// unit-tested without connecting to a LiveKit room. ROS Portal populates each
   /// callback from its own room and passes the struct in at construction.
   struct LiveKitMethods {
+    /// @brief Return whether the local room session can perform RPC work.
+    IsRoomAvailableFn is_room_available;
     HasParticipantFn has_participant;
     PerformRpcFn perform_rpc;
     RegisterRpcMethodFn register_rpc_method;
@@ -76,7 +78,7 @@ public:
     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph;
     //! @brief Topic APIs used to resolve names and create publishers.
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics;
-    //! @brief Logger used for manager diagnostics.
+    //! @brief Node logger used to create the manager's child logger.
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
   };
 
@@ -251,6 +253,8 @@ private:
   bool rpcRegistered(const std::string& rpc_method) const;
 
   NodeInterfaces node_interfaces_;
+  /// @brief Logger owned by the CLI manager, derived from the ROS node logger.
+  rclcpp::Logger logger_;
   LiveKitMethods livekit_methods_;
   /// Use a function rather than a static list to account for a dynamic set of
   /// allowed topics.

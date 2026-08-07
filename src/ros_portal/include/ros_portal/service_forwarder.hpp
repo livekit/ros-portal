@@ -48,6 +48,8 @@ public:
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
   struct LiveKitMethods {
+    /// @brief Return whether the local room session can perform RPC work.
+    IsRoomAvailableFn is_room_available;
     /// @brief Check whether a remote participant exists.
     HasParticipantFn has_participant;
     /// @brief Perform one LiveKit RPC call.

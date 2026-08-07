@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ros_portal/diagnostics/connection_health.hpp"
+#include "ros_portal/connection/connection_diagnostics.hpp"
 
 #include <livekit/room.h>
 
@@ -348,28 +348,30 @@ void updateConnectionHealthStatsSnapshot(ConnectionHealthState& state, const liv
 
 void populateConnectionHealthStatus(const ConnectionHealthState& state,
                                     diagnostic_updater::DiagnosticStatusWrapper& status) {
-  const bool connected = state.kind == ConnectionHealthStateKind::Connected;
-
-  if (connected) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Connected to LiveKit room");
-  } else if (state.kind == ConnectionHealthStateKind::Reconnecting) {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Reconnecting to LiveKit room");
-  } else {
-    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Disconnected from LiveKit room");
+  switch (state.kind) {
+    case ConnectionHealthStateKind::Connected:
+      status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Connected to LiveKit room");
+      break;
+    case ConnectionHealthStateKind::Reconnecting:
+      status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Reconnecting to LiveKit room");
+      break;
+    case ConnectionHealthStateKind::Disconnected:
+      status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Disconnected from LiveKit room");
+      break;
   }
 
-  status.add("connected", connected ? "true" : "false");
   status.add("state", stateToString(state.kind));
   status.add("num_peers", state.num_peers);
   status.add("reconnect_count", state.reconnect_count);
+  status.add("connection_loss_count", state.connection_loss_count);
   status.add("room_name", state.room_name);
-  if (connected) {
+  if (state.kind == ConnectionHealthStateKind::Connected) {
     addRtcSummaryFields(status, state.rtc_summary);
   }
 }
 
 ConnectionHealthDiagnostics::ConnectionHealthDiagnostics(DiagnosticsManagerFns diagnostics)
-    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, {}, std::nullopt},
+    : state_{ConnectionHealthStateKind::Disconnected, {}, 0, 0, 0, {}, std::nullopt},
       diagnostics_(std::move(diagnostics)) {
   if (!diagnostics_.add || !diagnostics_.remove) {
     throw std::invalid_argument("ConnectionHealthDiagnostics requires fully populated DiagnosticsManagerFns");
@@ -392,6 +394,9 @@ void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
 
 void ConnectionHealthDiagnostics::markDisconnected() {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (state_.kind == ConnectionHealthStateKind::Connected) {
+    ++state_.connection_loss_count;
+  }
   state_.kind = ConnectionHealthStateKind::Disconnected;
   state_.room_name.clear();
   state_.num_peers = 0;
@@ -483,7 +488,10 @@ void ConnectionHealthDiagnostics::populateStatus(diagnostic_updater::DiagnosticS
 void ConnectionHealthDiagnostics::markReconnecting(livekit::Room& room) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (state_.kind != ConnectionHealthStateKind::Reconnecting) {
+    // Only count SDK in-session reconnects that start from an established
+    // connection. Terminal disconnect + later Room::connect is not a reconnect.
+    if (state_.kind == ConnectionHealthStateKind::Connected) {
+      ++state_.connection_loss_count;
       ++state_.reconnect_count;
     }
     state_.kind = ConnectionHealthStateKind::Reconnecting;

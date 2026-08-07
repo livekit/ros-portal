@@ -44,12 +44,38 @@ jobs:
   validate:
     name: Release Validation
     runs-on: ubuntu-24.04
+    environment: docker-hub
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       publish_docker: ${{ steps.version.outputs.publish_docker }}
       update_distro_tags: ${{ steps.version.outputs.update_distro_tags }}
     steps:
+      - name: Verify Docker Hub credentials
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          [[ -n "${DOCKERHUB_USERNAME}" ]] || {
+            echo "DOCKERHUB_USERNAME is not configured" >&2
+            exit 1
+          }
+          if [[ "${DOCKERHUB_USERNAME}" != "livekit" && "${DOCKERHUB_USERNAME}" != "livekitbuild" ]]; then
+            echo "DOCKERHUB_USERNAME must be livekit or livekitbuild" >&2
+            exit 1
+          fi
+          [[ -n "${DOCKERHUB_TOKEN}" ]] || {
+            echo "DOCKERHUB_TOKEN is not configured" >&2
+            exit 1
+          }
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -274,7 +300,7 @@ jobs:
       - name: Verify Docker Hub credentials
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           set -euo pipefail
           [[ -n "${DOCKERHUB_USERNAME}" ]] || {
@@ -293,7 +319,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Check out repository
@@ -381,7 +407,7 @@ jobs:
       - name: Verify Docker Hub credentials
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           set -euo pipefail
           [[ -n "${DOCKERHUB_USERNAME}" ]] || {
@@ -400,7 +426,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Check out repository
@@ -485,7 +511,7 @@ jobs:
       - name: Verify Docker Hub credentials
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           set -euo pipefail
           [[ -n "${DOCKERHUB_USERNAME}" ]] || {
@@ -504,7 +530,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Check out repository

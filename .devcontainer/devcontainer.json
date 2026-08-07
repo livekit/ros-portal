@@ -2,7 +2,7 @@
   "name": "ros-portal",
   "build": {
     "context": "..",
-    "dockerfile": "../Dockerfile",
+    "dockerfile": "../docker/development/Dockerfile",
     "args": {
       "BUILD_LIVEKIT_SDK_FROM_SOURCE": "${localEnv:BUILD_LIVEKIT_SDK_FROM_SOURCE:false}",
       "INSTALL_CPP_TOOLS": "${localEnv:INSTALL_CPP_TOOLS:true}",

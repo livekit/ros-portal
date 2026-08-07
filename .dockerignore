@@ -1,0 +1,13 @@
+**
+
+!setup-shell-env.sh
+
+!docker/
+!docker/development/
+!docker/development/Dockerfile
+!docker/runtime/
+!docker/runtime/**
+
+!artifacts/
+!artifacts/debian/
+!artifacts/debian/*.deb

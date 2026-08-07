@@ -25,6 +25,9 @@ on:
       matrix:
         description: ROS distribution and architecture build matrix
         value: ${{ jobs.load.outputs.matrix }}
+      distros:
+        description: ROS distribution-only matrix for publish and verification jobs
+        value: ${{ jobs.load.outputs.distros }}
 
 permissions:
   contents: read
@@ -35,6 +38,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      distros: ${{ steps.matrix.outputs.distros }}
     steps:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -46,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          matrix="$(jq -ce '
+          payload="$(jq -ce '
             def non_empty_string:
               type == "string" and length > 0;
 
@@ -71,18 +75,27 @@ jobs:
               error("expected each distro to contain image settings and a non-empty matrix.include")
             else
               {
-                include: [
-                  .distros[] as $distro
-                  | $distro.matrix.include[]
-                  | {
-                      ros_distro: $distro.ros_distro,
-                      arch: .arch,
-                      os: .os,
-                      ros_image_tag: $distro.ros_image_tag,
-                      ros_image_digest: $distro.ros_image_digest
-                    }
-                ]
+                matrix: {
+                  include: [
+                    .distros[] as $distro
+                    | $distro.matrix.include[]
+                    | {
+                        ros_distro: $distro.ros_distro,
+                        arch: .arch,
+                        os: .os,
+                        ros_image_tag: $distro.ros_image_tag,
+                        ros_image_digest: $distro.ros_image_digest
+                      }
+                  ]
+                },
+                distros: {
+                  include: [
+                    .distros[]
+                    | { ros_distro: .ros_distro }
+                  ]
+                }
               }
             end
           ' .github/ros-build-matrix.json)"
-          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+          echo "matrix=$(jq -ce '.matrix' <<<"${payload}")" >> "${GITHUB_OUTPUT}"
+          echo "distros=$(jq -ce '.distros' <<<"${payload}")" >> "${GITHUB_OUTPUT}"

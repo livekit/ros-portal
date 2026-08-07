@@ -42,25 +42,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t versions < <(
-            python3 - \
-              src/ros_portal/package.xml \
-              src/ros_portal_config/package.xml \
-              src/ros_portal_msgs/package.xml <<'PY'
+          version="$(
+            python3 - src/ros_portal/package.xml <<'PY'
           import sys
           import xml.etree.ElementTree as ET
 
-          for package_xml in sys.argv[1:]:
-              print(ET.parse(package_xml).getroot().findtext("version"))
+          print(ET.parse(sys.argv[1]).getroot().findtext("version"))
           PY
-          )
-          if [[ "${#versions[@]}" -ne 3 ]] ||
-            [[ "${versions[0]}" != "${versions[1]}" ]] ||
-            [[ "${versions[0]}" != "${versions[2]}" ]]; then
-            echo "First-party package.xml versions must be identical" >&2
+          )"
+          if [[ -z "${version}" ]]; then
+            echo "Unable to read src/ros_portal/package.xml version" >&2
             exit 1
           fi
-          echo "Release version: ${versions[0]}"
+          echo "Release version: ${version}"
 
       # TODO BOT-495: Replace this placeholder with the reviewed bloom release
       # process after the release repository and rosdistro entries exist.

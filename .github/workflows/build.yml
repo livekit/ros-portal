@@ -62,9 +62,9 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros_portal/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('docker/development/Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
           restore-keys: |
-            livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-
+            livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('docker/development/Dockerfile') }}-
       - name: Build packages
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
@@ -103,7 +103,7 @@ jobs:
           path: |
             src/externals/client-sdk-cpp/client-sdk-rust/target
             build/ros_portal/_deps
-          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
+          key: livekit-sdk-${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ inputs.ros_image_digest }}-${{ hashFiles('docker/development/Dockerfile') }}-${{ hashFiles('external.repos', 'src/ros_portal/cmake/BuildLiveKitSDK.cmake', 'src/ros_portal/cmake/ConfigureLiveKitSDK.cmake', 'src/ros_portal/CMakeLists.txt') }}
       - name: Archive colcon build output
         shell: bash
         run: |

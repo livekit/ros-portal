@@ -6,7 +6,8 @@ Follow the [Installation](./installation.md) and [Configuration](./configuration
 
 This guide assumes the following:
 
-- ROS Portal is installed via a Debian and is available at `/opt/livekit/ros/$ROS_DISTRO`.
+- If running via Docker, Docker is installed and available locally (e.g. `docker ps` resolves).
+- If running via a Debian install, ROS Portal is installed at `/opt/livekit/ros/$ROS_DISTRO`.
 - `LIVEKIT_URL` and `LIVEKIT_TOKEN` environment variables are set appropriately.
 - YAML configuration file is setup, at least minimally with required fields (can iterate on later).
 
@@ -18,7 +19,27 @@ If running LiveKit server locally, start as follows in `--dev` mode using the pa
 livekit-server --dev --enable_participant_data_blob
 ```
 
-## Running ROS Portal
+> [!NOTE]
+> Participant data blob is required for schema metadata validation and support, and this feature is in beta. If using LiveKit Cloud, contact your LiveKit representative to enable it.
+
+## Running ROS Portal (Docker)
+
+To run as a Docker container:
+
+```bash
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+docker run --rm --network host \
+  -e LIVEKIT_URL \
+  -e LIVEKIT_TOKEN \
+  --volume <path-to>/config.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:<distro> \
+  ros2 launch ros_portal ros_portal.launch.py \
+  config_path:=/config/ros_portal.yaml
+```
+
+See [Docker](./docker.md) for more details.
+
+## Running ROS Portal (Installed from Debian)
 
 To run using the bundled launch file:
 
@@ -82,3 +103,25 @@ export LIVEKIT_TOKEN=<token>
 export LIVEKIT_URL=<url>
 ros2 launch ros_portal ros_portal.launch.py
 ```
+
+## Next Steps
+
+Once ROS Portal is running, consider the following as possible next-steps:
+
+- Refine your YAML configuration file further. Start from the
+  [configuration examples](./configuration.md#examples), add a topic or service
+  pattern, restart ROS Portal, and confirm the expected ROS graph changes with
+  `ros2 topic list`, `ros2 topic echo`, `ros2 service list`, and
+  `ros2 service call`.
+- Try the [turtlesim over LiveKit tutorial](./tutorials.md#turtlesim-over-livekit)
+  to see a complete two-graph setup with topic forwarding, service forwarding,
+  and remote ROS CLI calls.
+- Use the [teleop step](./tutorials.md#teleop) to drive turtlesim through
+  `teleop_twist_keyboard`, which mirrors the command-velocity pattern used by
+  many robots.
+- Explore [remote ROS 2 CLI calls](./ros2_cli_calls.md) for ad-hoc inspection
+  and debugging of a remote participant's ROS graph.
+- Compare against full robot examples such as
+  [`cobra_flex_ros`](https://github.com/livekit-examples/cobra_flex_ros) and
+  [`waver_ros`](https://github.com/livekit-examples/waver_ros) when adapting ROS
+  Portal to a hardware stack.

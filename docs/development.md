@@ -5,7 +5,7 @@
 - LiveKit workspace in the container: `/livekit_ws`
 - External repositories in the container: `/livekit_ws/src/externals`
 
-The devcontainer builds from the repository-root `Dockerfile` and overrides
+The devcontainer builds from `docker/development/Dockerfile` and overrides
 `WS_ROS=livekit_ws` so the shell setup and aliases target `/livekit_ws`.
 
 External repositories are tracked in `external.repos` using `vcstool`.
@@ -27,8 +27,8 @@ devcontainer up --workspace-folder .
 For another ROS distribution, `ROS_DISTRO`, `ROS_IMAGE_TAG`, and
 `ROS_IMAGE_DIGEST` are a matched set and must be overridden together. Changing
 only `ROS_DISTRO` leaves the Jazzy base image selected, so the requested ROS
-installation will not exist in the container. Use the matching values from the
-distribution's `.github/workflows/ci-<distro>.yml` file.
+installation will not exist in the container. Use the matching values from
+`.github/ros-build-matrix.json`.
 
 For example, open a minimal Humble container with:
 

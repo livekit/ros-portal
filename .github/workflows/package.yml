@@ -28,10 +28,10 @@ jobs:
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
       ROS_DISTRO: ${{ inputs.ros_distro }}
-      ROS_IMAGE: ros:${{ inputs.ros_image_tag }}@sha256:${{ inputs.ros_image_digest }}
       ROS_IMAGE_DIGEST: ${{ inputs.ros_image_digest }}
       ROS_IMAGE_REPOSITORY: ros
       ROS_IMAGE_TAG: ${{ inputs.ros_image_tag }}
+      RUNTIME_IMAGE: ros-portal-ci:${{ inputs.ros_distro }}-${{ inputs.arch }}-${{ github.sha }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -65,23 +65,32 @@ jobs:
               set -euo pipefail
               exec ./scripts/package-deb.sh
             '
-      - name: Start livekit-server
-        id: livekit_server
-        uses: livekit/dev-server-action@6562d7d9343e46c26ead1223151f64f00e4fc37f # v1.1.0
-        with:
-          github-token: ${{ github.token }}
-          version: v1.13.3
-          config: |
-            enable_participant_data_blob: true
-      - name: Smoke-test Debian in ROS Image
+      # Build from the packaged artifact in a clean ROS base to verify its
+      # declared runtime dependencies and installation behavior.
+      - name: Build runtime Docker image
         shell: bash
         run: |
           set -euo pipefail
           deb_path="$(compgen -G 'artifacts/debian/*.deb')"
-          docker run --rm --network host --env "CI=true" --env "ROS_DISTRO=${ROS_DISTRO}" --volume "${PWD}/artifacts/debian:/packages:ro" --volume "${PWD}/scripts/smoke-test-deb.sh:/smoke-test-deb.sh:ro" "${ROS_IMAGE}" bash -lc "/smoke-test-deb.sh /packages/$(basename "${deb_path}")"
-      - name: Dump LiveKit server log on smoke-test failure
-        if: failure()
-        run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
+          docker build \
+            --platform "linux/${{ inputs.arch }}" \
+            --file docker/runtime/Dockerfile \
+            --build-arg "DEB_FILE=${deb_path}" \
+            --build-arg "IMAGE_REVISION=${GITHUB_SHA}" \
+            --build-arg "IMAGE_SOURCE=https://github.com/${GITHUB_REPOSITORY}" \
+            --build-arg "IMAGE_VERSION=ci-${GITHUB_SHA}" \
+            --build-arg "ROS_DISTRO=${ROS_DISTRO}" \
+            --build-arg "ROS_IMAGE_DIGEST=${ROS_IMAGE_DIGEST}" \
+            --build-arg "ROS_IMAGE_REPOSITORY=${ROS_IMAGE_REPOSITORY}" \
+            --build-arg "ROS_IMAGE_TAG=${ROS_IMAGE_TAG}" \
+            --tag "${RUNTIME_IMAGE}" \
+            .
+      - name: Smoke-test runtime Docker image
+        run: >-
+          ./scripts/smoke-test-docker-image.sh
+          "${RUNTIME_IMAGE}"
+          "${ROS_DISTRO}"
+          "${{ inputs.arch }}"
       - name: Upload Debian package
         if: ${{ always() && !cancelled() && steps.debian_package.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

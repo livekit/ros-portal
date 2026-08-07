@@ -40,6 +40,24 @@ without exposing DDS across networks.
 3. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
    project, then run. See [Running](docs/running.md).
 
+Or run the same node from the multi-architecture Docker image for your ROS
+distribution:
+
+```bash
+docker run --rm \
+  --network host \
+  --env LIVEKIT_URL=<url> \
+  --env LIVEKIT_TOKEN=<token> \
+  --volume /path/on/host/config.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:jazzy \
+  ros2 launch ros_portal ros_portal.launch.py \
+  config_path:=/config/ros_portal.yaml
+```
+
+Images are available for Humble, Jazzy, Kilted, and Lyrical on amd64 and
+arm64. See [Running with Docker](docs/docker.md) for tags, networking, and
+release details.
+
 To get familiar with using ROS Portal after that, follow the
 [tutorials](docs/tutorials.md).
 

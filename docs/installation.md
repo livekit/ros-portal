@@ -1,88 +1,89 @@
 # Installation
 
-## Docker
-
 <!-- TODO: document running ROS Portal from Docker directly. -->
 
-## Debian Packages
+## LiveKit
 
-CI builds Debian packages for:
+ROS Portal depends on [LiveKit](https://livekit.com) server and CLI. The following table below is a quick reference for installing these components if not already present.
 
-- ROS 2 Humble on Ubuntu 22.04 (Jammy)
-- ROS 2 Jazzy on Ubuntu 24.04 (Noble)
-- ROS 2 Kilted on Ubuntu 24.04 (Noble)
-- ROS 2 Lyrical on Ubuntu 26.04 (Resolute)
-- amd64 and arm64 for each distribution
+| Component | Purpose | Documentation |
+|---|---|---|
+| LiveKit Server | Host rooms that ROS Portal connects to | [LiveKit Cloud](https://cloud.livekit.io/) or [local install](https://docs.livekit.io/transport/self-hosting/local/) |
+| LiveKit CLI | Mint access tokens for ROS Portal | [LiveKit CLI guide](https://docs.livekit.io/reference/developer-tools/livekit-cli/) |
 
-The custom Debian package is named
-`ros-<distro>-livekit-portal`. Tagged GitHub Releases provide the `.deb`
-packages as direct downloads. CI workflow artifacts use
-`ros-<distro>-livekit-portal-<arch>-deb`; each artifact is a ZIP containing
-the versioned `.deb`.
+## ROS Portal (Debian)
 
-Each package is a self-contained ROS Portal overlay: it includes ROS Portal, its
-config and message packages, the pinned medkit packages, and the LiveKit SDK.
-It relies on the matching ROS 2 underlay and Ubuntu system libraries through
-normal APT dependencies.
+[ROS Portal releases](https://github.com/livekit/ros-portal/releases/latest) provide the `.deb` packages as direct downloads for each supported ROS distribution and platform architecture combination, in the following format:
+
+```log
+ros-<distro>-livekit-portal_<version>-<revision>_<arch>.deb
+```
+
+The package installs to `/opt/livekit/ros/<distro>` without
+modifying files owned by the ROS installation under `/opt/ros/<distro>`.
+
+The following ROS packages are installed:
+
+- `ros_portal`
+- `ros_portal_config`
+- `ros_portal_msgs`
+- `ros2_medkit_serialization` (bundled for dynamic message serialization; not available via ROS apt)
+
+The remaining dependent packages are leveraged from the native ROS installation.
+
+> [!NOTE]
+> Future versions of ROS Portal will be available via `apt` installation and will follow standard ROS installation locations.
 
 <!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
 ### Install
 
-Configure the official ROS 2 APT source for your Ubuntu release before
-installing ROS Portal. ROS Portal package uses that source to install its ROS
-runtime dependencies.
+Ensure the matching ROS release is installed prior to installing ROS Portal.
 
-Download the `.deb` matching the machine's ROS distribution and architecture
-from the tagged GitHub Release, then run:
+Download the `.deb` matching the machine's ROS distribution and architecture, then run:
 
 ```bash
 sudo apt update
-sudo apt install ./ros-jazzy-livekit-portal_*_amd64.deb
+sudo apt install ./ros-$ROS_DISTRO-livekit-portal*.deb
 ```
 
-Replace the distribution, version, Ubuntu codename, and architecture as
-appropriate. The package
-installs a ROS overlay at `/opt/livekit/ros/<distro>` without modifying files
-owned by the ROS installation under `/opt/ros/<distro>`.
+> [!NOTE]
+> Use apt install over alternatives to ensure additional third-party dependencies are installed if not already present.
 
-Source the installed overlay and check that ROS can find ROS Portal:
+Source the setup script and check that ROS can find ROS Portal. This guide assumes `bash`, but use
+the script for your shell:
 
 ```bash
-source /opt/livekit/ros/jazzy/setup.bash
+# bash
+source /opt/livekit/ros/$ROS_DISTRO/setup.bash
+```
+
+```bash
 ros2 pkg prefix ros_portal
 ```
 
-The overlay setup chains the matching ROS underlay automatically.
+If successful, outputs:
 
-### Run
-
-For a self-hosted LiveKit server, enable participant data blobs in its
-configuration before starting ROS Portal:
-
-```yaml
-enable_participant_data_blob: true
-```
-
-LiveKit participant data blobs carry the schema definitions required by ROS Portal
-data tracks.
-
-Set LiveKit credentials and use the installed launch file:
-
-```bash
-source /opt/livekit/ros/jazzy/setup.bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
-ros2 launch ros_portal ros_portal.launch.py
+```log
+/opt/livekit/ros/<distro>/ros_portal
 ```
 
 Each package also installs a distro-specific convenience command:
 
 ```bash
-export LIVEKIT_URL=<url>
-export LIVEKIT_TOKEN=<token>
-ros-portal-jazzy
+ros-portal-$ROS_DISTRO
 ```
 
+### Troubleshooting
+
+Missing `diagnostic-updater` package:
+
+```bash
+sudo apt update
+sudo apt install ros-$ROS_DISTRO-diagnostic-updater
+```
+
+## Next Steps
+
 See [Running](running.md) and [Configuration](configuration.md) for launch
-arguments and route configuration.
+arguments and configuration options.

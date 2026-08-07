@@ -95,6 +95,15 @@ livekit_configure_sdk(
 )
 
 find_package(LiveKit CONFIG REQUIRED)
+
+# LiveKit_VERSION comes from the found package's LiveKitConfigVersion.cmake, so
+# it reflects the SDK actually linked (including "latest" resolution and source
+# builds). The requested pin is only a fallback for packages without one.
+set(LIVEKIT_SDK_REPORTED_VERSION "${LiveKit_VERSION}")
+if(NOT LIVEKIT_SDK_REPORTED_VERSION)
+  set(LIVEKIT_SDK_REPORTED_VERSION "${LIVEKIT_SDK_VERSION}")
+endif()
+
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 find_package(ros2_medkit_cmake REQUIRED)
@@ -185,6 +194,35 @@ message(STATUS "LiveKit core target   : ${LIVEKIT_CORE_TARGET}")
 message(STATUS "LiveKit SDK prefix    : ${LIVEKIT_SDK_INSTALL_ROOT}")
 
 # ---------------------------------------------------------------------------
+# Generated version header
+#
+# cmake/version.hpp.in is rendered into the build tree as
+# ros_portal/version.hpp and installed next to the hand-written headers, so the
+# versions this build was made with are public and explicit for both this
+# package and downstream code. The template lives under cmake/ because
+# ament_auto_package() installs include/ wholesale and would ship it unrendered.
+# ---------------------------------------------------------------------------
+if(NOT ros_portal_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)")
+  message(FATAL_ERROR
+    "Could not parse a major.minor.patch version out of the package.xml version "
+    "'${ros_portal_VERSION}'")
+endif()
+set(ros_portal_VERSION_MAJOR "${CMAKE_MATCH_1}")
+set(ros_portal_VERSION_MINOR "${CMAKE_MATCH_2}")
+set(ros_portal_VERSION_PATCH "${CMAKE_MATCH_3}")
+
+set(ROS_PORTAL_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/include")
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.hpp.in"
+  "${ROS_PORTAL_GENERATED_INCLUDE_DIR}/${PROJECT_NAME}/version.hpp"
+  @ONLY)
+install(FILES "${ROS_PORTAL_GENERATED_INCLUDE_DIR}/${PROJECT_NAME}/version.hpp"
+  DESTINATION "include/${PROJECT_NAME}/${PROJECT_NAME}")
+
+message(STATUS "ROS Portal version    : ${ros_portal_VERSION}")
+message(STATUS "LiveKit SDK version   : ${LIVEKIT_SDK_REPORTED_VERSION}")
+
+# ---------------------------------------------------------------------------
 # Introspection library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(introspection_lib SHARED
@@ -224,7 +262,9 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 # ROS Portal library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros_portal_lib SHARED
-  src/diagnostics/connection_health.cpp
+  src/connection/connection_diagnostics.cpp
+  src/connection/connection_manager.cpp
+  src/diagnostics/build_info.cpp
   src/latched_topic_forwarder.cpp
   src/ros_portal.cpp
   src/schema/manager.cpp
@@ -239,6 +279,9 @@ ament_auto_add_library(ros_portal_lib SHARED
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}
+)
+target_include_directories(ros_portal_lib PUBLIC
+  "$<BUILD_INTERFACE:${ROS_PORTAL_GENERATED_INCLUDE_DIR}>"
 )
 target_link_libraries(ros_portal_lib
   introspection_lib

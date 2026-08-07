@@ -79,8 +79,9 @@ LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::Weak
   if (!locked_node) {
     throw std::invalid_argument("LatchedTopicForwarder requires a non-expired ROS node");
   }
-  if (!livekit_methods_.register_rpc_method || !livekit_methods_.unregister_rpc_method ||
-      !livekit_methods_.perform_rpc || !livekit_methods_.list_remote_identities) {
+  if (!livekit_methods_.is_room_available || !livekit_methods_.register_rpc_method ||
+      !livekit_methods_.unregister_rpc_method || !livekit_methods_.perform_rpc ||
+      !livekit_methods_.list_remote_identities) {
     throw std::invalid_argument("LatchedTopicForwarder requires fully populated LiveKitMethods");
   }
 
@@ -196,6 +197,11 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
 
 void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, const std::string& topic_type,
                                                  const std::uint8_t* data, std::size_t size) {
+  if (!livekit_methods_.is_room_available()) {
+    RCLCPP_DEBUG(logger_, "Skipping latched message store for '%s'; room is unavailable", topic_name.c_str());
+    return;
+  }
+
   // Dedup on the raw (topic, type, bytes) before paying for base64 + JSON:
   // identical inputs always serialize to an identical payload, so a hit here
   // means we already hold this state and can skip re-encoding it entirely.
@@ -259,6 +265,11 @@ void LatchedTopicForwarder::runWorker() {
 }
 
 void LatchedTopicForwarder::pushToPeers() {
+  if (!livekit_methods_.is_room_available()) {
+    RCLCPP_DEBUG(logger_, "Skipping latched topic push; room is unavailable");
+    return;
+  }
+
   const std::vector<std::string> identities = livekit_methods_.list_remote_identities();
 
   std::vector<StoredMessage> messages;

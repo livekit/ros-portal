@@ -97,7 +97,8 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
     throw std::invalid_argument("TopicForwarder requires a non-expired ROS node");
   }
 
-  if (!livekit_methods_.publish_data_track || !livekit_methods_.publish_video_track) {
+  if (!livekit_methods_.is_room_available || !livekit_methods_.publish_data_track ||
+      !livekit_methods_.publish_video_track) {
     throw std::invalid_argument("TopicForwarder requires fully populated LiveKitMethods");
   }
 
@@ -172,7 +173,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
 
   auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg,
                                                  const rclcpp::MessageInfo& message_info) {
-    if (isInboundPublication(message_info)) {
+    if (isInboundPublication(message_info) || !livekit_methods_.is_room_available()) {
       return;
     }
 
@@ -284,6 +285,10 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
     return true;
   }
 
+  if (!livekit_methods_.is_room_available()) {
+    return false;
+  }
+
   const auto schema_result = schema_manager_.ensureSchemaDefined(topic_type, state.encoding);
   if (!schema_result) {
     return false;
@@ -317,7 +322,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
 
   auto callback = [this, topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg,
                                      const rclcpp::MessageInfo& message_info) {
-    if (isInboundPublication(message_info)) {
+    if (isInboundPublication(message_info) || !livekit_methods_.is_room_available()) {
       return;
     }
 
@@ -329,6 +334,10 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     auto& state = state_it->second;
 
     if (!state.sink) {
+      if (!livekit_methods_.is_room_available()) {
+        return;
+      }
+
       const auto sink_result =
           livekit_methods_.publish_video_track(topic_name, static_cast<int>(msg->width), static_cast<int>(msg->height));
       if (!sink_result) {
@@ -743,6 +752,10 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
 void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state) {
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
+    if (!livekit_methods_.is_room_available()) {
+      continue;
+    }
+
     std::optional<rclcpp::SerializedMessage> serialized_msg;
     if (state->frame_encoding == livekit::DataTrackFrameEncoding::Json) {
       std::string error;

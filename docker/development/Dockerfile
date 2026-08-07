@@ -47,6 +47,7 @@ RUN apt-get update && apt-get install -y \
     ninja-build \
     openssh-client \
     pkg-config \
+    python3-argcomplete \
     python3-colcon-common-extensions \
     python3-jinja2 \
     python3-pip \

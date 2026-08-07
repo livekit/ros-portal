@@ -38,6 +38,30 @@ Inspect results with:
 colcon test-result --verbose
 ```
 
+### Isolated Connection-Fault Test
+
+An opt-in integration test routes only its ROS Portal participants through a
+test-owned loopback TCP proxy. The proxy resets and freezes their LiveKit
+signaling connections, verifies that ROS Portal operations pause, and then restores
+traffic to verify SDK in-session recovery. That path must increment
+`reconnect_count` once while entering `reconnecting`, and leave the counter
+unchanged after the same session recovers. It does not stop or reconfigure the
+LiveKit server and does not affect other clients connected to that server.
+
+After sourcing the test tokens, enable and select the dedicated CTest target:
+
+```bash
+source .token_helpers/set_test_tokens.bash
+ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1 \
+  colcon test --packages-select ros_portal \
+  --ctest-args -R ros_portal_connection_fault_tests
+```
+
+The test currently requires a non-TLS `ws://` URL such as the local-development
+default. Without `ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1`, the target reports a
+GTest skip. Its separate target name means the existing unit and integration
+test selections do not run it.
+
 The token helper defaults to local development credentials (`devkey` /
 `secret`) and the room `ros_portal_test_room`. It uses
 `ws://host.docker.internal:7880` by default to match the devcontainer launch

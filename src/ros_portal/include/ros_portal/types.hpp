@@ -32,6 +32,12 @@ using RpcHandler = std::function<std::string(const std::string&)>;
 //! @brief Return true when a remote participant identity is present.
 using HasParticipantFn = std::function<bool(const std::string& participant_id)>;
 
+//! @brief Return true when the current room session can perform room operations.
+using IsRoomAvailableFn = std::function<bool()>;
+
+//! @brief Canonical local failure when a room-scoped operation is requested while disconnected.
+inline constexpr const char* kRoomNotConnectedError = "room not connected";
+
 //! @brief Invoke an RPC method on a remote participant and return its JSON
 //! response. Returns std::nullopt when the RPC call fails.
 using PerformRpcFn =
@@ -43,9 +49,11 @@ using PerformRpcFn =
 //! unavailable).
 using RegisterRpcMethodFn = std::function<bool(const std::string& method, RpcHandler handler)>;
 
-//! @brief Remove a previously registered local RPC method. Returns false when
-//! the method could not be unregistered (for example, the local participant is
-//! unavailable).
+//! @brief Remove a previously registered local RPC method.
+//!
+//! Returns true when the method was removed or its room session has already
+//! ended, since destroying the local participant also removes its RPC handlers.
+//! Returns false only when cleanup fails while the room session is still active.
 using UnregisterRpcMethodFn = std::function<bool(const std::string& method)>;
 
 } // namespace ros_portal

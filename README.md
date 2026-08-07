@@ -34,12 +34,11 @@ without exposing DDS across networks.
 
 ## Quick Start
 
-1. **Install the latest release.** Download the `.deb` for your ROS 2 distro and
-   architecture from the
-   [latest GitHub Release](https://github.com/livekit/ros-portal/releases/latest),
-   then follow [Installation](docs/installation.md).
-2. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
-   project, set credentials, and launch. See [Running](docs/running.md).
+1. **Install ROS Portal.** [Download the `.deb`](https://github.com/livekit/ros-portal/releases/latest) for your ROS 2 distro and architecture and install. See [Installation](docs/installation.md).
+2. **Configure ROS Portal.** Set LiveKit credentials and a YAML config for the
+   topics and services to forward. See [Configuration](docs/configuration.md).
+3. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
+   project, then run. See [Running](docs/running.md).
 
 Or run the same node from the multi-architecture Docker image for your ROS
 distribution:
@@ -64,17 +63,11 @@ To get familiar with using ROS Portal after that, follow the
 
 ## User Guides
 
-- [Installation](docs/installation.md): Debian packages, supported ROS and Ubuntu
-  versions, and the installed overlay.
-- [Running with Docker](docs/docker.md): supported images, tags, configuration,
-  networking, and local image builds.
-- [Running](docs/running.md): launch commands, credentials, local development launch,
-  and simulation examples.
-- [Configuration](docs/configuration.md): YAML schema, topic routes, service routes,
-  throttling, latched topics (via
-  [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/)), data track encoding
-  (`ros2msg` / `ros2idl` / `jsonschema` for non-ROS consumers), and video options.
-- [Remote ROS2 CLI calls](docs/ros2_cli_calls.md): remote `ros2` command services
+- [Installation](docs/installation.md): Installing LiveKit dependencies and ROS Portal.
+- [Configuration](docs/configuration.md): Configuring LiveKit environment variables
+  and the ROS Portal configuration file.
+- [Running](docs/running.md): Running ROS Portal against LiveKit Cloud or local server.
+- [Remote ROS2 CLI calls](docs/ros2_cli_calls.md): Remote `ros2` command services
   backed by [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/).
 - [Diagnostics](docs/diagnostics.md): `/diagnostics` fields and aggregator setup.
 
@@ -87,7 +80,7 @@ To get familiar with using ROS Portal after that, follow the
 - [Current limitations](docs/limitations.md): known implementation limits and
   follow-up work.
 
-## Design Guides
+## Design Reference
 
 - [Architecture](docs/design/architecture.md): ROS Portal data flow,
   [LiveKit DataTracks](https://docs.livekit.io/transport/data/data-tracks/),

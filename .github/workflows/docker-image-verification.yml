@@ -27,7 +27,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: docker.io/livekit/ros-portal
+  # Temporary test destination; restore to docker.io/livekit/ros-portal before merge.
+  IMAGE_NAME: docker.io/alangeorge22076/ros-portal-test
 
 jobs:
   ros-build-matrix:

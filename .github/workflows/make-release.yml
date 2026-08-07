@@ -38,7 +38,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE_NAME: docker.io/livekit/ros-portal
+  # Temporary test destination; restore to docker.io/livekit/ros-portal before merge.
+  IMAGE_NAME: docker.io/alangeorge22076/ros-portal-test
 
 jobs:
   validate:
@@ -221,7 +222,7 @@ jobs:
             Or run the multi-architecture Docker image for your distribution:
 
             ```bash
-            docker run --rm --network host livekit/ros-portal:<distro>
+            docker run --rm --network host alangeorge22076/ros-portal-test:<distro>
             ```
 
             See [Running with Docker](https://github.com/${{ github.repository }}/blob/main/docs/docker.md).

@@ -24,7 +24,9 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:
-      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ inputs.ros_distro == 'humble' && 'true' || 'false' }}
+      # Keep the devcontainer consistent with the source-built SDK used to
+      # create the build artifacts consumed by this job.
+      BUILD_LIVEKIT_SDK_FROM_SOURCE: "true"
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
       ROS_DISTRO: ${{ inputs.ros_distro }}

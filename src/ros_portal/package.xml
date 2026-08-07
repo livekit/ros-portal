@@ -17,7 +17,7 @@
 -->
 <package format="3">
   <name>ros_portal</name>
-  <version>0.1.0</version>
+  <version>1.0.0</version>
   <description>ROS2 node that bridges the ROS2 topic graph to the LiveKit ecosystem</description>
   <maintainer email="sderosa@livekit.io">sderosa</maintainer>
   <license>Apache-2.0</license>

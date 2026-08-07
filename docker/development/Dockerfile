@@ -107,6 +107,7 @@ RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
         libglib2.0-dev \
         libgstreamer-plugins-base1.0-dev \
         libgstreamer1.0-dev \
+        libjpeg-dev \
         libprotobuf-dev \
         libssl-dev \
         libunwind-dev \

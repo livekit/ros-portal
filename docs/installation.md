@@ -89,5 +89,5 @@ sudo apt install ros-$ROS_DISTRO-diagnostic-updater
 
 ## Next Steps
 
-See [Running](running.md) and [Configuration](configuration.md) for launch
-arguments and configuration options.
+See [Configuration](configuration.md) next to setup environment variables and the
+ROS Portal configuration file, then [Running](running.md) for running ROS Portal.

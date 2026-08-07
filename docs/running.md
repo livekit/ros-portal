@@ -19,6 +19,9 @@ If running LiveKit server locally, start as follows in `--dev` mode using the pa
 livekit-server --dev --enable_participant_data_blob
 ```
 
+> [!NOTE]
+> Participant data blob is required for schema metadata validation and support, and this feature is in beta. If using LiveKit Cloud, contact your LiveKit representative to enable it.
+
 ## Running ROS Portal (Docker)
 
 To run as a Docker container:
@@ -104,3 +107,6 @@ export LIVEKIT_TOKEN=<token>
 export LIVEKIT_URL=<url>
 ros2 launch ros_portal ros_portal.launch.py
 ```
+
+## Next Steps
+

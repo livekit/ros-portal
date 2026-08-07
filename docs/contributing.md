@@ -15,12 +15,14 @@ Please make sure your change passes all of the following:
 ```sh
 colcon build --packages-up-to ros_portal                                     # building
 ./scripts/clang-format.sh --fix                                              # formatting
+./scripts/clang-tidy.sh                                                      # correctness (note: CI blocks errors only)
 colcon test --packages-up-to ros_portal                                      # tests (be sure to set credentials)
 ros2 launch ros_portal ros_portal.launch.py config_path=/path/to/config.yaml # app still launches and behaves correctly
 ```
 
 - Add tests for ROS Portal logic where practical
 - Keep commits focused; a single logical change per PR is easiest to review
+- For a better dev process, install the pre-commit hooks described in [cpp-tools](https://github.com/livekit/cpp-tools#quick-start)
 
 ## Pull requests
 

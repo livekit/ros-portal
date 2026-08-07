@@ -13,11 +13,11 @@ Describe the changes in this PR. Explain what the PR is meant to solve and how t
 
 If this PR introduces breaking changes, list them here and document the rationale for introducing such a change.
 
-### Minimum Supported client-sdk-cpp Version
+### Minimum Supported C++ Client SDK Version
 
-If the PR modifies the client-sdk-cpp version, document it here.
+If the PR modifies the [client-sdk-cpp version](https://github.com/livekit/client-sdk-cpp), document it here.
 
 ### Testing
 
-Ideally, unit test the code you add, but ensure you're not repeating existing test cases. Use as many already written scaffolding, utilities as possible; write your own, when needed.
+Ideally, unit and integration test the code you add, but ensure you're not repeating existing test cases. Use existing test scaffolding and utilities before writing your own.
 If external services, APIs, tokens are required (e.g., running an LK server instance), provide the necessary information. Make sure your tests perform useful, context-aware assertions and do not simply emulate "happy paths".

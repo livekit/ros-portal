@@ -109,8 +109,8 @@ private:
     std::string local_identity{"unset"};
     /// @brief Effective topic polling period.
     std::atomic<int> topic_polling_period_ms{0};
-    /// @brief Whether connection-health diagnostics are instantiated.
-    std::atomic_bool connection_health_active{false};
+    /// @brief Whether the connection manager is instantiated.
+    std::atomic_bool connection_manager_active{false};
     /// @brief Whether the topic forwarder is instantiated.
     std::atomic_bool topic_forwarder_active{false};
     /// @brief Whether the latched-topic forwarder is instantiated.

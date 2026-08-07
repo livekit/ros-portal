@@ -91,7 +91,7 @@ credential failures remain observable.
 | Key | Value |
 |---|---|
 | `initialized` | Whether initialization completed. |
-| `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_health`, `topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and `cli_manager`. Any inactive component triggers an `ERROR` status. |
+| `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_manager`, `topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and `cli_manager`. Any inactive component triggers an `ERROR` status. |
 | `config_path` | Effective configuration file path, or `unset`. |
 | `topic_polling_period_ms` | Effective topic discovery polling period. |
 | `local_identity` | Connected local participant identity, or `unset`. |

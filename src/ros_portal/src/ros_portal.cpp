@@ -166,7 +166,7 @@ bool RosPortal::initialize() {
   };
   connection_manager_ = std::make_unique<ConnectionManager>(
       std::move(connection_methods), this->get_logger().get_child("connection"), makeDiagnosticsFns());
-  diagnostic_state_.connection_health_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
+  diagnostic_state_.connection_manager_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
   room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
   // Room::connect() may emit events for data tracks that were already
@@ -261,7 +261,7 @@ void RosPortal::shutdown() {
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   connection_manager_.reset();
-  diagnostic_state_.connection_health_active.store(false, std::memory_order_relaxed);
+  diagnostic_state_.connection_manager_active.store(false, std::memory_order_relaxed);
   build_info_diagnostics_.reset();
 
   // Reset diagnostics_updater_ after all its task owners are gone.
@@ -449,8 +449,8 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
     }
     components_inactive += component;
   };
-  if (!diagnostic_state_.connection_health_active.load(std::memory_order_relaxed)) {
-    append_component("connection_health");
+  if (!diagnostic_state_.connection_manager_active.load(std::memory_order_relaxed)) {
+    append_component("connection_manager");
   }
   if (!diagnostic_state_.topic_forwarder_active.load(std::memory_order_relaxed)) {
     append_component("topic_forwarder");
@@ -867,6 +867,7 @@ bool RosPortal::hasParticipant(const std::string& participant_id) const {
 std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_id, const std::string& method,
                                                  const std::string& payload, std::uint8_t timeout_sec) {
   if (!roomOperationsEnabled()) {
+    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     return std::nullopt;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
@@ -891,6 +892,7 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
 
 bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
   if (!roomOperationsEnabled()) {
+    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;

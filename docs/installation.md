@@ -11,6 +11,10 @@ ROS Portal depends on [LiveKit](https://livekit.com) server and CLI. The followi
 | LiveKit Server | Host rooms that ROS Portal connects to | [LiveKit Cloud](https://cloud.livekit.io/) or [local install](https://docs.livekit.io/transport/self-hosting/local/) |
 | LiveKit CLI | Mint access tokens for ROS Portal | [LiveKit CLI guide](https://docs.livekit.io/reference/developer-tools/livekit-cli/) |
 
+## ROS Portal (Docker)
+
+ROS Portal is available as a Docker container to avoid installation and get running quickly. See [Running ROS Portal (Docker)](./running.md#running-ros-portal-docker).
+
 ## ROS Portal (Debian)
 
 [ROS Portal releases](https://github.com/livekit/ros-portal/releases/latest) provide the `.deb` packages as direct downloads for each supported ROS distribution and platform architecture combination, in the following format:

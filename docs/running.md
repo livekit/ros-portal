@@ -6,7 +6,8 @@ Follow the [Installation](./installation.md) and [Configuration](./configuration
 
 This guide assumes the following:
 
-- ROS Portal is installed via a Debian and is available at `/opt/livekit/ros/$ROS_DISTRO`.
+- If running via Docker, Docker is installed and available locally (e.g. `docker ps` resolves).
+- If running via a Debian install, ROS Portal is installed at `/opt/livekit/ros/$ROS_DISTRO`.
 - `LIVEKIT_URL` and `LIVEKIT_TOKEN` environment variables are set appropriately.
 - YAML configuration file is setup, at least minimally with required fields (can iterate on later).
 
@@ -18,7 +19,28 @@ If running LiveKit server locally, start as follows in `--dev` mode using the pa
 livekit-server --dev --enable_participant_data_blob
 ```
 
-## Running ROS Portal
+## Running ROS Portal (Docker)
+
+To run as a Docker container:
+
+```bash
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+docker run --rm --network host \
+  -e LIVEKIT_URL \
+  -e LIVEKIT_TOKEN \
+  --volume <path-to>/config.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:<distro> \
+  ros2 launch ros_portal ros_portal.launch.py \
+  config_path:=/config/ros_portal.yaml
+```
+
+A note on image tag versions:
+
+- `latest` is not tagged. Distro tags are moved forward as functional latest, e.g. `ros-portal:humble`, `ros-portal:jazzy`, `ros-portal:kilted`, `ros-portal:lyrical`
+- If a specific version is needed, use `<distro>-<tag>`, e.g. `ros-portal:humble-v0.1.0`
+- For production use, it is recommended to pin the desired tag to avoid undesired version changes
+
+## Running ROS Portal (Installed from Debian)
 
 To run using the bundled launch file:
 

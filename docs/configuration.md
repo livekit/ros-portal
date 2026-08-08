@@ -124,10 +124,11 @@ ros_portal:
 
 ### Top-Level Fields
 
-All config lives under `ros_portal`.
+All runtime config lives under `ros_portal`.
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
+| `$schema` | string | no | - | Link to JSON schema, use [this link](https://github.com/livekit/ros-portal/blob/main/src/ros_portal_config/schema/ros_portal_config.schema.json) and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
 | `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |

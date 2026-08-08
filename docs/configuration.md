@@ -124,7 +124,7 @@ ros_portal:
 
 ### Top-Level Fields
 
-All runtime config lives under `ros_portal`.
+All config lives under `ros_portal`.
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|

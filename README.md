@@ -34,32 +34,34 @@ without exposing DDS across networks.
 
 ## Quick Start
 
-1. **Install ROS Portal.** [Download the `.deb`](https://github.com/livekit/ros-portal/releases/latest) for your ROS 2 distro and architecture and install. See [Installation](docs/installation.md).
+1. **Install ROS Portal.** [Download the `.deb`](https://github.com/livekit/ros-portal/releases/latest) for your ROS 2 distro and architecture and install, or skip this step if running from Docker. See [Installation](docs/installation.md).
 2. **Configure ROS Portal.** Set LiveKit credentials and a YAML config for the
    topics and services to forward. See [Configuration](docs/configuration.md).
 3. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
    project, then run. See [Running](docs/running.md).
 
-Or run the same node from the multi-architecture Docker image for your ROS
-distribution:
+Or quickly run via Docker for your ROS distribution:
+
+Set `LIVEKIT_*` environment variables and define a configuration file `ros_portal.yaml` as described
+in [Configuration](configuration.md), then run:
 
 ```bash
+docker login
+
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+# Assumes ros_portal.yaml exists in same location
+
+# Change to desired ROS distro, or skip this if already in a ROS environment
+export ROS_DISTRO=jazzy
 docker run --rm \
   --network host \
-  --env LIVEKIT_URL=<url> \
-  --env LIVEKIT_TOKEN=<token> \
-  --volume /path/on/host/config.yaml:/config/ros_portal.yaml:ro \
-  livekit/ros-portal:jazzy \
+  -e LIVEKIT_URL \
+  -e LIVEKIT_TOKEN \
+  --volume $(pwd)/ros_portal.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:$ROS_DISTRO \
   ros2 launch ros_portal ros_portal.launch.py \
   config_path:=/config/ros_portal.yaml
 ```
-
-Images are available for Humble, Jazzy, Kilted, and Lyrical on amd64 and
-arm64. See [Running with Docker](docs/docker.md) for tags, networking, and
-release details.
-
-To get familiar with using ROS Portal after that, follow the
-[tutorials](docs/tutorials.md).
 
 ## User Guides
 
@@ -67,9 +69,11 @@ To get familiar with using ROS Portal after that, follow the
 - [Configuration](docs/configuration.md): Configuring LiveKit environment variables
   and the ROS Portal configuration file.
 - [Running](docs/running.md): Running ROS Portal against LiveKit Cloud or local server.
+- [Docker](docs/docker.md): Details for the ROS Portal Docker image.
 - [Remote ROS2 CLI calls](docs/ros2_cli_calls.md): Remote `ros2` command services
   backed by [LiveKit RPC](https://docs.livekit.io/transport/data/rpc/).
 - [Diagnostics](docs/diagnostics.md): `/diagnostics` fields and aggregator setup.
+- [Tutorials](docs/tutorials.md): Run the ROS Turtlesim example across two graphs.
 
 ## Developer Guides
 

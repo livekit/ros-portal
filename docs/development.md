@@ -36,7 +36,6 @@ For example, open a minimal Humble container with:
 ROS_DISTRO=humble \
 ROS_IMAGE_TAG=humble-ros-base-jammy \
 ROS_IMAGE_DIGEST=afb40d6be65331c20a114d4e229a7ef099fed1b17bf6370daee193514b32aa16 \
-BUILD_LIVEKIT_SDK_FROM_SOURCE=true \
 INSTALL_CPP_TOOLS=false \
 INSTALL_SIMULATION_DEPS=false \
 devcontainer up --workspace-folder .
@@ -50,16 +49,12 @@ The remaining overrides are independent feature choices:
 - `INSTALL_CPP_TOOLS` defaults to `true`. Set it to `false` when the formatter
   and static-analysis toolchain are unnecessary. The distro matrix disables it
   because those tools have a dedicated workflow.
-- `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `false`. Humble requires `true`
-  because its system toolchain is incompatible with the release archive.
+- `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `false`. Leave it off for normal
+  builds; the pinned Ubuntu 22.04 SDK archive works on Humble through Lyrical.
+  Set it to `true` only when iterating on the SDK checkout itself (installs the
+  Rust/C++ toolchain needed to compile `client-sdk-cpp`).
 - `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
   other than the default `ros` repository.
-
-Humble must build the pinned LiveKit SDK from source because the generic Linux
-release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04
-provides. CI installs the source-build toolchain in the Humble image and asks
-ROS Portal CMake configuration to build the SDK checkout from `external.repos`.
-
 ## Shell Helpers
 
 See `setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
@@ -115,9 +110,13 @@ versions used in CI automatically.
 
 ## LiveKit SDK
 
-The default build downloads the pinned LiveKit SDK release during CMake
-configure. Its release version lives in `src/ros_portal/colcon.pkg`
-and as the default of the `LIVEKIT_SDK_VERSION` CMake cache variable in
+The default build downloads the pinned LiveKit C++ SDK release during CMake
+configure. On Linux it selects the Ubuntu 22.04 archive
+(`livekit-sdk-ubuntu-22.04-*`) so the same prebuilt ABI works on Humble (Jammy)
+and newer ROS distros (Jazzy/Kilted on Noble, Lyrical on Resolute).
+
+The release version lives in `src/ros_portal/colcon.pkg` and as the default of
+the `LIVEKIT_SDK_VERSION` CMake cache variable in
 `src/ros_portal/CMakeLists.txt`; `external.repos` pins the source
 checkout to that release's commit. Bump all three together when upgrading. The
 SDK release check verifies that the two version strings match and that the
@@ -132,21 +131,22 @@ vcs import --recursive src/externals < external.repos
 ```
 
 To compile the SDK from that checkout and build ROS Portal against the
-resulting package:
+resulting package (optional; only needed when changing the SDK itself):
 
 ```bash
 colcon build --packages-select ros_portal \
   --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
 ```
 
-The SDK uses isolated build and install directories under ROS Portal package's
-colcon build directory. Its source build defaults to two parallel jobs. Set
+When building from source, enable `BUILD_LIVEKIT_SDK_FROM_SOURCE=true` for the
+devcontainer so the image installs the Rust/C++ toolchain. The SDK uses
+isolated build and install directories under ROS Portal package's colcon build
+directory. Its source build defaults to two parallel jobs. Set
 `CMAKE_BUILD_PARALLEL_LEVEL` or `LIVEKIT_SDK_BUILD_JOBS` to override that bound;
 the same limit is applied to both the CMake and Rust/Cargo build steps. Use one
 SDK job when building in a memory-constrained Docker Desktop VM.
 
-A source build is expensive, so both halves of its output are reusable and CI
-caches them:
+A source build is expensive, so both halves of its output are reusable:
 
 - `src/externals/client-sdk-cpp/client-sdk-rust/target` — Rust artifacts and the
   vendored WebRTC the build scripts unpack. This is the bulk of both the time and

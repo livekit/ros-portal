@@ -1,6 +1,6 @@
 {
   "cmake-args": [
-    "-DLIVEKIT_SDK_VERSION=1.5.0",
+    "-DLIVEKIT_SDK_VERSION=1.6.1-rc1",
     "-DBUILD_TESTING=ON"
   ]
 }

@@ -2,7 +2,7 @@ repositories:
   client-sdk-cpp:
     type: git
     url: https://github.com/livekit/client-sdk-cpp.git
-    version: 2cbf9a31eebd4d397ffae0ea6a8f63bf88310c50  # v1.5.0
+    version: e209a0945c4fc8f2bd9ea0a14edb4b8b26309d46  # v1.6.1-rc1
   cpp-tools:
     type: git
     url: https://github.com/livekit/cpp-tools.git

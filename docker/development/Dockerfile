@@ -90,9 +90,9 @@ RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-turtlesim \
     ros-${ROS_DISTRO}-teleop-twist-keyboard
 
-# Humble's Ubuntu 22.04 runtime is older than the generic LiveKit SDK release
-# artifacts. Install the toolchain needed for the colcon build to compile the
-# pinned SDK vcstool checkout in that image.
+# Optional toolchain for compiling the pinned client-sdk-cpp checkout instead of
+# downloading the Ubuntu 22.04 prebuilt release (LIVEKIT_BUILD_SDK_FROM_SOURCE /
+# BUILD_LIVEKIT_SDK_FROM_SOURCE). Not required for normal ROS Portal builds.
 RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \

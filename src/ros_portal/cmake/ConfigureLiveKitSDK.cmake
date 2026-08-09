@@ -72,18 +72,25 @@ function(livekit_configure_sdk)
   set(LIVEKIT_SDK_SHA256 "" CACHE STRING
     "Optional SHA-256 checksum for the LiveKit C++ SDK archive")
 
-  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.5.0-rc2")
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _livekit_target_processor)
-    if(APPLE AND _livekit_target_processor MATCHES "^(arm64|aarch64)$")
-      set(LIVEKIT_SDK_SHA256 "610bbf9bb45bf7d99272a5b2acf9585defb9d46c454ef966e31ef573261da3f7")
-    elseif(APPLE AND _livekit_target_processor MATCHES "^(x86_64|amd64)$")
-      set(LIVEKIT_SDK_SHA256 "ef1d242174063ce52bbe1de8b464cf301fb54bcb79cc52b1c6cdde481c888998")
-    elseif(UNIX AND _livekit_target_processor MATCHES "^(arm64|aarch64)$")
-      set(LIVEKIT_SDK_SHA256 "dcacee92e9fba3d6546af1bd7b284b8672e879a6f74ab13ebf7945a2595f5a8b")
-    elseif(UNIX AND _livekit_target_processor MATCHES "^(x86_64|amd64)$")
-      set(LIVEKIT_SDK_SHA256 "55c79218b2dff12fd8ea3e78ffd28d07e0fab6d26ac151a907a33e08407bf039")
-    elseif(WIN32 AND _livekit_target_processor MATCHES "^(x86_64|amd64)$")
-      set(LIVEKIT_SDK_SHA256 "62928a72a8fe0e3b2899cd0233d301bee5bf4e5146cd17bf2fe97e81a31cd5d4")
+  include(LiveKitSDK)
+  _lk_default_triple(_livekit_sdk_triple)
+
+  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.6.1-rc1")
+    if(_livekit_sdk_triple STREQUAL "ubuntu-22.04-x64")
+      set(LIVEKIT_SDK_SHA256
+        "a53e91a43a3af445b85f172b931843d868f2827ad913b7acc7670692ca6867ff")
+    elseif(_livekit_sdk_triple STREQUAL "ubuntu-22.04-arm64")
+      set(LIVEKIT_SDK_SHA256
+        "2bdcde51561248d7b32a806e62f58d61286f7e8da9b2d56db8e048adc4bc9a2d")
+    elseif(_livekit_sdk_triple STREQUAL "macos-arm64")
+      set(LIVEKIT_SDK_SHA256
+        "0a123fca2345d100cc3f755e57baf663d8b1fdc441f31847b3dea8f27a9585e7")
+    elseif(_livekit_sdk_triple STREQUAL "macos-x64")
+      set(LIVEKIT_SDK_SHA256
+        "cb275679e72e909e04c765619a4cccb09761f4fa5ddf124b8b026130341db7fd")
+    elseif(_livekit_sdk_triple STREQUAL "windows-x64")
+      set(LIVEKIT_SDK_SHA256
+        "a270fbc76784c745480d60831f1f0350f8c31bf6ca98bdb07487784b2198e42f")
     endif()
   endif()
 
@@ -103,7 +110,6 @@ function(livekit_configure_sdk)
     set(LIVEKIT_SDK_INSTALL_ROOT "${_livekit_source_install_dir}")
     list(PREPEND CMAKE_PREFIX_PATH "${LIVEKIT_SDK_INSTALL_ROOT}")
   else()
-    include(LiveKitSDK)
     set(_livekit_sdk_setup_args
       VERSION "${LIVEKIT_SDK_VERSION}"
       SDK_DIR "${LIVEKIT_CONFIG_BUILD_ROOT}/livekit-sdk"

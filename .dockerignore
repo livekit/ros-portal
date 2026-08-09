@@ -1,6 +1,7 @@
 **
 
-!setup-shell-env.sh
+!scripts/
+!scripts/setup-shell-env.sh
 
 !docker/
 !docker/development/

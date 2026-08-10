@@ -81,3 +81,6 @@ clang-tidy.log
 
 # Agents
 .claude/
+
+# Mac
+.DS_Store

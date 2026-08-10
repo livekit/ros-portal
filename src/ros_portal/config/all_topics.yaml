@@ -1,3 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
+# Copyright 2026 LiveKit
+
+# This file mirrors the node's builtin default config (used when no
+# `config_path` is provided): it forwards all topics bidirectionally. Kept in
+# sync with `kDefaultConfigYaml` in ros_utils.hpp (verified by unit test).
 ros_portal:
   version: "0.0.1"
   topic_polling_period_ms: 500

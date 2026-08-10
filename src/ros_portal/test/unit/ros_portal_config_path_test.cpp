@@ -128,6 +128,23 @@ TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
   EXPECT_EQ(ros_portal->rosThreads(), 3);
 }
 
+TEST_F(RosPortalConfigPathTest, InitializeUsesBuiltinDefaultWhenConfigPathEmpty) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
+  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-until-connection-timer-runs", 1), 0);
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+      rclcpp::Parameter("config_path", std::string{}),
+  });
+
+  auto ros_portal = std::make_shared<RosPortal>(options);
+
+  EXPECT_TRUE(ros_portal->initialize());
+  EXPECT_EQ(ros_portal->rosThreads(), 0);
+}
+
 TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};

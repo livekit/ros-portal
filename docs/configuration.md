@@ -88,6 +88,10 @@ forwards through LiveKit, in which direction, and related runtime options.
 The configuration file path is resolved through the node's `config_path` ROS
 parameter. See [Running](./running.md) for more information.
 
+`config_path` is optional. When it is empty or omitted, ROS Portal applies a
+builtin default that forwards all topics bidirectionally (equivalent to
+[`all_topics.yaml`](../src/ros_portal/config/all_topics.yaml)).
+
 Follow the examples below to get started quickly, or use the field reference
 further down to build out a full configuration file.
 
@@ -95,7 +99,8 @@ further down to build out a full configuration file.
 
 Complete configs in this repository:
 
-- [`ros_portal.yaml`](../src/ros_portal/config/ros_portal.yaml) — default package config used for development and integration testing.
+- [`all_topics.yaml`](../src/ros_portal/config/all_topics.yaml) — mirrors the builtin default applied when no `config_path` is provided; forwards all topics bidirectionally.
+- [`ros_portal.yaml`](../src/ros_portal/config/ros_portal.yaml) — example package config used for development and integration testing.
 - [`turtle_sim_config.yaml`](../src/ros_portal_tutorials/config/turtle_sim_config.yaml)
   and
   [`turtle_sim_controller.yaml`](../src/ros_portal_tutorials/config/turtle_sim_controller.yaml) —

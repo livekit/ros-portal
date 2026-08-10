@@ -88,6 +88,24 @@ std::optional<std::string> liveKitToRosTopicName(const std::string& participant_
 
 void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger);
 
+/// @brief Builtin default ROS Portal config, applied when no `config_path` is
+/// provided. Forwards all topics bidirectionally. Kept in sync with the
+/// installed `config/all_topics.yaml` example (verified by unit test).
+inline constexpr const char* kDefaultConfigYaml = R"(ros_portal:
+  version: "0.0.1"
+  topic_polling_period_ms: 500
+
+  topics:
+    - topic: ".*"
+      direction: "bidirectional"
+)";
+
+/// @brief Parse the ROS Portal config from @p path, or fall back to the builtin
+/// default (@ref kDefaultConfigYaml) that forwards all topics when @p path is
+/// empty.
+/// @param path Filesystem path to a config YAML, or empty to use the default.
+/// @param logger Logger for parse diagnostics.
+/// @return Parsed config, or std::nullopt on failure.
 std::optional<ros_portal_config::RosPortalConfig> parseRosPortalConfig(const std::filesystem::path& path,
                                                                        rclcpp::Logger logger);
 

@@ -72,18 +72,22 @@ def test_launch_setup_passes_config_path(tmp_path):
     assert actions[0].kwargs['parameters'] == [{'config_path': str(config_path)}]
 
 
-def test_launch_setup_rejects_missing_config_argument(tmp_path, monkeypatch):
+def test_launch_setup_uses_builtin_default_when_config_argument_empty(tmp_path):
     module = _load_launch_module()
-    config_path = tmp_path / 'ros_portal.yaml'
-    _write_config(config_path)
 
-    monkeypatch.setattr(module, 'Node', lambda **kwargs: None)
+    class FakeNode:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    module.Node = FakeNode
 
     context = LaunchContext()
     context.launch_configurations['config_path'] = ''
 
-    with pytest.raises(RuntimeError, match='The `config_path` launch argument is required.'):
-        module._launch_setup(context)
+    actions = module._launch_setup(context)
+
+    assert len(actions) == 1
+    assert actions[0].kwargs['parameters'] == [{'config_path': ''}]
 
 
 def test_launch_setup_rejects_missing_config_file(tmp_path, monkeypatch):

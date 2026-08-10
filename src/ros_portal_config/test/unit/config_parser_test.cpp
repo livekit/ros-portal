@@ -53,7 +53,7 @@ ros_portal:
 TEST(ConfigParserTest, IgnoresOptionalSchemaKey) {
   const auto config = parse(R"(
 # Copyright 2026 LiveKit
-$schema: ../../schema/ros_portal_config.schema.json
+$schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
 ros_portal:
   version: "0.0.1"
 )");

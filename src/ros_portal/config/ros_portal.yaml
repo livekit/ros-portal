@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-$schema: ../../ros_portal_config/schema/ros_portal_config.schema.json
+$schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
 
 ros_portal:
   version: "0.0.1"

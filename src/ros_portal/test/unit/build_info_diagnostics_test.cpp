@@ -42,7 +42,7 @@ std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWr
 
 TEST(BuildInfoDiagnosticsTest, PopulatesOkStatusWithVersionFields) {
   BuildInfo info;
-  info.livekit_sdk_version = "1.5.0";
+  info.livekit_sdk_version = "1.7.0";
   info.ros_portal_version = "0.1.0";
   info.ros_distro = "humble";
   diagnostic_updater::DiagnosticStatusWrapper status;
@@ -50,8 +50,8 @@ TEST(BuildInfoDiagnosticsTest, PopulatesOkStatusWithVersionFields) {
   populateBuildInfoStatus(info, status);
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(status.message, "LiveKit SDK 1.5.0");
-  EXPECT_EQ(valueFor(status, "livekit_sdk_version"), "1.5.0");
+  EXPECT_EQ(status.message, "LiveKit SDK 1.7.0");
+  EXPECT_EQ(valueFor(status, "livekit_sdk_version"), "1.7.0");
   EXPECT_EQ(valueFor(status, "ros_portal_version"), "0.1.0");
   EXPECT_EQ(valueFor(status, "ros_distro"), "humble");
 }

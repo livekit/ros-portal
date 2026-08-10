@@ -59,6 +59,8 @@
   <exec_depend>gstreamer1.0-plugins-base</exec_depend>
   <exec_depend>gstreamer1.0-plugins-good</exec_depend>
   <exec_depend>gstreamer1.0-plugins-ugly</exec_depend>
+  <exec_depend>gstreamer1.0-x</exec_depend>
+  <exec_depend>gstreamer1.0-libcamera</exec_depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>

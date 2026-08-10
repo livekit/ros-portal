@@ -56,6 +56,31 @@ if [[ "${actual_prefix}" != "${expected_prefix}" ]]; then
   exit 1
 fi
 
+echo "======== Verifying video-source dependencies in ${image_ref} ========"
+docker run --rm "${image_ref}" bash -c '
+  set -euo pipefail
+  gst-inspect-1.0 appsink >/dev/null
+  gst-inspect-1.0 h264parse >/dev/null
+  gst-inspect-1.0 v4l2src >/dev/null
+  gst-inspect-1.0 x264enc >/dev/null
+  # Overlay elements come from the Pango plugin, which Ubuntu ships in
+  # gstreamer1.0-x. That package is installed by the runtime Dockerfile rather
+  # than depended on by the Debian package, so this check covers the image only.
+  gst-inspect-1.0 clockoverlay >/dev/null
+  gst-inspect-1.0 timeoverlay >/dev/null
+  gst-launch-1.0 --quiet videotestsrc num-buffers=1 ! fakesink
+  # Exercise the tutorial pipeline shape end to end so a missing element in any
+  # of the plugin sets fails here rather than at runtime on a robot.
+  gst-launch-1.0 --quiet videotestsrc num-buffers=1 \
+    ! videoconvert \
+    ! timeoverlay \
+    ! clockoverlay \
+    ! x264enc \
+    ! h264parse \
+    ! fakesink
+'
+echo "======== Verified video-source dependencies in ${image_ref} ========"
+
 echo "======== Resolving the ROS Portal launch description in ${image_ref} ========"
 docker run --rm "${image_ref}" \
   ros2 launch ros_portal ros_portal.launch.py --show-args

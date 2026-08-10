@@ -72,7 +72,7 @@ function(livekit_configure_sdk)
   set(LIVEKIT_SDK_SHA256 "" CACHE STRING
     "Optional SHA-256 checksum for the LiveKit C++ SDK archive")
 
-  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.5.0-rc2")
+  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.7.0-rc2")
     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _livekit_target_processor)
     if(APPLE AND _livekit_target_processor MATCHES "^(arm64|aarch64)$")
       set(LIVEKIT_SDK_SHA256 "610bbf9bb45bf7d99272a5b2acf9585defb9d46c454ef966e31ef573261da3f7")

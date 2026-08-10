@@ -32,6 +32,8 @@ LABEL io.livekit.ros-distro="${ROS_DISTRO}"
 
 ENV ROS_DISTRO=${ROS_DISTRO}
 
+# gstreamer runtime deps come from ros-portal package.xml
+
 COPY ${DEB_FILE} /tmp/ros-portal.deb
 COPY docker/runtime/ros-portal-entrypoint.sh /usr/local/bin/ros-portal-entrypoint.sh
 

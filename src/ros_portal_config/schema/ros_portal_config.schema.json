@@ -6,6 +6,10 @@
   "additionalProperties": false,
   "required": ["ros_portal"],
   "properties": {
+    "$schema": {
+      "description": "Optional JSON Schema URL for editor autocomplete and validation. Ignored at runtime.",
+      "type": "string"
+    },
     "ros_portal": {
       "type": "object",
       "additionalProperties": false,

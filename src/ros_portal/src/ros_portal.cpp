@@ -159,6 +159,12 @@ bool RosPortal::initialize() {
   // ROS Portal owns retry cadence. Disable the Rust SDK's immediate inner join
   // retries so each 1 Hz manager tick represents one connection attempt.
   room_options.join_retries = 0U;
+  // Identify ROS Portal to the server as an SDK layered on top of the C++ SDK,
+  // using the version of this build rather than a hardcoded string. Immutable
+  // for the process, so the retry lambda below can capture it by value.
+  const std::string other_sdks = diagnostics::formatOtherSdks(diagnostics::collectBuildInfo());
+  room_options.other_sdks = other_sdks;
+  RCLCPP_DEBUG(this->get_logger(), "LiveKit client info other_sdks: %s", other_sdks.c_str());
 
   ConnectionManager::Methods connection_methods;
   connection_methods.try_connect = [this, livekit_url, livekit_token, room_options]() {

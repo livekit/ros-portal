@@ -21,6 +21,8 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import OpaqueFunction
 from launch.actions import SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
 
 
@@ -48,10 +50,17 @@ def _launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
+    default_config = PathJoinSubstitution([
+        FindPackageShare('ros_portal'),
+        'config',
+        'all_topics.yaml',
+    ])
+
     return LaunchDescription([
         SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'),
         DeclareLaunchArgument(
             'config_path',
+            default_value=default_config,
             description=(
                 'Path to ROS Portal config YAML file. When empty, the node uses '
                 'its builtin default config that forwards all topics bidirectionally.'

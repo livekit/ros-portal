@@ -62,7 +62,7 @@ ROS Portal CMake configuration to build the SDK checkout from `external.repos`.
 
 ## Shell Helpers
 
-See `setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
+See `scripts/setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
 `cbpu` / `cbps`. `sros` sources the container's ROS installation and the
 default workspace overlay under `/livekit_ws/install`. Colcon overlays are not
 portable across ROS distributions; move or delete `build`, `install`, and

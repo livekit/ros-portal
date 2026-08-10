@@ -54,7 +54,7 @@ runs:
         ARCH: ${{ inputs.arch }}
         IMAGE_NAME: ${{ inputs.image-name }}
       run: |
-        image_hash="$(md5sum docker/development/Dockerfile setup-shell-env.sh | md5sum | awk '{print $1}')"
+        image_hash="$(md5sum docker/development/Dockerfile scripts/setup-shell-env.sh | md5sum | awk '{print $1}')"
         image_name="$(printf '%s' "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
         image_ref="${image_name}:${image_hash}"
         local_ref="ros-portal:${image_hash}"

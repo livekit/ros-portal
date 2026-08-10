@@ -9,7 +9,7 @@ This guide assumes the following:
 - If running via Docker, Docker is installed and available locally (e.g. `docker ps` resolves).
 - If running via a Debian install, ROS Portal is installed at `/opt/livekit/ros/$ROS_DISTRO`.
 - `LIVEKIT_URL` and `LIVEKIT_TOKEN` environment variables are set appropriately.
-- YAML configuration file is setup, at least minimally with required fields (can iterate on later).
+- Optionally, a YAML configuration file is set up. When `config_path` is omitted, ROS Portal forwards all topics bidirectionally using its builtin default (see [Configuration](./configuration.md)).
 
 ## Running LiveKit Server
 
@@ -47,6 +47,14 @@ To run using the bundled launch file:
 # LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
 source /opt/livekit/ros/$ROS_DISTRO/setup.bash
 ros2 launch ros_portal ros_portal.launch.py config_path:=/path/to/config.yaml
+```
+
+Omit `config_path` to forward all topics using the builtin default config:
+
+```bash
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+source /opt/livekit/ros/$ROS_DISTRO/setup.bash
+ros2 launch ros_portal ros_portal.launch.py
 ```
 
 Or run using the helper alias:

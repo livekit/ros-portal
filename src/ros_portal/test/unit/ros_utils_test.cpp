@@ -18,12 +18,17 @@
 
 #include <gtest/gtest.h>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <rclcpp/logger.hpp>
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+#include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal::utils {
 namespace {
@@ -111,6 +116,38 @@ TEST(RosUtilsTest, ResolveEnvironmentCredentialTreatsEmptyValueAsNone) {
 
   EXPECT_TRUE(value.empty());
   EXPECT_EQ(source, "none");
+}
+
+TEST(RosUtilsTest, DefaultConfigForwardsAllTopicsBidirectionally) {
+  const auto config = parseRosPortalConfig(std::filesystem::path{}, rclcpp::get_logger("ros_utils_test"));
+
+  ASSERT_TRUE(config.has_value());
+  EXPECT_EQ(config->topic_polling_period_ms, 500);
+  ASSERT_EQ(config->topics.size(), 1u);
+  EXPECT_EQ(config->topics.front().topic, ".*");
+  EXPECT_EQ(config->topics.front().direction, ros_portal_config::Direction::Bidirectional);
+}
+
+TEST(RosUtilsTest, BuiltinDefaultConfigMatchesInstalledAllTopicsYaml) {
+  const auto builtin = parseRosPortalConfig(std::filesystem::path{}, rclcpp::get_logger("ros_utils_test"));
+  ASSERT_TRUE(builtin.has_value());
+
+  const auto share_dir = ament_index_cpp::get_package_share_directory("ros_portal");
+  const auto all_topics_path = std::filesystem::path(share_dir) / "config" / "all_topics.yaml";
+  ASSERT_TRUE(std::filesystem::exists(all_topics_path)) << all_topics_path.string();
+
+  const auto from_file = parseRosPortalConfig(all_topics_path, rclcpp::get_logger("ros_utils_test"));
+  ASSERT_TRUE(from_file.has_value());
+
+  EXPECT_EQ(builtin->version, from_file->version);
+  EXPECT_EQ(builtin->topic_polling_period_ms, from_file->topic_polling_period_ms);
+  EXPECT_EQ(builtin->ros_threads, from_file->ros_threads);
+  ASSERT_EQ(builtin->services.size(), from_file->services.size());
+  ASSERT_EQ(builtin->topics.size(), from_file->topics.size());
+  for (std::size_t i = 0; i < builtin->topics.size(); ++i) {
+    EXPECT_EQ(builtin->topics[i].topic, from_file->topics[i].topic);
+    EXPECT_EQ(builtin->topics[i].direction, from_file->topics[i].direction);
+  }
 }
 
 TEST(RosUtilsTest, OutgoingTopicPatternsIncludesOutAndBidirectionalTopics) {

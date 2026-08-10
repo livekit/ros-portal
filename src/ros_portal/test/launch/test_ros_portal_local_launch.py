@@ -157,6 +157,36 @@ def test_launch_setup_uses_provided_token_without_minting(tmp_path, monkeypatch)
     assert actions[3].kwargs['parameters'] == [{'config_path': str(config_path)}]
 
 
+def test_launch_setup_uses_builtin_default_when_config_path_empty(tmp_path, monkeypatch):
+    module = _load_launch_module()
+
+    class FakeSetEnvironmentVariable:
+        def __init__(self, name, value):
+            self.name = name
+            self.value = value
+
+    class FakeNode:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(module, 'SetEnvironmentVariable', FakeSetEnvironmentVariable)
+    monkeypatch.setattr(module, 'Node', FakeNode)
+    monkeypatch.setattr(module, '_mint_token', lambda *args, **kwargs: 'unused')
+
+    context = LaunchContext()
+    context.launch_configurations['config_path'] = ''
+    context.launch_configurations['livekit_url'] = 'ws://example.test:7880'
+    context.launch_configurations['identity'] = 'ros-portal-test'
+    context.launch_configurations['room_name'] = 'launch_room'
+    context.launch_configurations['token'] = 'provided-jwt-token'
+    context.launch_configurations['token_valid_for'] = '10m'
+    context.launch_configurations['use_dev_credentials'] = 'false'
+
+    actions = module._launch_setup(context)
+
+    assert actions[3].kwargs['parameters'] == [{'config_path': ''}]
+
+
 def test_launch_setup_rejects_missing_config_file(tmp_path, monkeypatch):
     module = _load_launch_module()
     missing_config = tmp_path / 'missing.yaml'

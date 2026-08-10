@@ -14,7 +14,8 @@ exposes selected remote `ros2` CLI operations through ROS 2 services backed by
 
 - `src/`: ROS Portal node and library implementation.
 - `include/`: public ROS Portal headers.
-- `config/ros_portal.yaml`: installed default ROS Portal config.
+- `config/all_topics.yaml`: mirrors the builtin default config (used when no `config_path` is provided) that forwards all topics bidirectionally.
+- `config/ros_portal.yaml`: example ROS Portal config used for development and integration testing.
 - `launch/`: ROS Portal launch files for normal and local development use.
 - `test/`: unit and integration tests.
 

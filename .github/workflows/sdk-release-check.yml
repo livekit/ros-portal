@@ -12,7 +12,7 @@ permissions:
 
 env:
   # external.repos deliberately pins a pre-release client-sdk-cpp branch
-  # (ladvoc/livekit-capture) because capture has not shipped in a tagged SDK
+  # (sderosa/capture-no-device-source) because capture has not shipped in a tagged SDK
   # release yet, and every CI distro builds that checkout from source. A branch
   # commit can never equal a release commit, so the release equality check is
   # off until capture lands in a release; flip this back to "true" then. The

@@ -818,9 +818,8 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
             "capture source creation returned no video source");
       }
 
-      // The negotiated frame rate and pixel format are not reported back by the
-      // SDK, so resolution is the only observable evidence that a 'closest' or
-      // 'highest_*' device request resolved the way the operator expected.
+      // GStreamer sources discover resolution from negotiated pipeline caps, so
+      // log what the SDK settled on.
       RCLCPP_INFO(this->get_logger(), "Capture source '%s' (%s) negotiated %dx%d", config.track_name.c_str(),
                   ros_portal_config::toString(config.source.type), capture_source->width(), capture_source->height());
 
@@ -844,8 +843,18 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
                                            capture::capturePublishOptions(config.publish_options, config.simulcast)));
 
       auto session = std::make_shared<VideoSourceManager::Session>();
-      session->start = [capture_source] { capture_source->start(); };
-      session->stop = [capture_source] { capture_source->stop(); };
+      // The manager treats a throwing start/stop as a failure, so surface the
+      // SDK's boolean result that way.
+      session->start = [capture_source] {
+        if (!capture_source->start()) {
+          throw std::runtime_error("capture source start request failed");
+        }
+      };
+      session->stop = [capture_source] {
+        if (!capture_source->stop()) {
+          throw std::runtime_error("capture source stop request failed");
+        }
+      };
       session->unpublish = [participant, track] {
         if (const auto publication = track->publication()) {
           participant->unpublishTrack(publication->sid());

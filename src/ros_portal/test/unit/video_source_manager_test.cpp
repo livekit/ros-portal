@@ -47,10 +47,6 @@ ros_portal_config::VideoSourceConfig makeSource(std::string track_name, ros_port
   if (type == ros_portal_config::CaptureSourceType::Gstreamer) {
     config.source.pipeline = "videotestsrc ! x264enc ! appsink name=lk_appsink";
   }
-  if (type == ros_portal_config::CaptureSourceType::Device) {
-    // The manager never inspects the block, but keep the fixture realistic.
-    config.source.device = ros_portal_config::DeviceSourceConfig{};
-  }
   return config;
 }
 
@@ -66,7 +62,7 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   int start_calls = 0;
   int stop_calls = 0;
   int unpublish_calls = 0;
-  VideoSourceManager::FinishedCallback demo_finished;
+  VideoSourceManager::FinishedCallback pattern_finished;
   VideoSourceManager::LiveKitMethods methods;
   methods.create_and_publish = [&](const ros_portal_config::VideoSourceConfig& config,
                                    VideoSourceManager::FinishedCallback callback)
@@ -75,8 +71,8 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
     if (config.track_name == "broken") {
       return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure("pipeline failed");
     }
-    if (config.track_name == "demo") {
-      demo_finished = std::move(callback);
+    if (config.track_name == "pattern") {
+      pattern_finished = std::move(callback);
     }
     auto session = std::make_shared<VideoSourceManager::Session>();
     session->start = [&start_calls] { ++start_calls; };
@@ -88,8 +84,8 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   {
     const std::vector configs{
         makeSource("broken", ros_portal_config::CaptureSourceType::Gstreamer),
-        makeSource("demo", ros_portal_config::CaptureSourceType::Demo),
-        makeSource("usb_camera", ros_portal_config::CaptureSourceType::Device),
+        makeSource("pattern", ros_portal_config::CaptureSourceType::Pattern),
+        makeSource("camera", ros_portal_config::CaptureSourceType::Gstreamer),
     };
     const VideoSourceManager manager(configs, std::move(methods), std::move(diagnostics),
                                      rclcpp::get_logger("video_source_manager_test"));
@@ -104,21 +100,20 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
     EXPECT_EQ(valueFor(failed_status, "state"), "error");
     EXPECT_EQ(valueFor(failed_status, "error"), "pipeline failed");
 
-    ASSERT_TRUE(static_cast<bool>(demo_finished));
-    demo_finished(VideoSourceResult{std::nullopt, 42, VideoSourceExit::EndOfStream});
+    ASSERT_TRUE(static_cast<bool>(pattern_finished));
+    pattern_finished(VideoSourceResult{std::nullopt, 42, VideoSourceExit::EndOfStream});
     diagnostic_updater::DiagnosticStatusWrapper finished_status;
-    diagnostic_callbacks.at("video_source/demo/1")(finished_status);
+    diagnostic_callbacks.at("video_source/pattern/1")(finished_status);
     EXPECT_EQ(finished_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
     EXPECT_EQ(valueFor(finished_status, "state"), "end_of_stream");
     EXPECT_EQ(valueFor(finished_status, "frames_captured"), "42");
 
-    // A device source needs no manager changes: source_type is rendered from
-    // the config enum, so the new variant flows into diagnostics for free.
-    diagnostic_updater::DiagnosticStatusWrapper device_status;
-    diagnostic_callbacks.at("video_source/usb_camera/2")(device_status);
-    EXPECT_EQ(device_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-    EXPECT_EQ(valueFor(device_status, "state"), "running");
-    EXPECT_EQ(valueFor(device_status, "source_type"), "device");
+    // A failed sibling does not affect a healthy source of the same type.
+    diagnostic_updater::DiagnosticStatusWrapper running_status;
+    diagnostic_callbacks.at("video_source/camera/2")(running_status);
+    EXPECT_EQ(running_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+    EXPECT_EQ(valueFor(running_status, "state"), "running");
+    EXPECT_EQ(valueFor(running_status, "source_type"), "gstreamer");
   }
 
   EXPECT_TRUE(diagnostic_callbacks.empty());

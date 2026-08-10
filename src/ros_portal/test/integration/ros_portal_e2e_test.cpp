@@ -15,7 +15,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <livekit/capture_source.h>
 #include <livekit/data_track_options.h>
 #include <livekit/local_data_track.h>
 #include <livekit/local_participant.h>
@@ -173,7 +172,7 @@ TEST_F(RosPortalTestE2E, RepublishesRosMessagesBothWays) {
                               "message from ROS Portal B"));
 }
 
-TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
+TEST_F(RosPortalTestE2E, PublishesConfiguredPatternCaptureFrames) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
   livekit::Room receiver_room;
@@ -183,7 +182,7 @@ TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
   std::mutex mutex;
   std::condition_variable cv;
   int frames_received = 0;
-  constexpr const char* kTrackName = "ros-portal-demo-capture";
+  constexpr const char* kTrackName = "ros-portal-pattern-capture";
   receiver_room.setOnVideoFrameEventCallback(identityA(), kTrackName,
                                              [&mutex, &cv, &frames_received](const livekit::VideoFrameEvent&) {
                                                const std::lock_guard<std::mutex> lock(mutex);
@@ -196,9 +195,9 @@ TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
 ros_portal:
   version: "0.0.1"
   video_sources:
-    - track_name: "ros-portal-demo-capture"
+    - track_name: "ros-portal-pattern-capture"
       source:
-        type: "demo"
+        type: "pattern"
       publish_options:
         max_bitrate_bps: 1000000
         max_framerate: 30
@@ -207,64 +206,7 @@ ros_portal:
   std::unique_lock<std::mutex> lock(mutex);
   EXPECT_TRUE(
       cv.wait_for(lock, kMessageTimeout, [&frames_received] { return frames_received >= kMinimumCaptureFrames; }))
-      << "Timed out waiting for ROS Portal demo capture frames; received " << frames_received;
-  lock.unlock();
-
-  receiver_room.clearOnVideoFrameCallback(identityA(), kTrackName);
-}
-
-// Native device capture end to end. Skips itself unless the host actually has a
-// camera, matching how the SDK gates its own device tests -- CI containers have
-// no /dev/video*, so this is expected to report SKIPPED there.
-TEST_F(RosPortalTestE2E, PublishesConfiguredDeviceCaptureFrames) {
-  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
-
-  std::vector<livekit::CaptureDeviceInfo> devices;
-  try {
-    devices = livekit::CaptureSource::listDevices().get();
-  } catch (const livekit::CaptureSourceError& error) {
-    GTEST_SKIP() << "capture device enumeration unavailable: " << error.what();
-  }
-  if (devices.empty()) {
-    GTEST_SKIP() << "no capture devices attached to this machine";
-  }
-
-  livekit::Room receiver_room;
-  const livekit::RoomOptions room_options;
-  ASSERT_TRUE(receiver_room.connect(liveKitUrl(), tokenB(), room_options));
-
-  std::mutex mutex;
-  std::condition_variable cv;
-  int frames_received = 0;
-  constexpr const char* kTrackName = "ros-portal-device-capture";
-  receiver_room.setOnVideoFrameEventCallback(identityA(), kTrackName,
-                                             [&mutex, &cv, &frames_received](const livekit::VideoFrameEvent&) {
-                                               const std::lock_guard<std::mutex> lock(mutex);
-                                               if (++frames_received >= kMinimumCaptureFrames) {
-                                                 cv.notify_all();
-                                               }
-                                             });
-
-  // Deliberately requests the device default format: a concrete `exact` request
-  // is flaky across machines, and a `highest_*` request that pins a frame format
-  // can legitimately fail on cameras that do not offer it.
-  const std::string config_yaml = R"(
-ros_portal:
-  version: "0.0.1"
-  video_sources:
-    - track_name: "ros-portal-device-capture"
-      source:
-        type: "device"
-        device:
-          id: ")" + devices.front().id +
-                                  "\"\n";
-  initializeSinglePortalRuntime(config_yaml);
-
-  std::unique_lock<std::mutex> lock(mutex);
-  EXPECT_TRUE(
-      cv.wait_for(lock, kMessageTimeout, [&frames_received] { return frames_received >= kMinimumCaptureFrames; }))
-      << "Timed out waiting for ROS Portal device capture frames from '" << devices.front().name << "'; received "
-      << frames_received;
+      << "Timed out waiting for ROS Portal pattern capture frames; received " << frames_received;
   lock.unlock();
 
   receiver_room.clearOnVideoFrameCallback(identityA(), kTrackName);

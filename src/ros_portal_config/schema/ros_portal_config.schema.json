@@ -59,19 +59,16 @@
       "enum": ["ros2msg", "ros2idl", "jsonschema"]
     },
     "captureSourceType": {
-      "enum": ["gstreamer", "demo", "device"]
+      "enum": ["gstreamer", "pattern"]
+    },
+    "videoPattern": {
+      "enum": ["gradient", "logo"]
     },
     "videoCodec": {
       "enum": ["h264", "h265", "vp8", "vp9", "av1"]
     },
     "gstreamerBitrateUnit": {
       "enum": ["bps", "kbps"]
-    },
-    "deviceFormatStrategy": {
-      "enum": ["exact", "closest", "highest_framerate", "highest_resolution"]
-    },
-    "deviceFrameFormat": {
-      "enum": ["i420", "nv12", "bgra", "rgb24", "bgr24", "yuyv", "uyvy", "grey", "mjpeg"]
     },
     "nonemptyString": {
       "type": "string",
@@ -114,51 +111,14 @@
         }
       }
     },
-    "deviceFormatSelection": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["strategy"],
-      "properties": {
-        "strategy": {
-          "description": "How the device picks the format it delivers. 'exact' requires the device to offer the requested resolution and frame rate; 'closest' uses the nearest supported values; 'highest_framerate' and 'highest_resolution' maximize one axis under the remaining fields as constraints.",
-          "$ref": "#/$defs/deviceFormatStrategy"
-        },
-        "resolution": {
-          "description": "Requested frame dimensions. Required for 'exact' and 'closest'; an optional constraint for 'highest_framerate'; invalid for 'highest_resolution'.",
-          "$ref": "#/$defs/captureResolution"
-        },
-        "framerate_fps": {
-          "description": "Requested frame rate. Required for 'exact' and 'closest'; an optional constraint for 'highest_resolution'; invalid for 'highest_framerate'.",
-          "$ref": "#/$defs/positiveInteger"
-        },
-        "frame_format": {
-          "description": "Requested pixel format. Platform-specific and treated as a preference the backend may substitute: macOS accepts only 'i420', 'nv12', or 'bgra' and always delivers NV12; V4L2 rejects 'i420' and 'bgra'. Defaults to 'nv12' for 'exact' and 'closest' (the only value both backends accept); left unconstrained for 'highest_framerate' and 'highest_resolution', where naming it selects the format outright with no fallback.",
-          "$ref": "#/$defs/deviceFrameFormat"
-        }
-      }
-    },
-    "deviceSourceConfig": {
+    "patternSourceConfig": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "index": {
-          "description": "Platform enumeration position: the AVFoundation video-device index on macOS, the /dev/videoN node number on Linux. Mutually exclusive with 'id'. Not the position in 'capture_devices' output, and it can shift as devices are attached; prefer 'id'.",
-          "$ref": "#/$defs/nonNegativeInteger"
+        "pattern": {
+          "description": "Test pattern rendered by the built-in source: 'gradient' is an animated color gradient, 'logo' a bouncing LiveKit logo. Defaults to 'gradient' when omitted.",
+          "$ref": "#/$defs/videoPattern"
         },
-        "id": {
-          "description": "Platform-stable device identifier as reported by 'ros2 run ros_portal capture_devices'. Mutually exclusive with 'index'. Stable across reboots on macOS; on V4L2 it is the node number, so re-enumerate rather than persisting it.",
-          "$ref": "#/$defs/nonemptyString"
-        },
-        "format": {
-          "description": "Format requested from the device. Omit to accept the device's default format.",
-          "$ref": "#/$defs/deviceFormatSelection"
-        }
-      }
-    },
-    "demoSourceConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
         "resolution": {
           "description": "Output resolution of the built-in test source. Defaults to 640x480 when omitted.",
           "$ref": "#/$defs/captureResolution"
@@ -178,7 +138,7 @@
           "$ref": "#/$defs/captureSourceType"
         },
         "pipeline": {
-          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'demo' and 'device'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
+          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'pattern'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
           "$ref": "#/$defs/nonemptyString"
         },
         "codec": {
@@ -186,20 +146,16 @@
           "$ref": "#/$defs/videoCodec"
         },
         "resolution": {
-          "description": "Expected encoded resolution. GStreamer sources only; when omitted, it is discovered from negotiated pipeline caps. Device sources request a resolution through 'device.format.resolution' instead.",
+          "description": "Expected encoded resolution. GStreamer sources only; when omitted, it is discovered from negotiated pipeline caps.",
           "$ref": "#/$defs/captureResolution"
         },
         "rate_control": {
-          "description": "Optional binding that forwards WebRTC bitrate targets to a writable GStreamer encoder property. GStreamer sources only; device sources are pixel sources encoded by WebRTC, which applies its own rate control.",
+          "description": "Optional binding that forwards WebRTC bitrate targets to a writable GStreamer encoder property. GStreamer sources only; pattern sources are pixel sources encoded by WebRTC, which applies its own rate control.",
           "$ref": "#/$defs/gstreamerRateControl"
         },
-        "device": {
-          "description": "Camera device selection and requested format. Required when type is 'device'; invalid for 'gstreamer' and 'demo'.",
-          "$ref": "#/$defs/deviceSourceConfig"
-        },
-        "demo": {
-          "description": "Output characteristics of the built-in test source. Optional when type is 'demo'; invalid for 'gstreamer' and 'device'.",
-          "$ref": "#/$defs/demoSourceConfig"
+        "pattern": {
+          "description": "Pattern and output characteristics of the built-in test source. Optional when type is 'pattern'; invalid for 'gstreamer'.",
+          "$ref": "#/$defs/patternSourceConfig"
         }
       }
     },

@@ -309,22 +309,6 @@ target_link_libraries(ros_portal_node
 )
 livekit_set_runtime_rpath(ros_portal_node)
 
-# ---------------------------------------------------------------------------
-# Capture device enumeration tool
-#
-# Prints the video capture devices a `type: device` video source can open, so
-# operators can author `device.id`. Needs no ROS node, room, or credentials, so
-# it links the SDK directly rather than ros_portal_lib.
-# ---------------------------------------------------------------------------
-ament_auto_add_executable(capture_devices
-  src/capture_devices_main.cpp
-)
-target_link_libraries(capture_devices
-  "${LIVEKIT_CORE_TARGET}"
-  ${LIVEKIT_EXTRA_LINK_LIBS}
-)
-livekit_set_runtime_rpath(capture_devices)
-
 if(APPLE)
   install(DIRECTORY "${LIVEKIT_SDK_INSTALL_ROOT}/lib/"
     DESTINATION lib

@@ -84,28 +84,12 @@ ros_portal:
 
     # Pixel sources can be published as simulcast; encoded (gstreamer) sources
     # publish the single pre-encoded layer they produce and ignore the flag.
-    - track_name: "demo_camera"
+    - track_name: "pattern_camera"
       simulcast: true
       source:
-        type: "demo"
-        demo:
+        type: "pattern"
+        pattern:
           resolution:
             width: 640
             height: 480
           framerate_fps: 30
-
-    # Native device capture: no GStreamer pipeline, no GStreamer runtime deps.
-    # Discover ids with `ros2 run ros_portal capture_devices`.
-    - track_name: "usb_camera"
-      source:
-        type: "device"
-        device:
-          index: 0
-          format:
-            strategy: "closest"
-            resolution:
-              width: 1280
-              height: 720
-            framerate_fps: 30
-      publish_options:
-        max_framerate: 30

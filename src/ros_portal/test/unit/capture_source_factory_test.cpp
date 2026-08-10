@@ -19,11 +19,7 @@
 // subschemas).
 //
 // Deliberately not covered: createCaptureSource() itself, which reaches the
-// FFI, and the livekit::DeviceVideoSourceConfig returned by toLiveKitConfig().
-// livekit::DeviceSelector and livekit::DeviceFormatRequest keep their state
-// private and befriend only livekit::CaptureSource, so nothing about a
-// constructed value can be asserted. That is exactly why validation lands in
-// the inspectable DeviceRequest, which is what these tests read.
+// FFI.
 
 #include "ros_portal/capture_source_factory.hpp"
 
@@ -48,23 +44,10 @@ CaptureSourceConfig makeGstreamerSource() {
   return source;
 }
 
-CaptureSourceConfig makeDeviceSource() {
+CaptureSourceConfig makePatternSource() {
   CaptureSourceConfig source;
-  source.type = CaptureSourceType::Device;
-  source.device = ros_portal_config::DeviceSourceConfig{};
+  source.type = CaptureSourceType::Pattern;
   return source;
-}
-
-CaptureSourceConfig makeDemoSource() {
-  CaptureSourceConfig source;
-  source.type = CaptureSourceType::Demo;
-  return source;
-}
-
-ros_portal_config::DeviceFormatSelection makeFormat(ros_portal_config::DeviceFormatStrategy strategy) {
-  ros_portal_config::DeviceFormatSelection format;
-  format.strategy = strategy;
-  return format;
 }
 
 /// Asserts the call throws std::invalid_argument mentioning @p expected_text.
@@ -118,18 +101,11 @@ TEST(CaptureSourceFactoryTest, GstreamerRequiresPipeline) {
   expectRejected([&] { return toGstreamerConfig(source); }, "requires a pipeline");
 }
 
-TEST(CaptureSourceFactoryTest, GstreamerRejectsDeviceBlock) {
+TEST(CaptureSourceFactoryTest, GstreamerRejectsPatternBlock) {
   auto source = makeGstreamerSource();
-  source.device = ros_portal_config::DeviceSourceConfig{};
+  source.pattern = ros_portal_config::PatternSourceConfig{};
 
-  expectRejected([&] { return toGstreamerConfig(source); }, "'device' block");
-}
-
-TEST(CaptureSourceFactoryTest, GstreamerRejectsDemoBlock) {
-  auto source = makeGstreamerSource();
-  source.demo = ros_portal_config::DemoSourceConfig{};
-
-  expectRejected([&] { return toGstreamerConfig(source); }, "'demo' block");
+  expectRejected([&] { return toGstreamerConfig(source); }, "'pattern' block");
 }
 
 TEST(CaptureSourceFactoryTest, MapsEveryCodec) {
@@ -146,274 +122,82 @@ TEST(CaptureSourceFactoryTest, MapsEveryCodec) {
 }
 
 // ---------------------------------------------------------------------------
-// Demo
+// Pattern
 // ---------------------------------------------------------------------------
 
 // Regression guard: the SDK rejects a zero resolution or frame rate, and the
-// e2e demo test only catches that when a live server is available.
-TEST(CaptureSourceFactoryTest, DemoConfigDefaultsToNonZeroCharacteristics) {
-  const auto config = toDemoConfig(makeDemoSource());
+// e2e pattern test only catches that when a live server is available.
+TEST(CaptureSourceFactoryTest, PatternConfigDefaultsToNonZeroCharacteristics) {
+  const auto config = toPatternConfig(makePatternSource());
 
-  EXPECT_EQ(config.resolution.width, kDefaultDemoWidth);
-  EXPECT_EQ(config.resolution.height, kDefaultDemoHeight);
-  EXPECT_EQ(config.framerate_fps, kDefaultDemoFramerateFps);
+  EXPECT_EQ(config.resolution.width, kDefaultPatternWidth);
+  EXPECT_EQ(config.resolution.height, kDefaultPatternHeight);
+  EXPECT_EQ(config.framerate_fps, kDefaultPatternFramerateFps);
   EXPECT_GT(config.resolution.width, 0);
   EXPECT_GT(config.resolution.height, 0);
   EXPECT_GT(config.framerate_fps, 0u);
+  EXPECT_EQ(config.pattern, livekit::Pattern::Gradient);
 }
 
-TEST(CaptureSourceFactoryTest, DemoConfigUsesConfiguredCharacteristics) {
-  auto source = makeDemoSource();
-  ros_portal_config::DemoSourceConfig demo;
-  demo.resolution = ros_portal_config::CaptureResolution{1280, 720};
-  demo.framerate_fps = 15;
-  source.demo = demo;
+TEST(CaptureSourceFactoryTest, PatternConfigUsesConfiguredPattern) {
+  auto source = makePatternSource();
+  ros_portal_config::PatternSourceConfig pattern;
+  pattern.pattern = ros_portal_config::VideoPattern::Logo;
+  source.pattern = pattern;
 
-  const auto config = toDemoConfig(source);
+  EXPECT_EQ(toPatternConfig(source).pattern, livekit::Pattern::Logo);
+}
+
+TEST(CaptureSourceFactoryTest, MapsEveryPattern) {
+  const std::vector<std::pair<ros_portal_config::VideoPattern, livekit::Pattern>> expected{
+      {ros_portal_config::VideoPattern::Gradient, livekit::Pattern::Gradient},
+      {ros_portal_config::VideoPattern::Logo, livekit::Pattern::Logo},
+  };
+  for (const auto& [configured, sdk] : expected) {
+    EXPECT_EQ(toLiveKitPattern(configured), sdk);
+  }
+}
+
+TEST(CaptureSourceFactoryTest, PatternConfigUsesConfiguredCharacteristics) {
+  auto source = makePatternSource();
+  ros_portal_config::PatternSourceConfig pattern;
+  pattern.resolution = ros_portal_config::CaptureResolution{1280, 720};
+  pattern.framerate_fps = 15;
+  source.pattern = pattern;
+
+  const auto config = toPatternConfig(source);
 
   EXPECT_EQ(config.resolution.width, 1280);
   EXPECT_EQ(config.resolution.height, 720);
   EXPECT_EQ(config.framerate_fps, 15u);
 }
 
-TEST(CaptureSourceFactoryTest, DemoConfigFillsOnlyOmittedCharacteristics) {
-  auto source = makeDemoSource();
-  ros_portal_config::DemoSourceConfig demo;
-  demo.framerate_fps = 5;
-  source.demo = demo;
+TEST(CaptureSourceFactoryTest, PatternConfigFillsOnlyOmittedCharacteristics) {
+  auto source = makePatternSource();
+  ros_portal_config::PatternSourceConfig pattern;
+  pattern.framerate_fps = 5;
+  source.pattern = pattern;
 
-  const auto config = toDemoConfig(source);
+  const auto config = toPatternConfig(source);
 
   EXPECT_EQ(config.framerate_fps, 5u);
-  EXPECT_EQ(config.resolution.width, kDefaultDemoWidth);
-  EXPECT_EQ(config.resolution.height, kDefaultDemoHeight);
+  EXPECT_EQ(config.resolution.width, kDefaultPatternWidth);
+  EXPECT_EQ(config.resolution.height, kDefaultPatternHeight);
 }
 
-TEST(CaptureSourceFactoryTest, DemoRejectsGstreamerOptions) {
-  auto source = makeDemoSource();
+TEST(CaptureSourceFactoryTest, PatternRejectsGstreamerOptions) {
+  auto source = makePatternSource();
   source.pipeline = "videotestsrc ! appsink name=lk_appsink";
 
-  expectRejected([&] { return toDemoConfig(source); }, "does not accept gstreamer options");
+  expectRejected([&] { return toPatternConfig(source); }, "does not accept gstreamer options");
 }
 
-TEST(CaptureSourceFactoryTest, DemoRejectionNamesTheOffendingFields) {
-  auto source = makeDemoSource();
+TEST(CaptureSourceFactoryTest, PatternRejectionNamesTheOffendingFields) {
+  auto source = makePatternSource();
   source.codec = ros_portal_config::VideoCodec::H264;
   source.rate_control = ros_portal_config::GstreamerRateControl{"e", "p", ros_portal_config::GstreamerBitrateUnit::Bps};
 
-  expectRejected([&] { return toDemoConfig(source); }, "codec, rate_control");
-}
-
-TEST(CaptureSourceFactoryTest, DemoRejectsDeviceBlock) {
-  auto source = makeDemoSource();
-  source.device = ros_portal_config::DeviceSourceConfig{};
-
-  expectRejected([&] { return toDemoConfig(source); }, "'device' block");
-}
-
-// ---------------------------------------------------------------------------
-// Device selection
-// ---------------------------------------------------------------------------
-
-TEST(CaptureSourceFactoryTest, DefaultsToPlatformDevice) {
-  const auto request = toDeviceRequest(makeDeviceSource());
-
-  EXPECT_EQ(request.selection, DeviceRequest::Selection::Default);
-  EXPECT_EQ(request.strategy, DeviceRequest::Strategy::Default);
-  EXPECT_FALSE(request.resolution.has_value());
-  EXPECT_FALSE(request.framerate_fps.has_value());
-  EXPECT_FALSE(request.frame_format.has_value());
-}
-
-TEST(CaptureSourceFactoryTest, TranslatesDeviceSelectionById) {
-  auto source = makeDeviceSource();
-  source.device->id = "0x8020000005ac8514";
-
-  const auto request = toDeviceRequest(source);
-
-  EXPECT_EQ(request.selection, DeviceRequest::Selection::Id);
-  EXPECT_EQ(request.id, "0x8020000005ac8514");
-}
-
-TEST(CaptureSourceFactoryTest, TranslatesDeviceSelectionByIndex) {
-  auto source = makeDeviceSource();
-  source.device->index = 3;
-
-  const auto request = toDeviceRequest(source);
-
-  EXPECT_EQ(request.selection, DeviceRequest::Selection::Index);
-  EXPECT_EQ(request.index, 3u);
-}
-
-TEST(CaptureSourceFactoryTest, RejectsBothDeviceIndexAndId) {
-  auto source = makeDeviceSource();
-  source.device->index = 0;
-  source.device->id = "cam";
-
-  expectRejected([&] { return toDeviceRequest(source); }, "at most one of 'index' or 'id'");
-}
-
-TEST(CaptureSourceFactoryTest, DeviceRequiresDeviceBlock) {
-  CaptureSourceConfig source;
-  source.type = CaptureSourceType::Device;
-
-  expectRejected([&] { return toDeviceRequest(source); }, "requires a 'device' block");
-}
-
-TEST(CaptureSourceFactoryTest, DeviceRejectsGstreamerOptions) {
-  auto source = makeDeviceSource();
-  source.pipeline = "v4l2src ! appsink name=lk_appsink";
-
-  expectRejected([&] { return toDeviceRequest(source); }, "does not accept gstreamer options");
-}
-
-TEST(CaptureSourceFactoryTest, DeviceRejectsDemoBlock) {
-  auto source = makeDeviceSource();
-  source.demo = ros_portal_config::DemoSourceConfig{};
-
-  expectRejected([&] { return toDeviceRequest(source); }, "'demo' block");
-}
-
-// ---------------------------------------------------------------------------
-// Device format strategies
-// ---------------------------------------------------------------------------
-
-TEST(CaptureSourceFactoryTest, ExactAndClosestDefaultFrameFormatToNv12) {
-  for (const auto strategy :
-       {ros_portal_config::DeviceFormatStrategy::Exact, ros_portal_config::DeviceFormatStrategy::Closest}) {
-    auto source = makeDeviceSource();
-    auto format = makeFormat(strategy);
-    format.resolution = ros_portal_config::CaptureResolution{1280, 720};
-    format.framerate_fps = 30;
-    source.device->format = format;
-
-    const auto request = toDeviceRequest(source);
-
-    EXPECT_EQ(request.strategy, strategy == ros_portal_config::DeviceFormatStrategy::Exact
-                                    ? DeviceRequest::Strategy::Exact
-                                    : DeviceRequest::Strategy::Closest);
-    ASSERT_TRUE(request.resolution.has_value());
-    EXPECT_EQ(request.resolution->width, 1280);
-    EXPECT_EQ(request.resolution->height, 720);
-    ASSERT_TRUE(request.framerate_fps.has_value());
-    EXPECT_EQ(*request.framerate_fps, 30u);
-    ASSERT_TRUE(request.frame_format.has_value()) << "exact/closest need a concrete format";
-    EXPECT_EQ(*request.frame_format, livekit::DeviceFrameFormat::Nv12);
-  }
-}
-
-TEST(CaptureSourceFactoryTest, ExactPassesThroughExplicitFrameFormat) {
-  auto source = makeDeviceSource();
-  auto format = makeFormat(ros_portal_config::DeviceFormatStrategy::Exact);
-  format.resolution = ros_portal_config::CaptureResolution{640, 480};
-  format.framerate_fps = 30;
-  format.frame_format = ros_portal_config::DeviceFrameFormat::Mjpeg;
-  source.device->format = format;
-
-  const auto request = toDeviceRequest(source);
-
-  ASSERT_TRUE(request.frame_format.has_value());
-  EXPECT_EQ(*request.frame_format, livekit::DeviceFrameFormat::Mjpeg);
-}
-
-TEST(CaptureSourceFactoryTest, ExactAndClosestRequireResolutionAndFramerate) {
-  for (const auto strategy :
-       {ros_portal_config::DeviceFormatStrategy::Exact, ros_portal_config::DeviceFormatStrategy::Closest}) {
-    auto missing_framerate = makeDeviceSource();
-    auto format = makeFormat(strategy);
-    format.resolution = ros_portal_config::CaptureResolution{1280, 720};
-    missing_framerate.device->format = format;
-    expectRejected([&] { return toDeviceRequest(missing_framerate); }, "requires both resolution and framerate_fps");
-
-    auto missing_resolution = makeDeviceSource();
-    auto other = makeFormat(strategy);
-    other.framerate_fps = 30;
-    missing_resolution.device->format = other;
-    expectRejected([&] { return toDeviceRequest(missing_resolution); }, "requires both resolution and framerate_fps");
-  }
-}
-
-// Locks in the deliberate absence of a frame-format default for the highest_*
-// strategies: naming a format there selects it outright with no fallback, so
-// defaulting to nv12 would silently exclude cameras whose top resolution is
-// only offered as yuyv or mjpeg.
-TEST(CaptureSourceFactoryTest, HighestStrategiesLeaveFrameFormatUnset) {
-  for (const auto strategy : {ros_portal_config::DeviceFormatStrategy::HighestFramerate,
-                              ros_portal_config::DeviceFormatStrategy::HighestResolution}) {
-    auto source = makeDeviceSource();
-    source.device->format = makeFormat(strategy);
-
-    const auto request = toDeviceRequest(source);
-
-    EXPECT_FALSE(request.frame_format.has_value());
-  }
-}
-
-TEST(CaptureSourceFactoryTest, HighestFramerateAcceptsResolutionConstraint) {
-  auto source = makeDeviceSource();
-  auto format = makeFormat(ros_portal_config::DeviceFormatStrategy::HighestFramerate);
-  format.resolution = ros_portal_config::CaptureResolution{640, 480};
-  format.frame_format = ros_portal_config::DeviceFrameFormat::Yuyv;
-  source.device->format = format;
-
-  const auto request = toDeviceRequest(source);
-
-  EXPECT_EQ(request.strategy, DeviceRequest::Strategy::HighestFramerate);
-  ASSERT_TRUE(request.resolution.has_value());
-  EXPECT_EQ(request.resolution->width, 640);
-  EXPECT_FALSE(request.framerate_fps.has_value());
-  ASSERT_TRUE(request.frame_format.has_value());
-  EXPECT_EQ(*request.frame_format, livekit::DeviceFrameFormat::Yuyv);
-}
-
-TEST(CaptureSourceFactoryTest, HighestResolutionAcceptsFramerateConstraint) {
-  auto source = makeDeviceSource();
-  auto format = makeFormat(ros_portal_config::DeviceFormatStrategy::HighestResolution);
-  format.framerate_fps = 15;
-  source.device->format = format;
-
-  const auto request = toDeviceRequest(source);
-
-  EXPECT_EQ(request.strategy, DeviceRequest::Strategy::HighestResolution);
-  ASSERT_TRUE(request.framerate_fps.has_value());
-  EXPECT_EQ(*request.framerate_fps, 15u);
-  EXPECT_FALSE(request.resolution.has_value());
-}
-
-TEST(CaptureSourceFactoryTest, HighestFramerateRejectsFramerate) {
-  auto source = makeDeviceSource();
-  auto format = makeFormat(ros_portal_config::DeviceFormatStrategy::HighestFramerate);
-  format.framerate_fps = 30;
-  source.device->format = format;
-
-  expectRejected([&] { return toDeviceRequest(source); }, "does not accept framerate_fps");
-}
-
-TEST(CaptureSourceFactoryTest, HighestResolutionRejectsResolution) {
-  auto source = makeDeviceSource();
-  auto format = makeFormat(ros_portal_config::DeviceFormatStrategy::HighestResolution);
-  format.resolution = ros_portal_config::CaptureResolution{1920, 1080};
-  source.device->format = format;
-
-  expectRejected([&] { return toDeviceRequest(source); }, "does not accept resolution");
-}
-
-// Catches enum-order skew between the schema and the SDK.
-TEST(CaptureSourceFactoryTest, MapsEveryFrameFormat) {
-  const std::vector<std::pair<ros_portal_config::DeviceFrameFormat, livekit::DeviceFrameFormat>> expected{
-      {ros_portal_config::DeviceFrameFormat::I420, livekit::DeviceFrameFormat::I420},
-      {ros_portal_config::DeviceFrameFormat::Nv12, livekit::DeviceFrameFormat::Nv12},
-      {ros_portal_config::DeviceFrameFormat::Bgra, livekit::DeviceFrameFormat::Bgra},
-      {ros_portal_config::DeviceFrameFormat::Rgb24, livekit::DeviceFrameFormat::Rgb24},
-      {ros_portal_config::DeviceFrameFormat::Bgr24, livekit::DeviceFrameFormat::Bgr24},
-      {ros_portal_config::DeviceFrameFormat::Yuyv, livekit::DeviceFrameFormat::Yuyv},
-      {ros_portal_config::DeviceFrameFormat::Uyvy, livekit::DeviceFrameFormat::Uyvy},
-      {ros_portal_config::DeviceFrameFormat::Grey, livekit::DeviceFrameFormat::Grey},
-      {ros_portal_config::DeviceFrameFormat::Mjpeg, livekit::DeviceFrameFormat::Mjpeg},
-  };
-  for (const auto& [configured, sdk] : expected) {
-    EXPECT_EQ(toLiveKitFrameFormat(configured), sdk);
-  }
+  expectRejected([&] { return toPatternConfig(source); }, "codec, rate_control");
 }
 
 // ---------------------------------------------------------------------------

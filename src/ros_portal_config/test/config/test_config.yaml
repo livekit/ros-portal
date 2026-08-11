@@ -82,11 +82,11 @@ ros_portal:
 
     # Pixel sources can be published as simulcast; encoded (gstreamer) sources
     # publish the single pre-encoded layer they produce and ignore the flag.
-    - track_name: "demo_camera"
+    - track_name: "pattern_camera"
       simulcast: true
       source:
-        type: "demo"
-        demo:
+        type: "pattern"
+        pattern:
           resolution:
             width: 640
             height: 480

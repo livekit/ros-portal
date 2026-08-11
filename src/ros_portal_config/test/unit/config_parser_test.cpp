@@ -104,10 +104,10 @@ ros_portal:
       publish_options:
         max_bitrate_bps: 3500000
         max_framerate: 30
-    - track_name: "demo_camera"
+    - track_name: "pattern_camera"
       simulcast: true
       source:
-        type: "demo"
+        type: "pattern"
     - track_name: "usb_camera"
       source:
         type: "device"
@@ -169,11 +169,11 @@ ros_portal:
   EXPECT_EQ(*config.video_sources[0].publish_options->max_bitrate_bps, 3500000);
   ASSERT_TRUE(config.video_sources[0].publish_options->max_framerate.has_value());
   EXPECT_EQ(*config.video_sources[0].publish_options->max_framerate, 30);
-  EXPECT_EQ(config.video_sources[1].track_name, "demo_camera");
+  EXPECT_EQ(config.video_sources[1].track_name, "pattern_camera");
   EXPECT_TRUE(config.video_sources[1].simulcast);
-  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Demo);
+  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Pattern);
   EXPECT_FALSE(config.video_sources[1].source.pipeline.has_value());
-  EXPECT_FALSE(config.video_sources[1].source.demo.has_value());
+  EXPECT_FALSE(config.video_sources[1].source.pattern.has_value());
 
   EXPECT_EQ(config.video_sources[2].track_name, "usb_camera");
   EXPECT_EQ(config.video_sources[2].source.type, CaptureSourceType::Device);
@@ -283,28 +283,28 @@ ros_portal:
   EXPECT_FALSE(format.framerate_fps.has_value());
 }
 
-TEST(ConfigParserTest, ParsesDemoSourceCharacteristics) {
+TEST(ConfigParserTest, ParsesPatternSourceCharacteristics) {
   const auto config = parse(R"(
 ros_portal:
   version: "0.0.1"
   video_sources:
-    - track_name: "demo_camera"
+    - track_name: "pattern_camera"
       source:
-        type: "demo"
-        demo:
+        type: "pattern"
+        pattern:
           resolution:
             width: 1280
             height: 720
           framerate_fps: 15
 )");
 
-  ASSERT_TRUE(config.video_sources[0].source.demo.has_value());
-  const auto& demo = *config.video_sources[0].source.demo;
-  ASSERT_TRUE(demo.resolution.has_value());
-  EXPECT_EQ(demo.resolution->width, 1280);
-  EXPECT_EQ(demo.resolution->height, 720);
-  ASSERT_TRUE(demo.framerate_fps.has_value());
-  EXPECT_EQ(*demo.framerate_fps, 15);
+  ASSERT_TRUE(config.video_sources[0].source.pattern.has_value());
+  const auto& pattern = *config.video_sources[0].source.pattern;
+  ASSERT_TRUE(pattern.resolution.has_value());
+  EXPECT_EQ(pattern.resolution->width, 1280);
+  EXPECT_EQ(pattern.resolution->height, 720);
+  ASSERT_TRUE(pattern.framerate_fps.has_value());
+  EXPECT_EQ(*pattern.framerate_fps, 15);
 }
 
 TEST(ConfigParserTest, RejectsNonBooleanSimulcast) {
@@ -316,7 +316,7 @@ ros_portal:
     - track_name: "camera"
       simulcast: "yes please"
       source:
-        type: "demo"
+        type: "pattern"
 )",
       "boolean");
 }
@@ -725,9 +725,9 @@ TEST(ConfigParserTest, ParsesFile) {
   EXPECT_EQ(config.video_sources[0].track_name, "front_camera");
   EXPECT_FALSE(config.video_sources[0].simulcast);
   EXPECT_TRUE(config.video_sources[1].simulcast);
-  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Demo);
-  ASSERT_TRUE(config.video_sources[1].source.demo.has_value());
-  EXPECT_EQ(config.video_sources[1].source.demo->resolution->width, 640);
+  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Pattern);
+  ASSERT_TRUE(config.video_sources[1].source.pattern.has_value());
+  EXPECT_EQ(config.video_sources[1].source.pattern->resolution->width, 640);
   EXPECT_EQ(config.video_sources[2].source.type, CaptureSourceType::Device);
   ASSERT_TRUE(config.video_sources[2].source.device.has_value());
   EXPECT_EQ(*config.video_sources[2].source.device->index, 0);

@@ -31,3 +31,12 @@ ros_portal:
     # Pose telemetry out to the controller (ROS -> LiveKit).
     - topic: "/turtle.*/pose"
       direction: "out"
+
+  video_sources:
+    - track_name: "pattern_camera"
+      source:
+        type: "pattern"      # was "demo"
+        pattern:             # the block (was "demo:")
+          pattern: "logo"    # the pattern choice — stutters
+          resolution: { width: 1280, height: 720 }
+          framerate_fps: 15

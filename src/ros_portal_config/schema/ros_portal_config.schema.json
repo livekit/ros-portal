@@ -58,7 +58,10 @@
       "enum": ["ros2msg", "ros2idl", "jsonschema"]
     },
     "captureSourceType": {
-      "enum": ["gstreamer", "demo", "device"]
+      "enum": ["gstreamer", "pattern", "device"]
+    },
+    "videoPattern": {
+      "enum": ["gradient", "logo"]
     },
     "videoCodec": {
       "enum": ["h264", "h265", "vp8", "vp9", "av1"]
@@ -154,10 +157,14 @@
         }
       }
     },
-    "demoSourceConfig": {
+    "patternSourceConfig": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "pattern": {
+          "description": "Test pattern rendered by the built-in source: 'gradient' is an animated color gradient, 'logo' a bouncing LiveKit logo. Defaults to 'gradient' when omitted.",
+          "$ref": "#/$defs/videoPattern"
+        },
         "resolution": {
           "description": "Output resolution of the built-in test source. Defaults to 640x480 when omitted.",
           "$ref": "#/$defs/captureResolution"
@@ -177,7 +184,7 @@
           "$ref": "#/$defs/captureSourceType"
         },
         "pipeline": {
-          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'demo' and 'device'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
+          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'pattern' and 'device'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
           "$ref": "#/$defs/nonemptyString"
         },
         "codec": {
@@ -193,12 +200,12 @@
           "$ref": "#/$defs/gstreamerRateControl"
         },
         "device": {
-          "description": "Camera device selection and requested format. Required when type is 'device'; invalid for 'gstreamer' and 'demo'.",
+          "description": "Camera device selection and requested format. Required when type is 'device'; invalid for 'gstreamer' and 'pattern'.",
           "$ref": "#/$defs/deviceSourceConfig"
         },
-        "demo": {
-          "description": "Output characteristics of the built-in test source. Optional when type is 'demo'; invalid for 'gstreamer' and 'device'.",
-          "$ref": "#/$defs/demoSourceConfig"
+        "pattern": {
+          "description": "Pattern and output characteristics of the built-in test source. Optional when type is 'pattern'; invalid for 'gstreamer' and 'device'.",
+          "$ref": "#/$defs/patternSourceConfig"
         }
       }
     },

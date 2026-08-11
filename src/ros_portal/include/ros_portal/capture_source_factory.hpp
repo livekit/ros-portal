@@ -41,14 +41,14 @@
 /// @c std::invalid_argument.
 namespace ros_portal::capture {
 
-/// Output characteristics used when a demo source omits them.
+/// Output characteristics used when a pattern source omits them.
 ///
-/// The SDK requires both to be non-zero (see @c DemoVideoSourceConfig in
-/// livekit/capture_source.h), so an omitted @c demo block cannot simply
+/// The SDK requires both to be non-zero (see @c PatternVideoSourceConfig in
+/// livekit/capture_source.h), so an omitted @c pattern block cannot simply
 /// forward a default-constructed config.
-inline constexpr int kDefaultDemoWidth = 640;
-inline constexpr int kDefaultDemoHeight = 480;
-inline constexpr std::uint32_t kDefaultDemoFramerateFps = 30;
+inline constexpr int kDefaultPatternWidth = 640;
+inline constexpr int kDefaultPatternHeight = 480;
+inline constexpr std::uint32_t kDefaultPatternFramerateFps = 30;
 
 /// @brief Inspectable, validated form of a configured device capture request.
 ///
@@ -103,13 +103,16 @@ livekit::VideoCodec toLiveKitCodec(ros_portal_config::VideoCodec codec);
 /// @brief Map a configured pixel format onto its SDK enumerator.
 livekit::DeviceFrameFormat toLiveKitFrameFormat(ros_portal_config::DeviceFrameFormat format);
 
+/// @brief Map a configured test pattern onto its SDK enumerator.
+livekit::Pattern toLiveKitPattern(ros_portal_config::VideoPattern pattern);
+
 /// @brief Translate a validated GStreamer capture source entry.
 /// @throws std::invalid_argument when the entry is not a valid GStreamer source.
 livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::CaptureSourceConfig& source);
 
-/// @brief Translate a validated demo capture source entry.
-/// @throws std::invalid_argument when the entry is not a valid demo source.
-livekit::DemoVideoSourceConfig toDemoConfig(const ros_portal_config::CaptureSourceConfig& source);
+/// @brief Translate a validated pattern capture source entry.
+/// @throws std::invalid_argument when the entry is not a valid pattern source.
+livekit::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::CaptureSourceConfig& source);
 
 /// @brief Validate a device capture source entry into its inspectable form.
 /// @throws std::invalid_argument when the entry is not a valid device source.

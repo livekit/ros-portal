@@ -59,6 +59,6 @@ ros_portal:
   # Independent capture sources publish directly as LiveKit video tracks.
   # Uncomment this deterministic source for capture integration testing.
   video_sources:
-    - track_name: "demo_camera"
+    - track_name: "pattern_camera"
       source:
-        type: "demo"
+        type: "pattern"

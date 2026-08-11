@@ -66,7 +66,7 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   int start_calls = 0;
   int stop_calls = 0;
   int unpublish_calls = 0;
-  VideoSourceManager::FinishedCallback demo_finished;
+  VideoSourceManager::FinishedCallback pattern_finished;
   VideoSourceManager::LiveKitMethods methods;
   methods.create_and_publish = [&](const ros_portal_config::VideoSourceConfig& config,
                                    VideoSourceManager::FinishedCallback callback)
@@ -75,8 +75,8 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
     if (config.track_name == "broken") {
       return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure("pipeline failed");
     }
-    if (config.track_name == "demo") {
-      demo_finished = std::move(callback);
+    if (config.track_name == "pattern") {
+      pattern_finished = std::move(callback);
     }
     auto session = std::make_shared<VideoSourceManager::Session>();
     session->start = [&start_calls] { ++start_calls; };
@@ -88,7 +88,7 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   {
     const std::vector configs{
         makeSource("broken", ros_portal_config::CaptureSourceType::Gstreamer),
-        makeSource("demo", ros_portal_config::CaptureSourceType::Demo),
+        makeSource("pattern", ros_portal_config::CaptureSourceType::Pattern),
         makeSource("usb_camera", ros_portal_config::CaptureSourceType::Device),
     };
     const VideoSourceManager manager(configs, std::move(methods), std::move(diagnostics),
@@ -104,10 +104,10 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
     EXPECT_EQ(valueFor(failed_status, "state"), "error");
     EXPECT_EQ(valueFor(failed_status, "error"), "pipeline failed");
 
-    ASSERT_TRUE(static_cast<bool>(demo_finished));
-    demo_finished(VideoSourceResult{std::nullopt, 42, VideoSourceExit::EndOfStream});
+    ASSERT_TRUE(static_cast<bool>(pattern_finished));
+    pattern_finished(VideoSourceResult{std::nullopt, 42, VideoSourceExit::EndOfStream});
     diagnostic_updater::DiagnosticStatusWrapper finished_status;
-    diagnostic_callbacks.at("video_source/demo/1")(finished_status);
+    diagnostic_callbacks.at("video_source/pattern/1")(finished_status);
     EXPECT_EQ(finished_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
     EXPECT_EQ(valueFor(finished_status, "state"), "end_of_stream");
     EXPECT_EQ(valueFor(finished_status, "frames_captured"), "42");

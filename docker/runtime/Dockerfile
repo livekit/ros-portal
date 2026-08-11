@@ -48,7 +48,6 @@ RUN set -eu; \
         gstreamer1.0-plugins-good \
         gstreamer1.0-plugins-ugly \
         gstreamer1.0-x \
-        gstreamer1.0-libcamera \
     && \
     rm -rf /var/lib/apt/lists/*
 

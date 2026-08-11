@@ -42,7 +42,7 @@ std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWr
 
 TEST(BuildInfoDiagnosticsTest, PopulatesOkStatusWithVersionFields) {
   BuildInfo info;
-  info.livekit_sdk_version = "1.5.0";
+  info.livekit_sdk_version = "1.7.0";
   info.ros_portal_version = "0.1.0";
   info.ros_distro = "humble";
   diagnostic_updater::DiagnosticStatusWrapper status;
@@ -50,8 +50,8 @@ TEST(BuildInfoDiagnosticsTest, PopulatesOkStatusWithVersionFields) {
   populateBuildInfoStatus(info, status);
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(status.message, "LiveKit SDK 1.5.0");
-  EXPECT_EQ(valueFor(status, "livekit_sdk_version"), "1.5.0");
+  EXPECT_EQ(status.message, "LiveKit SDK 1.7.0");
+  EXPECT_EQ(valueFor(status, "livekit_sdk_version"), "1.7.0");
   EXPECT_EQ(valueFor(status, "ros_portal_version"), "0.1.0");
   EXPECT_EQ(valueFor(status, "ros_distro"), "humble");
 }
@@ -62,6 +62,34 @@ TEST(BuildInfoDiagnosticsTest, CollectedInfoHasNoEmptyFields) {
   EXPECT_FALSE(info.livekit_sdk_version.empty());
   EXPECT_FALSE(info.ros_portal_version.empty());
   EXPECT_FALSE(info.ros_distro.empty());
+}
+
+TEST(BuildInfoDiagnosticsTest, FormatsOtherSdksAsPortalDistroVersion) {
+  BuildInfo info;
+  info.livekit_sdk_version = "1.7.0";
+  info.ros_portal_version = "0.1.0";
+  info.ros_distro = "jazzy";
+
+  EXPECT_EQ(formatOtherSdks(info), "ros-portal:jazzy-v0.1.0");
+}
+
+TEST(BuildInfoDiagnosticsTest, FormatsOtherSdksWithUnknownDistro) {
+  BuildInfo info;
+  info.ros_portal_version = "0.1.0";
+  info.ros_distro = "unknown";
+
+  EXPECT_EQ(formatOtherSdks(info), "ros-portal:unknown-v0.1.0");
+}
+
+TEST(BuildInfoDiagnosticsTest, FormatsOtherSdksFromCollectedInfo) {
+  // The value handed to RoomOptions::other_sdks must always attribute the
+  // participant to ROS Portal as `ros-portal:<ros_distro>-<version>` with no
+  // whitespace.
+  const auto info = collectBuildInfo();
+  const std::string other_sdks = formatOtherSdks(info);
+
+  EXPECT_EQ(other_sdks, "ros-portal:" + info.ros_distro + "-v" + info.ros_portal_version) << "actual: " << other_sdks;
+  EXPECT_EQ(other_sdks.find_first_of(" \t"), std::string::npos) << "actual: " << other_sdks;
 }
 
 TEST(BuildInfoDiagnosticsTest, RegistersAndRemovesTaskWithSharedHub) {

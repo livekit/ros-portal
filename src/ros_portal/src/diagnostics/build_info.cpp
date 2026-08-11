@@ -49,6 +49,10 @@ void populateBuildInfoStatus(const BuildInfo& info, diagnostic_updater::Diagnost
   status.add("ros_distro", info.ros_distro);
 }
 
+std::string formatOtherSdks(const BuildInfo& info) {
+  return "ros-portal:" + info.ros_distro + "-v" + info.ros_portal_version;
+}
+
 BuildInfoDiagnostics::BuildInfoDiagnostics(DiagnosticsManagerFns diagnostics)
     : info_(collectBuildInfo()), diagnostics_(std::move(diagnostics)) {
   if (!diagnostics_.add || !diagnostics_.remove) {

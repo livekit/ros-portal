@@ -385,24 +385,24 @@ All capture-backed tracks are published with LiveKit track source `camera`.
 Capture-derived settings take precedence where required: encoded GStreamer
 ingest dictates its codec, disables simulcast, and selects the pre-encoded
 encoder backend. Because of that precedence, `simulcast` only takes effect for
-pixel sources (`demo` and `device`); a `gstreamer` source publishes the single
+pixel sources (`pattern` and `device`); a `gstreamer` source publishes the single
 pre-encoded layer it produces regardless of the setting.
 
 ### Source configuration
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
-| `type` | string | yes | `gstreamer`, `demo`, or `device`. |
+| `type` | string | yes | `gstreamer`, `pattern`, or `device`. |
 | `pipeline` | string | GStreamer only | GStreamer launch description. Must contain `appsink name=lk_appsink` or leave exactly one encoded video source pad unlinked. |
 | `codec` | string | GStreamer only | `h264`, `h265`, `vp8`, `vp9`, or `av1`. Inferred from GStreamer caps when omitted. |
 | `resolution` | map | GStreamer only | Positive `width` and `height`. Discovered from negotiated caps when omitted; verified against the stream when supplied. |
 | `rate_control` | map | GStreamer only | Forward WebRTC bitrate targets to a GStreamer encoder property. |
 | `device` | map | Device only | Camera selection and requested format. Required when `type` is `device`. |
-| `demo` | map | no | Demo-only output characteristics. Optional when `type` is `demo`. |
+| `pattern` | map | no | Pattern-only rendering and output characteristics. Optional when `type` is `pattern`. |
 
-Each type accepts only its own fields: a `demo` or `device` source rejects the
+Each type accepts only its own fields: a `pattern` or `device` source rejects the
 GStreamer-only fields above, and a `gstreamer` source rejects the `device` and
-`demo` blocks. The schema tags the union by `type` but cannot express those
+`pattern` blocks. The schema tags the union by `type` but cannot express those
 rules, so they are enforced when the source is created and reported through
 `video_source/<track_name>/<index>`.
 
@@ -443,32 +443,34 @@ source diagnostics are always enabled. Rust-only TCP/RTSP/shared-memory wire
 formats, frame metadata, simulcast, and encoder selection are not accepted until
 equivalent C++ capture APIs exist.
 
-### Demo source
+### Pattern source
 
-The built-in deterministic demo source publishes cycling solid-color frames and
+The built-in deterministic pattern source renders a synthetic test pattern and
 accepts no GStreamer fields. It is intended for testing:
 
 ```yaml
 video_sources:
-  - track_name: "demo_camera"
+  - track_name: "pattern_camera"
     source:
-      type: "demo"
+      type: "pattern"
 ```
 
-Output characteristics default to 640x480 at 30 fps. Override either with an
-optional `demo` block:
+The rendered pattern defaults to `gradient` and output characteristics to 640x480
+at 30 fps. Override any of them with an optional `pattern` block:
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
+| `pattern` | string | no | `gradient` (animated color gradient) or `logo` (bouncing LiveKit logo). Defaults to `gradient`. |
 | `resolution` | map | no | Positive `width` and `height`. Defaults to 640x480. |
 | `framerate_fps` | integer | no | Positive frame rate. Defaults to 30. |
 
 ```yaml
 video_sources:
-  - track_name: "demo_camera"
+  - track_name: "pattern_camera"
     source:
-      type: "demo"
-      demo:
+      type: "pattern"
+      pattern:
+        pattern: "logo"
         resolution: { width: 1280, height: 720 }
         framerate_fps: 15
 ```
@@ -567,7 +569,7 @@ must add `--device`). On macOS the first open prompts for camera permission; a
 denied or headless process fails source creation.
 
 Capture requires the pinned C++ SDK source build. GStreamer is additionally
-required for `type: gstreamer`, but not for `device` or `demo`. The schema's
+required for `type: gstreamer`, but not for `device` or `pattern`. The schema's
 tagged `source.type` is intentionally backend-neutral so future RTSP and other
 ingestion backends can be added without changing the `video_sources` collection
 shape — `device` is the first backend added under it.

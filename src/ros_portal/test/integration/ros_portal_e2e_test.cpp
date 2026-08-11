@@ -173,7 +173,7 @@ TEST_F(RosPortalTestE2E, RepublishesRosMessagesBothWays) {
                               "message from ROS Portal B"));
 }
 
-TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
+TEST_F(RosPortalTestE2E, PublishesConfiguredPatternCaptureFrames) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
 
   livekit::Room receiver_room;
@@ -183,7 +183,7 @@ TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
   std::mutex mutex;
   std::condition_variable cv;
   int frames_received = 0;
-  constexpr const char* kTrackName = "ros-portal-demo-capture";
+  constexpr const char* kTrackName = "ros-portal-pattern-capture";
   receiver_room.setOnVideoFrameEventCallback(identityA(), kTrackName,
                                              [&mutex, &cv, &frames_received](const livekit::VideoFrameEvent&) {
                                                const std::lock_guard<std::mutex> lock(mutex);
@@ -196,9 +196,9 @@ TEST_F(RosPortalTestE2E, PublishesConfiguredDemoCaptureFrames) {
 ros_portal:
   version: "0.0.1"
   video_sources:
-    - track_name: "ros-portal-demo-capture"
+    - track_name: "ros-portal-pattern-capture"
       source:
-        type: "demo"
+        type: "pattern"
       publish_options:
         max_bitrate_bps: 1000000
         max_framerate: 30
@@ -207,7 +207,7 @@ ros_portal:
   std::unique_lock<std::mutex> lock(mutex);
   EXPECT_TRUE(
       cv.wait_for(lock, kMessageTimeout, [&frames_received] { return frames_received >= kMinimumCaptureFrames; }))
-      << "Timed out waiting for ROS Portal demo capture frames; received " << frames_received;
+      << "Timed out waiting for ROS Portal pattern capture frames; received " << frames_received;
   lock.unlock();
 
   receiver_room.clearOnVideoFrameCallback(identityA(), kTrackName);

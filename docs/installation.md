@@ -89,7 +89,7 @@ pipelines using `clockoverlay`, `textoverlay`, or `timeoverlay` — including th
 `ros_portal_tutorials` configuration — fail to start with:
 
 ```log
-[ERROR] [ros_portal]: Video source 'demo_camera' failed to start: invalid
+[ERROR] [ros_portal]: Video source 'pattern_camera' failed to start: invalid
 request: GStreamer pipeline error: failed to create pipeline: no element
 "clockoverlay"
 ```

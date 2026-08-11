@@ -177,9 +177,19 @@ livekit::DeviceFrameFormat toLiveKitFrameFormat(ros_portal_config::DeviceFrameFo
   return livekit::DeviceFrameFormat::Nv12;
 }
 
+livekit::Pattern toLiveKitPattern(ros_portal_config::VideoPattern pattern) {
+  switch (pattern) {
+    case ros_portal_config::VideoPattern::Gradient:
+      return livekit::Pattern::Gradient;
+    case ros_portal_config::VideoPattern::Logo:
+      return livekit::Pattern::Logo;
+  }
+  return livekit::Pattern::Gradient;
+}
+
 livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::CaptureSourceConfig& source) {
   rejectForeignBlock(source.device.has_value(), "gstreamer", "device");
-  rejectForeignBlock(source.demo.has_value(), "gstreamer", "demo");
+  rejectForeignBlock(source.pattern.has_value(), "gstreamer", "pattern");
 
   if (!source.pipeline) {
     throw std::invalid_argument("gstreamer source requires a pipeline");
@@ -205,22 +215,25 @@ livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::C
   return config;
 }
 
-livekit::DemoVideoSourceConfig toDemoConfig(const ros_portal_config::CaptureSourceConfig& source) {
-  rejectGstreamerOnlyFields(source, "demo");
-  rejectForeignBlock(source.device.has_value(), "demo", "device");
+livekit::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::CaptureSourceConfig& source) {
+  rejectGstreamerOnlyFields(source, "pattern");
+  rejectForeignBlock(source.device.has_value(), "pattern", "device");
 
   // The SDK rejects zero resolution or frame rate, so fill in defaults rather
   // than forwarding a default-constructed config.
-  livekit::DemoVideoSourceConfig config;
-  config.resolution = livekit::CaptureResolution{kDefaultDemoWidth, kDefaultDemoHeight};
-  config.framerate_fps = kDefaultDemoFramerateFps;
+  livekit::PatternVideoSourceConfig config;
+  config.resolution = livekit::CaptureResolution{kDefaultPatternWidth, kDefaultPatternHeight};
+  config.framerate_fps = kDefaultPatternFramerateFps;
 
-  if (source.demo) {
-    if (source.demo->resolution) {
-      config.resolution = toLiveKitResolution(*source.demo->resolution);
+  if (source.pattern) {
+    if (source.pattern->pattern) {
+      config.pattern = toLiveKitPattern(*source.pattern->pattern);
     }
-    if (source.demo->framerate_fps) {
-      config.framerate_fps = toUnsigned(*source.demo->framerate_fps);
+    if (source.pattern->resolution) {
+      config.resolution = toLiveKitResolution(*source.pattern->resolution);
+    }
+    if (source.pattern->framerate_fps) {
+      config.framerate_fps = toUnsigned(*source.pattern->framerate_fps);
     }
   }
   return config;
@@ -228,7 +241,7 @@ livekit::DemoVideoSourceConfig toDemoConfig(const ros_portal_config::CaptureSour
 
 DeviceRequest toDeviceRequest(const ros_portal_config::CaptureSourceConfig& source) {
   rejectGstreamerOnlyFields(source, "device");
-  rejectForeignBlock(source.demo.has_value(), "device", "demo");
+  rejectForeignBlock(source.pattern.has_value(), "device", "pattern");
 
   if (!source.device) {
     throw std::invalid_argument("device source requires a 'device' block");
@@ -306,8 +319,8 @@ livekit::DeviceVideoSourceConfig toLiveKitConfig(const DeviceRequest& request) {
 std::future<std::shared_ptr<livekit::CaptureSource>> createCaptureSource(
     const ros_portal_config::CaptureSourceConfig& source) {
   switch (source.type) {
-    case ros_portal_config::CaptureSourceType::Demo:
-      return livekit::CaptureSource::create(toDemoConfig(source));
+    case ros_portal_config::CaptureSourceType::Pattern:
+      return livekit::CaptureSource::create(toPatternConfig(source));
     case ros_portal_config::CaptureSourceType::Device:
       return livekit::CaptureSource::create(toLiveKitConfig(toDeviceRequest(source)));
     case ros_portal_config::CaptureSourceType::Gstreamer:

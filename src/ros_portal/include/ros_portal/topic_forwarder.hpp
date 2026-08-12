@@ -159,10 +159,6 @@ public:
   /// @param topics Current ROS topic names and types.
   void reconcileTopics(const TopicNamesAndTypes& topics);
 
-  /// @brief Query the graph and reconcile topics. Intended for focused tests;
-  /// production discovery shares a cached snapshot through RosPortal.
-  void pollTopics();
-
   /// @brief Remove subscriptions whose publishers have been absent for the
   /// configured grace period.
   /// @return True when at least one subscription was removed.

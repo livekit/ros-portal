@@ -122,24 +122,6 @@ TopicForwarder::~TopicForwarder() {
   image_topic_states_.clear();
 }
 
-void TopicForwarder::pollTopics() {
-  if (!needsGraphDiscovery()) {
-    return;
-  }
-
-  TopicNamesAndTypes topic_names_and_types;
-  {
-    const auto node = node_.lock();
-    if (!node) {
-      RCLCPP_ERROR(logger_, "Skipping topic poll; ROS node has been destroyed");
-      return;
-    }
-    topic_names_and_types = node->get_topic_names_and_types();
-  }
-
-  reconcileTopics(topic_names_and_types);
-}
-
 bool TopicForwarder::needsGraphDiscovery() const { return !options_.outgoing_topic_patterns.empty(); }
 
 void TopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_types) {

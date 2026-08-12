@@ -136,6 +136,10 @@ protected:
     return spinUntil([&]() { return node_->get_publishers_info_by_topic(topic).size() == expected; });
   }
 
+  // Mirrors production discovery, where RosPortal hands each forwarder a graph
+  // snapshot it queried once for all of them.
+  void reconcileFromGraph(TopicForwarder& forwarder) { forwarder.reconcileTopics(node_->get_topic_names_and_types()); }
+
   std::shared_ptr<rclcpp::Node> node_;
   std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   diagnostics::DiagnosticsManagerFns diagnostics_fns_;
@@ -209,12 +213,12 @@ TEST_F(TopicForwarderTest, SubscriptionIsRemovedAfterPublisherGracePeriod) {
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/ephemeral", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 1U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() == 1U; }));
 
   publisher.reset();
   ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 0U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   EXPECT_TRUE(forwarder.reapExpiredSubscriptions());
   ASSERT_TRUE(spinUntil([&]() { return node_->count_subscribers("/allowed/ephemeral") == 0U; }));
 }
@@ -229,7 +233,7 @@ TEST_F(TopicForwarderTest, ExpiryDeadlineIsOnlyReportedWhilePublishersAreAbsent)
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/ephemeral", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 1U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() == 1U; }));
 
   // A live publisher keeps the subscription off the clock.
@@ -238,7 +242,7 @@ TEST_F(TopicForwarderTest, ExpiryDeadlineIsOnlyReportedWhilePublishersAreAbsent)
   publisher.reset();
   ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 0U));
   const auto before = std::chrono::steady_clock::now();
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
 
   // The grace period starts on the reconcile that observed zero publishers, so
   // the worker can sleep until it elapses instead of polling for it.
@@ -333,7 +337,7 @@ TEST_F(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho
   // Polling must still create the outbound subscription.
   auto local_publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 2U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return local_publisher->get_subscription_count() > 0U; }));
 
   // The inbound publication must not be echoed back to LiveKit.
@@ -520,7 +524,7 @@ TEST_F(TopicForwarderTest, RateCapDropsSamplesWithinPeriod) {
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", pub_qos);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1u));
 
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1u; }));
 
   std_msgs::msg::String msg;
@@ -556,7 +560,7 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", pub_qos);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1u));
 
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1u; }));
 
   std_msgs::msg::String first_msg;
@@ -604,7 +608,7 @@ TEST_F(TopicForwarderTest, RateCapForwardsAgainAfterPeriodElapses) {
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", pub_qos);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1u));
 
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1u; }));
 
   std_msgs::msg::String msg;
@@ -637,7 +641,7 @@ TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", pub_qos);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1u));
 
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1u; }));
 
   std_msgs::msg::String msg;
@@ -662,7 +666,7 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
 
   std_msgs::msg::String msg;
@@ -682,7 +686,7 @@ TEST_F(TopicForwarderTest, OutboundPausesWhileRoomIsUnavailable) {
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
 
   std_msgs::msg::String msg;
@@ -710,7 +714,7 @@ TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", pub_qos);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1u));
 
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1u; }));
 
   std_msgs::msg::String msg;

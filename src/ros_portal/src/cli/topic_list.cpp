@@ -72,11 +72,6 @@ std::string formatTopicList(const std::vector<TopicInfo>& topics, const TopicLis
   return stream.str();
 }
 
-std::vector<TopicInfo> collectTopicInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
-                                        const TopicListOptions& options) {
-  return collectTopicInfo(graph.get_topic_names_and_types(), graph, options);
-}
-
 std::vector<TopicInfo> collectTopicInfo(const TopicNamesAndTypes& topic_names_and_types,
                                         const rclcpp::node_interfaces::NodeGraphInterface& graph,
                                         const TopicListOptions& options) {

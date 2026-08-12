@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <rclcpp/node_interfaces/node_graph_interface.hpp>
 #include <string>
 #include <vector>
 
@@ -36,13 +35,6 @@ bool isHiddenService(const std::string& service_name);
 /// @param options Formatting options that control count and type output.
 /// @return Human-readable command output ending in a newline when non-empty.
 std::string formatServiceList(const std::vector<ServiceInfo>& services, const ServiceListOptions& options);
-
-/// @brief Query the ROS graph for visible service metadata.
-/// @param graph Node graph interface used for discovery.
-/// @param options Discovery options, including hidden-service filtering.
-/// @return Service metadata sorted by service name.
-std::vector<ServiceInfo> collectServiceInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
-                                            const ServiceListOptions& options);
 
 /// @brief Collect visible service metadata from a shared names/types snapshot.
 /// @param services Cached service names and types.

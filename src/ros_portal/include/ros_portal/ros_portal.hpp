@@ -29,7 +29,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
@@ -159,6 +158,9 @@ private:
 
   /// @brief Reconcile all graph-dependent forwarders from one shared snapshot.
   void reconcileGraphTopics();
+
+  /// @brief Drop outbound subscriptions whose grace period has elapsed.
+  void reapInactiveSubscriptions();
 
   /// @brief Create components whose LiveKit state belongs to the current room
   /// session.
@@ -325,8 +327,8 @@ private:
   bool room_session_prepared_{false};
   //! @brief Whether room-session-bound forwarding components are active.
   bool room_components_started_{false};
-  //! @brief Serializes room component start, stop, polling, and delegate access.
-  std::mutex room_components_mutex_;
+  //! @brief Serializes room component start, stop, discovery, and delegate access.
+  mutable std::mutex room_components_mutex_;
   //! @brief Stored topic configuration used to recreate components after reconnect.
   std::vector<ros_portal_config::TopicConfig> topics_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.

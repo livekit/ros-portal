@@ -18,13 +18,32 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <memory>
+#include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <stdexcept>
+#include <thread>
 
 namespace ros_portal::utils {
 namespace {
+
+bool waitForPublisher(rclcpp::Node& node, const std::string& topic_name,
+                      std::chrono::milliseconds timeout = std::chrono::seconds(2)) {
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node.get_node_base_interface());
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    if (node.count_publishers(topic_name) == 1U) {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  executor.spin_some();
+  return node.count_publishers(topic_name) == 1U;
+}
 
 TEST(GraphSnapshotCacheTest, SharesSnapshotUntilGraphEventInvalidatesGeneration) {
   const auto node = std::make_shared<rclcpp::Node>("graph_snapshot_cache_test");
@@ -33,7 +52,7 @@ TEST(GraphSnapshotCacheTest, SharesSnapshotUntilGraphEventInvalidatesGeneration)
   const auto before = cache.topics();
   const auto publisher = node->create_publisher<std_msgs::msg::String>("/new_topic", 10);
   ASSERT_NE(publisher, nullptr);
-  ASSERT_EQ(node->count_publishers("/new_topic"), 1U);
+  ASSERT_TRUE(waitForPublisher(*node, "/new_topic"));
 
   const auto still_cached = cache.topics();
   EXPECT_EQ(still_cached, before);

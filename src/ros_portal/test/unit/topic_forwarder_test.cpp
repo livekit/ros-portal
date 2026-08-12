@@ -199,9 +199,7 @@ TEST_F(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNul
   auto subscription = node_->create_subscription<std_msgs::msg::String>(
       "/remote/null_snapshot", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
   ASSERT_NE(subscription, nullptr);
-  ASSERT_TRUE(spinUntil([&]() {
-    return node_->get_topic_names_and_types().count("/remote/null_snapshot") > 0U;
-  }));
+  ASSERT_TRUE(spinUntil([&]() { return node_->get_topic_names_and_types().count("/remote/null_snapshot") > 0U; }));
 
   EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/null_snapshot", std::nullopt), "std_msgs/msg/String");
 }

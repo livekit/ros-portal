@@ -24,7 +24,6 @@
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
-#include <map>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -315,7 +314,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     sub_options.callback_group = callback_group_;
     auto subscription =
         utils::createGenericSubscription(node, topic_name, topic_type, qos, std::move(callback), sub_options);
-    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), topic_type, std::nullopt};
+    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create generic subscription for '%s' [%s]: %s", topic_name.c_str(),
@@ -469,7 +468,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     sub_options.callback_group = callback_group_;
     auto subscription =
         node->create_subscription<sensor_msgs::msg::Image>(topic_name, qos, std::move(callback), sub_options);
-    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), kImageMsgType, std::nullopt};
+    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     image_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create image subscription for '%s' [%s]: %s", topic_name.c_str(), kImageMsgType,

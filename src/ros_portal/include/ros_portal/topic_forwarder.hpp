@@ -285,8 +285,6 @@ private:
   struct OutboundSubscription {
     /// @brief ROS subscription handle used to inspect matched publishers.
     rclcpp::SubscriptionBase::SharedPtr handle;
-    /// @brief ROS interface type pinned when the subscription was created.
-    std::string topic_type;
     /// @brief First observation of zero matched publishers for the topic.
     std::optional<std::chrono::steady_clock::time_point> publishers_absent_since;
   };

@@ -124,12 +124,9 @@ public:
   bool needsGraphDiscovery() const;
 
   /// @brief Reconcile outbound latched subscriptions against a shared snapshot.
+  /// Creates subscriptions for new matches; safe to call repeatedly.
   /// @param topics Current ROS topic names and types.
   void reconcileTopics(const TopicNamesAndTypes& topics);
-
-  /// @brief Discover configured outbound latched topics on the ROS graph and
-  /// create subscriptions for new matches. Safe to call repeatedly.
-  void poll();
 
   /// @brief Handle an inbound latched-state RPC: validate the topic, decode the
   /// payload, and republish it on a TRANSIENT_LOCAL publisher.

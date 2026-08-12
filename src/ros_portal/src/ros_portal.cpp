@@ -35,6 +35,7 @@
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -537,26 +538,14 @@ void RosPortal::graphDiscoveryLoop() {
       if (stop_graph_discovery_.load()) {
         break;
       }
-      if (!graph_event_->check_and_clear()) {
-        {
-          const std::lock_guard<std::mutex> lock(room_components_mutex_);
-          if (room_components_started_ && topic_forwarder_) {
-            topic_forwarder_->reapExpiredSubscriptions();
-          }
-        }
-        continue;
+      if (graph_event_->check_and_clear()) {
+        std::this_thread::sleep_for(kDebounce);
+        graph_event_->check_and_clear();
+        graph_snapshot_cache_->invalidate();
+        reconcileGraphTopics();
       }
 
-      std::this_thread::sleep_for(kDebounce);
-      graph_event_->check_and_clear();
-      graph_snapshot_cache_->invalidate();
-      reconcileGraphTopics();
-      {
-        const std::lock_guard<std::mutex> lock(room_components_mutex_);
-        if (room_components_started_ && topic_forwarder_) {
-          topic_forwarder_->reapExpiredSubscriptions();
-        }
-      }
+      reapInactiveSubscriptions();
     }
   } catch (const std::exception& error) {
     if (!stop_graph_discovery_.load()) {
@@ -571,11 +560,15 @@ void RosPortal::graphDiscoveryLoop() {
 }
 
 std::chrono::nanoseconds RosPortal::nextGraphWait() const {
-  if (!topic_forwarder_) {
-    return kMaxGraphWait;
+  std::optional<std::chrono::steady_clock::time_point> deadline;
+  {
+    const std::lock_guard<std::mutex> lock(room_components_mutex_);
+    if (!topic_forwarder_) {
+      return kMaxGraphWait;
+    }
+    deadline = topic_forwarder_->nextExpiryDeadline();
   }
 
-  const auto deadline = topic_forwarder_->nextExpiryDeadline();
   if (!deadline.has_value()) {
     return kMaxGraphWait;
   }
@@ -609,6 +602,13 @@ void RosPortal::reconcileGraphTopics() {
   }
   if (latched_discovery) {
     latched_topic_forwarder_->reconcileTopics(*topics);
+  }
+}
+
+void RosPortal::reapInactiveSubscriptions() {
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  if (room_components_started_ && topic_forwarder_) {
+    topic_forwarder_->reapExpiredSubscriptions();
   }
 }
 

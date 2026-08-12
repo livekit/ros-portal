@@ -549,7 +549,7 @@ ros_portal:
       "expected nonempty string");
 }
 
-TEST(ConfigParserTest, RejectsInvalidTopicPollingPeriod) {
+TEST(ConfigParserTest, RejectsRemovedTopicPollingPeriodField) {
   expectInvalid(
       R"(
 ros_portal:

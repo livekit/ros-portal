@@ -38,18 +38,11 @@ bool isHiddenTopic(const std::string& topic_name);
 /// @return Human-readable command output ending in a newline when non-empty.
 std::string formatTopicList(const std::vector<TopicInfo>& topics, const TopicListOptions& options);
 
-/// @brief Query the ROS graph for visible topic metadata.
-/// @param graph Node graph interface used for discovery.
-/// @param options Discovery options, including hidden-topic filtering and
-/// verbose publisher/subscriber counts.
-/// @return Topic metadata sorted by topic name.
-std::vector<TopicInfo> collectTopicInfo(const rclcpp::node_interfaces::NodeGraphInterface& graph,
-                                        const TopicListOptions& options);
-
 /// @brief Collect visible topic metadata from a shared names/types snapshot.
 /// @param topics Cached topic names and types.
 /// @param graph Node graph interface used only for verbose endpoint counts.
-/// @param options Discovery and formatting options.
+/// @param options Discovery options, including hidden-topic filtering and
+/// verbose publisher/subscriber counts.
 /// @return Topic metadata sorted by topic name.
 std::vector<TopicInfo> collectTopicInfo(const TopicNamesAndTypes& topics,
                                         const rclcpp::node_interfaces::NodeGraphInterface& graph,

@@ -538,8 +538,11 @@ void RosPortal::graphDiscoveryLoop() {
         break;
       }
       if (!graph_event_->check_and_clear()) {
-        if (topic_forwarder_) {
-          topic_forwarder_->reapExpiredSubscriptions();
+        {
+          const std::lock_guard<std::mutex> lock(room_components_mutex_);
+          if (room_components_started_ && topic_forwarder_) {
+            topic_forwarder_->reapExpiredSubscriptions();
+          }
         }
         continue;
       }
@@ -548,8 +551,11 @@ void RosPortal::graphDiscoveryLoop() {
       graph_event_->check_and_clear();
       graph_snapshot_cache_->invalidate();
       reconcileGraphTopics();
-      if (topic_forwarder_) {
-        topic_forwarder_->reapExpiredSubscriptions();
+      {
+        const std::lock_guard<std::mutex> lock(room_components_mutex_);
+        if (room_components_started_ && topic_forwarder_) {
+          topic_forwarder_->reapExpiredSubscriptions();
+        }
       }
     }
   } catch (const std::exception& error) {

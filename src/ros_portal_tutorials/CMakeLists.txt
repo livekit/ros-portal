@@ -23,11 +23,18 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
+
+  ament_add_pytest_test(
+    turtle_sim_bagger_launch_test
+    test/test_turtle_sim_bagger_launch.py
+  )
+
   ament_lint_auto_find_test_dependencies()
 endif()
 
 install(FILES README.md
   DESTINATION share/${PROJECT_NAME})
 
-ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config)
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)

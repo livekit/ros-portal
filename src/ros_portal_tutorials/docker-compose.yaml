@@ -1,0 +1,121 @@
+name: ros-portal-turtlesim-tutorial
+
+x-service-defaults: &service-defaults
+  image: livekit/ros-portal:lyrical-v0.1.0
+  init: true
+
+x-portal-command: &portal-command
+  - bash
+  - -lc
+  - |
+    set -euo pipefail
+    if ! ros2 pkg prefix turtlesim_msgs >/dev/null 2>&1; then
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        "ros-$${ROS_DISTRO}-turtlesim-msgs"
+    fi
+    sed \
+      -e '/^\$$schema:/d' \
+      -e 's#turtlesim/srv/#turtlesim_msgs/srv/#g' \
+      /config/ros_portal.yaml > /tmp/ros_portal.yaml
+    exec ros2 launch ros_portal ros_portal.launch.py \
+      config_path:=/tmp/ros_portal.yaml
+
+services:
+  turtlesim:
+    <<: *service-defaults
+    environment:
+      QT_QPA_PLATFORM: offscreen
+      ROS_DOMAIN_ID: "42"
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        if ! ros2 pkg prefix turtlesim >/dev/null 2>&1; then
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            "ros-$${ROS_DISTRO}-turtlesim"
+        fi
+        exec ros2 run turtlesim turtlesim_node -platform offscreen
+
+  turtle-sim-portal:
+    <<: *service-defaults
+    depends_on:
+      - turtlesim
+    environment:
+      LIVEKIT_TOKEN: ${LIVEKIT_TOKEN_TURTLE_SIM:?Set LIVEKIT_TOKEN_TURTLE_SIM}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://host.docker.internal:7880}
+      ROS_DOMAIN_ID: "42"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - type: bind
+        source: ./config/turtle_sim_config.yaml
+        target: /config/ros_portal.yaml
+        read_only: true
+    command: *portal-command
+
+  controller-portal:
+    <<: *service-defaults
+    environment:
+      LIVEKIT_TOKEN: ${LIVEKIT_TOKEN_CONTROLLER:?Set LIVEKIT_TOKEN_CONTROLLER}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://host.docker.internal:7880}
+      ROS_DOMAIN_ID: "100"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - type: bind
+        source: ./config/turtle_sim_controller.yaml
+        target: /config/ros_portal.yaml
+        read_only: true
+    command: *portal-command
+
+  bagger-portal:
+    <<: *service-defaults
+    environment:
+      LIVEKIT_TOKEN: ${LIVEKIT_TOKEN_BAGGER:?Set LIVEKIT_TOKEN_BAGGER}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://host.docker.internal:7880}
+      ROS_DOMAIN_ID: "200"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - type: bind
+        source: ./config/turtle_sim_bagger.yaml
+        target: /config/ros_portal.yaml
+        read_only: true
+    command: *portal-command
+
+  bagger-recorder:
+    <<: *service-defaults
+    depends_on:
+      - bagger-portal
+    environment:
+      ROOM_NAME: ${ROOM_NAME:-turtle_room}
+      ROS_DOMAIN_ID: "200"
+    volumes:
+      - type: bind
+        source: ${BAG_OUTPUT_DIR:-./bags}
+        target: /bags
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        if ! ros2 pkg prefix turtlesim_msgs >/dev/null 2>&1; then
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            "ros-$${ROS_DISTRO}-turtlesim-msgs"
+        fi
+        bag_name="$$(printf '%s' "$${ROOM_NAME}" | sed -E \
+          -e 's/[^A-Za-z0-9_.-]+/_/g' \
+          -e 's/^[._-]+//' \
+          -e 's/[._-]+$$//')"
+        if [[ -z "$${bag_name}" ]]; then
+          echo "ROOM_NAME must contain a letter or number" >&2
+          exit 1
+        fi
+        timestamp="$$(date -u +%Y%m%dT%H%M%S%NZ)"
+        exec ros2 bag record -a -o "/bags/$${bag_name}_$${timestamp}"

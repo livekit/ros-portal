@@ -3,16 +3,18 @@
 ## Turtlesim over LiveKit
 
 This tutorial builds on the [ROS turtlesim beginner tutorials](https://docs.ros.org/en/foxy/Tutorials.html).
-It runs turtlesim in one ROS graph and controls it from another, with a LiveKit
-room as their only connection.
+It runs turtlesim in one ROS graph and controls it from another. A third graph
+records the room. The LiveKit room is their only connection.
 
-You will run two ROS graphs on one machine, isolated by `ROS_DOMAIN_ID` so they
+You will run three ROS graphs on one machine, isolated by `ROS_DOMAIN_ID` so they
 share no DDS traffic:
 
 - **turtle_sim** (`ROS_DOMAIN_ID=42`): runs `turtlesim_node` and a ROS Portal node with
   `identity:=turtle_sim`.
 - **controller** (`ROS_DOMAIN_ID=100`): runs a ROS Portal node with `identity:=controller`
   and drives the turtle.
+- **bagger** (`ROS_DOMAIN_ID=200`): runs a ROS Portal node with `identity:=bagger`
+  and records the room with rosbag2.
 
 Because the domains differ, the only path between them is the LiveKit room. Along
 the way you'll use all three bridging mechanisms: **CLI forwarding**,
@@ -36,14 +38,21 @@ flowchart LR
         B2["ROS Portal · controller"]
     end
 
+    subgraph D200["Domain 200"]
+        direction TB
+        BAG["rosbag2 recorder"]
+        B3["ROS Portal · bagger"]
+    end
+
     D42 <--> LK
     LK <--> D100
+    LK --> D200
 ```
 
 ### Prerequisites
 
-- `turtlesim` and `teleop_twist_keyboard` ROS 2 packages installed:
-  `sudo apt install ros-$ROS_DISTRO-turtlesim ros-$ROS_DISTRO-teleop-twist-keyboard`.
+- Install the `turtlesim`, `teleop_twist_keyboard`, and `rosbag2` ROS 2 packages:
+  `sudo apt install ros-$ROS_DISTRO-turtlesim ros-$ROS_DISTRO-teleop-twist-keyboard ros-$ROS_DISTRO-rosbag2`.
 - `ros_portal_tutorials` built with its dependencies:
   `colcon build --packages-up-to ros_portal_tutorials`.
 - A running LiveKit server. See [Running](running.md#livekit-server) for instructions.
@@ -52,12 +61,16 @@ flowchart LR
 > **Reminder:** In every new shell, source your workspace with
 > `source install/setup.bash`. In the devcontainer, use `sros`.
 
+You can also start the complete tutorial with Docker Compose. See the
+[`ros_portal_tutorials` README](../src/ros_portal_tutorials/README.md#docker-compose)
+for the token and startup commands.
+
 ---
 
-### 1. Set up turtlesim across two domains
+### 1. Set up turtlesim across three domains
 
 The `ros_portal_tutorials` package
-([src/ros_portal_tutorials](../src/ros_portal_tutorials)) ships both configs, so
+([src/ros_portal_tutorials](../src/ros_portal_tutorials)) ships all three configs, so
 they are ready to use after a build — no editing required. This section
 walks through what the configs contain. Credentials and room name are **not** in
 config (see [Configuration](configuration.md)); only routes are.
@@ -110,6 +123,23 @@ ros_portal:
       msg_type: "turtlesim/srv/Spawn"
 ```
 
+**`turtle_sim_bagger.yaml`** accepts every topic that participants publish into
+the room. The bagger cannot publish its local topics back because the route is
+inbound-only:
+
+```yaml
+ros_portal:
+  version: "0.0.1"
+  ros_threads: 4
+
+  topics:
+    - topic: ".*"
+      direction: "in"
+```
+
+The wildcard does not change the export policy of another participant. The
+bagger records only the topics that the turtle_sim and controller configs export.
+
 **Terminal A — start turtlesim** on the turtle_sim domain:
 
 ```bash
@@ -144,7 +174,18 @@ ros2 launch ros_portal ros_portal_local.launch.py \
   identity:=controller room_name:=turtle_room
 ```
 
-Both ROS Portal nodes use `room_name:=turtle_room` to join the same room.
+**Terminal D — start the bagger** on a third domain:
+
+```bash
+export ROS_DOMAIN_ID=200
+ros2 launch ros_portal_tutorials turtle_sim_bagger.launch.py \
+  room_name:=turtle_room bag_output_dir:="$PWD/bags"
+```
+
+The launch file starts ROS Portal and `ros2 bag record -a`. It writes the bag
+to `bags/turtle_room_<UTC timestamp>` and discovers topics that appear later.
+
+All three ROS Portal nodes use `room_name:=turtle_room` to join the same room.
 Override `livekit_url:` or `token:` for your server as needed; see
 [Running](running.md).
 
@@ -341,6 +382,27 @@ over LiveKit!
 
 ---
 
+### 5. Inspect the remote bag
+
+Stop Terminal D with `Ctrl+C`. This action lets rosbag2 write the final
+`metadata.yaml` file.
+
+Terminal D prints the full recording path when it starts. Pass that path to
+`ros2 bag info`:
+
+```bash
+ros2 bag info /path/printed/by/the/bagger
+```
+
+The topic list includes `/turtle1/pose` and `/turtle1/cmd_vel`. Each topic has
+messages after you drive the turtle.
+
+The recording also contains local bagger-domain topics, such as `/diagnostics`.
+The bagger does not record ROS service calls because ROS Portal transports them
+through LiveKit RPC.
+
+---
+
 ### Recap
 
 | ROS 2 tutorial step | ROS Portal mechanism |
@@ -352,6 +414,7 @@ over LiveKit!
 | `ros2 topic pub` | config topic route, or CLI forwarding (`ros2_topic_pub`) |
 | `ros2 topic echo` | config topic route (`topics::topic::direction`) |
 | `teleop_twist_keyboard` | config topic route (`topics::topic::direction`) |
+| `ros2 bag record` | inbound wildcard route on the bagger participant |
 
 **CLI forwarding** is best for ad-hoc, one-off introspection and calls against any
 participant. **Config routes** are best for the topics and services that are part

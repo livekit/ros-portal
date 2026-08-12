@@ -101,10 +101,11 @@ Complete configs in this repository:
 
 - [`all_topics.yaml`](../src/ros_portal/config/all_topics.yaml) — mirrors the builtin default applied when no `config_path` is provided; forwards all topics bidirectionally.
 - [`ros_portal.yaml`](../src/ros_portal/config/ros_portal.yaml) — example package config used for development and integration testing.
-- [`turtle_sim_config.yaml`](../src/ros_portal_tutorials/config/turtle_sim_config.yaml)
+- [`turtle_sim_config.yaml`](../src/ros_portal_tutorials/config/turtle_sim_config.yaml),
+  [`turtle_sim_controller.yaml`](../src/ros_portal_tutorials/config/turtle_sim_controller.yaml),
   and
-  [`turtle_sim_controller.yaml`](../src/ros_portal_tutorials/config/turtle_sim_controller.yaml) —
-  paired turtlesim tutorial configs (see [Tutorials](./tutorials.md)).
+  [`turtle_sim_bagger.yaml`](../src/ros_portal_tutorials/config/turtle_sim_bagger.yaml) —
+  turtlesim tutorial configs (see [Tutorials](./tutorials.md)).
 
 Full robot stacks with ROS Portal configs:
 

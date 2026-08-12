@@ -567,6 +567,7 @@ void RosPortal::graphDiscoveryLoop() {
       RCLCPP_ERROR(this->get_logger(), "ROS graph discovery stopped after an unknown error");
     }
   }
+  diagnostic_state_.graph_discovery_active.store(false, std::memory_order_relaxed);
 }
 
 std::chrono::nanoseconds RosPortal::nextGraphWait() const {

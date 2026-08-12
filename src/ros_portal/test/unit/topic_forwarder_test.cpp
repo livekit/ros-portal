@@ -187,6 +187,21 @@ TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears
   EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/late", conflicting_schema), "std_msgs/msg/String");
 }
 
+TEST_F(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNull) {
+  auto options = makeOptions();
+  options.topic_snapshot = []() { return TopicGraphSnapshot{}; };
+  const TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto subscription = node_->create_subscription<std_msgs::msg::String>(
+      "/remote/null_snapshot", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
+  ASSERT_NE(subscription, nullptr);
+  ASSERT_TRUE(spinUntil([&]() {
+    return node_->get_topic_names_and_types().count("/remote/null_snapshot") > 0U;
+  }));
+
+  EXPECT_EQ(forwarder.resolveInboundRosTopicType("/remote/null_snapshot", std::nullopt), "std_msgs/msg/String");
+}
+
 TEST_F(TopicForwarderTest, SubscriptionIsRemovedAfterPublisherGracePeriod) {
   auto options = makeOptions();
   options.inactive_subscription_grace = 0ms;

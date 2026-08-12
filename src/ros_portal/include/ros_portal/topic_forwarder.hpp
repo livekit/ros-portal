@@ -194,6 +194,7 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
   FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
+  FRIEND_TEST(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNull);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure);
   FRIEND_TEST(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho);
 #endif

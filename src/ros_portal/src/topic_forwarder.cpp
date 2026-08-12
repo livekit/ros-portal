@@ -711,7 +711,8 @@ std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(
   TopicGraphSnapshot topics;
   if (options_.topic_snapshot) {
     topics = options_.topic_snapshot();
-  } else {
+  }
+  if (!topics) {
     const auto node = node_.lock();
     if (!node) {
       return std::nullopt;

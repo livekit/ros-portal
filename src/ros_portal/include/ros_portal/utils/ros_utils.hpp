@@ -93,7 +93,6 @@ void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rcl
 /// installed `config/all_topics.yaml` example (verified by unit test).
 inline constexpr const char* kDefaultConfigYaml = R"(ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 500
 
   topics:
     - topic: ".*"

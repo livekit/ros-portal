@@ -122,7 +122,6 @@ TEST(RosUtilsTest, DefaultConfigForwardsAllTopicsBidirectionally) {
   const auto config = parseRosPortalConfig(std::filesystem::path{}, rclcpp::get_logger("ros_utils_test"));
 
   ASSERT_TRUE(config.has_value());
-  EXPECT_EQ(config->topic_polling_period_ms, 500);
   ASSERT_EQ(config->topics.size(), 1u);
   EXPECT_EQ(config->topics.front().topic, ".*");
   EXPECT_EQ(config->topics.front().direction, ros_portal_config::Direction::Bidirectional);
@@ -140,7 +139,6 @@ TEST(RosUtilsTest, BuiltinDefaultConfigMatchesInstalledAllTopicsYaml) {
   ASSERT_TRUE(from_file.has_value());
 
   EXPECT_EQ(builtin->version, from_file->version);
-  EXPECT_EQ(builtin->topic_polling_period_ms, from_file->topic_polling_period_ms);
   EXPECT_EQ(builtin->ros_threads, from_file->ros_threads);
   ASSERT_EQ(builtin->services.size(), from_file->services.size());
   ASSERT_EQ(builtin->topics.size(), from_file->topics.size());

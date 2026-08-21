@@ -92,7 +92,9 @@ RUN apt-get update && apt-get install -y \
 
 # Humble's Ubuntu 22.04 runtime is older than the generic LiveKit SDK release
 # artifacts. Install the toolchain needed for the colcon build to compile the
-# pinned SDK vcstool checkout in that image.
+# pinned SDK vcstool checkout in that image. Noble (24.04) already ships a
+# recent enough apt cmake; only Jammy needs the pip upgrade (PEP 668 blocks pip
+# on Noble anyway).
 RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \
@@ -113,7 +115,10 @@ RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
         llvm-dev \
         protobuf-compiler \
         xz-utils && \
-      python3 -m pip install --no-cache-dir cmake==3.31.10 && \
+      . /etc/os-release && \
+      if [ "${VERSION_CODENAME}" = "jammy" ]; then \
+        python3 -m pip install --no-cache-dir cmake==3.31.10; \
+      fi && \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --profile minimal --default-toolchain stable && \
        rm -rf /var/lib/apt/lists/*; \

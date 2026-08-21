@@ -76,7 +76,11 @@ jobs:
   clang-tidy:
     name: clang-tidy
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
+    env:
+      # TODO(revert): drop alan/feature-span-dt override after SDK span API ships.
+      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ (github.head_ref == 'alan/feature-span-dt' || github.ref_name == 'alan/feature-span-dt') && 'true' || 'false' }}
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
 
     steps:
       - name: Checkout
@@ -119,6 +123,28 @@ jobs:
             --ignore-src -r -y --rosdistro jazzy \
             --skip-keys ament_cmake_clang_tidy
 
+      - name: Install LiveKit SDK source toolchain
+        if: env.BUILD_LIVEKIT_SDK_FROM_SOURCE == 'true'
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y \
+            libabsl-dev \
+            libasound2-dev \
+            libdecor-0-dev \
+            libdrm-dev \
+            libglib2.0-dev \
+            libprotobuf-dev \
+            libunwind-dev \
+            libusb-1.0-0-dev \
+            libva-dev \
+            libwayland-dev \
+            protobuf-compiler \
+            xz-utils
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+
       - name: Install shared clang-tidy configuration
         run: ./src/externals/cpp-tools/install.sh clang-tidy --repo-root "$GITHUB_WORKSPACE" --force
 
@@ -144,9 +170,16 @@ jobs:
           set -eo pipefail
           source /opt/ros/jazzy/setup.bash
           set -u
+          cmake_args=(
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DBUILD_TESTING=OFF
+          )
+          if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then
+            cmake_args+=(-DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON)
+          fi
           colcon build \
             --packages-up-to ros_portal \
-            --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTING=OFF
+            --cmake-args "${cmake_args[@]}"
           jq -s 'add' build/*/compile_commands.json > build/compile_commands.json
 
       - name: Run clang-tidy

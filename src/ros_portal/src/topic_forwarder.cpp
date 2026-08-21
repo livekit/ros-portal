@@ -402,7 +402,8 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
       }
     }
 
-    auto frame = utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height), rgba, rgba_size);
+    auto frame =
+        utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height), rgba, rgba_size);
     if (!frame) {
       RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
                            "Skipping image on topic '%s' because RGBA buffer size %zu does "

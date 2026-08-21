@@ -2,7 +2,7 @@ repositories:
   client-sdk-cpp:
     type: git
     url: https://github.com/livekit/client-sdk-cpp.git
-    version: d8a3a5e078f8ab31818495de9993197342fd7544  # other_sdks
+    version: 30b147c3aa5b34e4b8fc6949db3e6ce6f827100c  # alan/feature-span-dt
   cpp-tools:
     type: git
     url: https://github.com/livekit/cpp-tools.git

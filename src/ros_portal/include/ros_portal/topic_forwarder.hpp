@@ -38,6 +38,7 @@
 #include <rclcpp/qos.hpp>
 #include <rclcpp/time.hpp>
 #include <regex>
+#include <sensor_msgs/msg/image.hpp>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -297,6 +298,16 @@ private:
   /// @param state Per-topic state that stores the lazily created writer.
   /// @return true if a valid writer is available on @p state.
   bool ensureWriterLocked(const std::string& topic_name, const std::string& topic_type, DataTopicState& state);
+
+  /// @brief Ensure the outbound LiveKit video-track sink for @p state exists,
+  /// creating it lazily on first use. Must be called with @ref
+  /// outbound_topics_mutex_ held.
+  /// @param topic_name ROS topic name used for the LiveKit track.
+  /// @param image First image sample used to publish the track dimensions.
+  /// @param state Per-topic state that stores the lazily created sink.
+  /// @return true if a valid sink is available on @p state.
+  bool ensureVideoSinkLocked(const std::string& topic_name, const sensor_msgs::msg::Image& image,
+                             ImageTopicState& state);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
   void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);

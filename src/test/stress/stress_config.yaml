@@ -1,0 +1,23 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+ros_portal:
+  version: "0.0.1"
+  topic_polling_period_ms: 100
+
+  services:
+    - service: "/stress/echo"
+      direction: "out"
+      participant: "ros-portal-stress-observer"
+      msg_type: "std_srvs/srv/Trigger"
+
+  topics:
+    - topic: "/stress/telemetry"
+      direction: "out"
+    - topic: "/stress/camera/image_raw"
+      direction: "out"
+      video_options:
+        bitrate_kbps: 3500
+        codec: "h264"

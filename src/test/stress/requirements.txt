@@ -1,0 +1,3 @@
+# The LiveKit-only observer uses the Python RTC SDK. ROS Python packages are
+# supplied by the sourced ROS installation, not by pip.
+livekit

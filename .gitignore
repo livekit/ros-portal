@@ -4,6 +4,7 @@ build/
 build-*/
 package-deb/
 artifacts/
+/.venv-stress/
 docker/runtime/*.deb
 install/
 install-*/

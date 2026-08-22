@@ -104,6 +104,31 @@ _source_test_tokens_if_needed()
     fi
 }
 
+# Run the developer stress harness. Assumes ros_portal has already been built.
+test_stress()
+{
+    cd "\${WS}" && _source_ros_env && _source_ws_overlay
+    if ! ros2 pkg prefix ros_portal >/dev/null 2>&1; then
+        echo "test_stress: ros_portal is not built; run cbps ros_portal first" >&2
+        return 1
+    fi
+    _source_test_tokens_if_needed
+    if [ ! -x "\${WS}/.venv-stress/bin/python" ]; then
+        echo "test_stress: creating .venv-stress..."
+        if ! python3 -m venv --system-site-packages "\${WS}/.venv-stress"; then
+            if ! command -v apt-get >/dev/null 2>&1 || [ "\$(id -u)" -ne 0 ]; then
+                echo "test_stress: Python venv support is required; install python3-venv and retry" >&2
+                return 1
+            fi
+            echo "test_stress: installing Python venv support..."
+            apt-get update && apt-get install -y python3-venv
+            python3 -m venv --system-site-packages "\${WS}/.venv-stress"
+        fi
+    fi
+    "\${WS}/.venv-stress/bin/python" -m pip install --quiet -r "\${WS}/src/test/stress/requirements.txt"
+    "\${WS}/.venv-stress/bin/python" "\${WS}/src/test/stress/run.py" "\$@"
+}
+
 # Run unit tests
 test_unit()
 {

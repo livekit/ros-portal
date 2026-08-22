@@ -2,6 +2,9 @@
 
 There are unit and integration tests which are run in CI. For more manual integration testing, see [`ros_portal_tutorials`](../src/ros_portal_tutorials/README.md), which drives ROS Portal against turtlesim. For a full robot in simulation and on hardware, see [`waver_ros`](https://github.com/livekit-examples/waver_ros).
 
+For a developer-run, single-command ROS Portal load and soak harness, see
+[`stress_testing.md`](stress_testing.md).
+
 ## Unit Tests
 
 ```bash

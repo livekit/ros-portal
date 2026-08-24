@@ -442,7 +442,11 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
   }
 
   try {
-    const auto topics = node_interfaces_.topic_snapshot();
+    // List RPCs promise the graph state at request time. Discovery and topic
+    // publishing can use a shared snapshot, but a cached snapshot may still
+    // represent the generation before a just-observed graph event.
+    const auto topics =
+        std::make_shared<const TopicNamesAndTypes>(node_interfaces_.node_graph->get_topic_names_and_types());
     const auto output =
         formatTopicList(collectTopicInfo(*topics, *node_interfaces_.node_graph, options.value()), options.value());
     return cliResponseToJson(true, "", output);
@@ -476,7 +480,10 @@ std::string Manager::handleServiceListRpc(const std::string& payload) const {
   }
 
   try {
-    const auto services = node_interfaces_.service_snapshot();
+    // See handleTopicListRpc: list RPCs must not return a stale cached graph
+    // snapshot while the discovery worker is processing a graph event.
+    const auto services =
+        std::make_shared<const ServiceNamesAndTypes>(node_interfaces_.node_graph->get_service_names_and_types());
     const auto output = formatServiceList(collectServiceInfo(*services, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {

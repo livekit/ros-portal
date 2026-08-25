@@ -221,6 +221,28 @@ TEST_F(TopicForwarderTest, SubscriptionIsRemovedAfterPublisherGracePeriod) {
   ASSERT_TRUE(spinUntil([&]() { return node_->count_subscribers("/allowed/ephemeral") == 0U; }));
 }
 
+TEST_F(TopicForwarderTest, SubscriptionIsReestablishedWhenPublisherReturnsAfterGracePeriod) {
+  auto options = makeOptions();
+  options.inactive_subscription_grace = 40ms;
+  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/returning", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/returning", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() == 1U; }));
+
+  publisher.reset();
+  ASSERT_TRUE(waitForPublishers("/allowed/returning", 0U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return forwarder.reapExpiredSubscriptions(); }, 500ms));
+  ASSERT_TRUE(spinUntil([&]() { return node_->count_subscribers("/allowed/returning") == 0U; }));
+
+  publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/returning", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/returning", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() == 1U; }));
+}
+
 TEST_F(TopicForwarderTest, ExpiryDeadlineIsOnlyReportedWhilePublishersAreAbsent) {
   auto options = makeOptions();
   options.inactive_subscription_grace = 10s;

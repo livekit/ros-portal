@@ -502,8 +502,6 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   status.add("config_path", config_path);
   status.add("graph_discovery_active", graph_discovery_active ? "true" : "false");
   status.add("local_identity", local_identity);
-  status.add("rpc_register_failures", diagnostic_state_.rpc_register_failures.load(std::memory_order_relaxed));
-  status.add("rpc_perform_failures", diagnostic_state_.rpc_perform_failures.load(std::memory_order_relaxed));
 
   if (!initialized) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal is not initialized");
@@ -902,12 +900,10 @@ bool RosPortal::hasParticipant(const std::string& participant_id) const {
 std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_id, const std::string& method,
                                                  const std::string& payload, std::uint8_t timeout_sec) {
   if (!roomOperationsEnabled()) {
-    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     return std::nullopt;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
-    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(),
                  "LiveKit RPC '%s' to participant '%s' failed: local participant "
                  "is unavailable",
@@ -918,7 +914,6 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
   try {
     return local_participant->performRpc(participant_id, method, payload, static_cast<double>(timeout_sec));
   } catch (const livekit::RpcError& error) {
-    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s", method.c_str(),
                  participant_id.c_str(), error.code(), error.message().c_str());
     return std::nullopt;
@@ -927,12 +922,10 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
 
 bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
   if (!roomOperationsEnabled()) {
-    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
-    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_WARN(this->get_logger(),
                 "Cannot register RPC method '%s': LiveKit local participant is "
                 "unavailable",
@@ -950,7 +943,6 @@ bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler)
                                            return handler(data.payload);
                                          });
   } catch (const livekit::RpcError& error) {
-    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' registration failed: code=%u message=%s", method.c_str(),
                  error.code(), error.message().c_str());
     return false;

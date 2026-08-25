@@ -12,6 +12,11 @@ stack. ROS Portal currently exposes seven diagnostic tasks:
 - `service_forwarder` — published when service forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
 
+Every task publishes on the `/diagnostics` topic with hardware ID `ros_portal`,
+and each task name is the section heading it is documented under below. Per-task
+sections therefore list only what differs between them: the source of the data,
+the status levels, and the key/value fields.
+
 ROS Portal publishes raw `diagnostic_msgs/msg/DiagnosticArray` messages. Grouped
 `/diagnostics_agg` output is provided by a separate `diagnostic_aggregator`
 configuration, not by ROS Portal node itself.
@@ -33,12 +38,7 @@ time (or read once from the environment at startup) and never change while the
 process runs, so this task always reports `OK` and exists purely to surface
 version information at the top of the diagnostics tree.
 
-| Property | Value |
-|---|---|
-| Task name | `build_info` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | Compile-time constants baked in by CMake, plus the `ROS_DISTRO` environment variable |
+**Source:** Compile-time constants baked in by CMake, plus the `ROS_DISTRO` environment variable
 
 ### Status Levels
 
@@ -67,16 +67,11 @@ directly instead of going through diagnostics.
 ## `ros_portal_status`
 
 Reports the node's initialization lifecycle, effective
-configuration, component health, shared LiveKit RPC failures, and graph
-discovery health. The task exists as soon as the node is constructed, so configuration and
-credential failures remain observable.
+configuration, component health, and graph discovery health. The task exists as
+soon as the node is constructed, so configuration and credential failures remain
+observable.
 
-| Property | Value |
-|---|---|
-| Task name | `ros_portal_status` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | Node lifecycle, effective configuration, component ownership, shared RPC helpers, and the graph discovery worker |
+**Source:** Node lifecycle, effective configuration, component ownership, and the graph discovery worker
 
 ### Status Levels
 
@@ -96,20 +91,13 @@ credential failures remain observable.
 | `config_path` | Effective configuration file path, or `unset`. |
 | `graph_discovery_active` | Whether the graph-event discovery worker is running. |
 | `local_identity` | Connected local participant identity, or `default`. |
-| `rpc_register_failures` | Cumulative failures from the shared RPC registration helper. |
-| `rpc_perform_failures` | Cumulative failures from the shared outbound RPC helper. |
 
 ## `connection_health`
 
 Reports whether ROS Portal is connected to its LiveKit room and includes a
 small RTC transport and traffic summary.
 
-| Property | Value |
-|---|---|
-| Task name | `connection_health` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | LiveKit room connection state, participant updates, and `Room::getStats()` |
+**Source:** LiveKit room connection state, participant updates, and `Room::getStats()`
 
 ### Status Levels
 
@@ -190,15 +178,11 @@ rtc.data_channels.total=1
 
 ## `topic_forwarder`
 
-Reports topic inventory, lazy LiveKit writer/sink availability, inbound reader
-liveness, and cumulative forwarding failures.
+Reports outbound and inbound track inventory and cumulative forwarding failures,
+and raises an error when an outbound LiveKit writer is still pending or an
+inbound reader thread has stopped.
 
-| Property | Value |
-|---|---|
-| Task name | `topic_forwarder` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack readers, and forwarding outcomes |
+**Source:** Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack readers, and forwarding outcomes
 
 ### Status Levels
 
@@ -212,48 +196,33 @@ liveness, and cumulative forwarding failures.
 
 | Key | Value |
 |---|---|
-| `outbound.data_topics` | Number of discovered outbound data topics. |
-| `outbound.image_topics` | Number of discovered outbound image topics. |
+| `outbound.data_tracks` | Number of discovered outbound data topics. |
+| `outbound.video_tracks` | Number of discovered outbound image topics. |
 | `outbound.subscriptions` | Number of active outbound ROS subscriptions. |
-| `outbound.data_tracks_pending_writer` | Data topics whose lazy LiveKit writer is unavailable. |
-| `outbound.image_tracks_pending_sink` | Image topics whose lazy LiveKit video sink is unavailable. |
-| `outbound.push_failures` | Cumulative LiveKit data-frame push failures. |
-| `outbound.json_conversion_failures` | Cumulative outbound ROS-to-JSON conversion failures. |
-| `outbound.subscription_create_failures` | Cumulative ROS subscription creation failures. |
-| `inbound.active_tracks` | Number of inbound LiveKit data tracks being republished. |
-| `inbound.reader_threads_alive` | Number of active inbound track reader threads still running. |
-| `inbound.tracks_rejected_no_type` | Cumulative inbound tracks rejected because no ROS type could be resolved. |
-| `inbound.tracks_rejected_not_allowed` | Cumulative inbound tracks rejected by topic patterns. |
-| `inbound.tracks_rejected_name_resolution_failed` | Cumulative inbound tracks rejected because a ROS topic name could not be produced. |
-| `inbound.publish_failures` | Cumulative failures publishing inbound frames on ROS. |
+| `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. |
+| `inbound.data_tracks` | Number of inbound LiveKit data tracks being republished. |
+| `inbound.failures` | Cumulative inbound failures, aggregating tracks rejected because no ROS type could be resolved, because they matched no topic pattern, or because a ROS topic name could not be produced, plus failures publishing inbound frames on ROS and inbound schema validation rejections. |
 | `inbound.json_decode_failures` | Cumulative invalid inbound JSON frames. |
 | `inbound.empty_payload_drops` | Cumulative empty inbound CDR payloads. |
 | `inbound.terminal_errors` | Cumulative inbound streams that ended with a terminal error. |
 | `inbound.last_terminal_error` | Most recent terminal error text, or `none`. |
-| `inbound_schemas_incorrect` | Cumulative count of inbound schema validation failures. |
-| `schema.definitions_active` | Number of outbound schema definitions currently cached or being defined. |
-| `schema.define_failures` | Cumulative schema definitions rejected by the LiveKit SDK or an exception. |
-| `schema.render_failures` | Cumulative local ROS or JSON schema render failures. |
-| `schema.encoding_mismatch_skips` | Cumulative explicit `ros2idl` requests skipped because the local definition rendered with another encoding. |
-| `schema.inbound_rejected_no_encoding` | Cumulative inbound tracks missing supported frame/schema encoding metadata. |
-| `schema.inbound_rejected_name_mismatch` | Cumulative inbound tracks whose advertised schema name differs from the resolved local ROS type. |
-| `schema.inbound_rejected_remote_unavailable` | Cumulative inbound tracks whose remote schema definition could not be retrieved. |
-| `schema.inbound_rejected_definition_differs` | Cumulative inbound tracks whose local and remote schema definitions or encodings differ. |
 
-`inbound_schemas_incorrect` is retained as the aggregate of the four
-`schema.inbound_rejected_*` counters.
+`outbound.failures` and `inbound.failures` are deliberately coarse. Every
+increment is logged individually with its specific cause, including the track,
+topic, and participant involved, so the log is the place to identify which
+failure occurred. Schema rejections additionally log both the remote and local
+schema SHA-256 hashes.
+
+The counts of outbound tracks awaiting a LiveKit writer or video sink and of
+running inbound reader threads are not published as fields. They only raise the
+summary to the `ERROR` level described above.
 
 ## `latched_topic_forwarder`
 
-Reports latched-topic RPC registration, topic and message inventory, per-peer
-delivery state, worker outcomes, and inbound RPC failures.
+Reports latched-topic RPC registration, per-peer delivery state, and cumulative
+outbound and inbound failures.
 
-| Property | Value |
-|---|---|
-| Task name | `latched_topic_forwarder` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | Latched ROS subscriptions and publishers, stored outbound state, participant delivery bookkeeping, and RPC outcomes |
+**Source:** Latched ROS subscriptions and publishers, stored outbound state, participant delivery bookkeeping, and RPC outcomes
 
 ### Status Levels
 
@@ -268,44 +237,49 @@ delivery state, worker outcomes, and inbound RPC failures.
 | Key | Value |
 |---|---|
 | `rpc_registered` | Whether the inbound latched-state RPC handler is registered. This is `false` when no inbound latched topics are configured because no handler is required. |
-| `outbound.topics_configured` | Number of configured outbound latched topics. |
-| `outbound.topics_subscribed` | Number of discovered outbound latched topics with ROS subscriptions. |
-| `outbound.messages_stored` | Number of distinct outbound messages currently retained. |
-| `outbound.max_stored_messages` | Configured retained-message capacity. |
-| `outbound.state_version` | Monotonic version incremented for each distinct stored message. |
+| `outbound.failures` | Cumulative outbound failures, aggregating messages dropped for exceeding the LiveKit RPC payload limit and failed outbound latched-state RPC calls. |
 | `peers.total` | Number of remote participants in delivery bookkeeping. |
-| `peers.up_to_date` | Peers that acknowledged the current state version. |
 | `peers.behind` | Peers that have not acknowledged the current version and remain eligible for retries. |
 | `peers.given_up` | Peers that reached the consecutive-failure cap. |
-| `outbound.oversize_drops` | Cumulative outbound messages exceeding the LiveKit RPC payload limit. |
-| `outbound.push_failures` | Cumulative failed outbound latched-state RPC calls. |
-| `time_since_last_successful_push_sec` | Seconds since the latest successful outbound RPC, or `unset` before the first success. |
-| `inbound.topics_configured` | Number of configured inbound latched topics. |
-| `inbound.publishers_created` | Number of lazily created inbound TRANSIENT_LOCAL ROS publishers. |
-| `inbound.rpc_requests` | Cumulative inbound latched-state RPC requests. |
-| `inbound.rejected_unconfigured_topic` | Requests rejected because the topic was not configured inbound. |
-| `inbound.malformed_payloads` | Requests whose JSON envelope or required fields were malformed. |
-| `inbound.base64_decode_failures` | Requests whose serialized message payload was not valid base64. |
-| `inbound.publish_failures` | Requests that could not create or use the required ROS publisher. |
+| `inbound.failures` | Cumulative inbound latched-state request failures, aggregating malformed payloads, requests for topics not configured inbound, payloads that were not valid base64, and requests that could not create or use the required ROS publisher. |
+
+`outbound.failures` and `inbound.failures` are deliberately coarse. Every
+increment is logged individually with its specific cause, including the topic or
+participant involved, so the log is the place to identify which failure occurred.
+
+### Inventory Logging
+
+Latched-topic inventory is logged rather than published as diagnostic fields.
+On startup the forwarder logs the number of configured outbound topics, the
+number of configured inbound topics, and the retained-message capacity. Each
+subsequent item is logged as it appears:
+
+| Event | Log |
+|---|---|
+| An outbound latched topic is discovered and subscribed | `Subscribed to latched topic '<topic>' [<type>] (RELIABLE, TRANSIENT_LOCAL)` |
+| A distinct outbound message is retained | `Stored latched message for '<topic>' (<n> retained, version <v>)` |
+| An inbound TRANSIENT_LOCAL publisher is created | `Created TRANSIENT_LOCAL publisher for latched '<topic>' [<type>]` |
+| An inbound request is republished on ROS | `Republished latched '<topic>' [<type>] (<n> bytes)` |
+
+Because every inbound request either republishes or is rejected, and both are
+logged, the log also accounts for the total inbound request count.
+
+Undiscovered outbound topics and full retained-message storage are not published
+as fields. They only raise the summary to `WARN` as described above.
 
 ## `service_forwarder`
 
 Reports configured route availability and cumulative local-to-remote service
 forwarding outcomes.
 
-| Property | Value |
-|---|---|
-| Task name | `service_forwarder` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | Configured routes, runtime type support, LiveKit RPC outcomes, and local ROS response handling |
+**Source:** Configured routes, runtime type support, LiveKit RPC outcomes, and local ROS response handling
 
 ### Status Levels
 
 | Level | Message | Meaning |
 |---|---|---|
 | `OK` | `Service forwarding healthy` | Every configured route was created and no request failure has been observed. |
-| `WARN` | `Service forwarding failures detected` | A request failed, a handler threw, or a local response send timed out. |
+| `WARN` | `Service forwarding failures detected` | A request failed, a handler threw, or a response-path failure occurred. |
 | `ERROR` | `One or more configured service routes are unavailable` | The number of created services does not match the configured route count. |
 
 ### Key/Value Fields
@@ -314,33 +288,32 @@ forwarding outcomes.
 |---|---|
 | `routes_configured` | Number of configured outgoing service routes. |
 | `services_created` | Number of local forwarded ROS services successfully created. |
-| `routes_skipped_invalid_config` | Routes skipped because service, type, or participant was empty. |
-| `routes_skipped_no_type_support` | Routes skipped because runtime service type support could not be loaded. |
+| `route_failures` | Cumulative route setup failures, aggregating routes skipped because service, type, or participant was empty, and routes skipped because runtime service type support could not be loaded. |
 | `requests_forwarded` | Cumulative local requests handled by the forwarder. |
 | `requests_succeeded` | Cumulative requests whose remote response populated the local response. |
-| `requests_failed` | Cumulative forwarding failures, including handler exceptions. |
-| `failures.participant_not_found` | Requests whose target LiveKit participant was absent. |
-| `failures.rpc_transport` | Requests whose LiveKit RPC failed. |
-| `failures.malformed_response` | Requests whose RPC response was malformed. |
-| `failures.remote_error` | Requests for which the remote service returned an error. |
-| `failures.request_serialization` | Requests that could not be serialized for RPC. |
-| `failures.response_deserialization` | Remote responses that could not populate the local ROS response. |
+| `requests_failed` | Total cumulative forwarding failures, for any reason. |
+| `request_failures` | Cumulative failures on the request path, aggregating an absent target LiveKit participant, requests that could not be serialized for RPC, and failed LiveKit RPCs. |
+| `response_failures` | Cumulative failures on the response path, aggregating malformed RPC responses, errors returned by the remote service, remote responses that could not populate the local ROS response, and timeouts sending the response to the local ROS client. |
 | `handler_exceptions` | Exceptions caught while handling forwarded requests. |
-| `response_send_timeouts` | Timeouts sending a response to the local ROS client. |
-| `last_failure_service` | Service name for the most recent failure, or `none`. |
 | `last_failure_reason` | Stable category for the most recent failure, or `none`. |
+
+`route_failures`, `request_failures`, and `response_failures` are deliberately
+coarse. Every increment is logged individually with its specific cause, including
+the service, message type, and participant involved, so the log is the place to
+identify which failure occurred. `last_failure_reason` additionally names the
+category of the most recent one.
+
+`requests_failed` is the total across all causes and is not the sum of
+`request_failures` and `response_failures`. It also counts requests rejected
+because the room was not connected, and handler exceptions, while excluding the
+response-send timeouts that `response_failures` includes.
 
 ## `cli_manager`
 
 Reports whether ROS Portal's ROS CLI services and matching LiveKit RPC handlers
-are registered, plus cache pressure and inbound/outbound RPC outcomes.
+are registered, plus cache pressure and cumulative CLI RPC failures.
 
-| Property | Value |
-|---|---|
-| Task name | `cli_manager` |
-| Topic | `/diagnostics` |
-| Hardware ID | `ros_portal` |
-| Source | CLI ROS service and LiveKit RPC registration, publisher/client caches, and remote RPC outcomes |
+**Source:** CLI ROS service and LiveKit RPC registration, publisher/client caches, and remote RPC outcomes
 
 ### Status Levels
 
@@ -366,32 +339,38 @@ Each CLI command pair is reported under its RPC method name:
 
 | Key | Value |
 |---|---|
-| `topic_pub_cache_size` | Current number of cached generic topic publishers. |
-| `topic_pub_cache_capacity` | Maximum number of cached generic topic publishers. |
 | `topic_pub_cache_full_rejections` | Number of topic publish requests rejected because the cache was full. |
-| `service_call_cache_size` | Current number of cached generic service clients. |
-| `service_call_cache_capacity` | Maximum number of cached generic service clients. |
 | `service_call_cache_full_rejections` | Number of service call requests rejected because the cache was full. |
+
+Cache size and capacity are not published as fields. Each rejection logs the
+cache utilization at the moment it filled, as
+`Rejecting publish to '<topic>': generic publisher cache is full (<size>/<capacity>)`
+and `Rejecting service call to '<service>': service client cache is full (<size>/<capacity>)`.
 
 ### RPC Outcome Fields
 
 | Key | Value |
 |---|---|
-| `remote_calls_total` | Cumulative local requests across all five remote CLI methods. |
-| `remote_participant_not_found` | Cumulative remote RPC failures because the target participant was absent. Informational; does not change the diagnostic level by itself. |
-| `remote_transport_failures` | Cumulative remote RPC transport failures. Informational; does not change the diagnostic level by itself. |
-| `remote_malformed_responses` | Cumulative remote RPC responses that could not be parsed. Informational; does not change the diagnostic level by itself. |
-| `<rpc_method>.rpc_invocations` | Cumulative requests for the named method, including locally rejected requests. |
-| `<rpc_method>.rpc_failures` | Cumulative requests for the named method that returned an unsuccessful response. |
-| `inbound_rpc_requests` | Cumulative inbound LiveKit CLI RPC requests. |
-| `inbound_rpc_failures` | Cumulative inbound CLI RPC requests that returned an unsuccessful response. |
-| `topic_pub_rejected_not_allowed` | Cumulative inbound topic publish requests rejected by the local allow policy. |
-| `service_call_timeouts` | Cumulative inbound ROS service calls that timed out. |
+| `rpc_failures` | Cumulative CLI RPC failures, aggregating outbound remote calls that returned an unsuccessful response for any reason (an absent target participant, a LiveKit transport failure, a malformed response, or a remote error) and inbound CLI RPC requests that returned failure. Informational; does not change the diagnostic level by itself. |
 
-The per-method fields use `ros2_topic_list`, `ros2_topic_pub`,
-`ros2_service_list`, `ros2_service_call`, and `ros2_interface_show` in place of
-`<rpc_method>`. RPC outcome fields are informational and do not change the
-diagnostic level by themselves.
+`rpc_failures` is deliberately coarse and counts each failed request exactly
+once, whichever cause produced it. Every increment is logged individually with
+its RPC method and specific cause:
+
+| Direction | Log |
+|---|---|
+| Outbound remote call failed | `Remote CLI RPC '<rpc_method>' failed: <reason>` |
+| Inbound request failed | `Failed to handle LiveKit RPC '<rpc_method>': <reason>` |
+
+Two inbound causes that previously had their own counters are logged separately
+before the request fails: a publish rejected by the local allow policy logs
+`Rejecting publish to '<topic>': not permitted by the local topic allow policy`,
+and a local ROS service call that times out logs
+`Local ROS service call for '<service>' timed out`.
+
+Request volume is not published. The five CLI methods are
+`ros2_topic_list`, `ros2_topic_pub`, `ros2_service_list`, `ros2_service_call`,
+and `ros2_interface_show`.
 
 ## Quick Check
 

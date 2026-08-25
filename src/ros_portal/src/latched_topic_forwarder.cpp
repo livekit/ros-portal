@@ -71,12 +71,6 @@ bool rpcSucceeded(const std::string& response) {
   }
 }
 
-/// @brief Return the current steady-clock time as nanoseconds since its epoch.
-std::int64_t steadyNowNanoseconds() {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-      .count();
-}
-
 } // namespace
 
 LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node,
@@ -112,6 +106,14 @@ LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::Weak
                    kLatchedStateRpcMethod);
     }
   }
+
+  // Configured inventory is logged once here rather than republished on every
+  // diagnostic cycle. Subscriptions, stored messages, and inbound publishers are
+  // each logged as they are created.
+  RCLCPP_INFO(logger_,
+              "Latched topic forwarding configured: %zu outbound topic(s), %zu inbound topic(s), "
+              "retaining up to %zu message(s)",
+              options_.outbound_topics.size(), options_.inbound_topics.size(), options_.max_stored_messages);
 
   diagnostics_.add(kLatchedTopicForwarderDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
@@ -232,7 +234,7 @@ void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, 
   std::string request_json = request.dump();
 
   if (request_json.size() > kMaxRpcPayloadBytes) {
-    diagnostic_state_.outbound_oversize_drops.fetch_add(1, std::memory_order_relaxed);
+    diagnostic_state_.outbound_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR_THROTTLE(logger_, *clock_, 10000,
                           "Latched message on '%s' is %zu bytes as an RPC payload, exceeding the %zu-byte LiveKit "
                           "RPC limit; not forwarding it (consider splitting large latched state)",
@@ -309,11 +311,12 @@ void LatchedTopicForwarder::pushToPeers() {
       const auto response =
           livekit_methods_.perform_rpc(id, kLatchedStateRpcMethod, message.request_json, options_.rpc_timeout_sec);
       if (!response || !rpcSucceeded(*response)) {
-        diagnostic_state_.outbound_push_failures.fetch_add(1, std::memory_order_relaxed);
+        diagnostic_state_.outbound_failures.fetch_add(1, std::memory_order_relaxed);
+        RCLCPP_ERROR_THROTTLE(logger_, *clock_, 5000, "Failed to push latched state to '%s': %s", id.c_str(),
+                              response ? response->c_str() : "no response from participant");
         delivered = false;
         break;
       }
-      diagnostic_state_.last_successful_push_steady_ns.store(steadyNowNanoseconds(), std::memory_order_relaxed);
     }
 
     const std::lock_guard<std::mutex> lock(state_mutex_);
@@ -354,7 +357,14 @@ void LatchedTopicForwarder::reconcileRosterLocked(const std::vector<std::string>
 }
 
 std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payload) {
-  diagnostic_state_.inbound_rpc_requests.fetch_add(1, std::memory_order_relaxed);
+  // Every rejection is counted once and logged with its specific cause, so the coarse
+  // inbound.failures counter can always be explained from the log.
+  const auto reject = [this](const std::string& reason) {
+    diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
+    RCLCPP_ERROR_THROTTLE(logger_, *clock_, 5000, "Rejecting inbound latched-state request: %s", reason.c_str());
+    return cliResponseToJson(false, reason, "");
+  };
+
   std::string topic;
   std::string msg_type;
   std::string data_b64;
@@ -364,19 +374,16 @@ std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payl
     msg_type = parsed.at("msg_type").get<std::string>();
     data_b64 = parsed.at("data").get<std::string>();
   } catch (const std::exception& e) {
-    diagnostic_state_.inbound_malformed_payloads.fetch_add(1, std::memory_order_relaxed);
-    return cliResponseToJson(false, std::string("malformed latched-state request: ") + e.what(), "");
+    return reject(std::string("malformed latched-state request: ") + e.what());
   }
 
   if (options_.inbound_topics.count(topic) == 0) {
-    diagnostic_state_.inbound_rejected_unconfigured_topic.fetch_add(1, std::memory_order_relaxed);
-    return cliResponseToJson(false, "topic '" + topic + "' is not a configured inbound latched topic", "");
+    return reject("topic '" + topic + "' is not a configured inbound latched topic");
   }
 
   const auto decoded = utils::base64Decode(data_b64);
   if (!decoded) {
-    diagnostic_state_.inbound_base64_decode_failures.fetch_add(1, std::memory_order_relaxed);
-    return cliResponseToJson(false, "invalid base64 payload for '" + topic + "'", "");
+    return reject("invalid base64 payload for '" + topic + "'");
   }
 
   rclcpp::GenericPublisher::SharedPtr publisher;
@@ -388,19 +395,15 @@ std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payl
     } else {
       const auto node = node_.lock();
       if (!node) {
-        diagnostic_state_.inbound_publish_failures.fetch_add(1, std::memory_order_relaxed);
-        return cliResponseToJson(false, "ROS node unavailable", "");
+        return reject("ROS node unavailable");
       }
       try {
         publisher = node->create_generic_publisher(topic, msg_type, latchedQoS());
       } catch (const std::exception& e) {
-        diagnostic_state_.inbound_publish_failures.fetch_add(1, std::memory_order_relaxed);
-        return cliResponseToJson(
-            false, std::string("failed to create publisher for '") + topic + "' [" + msg_type + "]: " + e.what(), "");
+        return reject(std::string("failed to create publisher for '") + topic + "' [" + msg_type + "]: " + e.what());
       }
       if (!publisher) {
-        diagnostic_state_.inbound_publish_failures.fetch_add(1, std::memory_order_relaxed);
-        return cliResponseToJson(false, "publisher handle invalid for '" + topic + "'", "");
+        return reject("publisher handle invalid for '" + topic + "'");
       }
       inbound_publishers_.emplace(topic, publisher);
       RCLCPP_INFO(logger_, "Created TRANSIENT_LOCAL publisher for latched '%s' [%s]", topic.c_str(), msg_type.c_str());
@@ -416,8 +419,7 @@ std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payl
     rcl_msg.buffer_length = decoded->size();
     publisher->publish(serialized);
   } catch (const std::exception& e) {
-    diagnostic_state_.inbound_publish_failures.fetch_add(1, std::memory_order_relaxed);
-    return cliResponseToJson(false, std::string("failed to publish '") + topic + "': " + e.what(), "");
+    return reject(std::string("failed to publish '") + topic + "': " + e.what());
   }
 
   RCLCPP_INFO(logger_, "Republished latched '%s' [%s] (%zu bytes)", topic.c_str(), msg_type.c_str(), decoded->size());
@@ -425,17 +427,8 @@ std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payl
 }
 
 void LatchedTopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
-  const auto outbound_oversize_drops = diagnostic_state_.outbound_oversize_drops.load(std::memory_order_relaxed);
-  const auto outbound_push_failures = diagnostic_state_.outbound_push_failures.load(std::memory_order_relaxed);
-  const auto last_successful_push_steady_ns =
-      diagnostic_state_.last_successful_push_steady_ns.load(std::memory_order_relaxed);
-  const auto inbound_rpc_requests = diagnostic_state_.inbound_rpc_requests.load(std::memory_order_relaxed);
-  const auto inbound_rejected_unconfigured_topic =
-      diagnostic_state_.inbound_rejected_unconfigured_topic.load(std::memory_order_relaxed);
-  const auto inbound_malformed_payloads = diagnostic_state_.inbound_malformed_payloads.load(std::memory_order_relaxed);
-  const auto inbound_base64_decode_failures =
-      diagnostic_state_.inbound_base64_decode_failures.load(std::memory_order_relaxed);
-  const auto inbound_publish_failures = diagnostic_state_.inbound_publish_failures.load(std::memory_order_relaxed);
+  const auto outbound_failures = diagnostic_state_.outbound_failures.load(std::memory_order_relaxed);
+  const auto inbound_failures = diagnostic_state_.inbound_failures.load(std::memory_order_relaxed);
 
   std::size_t outbound_topics_subscribed = 0U;
   {
@@ -444,41 +437,30 @@ void LatchedTopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusW
   }
 
   std::size_t outbound_messages_stored = 0U;
-  std::uint64_t outbound_state_version = 0U;
   std::size_t peers_total = 0U;
-  std::size_t peers_up_to_date = 0U;
   std::size_t peers_behind = 0U;
   std::size_t peers_given_up = 0U;
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     outbound_messages_stored = messages_.size();
-    outbound_state_version = version_;
     peers_total = participant_states_.size();
     for (const auto& [_, peer] : participant_states_) {
       if (peer.consecutive_failures >= options_.max_participant_failures) {
         ++peers_given_up;
-      } else if (peer.delivered_version >= version_) {
-        ++peers_up_to_date;
-      } else {
+      } else if (peer.delivered_version < version_) {
         ++peers_behind;
       }
     }
   }
 
-  std::size_t inbound_publishers_created = 0U;
-  {
-    const std::lock_guard<std::mutex> lock(publishers_mutex_);
-    inbound_publishers_created = inbound_publishers_.size();
-  }
-
+  // Undiscovered topics and full retained-message storage are not published as fields;
+  // they only raise the summary to WARN. Both are logged as they occur.
   const bool rpc_registration_failed = !options_.inbound_topics.empty() && !rpc_registered_;
   const bool topics_undiscovered = outbound_topics_subscribed < options_.outbound_topics.size();
   const bool storage_at_capacity = options_.max_stored_messages == 0U
                                        ? !options_.outbound_topics.empty()
                                        : outbound_messages_stored >= options_.max_stored_messages;
-  const bool failures_detected = outbound_oversize_drops > 0U || outbound_push_failures > 0U ||
-                                 inbound_rejected_unconfigured_topic > 0U || inbound_malformed_payloads > 0U ||
-                                 inbound_base64_decode_failures > 0U || inbound_publish_failures > 0U;
+  const bool failures_detected = outbound_failures > 0U || inbound_failures > 0U;
 
   if (rpc_registration_failed || peers_given_up > 0U) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
@@ -490,31 +472,11 @@ void LatchedTopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusW
   }
 
   status.add("rpc_registered", rpc_registered_ ? "true" : "false");
-  status.add("outbound.topics_configured", options_.outbound_topics.size());
-  status.add("outbound.topics_subscribed", outbound_topics_subscribed);
-  status.add("outbound.messages_stored", outbound_messages_stored);
-  status.add("outbound.max_stored_messages", options_.max_stored_messages);
-  status.add("outbound.state_version", outbound_state_version);
+  status.add("outbound.failures", outbound_failures);
   status.add("peers.total", peers_total);
-  status.add("peers.up_to_date", peers_up_to_date);
   status.add("peers.behind", peers_behind);
   status.add("peers.given_up", peers_given_up);
-  status.add("outbound.oversize_drops", outbound_oversize_drops);
-  status.add("outbound.push_failures", outbound_push_failures);
-  if (last_successful_push_steady_ns == 0) {
-    status.add("time_since_last_successful_push_sec", "unset");
-  } else {
-    const auto age_ns = std::max<std::int64_t>(0, steadyNowNanoseconds() - last_successful_push_steady_ns);
-    status.add("time_since_last_successful_push_sec",
-               std::chrono::duration<double>(std::chrono::nanoseconds(age_ns)).count());
-  }
-  status.add("inbound.topics_configured", options_.inbound_topics.size());
-  status.add("inbound.publishers_created", inbound_publishers_created);
-  status.add("inbound.rpc_requests", inbound_rpc_requests);
-  status.add("inbound.rejected_unconfigured_topic", inbound_rejected_unconfigured_topic);
-  status.add("inbound.malformed_payloads", inbound_malformed_payloads);
-  status.add("inbound.base64_decode_failures", inbound_base64_decode_failures);
-  status.add("inbound.publish_failures", inbound_publish_failures);
+  status.add("inbound.failures", inbound_failures);
 }
 
 } // namespace ros_portal

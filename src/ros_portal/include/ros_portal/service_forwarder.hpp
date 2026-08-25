@@ -115,36 +115,29 @@ private:
 
     /// @brief Number of configured outgoing service routes.
     std::size_t routes_configured{0U};
-    /// @brief Count of routes rejected due to incomplete configuration.
-    std::atomic<std::uint64_t> routes_skipped_invalid_config{0};
-    /// @brief Count of routes whose runtime type support could not be loaded.
-    std::atomic<std::uint64_t> routes_skipped_no_type_support{0};
+    /// @brief Count of route setup failures, aggregating routes rejected for
+    /// incomplete configuration and routes whose runtime type support could not be
+    /// loaded. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> route_failures{0};
     /// @brief Count of local requests handled by the forwarder.
     std::atomic<std::uint64_t> requests_forwarded{0};
     /// @brief Count of requests completed with a populated local response.
     std::atomic<std::uint64_t> requests_succeeded{0};
-    /// @brief Count of requests that failed during forwarding.
+    /// @brief Total count of requests that failed during forwarding, for any reason.
     std::atomic<std::uint64_t> requests_failed{0};
-    /// @brief Count of requests whose target participant was unavailable.
-    std::atomic<std::uint64_t> failures_participant_not_found{0};
-    /// @brief Count of requests whose LiveKit RPC failed.
-    std::atomic<std::uint64_t> failures_rpc_transport{0};
-    /// @brief Count of malformed LiveKit RPC responses.
-    std::atomic<std::uint64_t> failures_malformed_response{0};
-    /// @brief Count of errors returned by the remote service.
-    std::atomic<std::uint64_t> failures_remote_error{0};
-    /// @brief Count of requests that could not be serialized.
-    std::atomic<std::uint64_t> failures_request_serialization{0};
-    /// @brief Count of responses that could not populate the ROS response.
-    std::atomic<std::uint64_t> failures_response_deserialization{0};
+    /// @brief Count of failures on the request path, aggregating an unavailable
+    /// target participant, a request that could not be serialized, and a failed
+    /// LiveKit RPC. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> request_failures{0};
+    /// @brief Count of failures on the response path, aggregating malformed RPC
+    /// responses, errors returned by the remote service, responses that could not
+    /// populate the ROS response, and timeouts sending the response to the local ROS
+    /// client. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> response_failures{0};
     /// @brief Count of exceptions caught around forwarding handlers.
     std::atomic<std::uint64_t> handler_exceptions{0};
-    /// @brief Count of timeouts sending responses to local ROS clients.
-    std::atomic<std::uint64_t> response_send_timeouts{0};
     /// @brief Protects the most recent failure metadata.
     std::mutex last_failure_mutex;
-    /// @brief Service associated with the most recent failure.
-    std::string last_failure_service;
     /// @brief Stable category associated with the most recent failure.
     std::string last_failure_reason;
   };
@@ -161,14 +154,14 @@ private:
   /// @param response_data Runtime-typed response message memory to populate.
   void forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data);
 
-  /// @brief Record one failed forwarded request and its route.
-  void recordRequestFailure(const ServiceRoute& route, const std::string& reason);
+  /// @brief Record one failed forwarded request under a stable failure category.
+  void recordRequestFailure(const std::string& reason);
   /// @brief Record an exception escaping a forwarding handler.
-  void recordHandlerException(const std::string& service);
+  void recordHandlerException();
   /// @brief Record a timeout sending a response to the local ROS client.
-  void recordResponseSendTimeout(const std::string& service);
+  void recordResponseSendTimeout();
   /// @brief Update the most recent failure metadata.
-  void recordLastFailure(const std::string& service, const std::string& reason);
+  void recordLastFailure(const std::string& reason);
   /// @brief Populate the service-forwarder diagnostic status.
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 

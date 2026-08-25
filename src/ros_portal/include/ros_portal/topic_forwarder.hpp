@@ -323,20 +323,15 @@ private:
 
   /// @brief Mutable counters and metadata published by the diagnostic task.
   struct DiagnosticState {
-    /// @brief Count of outbound data frames rejected by the LiveKit writer.
-    std::atomic<std::uint64_t> outbound_push_failures{0};
-    /// @brief Count of outbound ROS messages that could not be converted to JSON.
-    std::atomic<std::uint64_t> outbound_json_conversion_failures{0};
-    /// @brief Count of outbound ROS subscriptions that could not be created.
-    std::atomic<std::uint64_t> outbound_subscription_create_failures{0};
-    /// @brief Count of inbound tracks rejected because no ROS type was available.
-    std::atomic<std::uint64_t> inbound_tracks_rejected_no_type{0};
-    /// @brief Count of inbound tracks rejected by the configured allowlist.
-    std::atomic<std::uint64_t> inbound_tracks_rejected_not_allowed{0};
-    /// @brief Count of inbound tracks whose ROS topic name could not be resolved.
-    std::atomic<std::uint64_t> inbound_tracks_rejected_name_resolution_failed{0};
-    /// @brief Count of inbound frames that failed ROS publication.
-    std::atomic<std::uint64_t> inbound_publish_failures{0};
+    /// @brief Count of outbound forwarding failures, aggregating LiveKit writer push
+    /// rejections, ROS-to-JSON conversion failures, and ROS subscription creation
+    /// failures. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> outbound_failures{0};
+    /// @brief Count of inbound track and frame failures, aggregating tracks rejected
+    /// because no ROS type was available, because they did not match the configured
+    /// topic patterns, or because ROS topic name resolution failed, plus frames that
+    /// failed ROS publication. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> inbound_failures{0};
     /// @brief Count of inbound JSON frames that could not be decoded.
     std::atomic<std::uint64_t> inbound_json_decode_failures{0};
     /// @brief Count of inbound empty CDR payloads dropped.

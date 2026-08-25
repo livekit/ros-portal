@@ -143,25 +143,30 @@ TEST_F(LatchedTopicForwarderTest, DiagnosticsReportConfigurationAndRpcRegistrati
   forwarder.populateStatus(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(valueFor(status, "rpc_registered"), "true");
-  EXPECT_EQ(valueFor(status, "outbound.topics_configured"), "1");
-  EXPECT_EQ(valueFor(status, "outbound.topics_subscribed"), "0");
-  EXPECT_EQ(valueFor(status, "outbound.messages_stored"), "0");
-  EXPECT_EQ(valueFor(status, "outbound.max_stored_messages"), "32");
-  EXPECT_EQ(valueFor(status, "outbound.state_version"), "0");
+  EXPECT_EQ(valueFor(status, "outbound.failures"), "0");
   EXPECT_EQ(valueFor(status, "peers.total"), "0");
-  EXPECT_EQ(valueFor(status, "peers.up_to_date"), "0");
   EXPECT_EQ(valueFor(status, "peers.behind"), "0");
   EXPECT_EQ(valueFor(status, "peers.given_up"), "0");
-  EXPECT_EQ(valueFor(status, "outbound.oversize_drops"), "0");
-  EXPECT_EQ(valueFor(status, "outbound.push_failures"), "0");
-  EXPECT_EQ(valueFor(status, "time_since_last_successful_push_sec"), "unset");
-  EXPECT_EQ(valueFor(status, "inbound.topics_configured"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.publishers_created"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.rpc_requests"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.rejected_unconfigured_topic"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.malformed_payloads"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.base64_decode_failures"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.publish_failures"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.failures"), "0");
+
+  // Configured and per-item inventory is logged rather than published as fields; the
+  // undiscovered outbound topic still drives the WARN summary asserted above.
+  EXPECT_FALSE(valueFor(status, "outbound.topics_configured").has_value());
+  EXPECT_FALSE(valueFor(status, "outbound.topics_subscribed").has_value());
+  EXPECT_FALSE(valueFor(status, "outbound.messages_stored").has_value());
+  EXPECT_FALSE(valueFor(status, "outbound.max_stored_messages").has_value());
+  EXPECT_FALSE(valueFor(status, "outbound.state_version").has_value());
+  EXPECT_FALSE(valueFor(status, "peers.up_to_date").has_value());
+  EXPECT_FALSE(valueFor(status, "outbound.oversize_drops").has_value());
+  EXPECT_FALSE(valueFor(status, "outbound.push_failures").has_value());
+  EXPECT_FALSE(valueFor(status, "time_since_last_successful_push_sec").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.topics_configured").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.publishers_created").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.rpc_requests").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.rejected_unconfigured_topic").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.malformed_payloads").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.base64_decode_failures").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.publish_failures").has_value());
 }
 
 TEST_F(LatchedTopicForwarderTest, DiagnosticsErrorWhenRpcRegistrationFails) {
@@ -208,7 +213,7 @@ TEST_F(LatchedTopicForwarderTest, SkipsOversizeMessage) {
   diagnostic_updater::DiagnosticStatusWrapper status;
   forwarder.populateStatus(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(status, "outbound.oversize_drops"), "1");
+  EXPECT_EQ(valueFor(status, "outbound.failures"), "1");
 }
 
 TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
@@ -226,12 +231,9 @@ TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
   diagnostic_updater::DiagnosticStatusWrapper status;
   forwarder.populateStatus(status);
   EXPECT_EQ(valueFor(status, "peers.total"), "1");
-  EXPECT_EQ(valueFor(status, "peers.up_to_date"), "1");
   EXPECT_EQ(valueFor(status, "peers.behind"), "0");
   EXPECT_EQ(valueFor(status, "peers.given_up"), "0");
-  EXPECT_EQ(valueFor(status, "outbound.push_failures"), "0");
-  ASSERT_TRUE(valueFor(status, "time_since_last_successful_push_sec").has_value());
-  EXPECT_NE(valueFor(status, "time_since_last_successful_push_sec"), "unset");
+  EXPECT_EQ(valueFor(status, "outbound.failures"), "0");
 
   // Already delivered at the current version: a second cycle sends nothing.
   forwarder.pushToPeers();
@@ -256,11 +258,9 @@ TEST_F(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion) {
   forwarder.populateStatus(failed_status);
   EXPECT_EQ(failed_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(valueFor(failed_status, "peers.total"), "1");
-  EXPECT_EQ(valueFor(failed_status, "peers.up_to_date"), "0");
   EXPECT_EQ(valueFor(failed_status, "peers.behind"), "0");
   EXPECT_EQ(valueFor(failed_status, "peers.given_up"), "1");
-  EXPECT_EQ(valueFor(failed_status, "outbound.push_failures"), "3");
-  EXPECT_EQ(valueFor(failed_status, "time_since_last_successful_push_sec"), "unset");
+  EXPECT_EQ(valueFor(failed_status, "outbound.failures"), "3");
 
   // Given up: further cycles do not attempt the peer.
   forwarder.pushToPeers();
@@ -334,11 +334,8 @@ TEST_F(LatchedTopicForwarderTest, InboundHandlerValidatesTopic) {
   diagnostic_updater::DiagnosticStatusWrapper status;
   forwarder.populateStatus(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(status, "inbound.rpc_requests"), "3");
-  EXPECT_EQ(valueFor(status, "inbound.rejected_unconfigured_topic"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.malformed_payloads"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.base64_decode_failures"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.publish_failures"), "0");
+  // One rejection each for: unconfigured topic, malformed payload, invalid base64.
+  EXPECT_EQ(valueFor(status, "inbound.failures"), "3");
 }
 
 } // namespace ros_portal

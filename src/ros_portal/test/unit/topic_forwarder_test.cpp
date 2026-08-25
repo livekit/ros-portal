@@ -285,15 +285,18 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   diagnostic_updater::DiagnosticStatusWrapper ok_status;
   forwarder.populateStatus(ok_status);
   EXPECT_EQ(ok_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(valueFor(ok_status, "inbound_schemas_incorrect"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.definitions_active"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.define_failures"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.render_failures"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.encoding_mismatch_skips"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_no_encoding"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_name_mismatch"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_remote_unavailable"), "0");
-  EXPECT_EQ(valueFor(ok_status, "schema.inbound_rejected_definition_differs"), "0");
+  EXPECT_EQ(valueFor(ok_status, "inbound.failures"), "0");
+  // Schema outcomes are folded into the inbound/outbound failure counters and are no
+  // longer published as their own fields.
+  EXPECT_FALSE(valueFor(ok_status, "inbound_schemas_incorrect").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.definitions_active").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.define_failures").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.render_failures").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.encoding_mismatch_skips").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_no_encoding").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_name_mismatch").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_remote_unavailable").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_definition_differs").has_value());
 
   TopicForwarder::RemoteDataTrackDescriptor descriptor;
   descriptor.sid = "schema-mismatch-sid";
@@ -307,8 +310,8 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   diagnostic_updater::DiagnosticStatusWrapper warn_status;
   forwarder.populateStatus(warn_status);
   EXPECT_EQ(warn_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(warn_status, "inbound_schemas_incorrect"), "1");
-  EXPECT_EQ(valueFor(warn_status, "schema.inbound_rejected_name_mismatch"), "1");
+  // The rejected track's schema name mismatch is counted as an inbound failure.
+  EXPECT_EQ(valueFor(warn_status, "inbound.failures"), "1");
 }
 
 // Case: A remote track claims a bidirectional topic before its local publisher appears.
@@ -769,17 +772,19 @@ TEST_F(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures) {
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
-  forwarder.pollTopics();
+  reconcileFromGraph(forwarder);
   ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
 
   diagnostic_updater::DiagnosticStatusWrapper pending_status;
   forwarder.populateStatus(pending_status);
   EXPECT_EQ(pending_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
-  EXPECT_EQ(valueFor(pending_status, "outbound.data_topics"), "1");
-  EXPECT_EQ(valueFor(pending_status, "outbound.image_topics"), "0");
+  EXPECT_EQ(valueFor(pending_status, "outbound.data_tracks"), "1");
+  EXPECT_EQ(valueFor(pending_status, "outbound.video_tracks"), "0");
   EXPECT_EQ(valueFor(pending_status, "outbound.subscriptions"), "1");
-  EXPECT_EQ(valueFor(pending_status, "outbound.data_tracks_pending_writer"), "1");
-  EXPECT_EQ(valueFor(pending_status, "outbound.image_tracks_pending_sink"), "0");
+  EXPECT_EQ(valueFor(pending_status, "outbound.failures"), "0");
+  // The pending writer raises the summary to ERROR but is no longer published as a field.
+  EXPECT_FALSE(valueFor(pending_status, "outbound.data_tracks_pending_writer").has_value());
+  EXPECT_FALSE(valueFor(pending_status, "outbound.image_tracks_pending_sink").has_value());
 
   std_msgs::msg::String msg;
   msg.data = "dropped by writer";
@@ -789,10 +794,11 @@ TEST_F(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures) {
   diagnostic_updater::DiagnosticStatusWrapper failed_status;
   forwarder.populateStatus(failed_status);
   EXPECT_EQ(failed_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(failed_status, "outbound.data_tracks_pending_writer"), "0");
-  EXPECT_EQ(valueFor(failed_status, "outbound.push_failures"), "1");
-  EXPECT_EQ(valueFor(failed_status, "outbound.json_conversion_failures"), "0");
-  EXPECT_EQ(valueFor(failed_status, "outbound.subscription_create_failures"), "0");
+  // The rejected push is the only outbound failure observed.
+  EXPECT_EQ(valueFor(failed_status, "outbound.failures"), "1");
+  EXPECT_FALSE(valueFor(failed_status, "outbound.push_failures").has_value());
+  EXPECT_FALSE(valueFor(failed_status, "outbound.json_conversion_failures").has_value());
+  EXPECT_FALSE(valueFor(failed_status, "outbound.subscription_create_failures").has_value());
 }
 
 TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) {
@@ -838,19 +844,26 @@ TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) 
   forwarder.onDataTrackPublished(std::move(stopped_reader));
 
   const auto reader_stopped = [&]() {
-    return forwarder.diagnostic_state_.inbound_terminal_errors.load(std::memory_order_relaxed) == 1U;
+    std::lock_guard<std::mutex> lock(forwarder.inbound_data_track_states_mutex_);
+    const auto state = forwarder.inbound_data_track_states_.find("stopped-reader");
+    return state != forwarder.inbound_data_track_states_.end() &&
+           forwarder.diagnostic_state_.inbound_terminal_errors.load(std::memory_order_relaxed) == 1U &&
+           !state->second->reader_thread_alive.load(std::memory_order_relaxed);
   };
   ASSERT_TRUE(spinUntil(reader_stopped));
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   forwarder.populateStatus(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
-  EXPECT_EQ(valueFor(status, "inbound.active_tracks"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.reader_threads_alive"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.tracks_rejected_no_type"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.tracks_rejected_not_allowed"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.tracks_rejected_name_resolution_failed"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.publish_failures"), "0");
+  EXPECT_EQ(valueFor(status, "inbound.data_tracks"), "1");
+  // One track rejected for each of: no ROS type, topic patterns, and name resolution.
+  EXPECT_EQ(valueFor(status, "inbound.failures"), "3");
+  // The stopped reader thread raises the summary to ERROR but is not published as a field.
+  EXPECT_FALSE(valueFor(status, "inbound.reader_threads_alive").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_no_type").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_not_allowed").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_name_resolution_failed").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.publish_failures").has_value());
   EXPECT_EQ(valueFor(status, "inbound.json_decode_failures"), "0");
   EXPECT_EQ(valueFor(status, "inbound.empty_payload_drops"), "0");
   EXPECT_EQ(valueFor(status, "inbound.terminal_errors"), "1");

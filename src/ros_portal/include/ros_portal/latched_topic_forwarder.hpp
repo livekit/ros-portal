@@ -173,23 +173,15 @@ private:
 
   /// @brief Mutable counters and metadata published by the diagnostic task.
   struct DiagnosticState {
-    /// @brief Count of outbound messages exceeding the LiveKit RPC limit.
-    std::atomic<std::uint64_t> outbound_oversize_drops{0};
-    /// @brief Count of failed outbound latched-state RPC calls.
-    std::atomic<std::uint64_t> outbound_push_failures{0};
-    /// @brief Steady-clock nanoseconds of the latest successful outbound RPC.
-    /// Zero means no successful push has occurred.
-    std::atomic<std::int64_t> last_successful_push_steady_ns{0};
-    /// @brief Count of inbound latched-state RPC requests.
-    std::atomic<std::uint64_t> inbound_rpc_requests{0};
-    /// @brief Count of inbound requests for unconfigured topics.
-    std::atomic<std::uint64_t> inbound_rejected_unconfigured_topic{0};
-    /// @brief Count of malformed inbound JSON payloads.
-    std::atomic<std::uint64_t> inbound_malformed_payloads{0};
-    /// @brief Count of inbound payloads that failed base64 decoding.
-    std::atomic<std::uint64_t> inbound_base64_decode_failures{0};
-    /// @brief Count of inbound requests that could not be published on ROS.
-    std::atomic<std::uint64_t> inbound_publish_failures{0};
+    /// @brief Count of outbound failures, aggregating messages dropped for exceeding
+    /// the LiveKit RPC payload limit and failed outbound latched-state RPC calls.
+    /// Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> outbound_failures{0};
+    /// @brief Count of inbound latched-state request failures, aggregating malformed
+    /// payloads, requests for unconfigured topics, base64 decode failures, and
+    /// requests that could not be published on ROS. Every occurrence is logged with
+    /// its specific cause.
+    std::atomic<std::uint64_t> inbound_failures{0};
   };
 
   /// @brief QoS for latched publishers/subscriptions: reliable, transient-local,

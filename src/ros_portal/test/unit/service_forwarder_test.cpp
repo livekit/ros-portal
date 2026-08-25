@@ -204,6 +204,9 @@ TEST_F(ServiceForwarderTest, ForwardsSetBoolRequestAndPopulatesResponse) {
   EXPECT_EQ(valueFor(status, "requests_forwarded"), "1");
   EXPECT_EQ(valueFor(status, "requests_succeeded"), "1");
   EXPECT_EQ(valueFor(status, "requests_failed"), "0");
+  EXPECT_EQ(valueFor(status, "request_failures"), "0");
+  EXPECT_EQ(valueFor(status, "response_failures"), "0");
+  EXPECT_EQ(valueFor(status, "route_failures"), "0");
 }
 
 TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
@@ -235,9 +238,12 @@ TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(valueFor(status, "requests_forwarded"), "1");
   EXPECT_EQ(valueFor(status, "requests_failed"), "1");
-  EXPECT_EQ(valueFor(status, "failures.participant_not_found"), "1");
-  EXPECT_EQ(valueFor(status, "last_failure_service"), "/service_forwarder/missing_participant");
+  // A missing participant fails on the request path.
+  EXPECT_EQ(valueFor(status, "request_failures"), "1");
+  EXPECT_EQ(valueFor(status, "response_failures"), "0");
   EXPECT_EQ(valueFor(status, "last_failure_reason"), "participant_not_found");
+  EXPECT_FALSE(valueFor(status, "last_failure_service").has_value());
+  EXPECT_FALSE(valueFor(status, "failures.participant_not_found").has_value());
 }
 
 TEST_F(ServiceForwarderTest, RoomUnavailableReturnsExplicitFailureWhenRepresentable) {
@@ -292,8 +298,11 @@ TEST_F(ServiceForwarderTest, MalformedRpcResponseReturnsDefaultResponse) {
   diagnostic_updater::DiagnosticStatusWrapper status;
   diagnostics.populate(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(status, "failures.malformed_response"), "1");
+  // Malformed remote JSON fails on the response path.
+  EXPECT_EQ(valueFor(status, "response_failures"), "1");
+  EXPECT_EQ(valueFor(status, "request_failures"), "0");
   EXPECT_EQ(valueFor(status, "last_failure_reason"), "malformed_response");
+  EXPECT_FALSE(valueFor(status, "failures.malformed_response").has_value());
 }
 
 TEST_F(ServiceForwarderTest, DiagnosticsReportSkippedRoutes) {
@@ -315,8 +324,10 @@ TEST_F(ServiceForwarderTest, DiagnosticsReportSkippedRoutes) {
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(valueFor(status, "routes_configured"), "3");
   EXPECT_EQ(valueFor(status, "services_created"), "1");
-  EXPECT_EQ(valueFor(status, "routes_skipped_invalid_config"), "1");
-  EXPECT_EQ(valueFor(status, "routes_skipped_no_type_support"), "1");
+  // One route skipped for empty configuration, one for missing type support.
+  EXPECT_EQ(valueFor(status, "route_failures"), "2");
+  EXPECT_FALSE(valueFor(status, "routes_skipped_invalid_config").has_value());
+  EXPECT_FALSE(valueFor(status, "routes_skipped_no_type_support").has_value());
 }
 
 TEST_F(ServiceForwarderTest, DiagnosticsReportHandlerExceptions) {
@@ -346,6 +357,7 @@ TEST_F(ServiceForwarderTest, DiagnosticsReportHandlerExceptions) {
   EXPECT_EQ(valueFor(status, "requests_failed"), "1");
   EXPECT_EQ(valueFor(status, "handler_exceptions"), "1");
   EXPECT_EQ(valueFor(status, "last_failure_reason"), "handler_exception");
+  EXPECT_FALSE(valueFor(status, "last_failure_service").has_value());
 }
 
 } // namespace

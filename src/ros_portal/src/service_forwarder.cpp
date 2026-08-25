@@ -218,17 +218,17 @@ std::size_t ServiceForwarder::serviceCount() const { return services_.size(); }
 void ServiceForwarder::createService(const ServiceRoute& route,
                                      const rclcpp::CallbackGroup::SharedPtr& callback_group) {
   if (route.service.empty()) {
-    diagnostic_state_.routes_skipped_invalid_config.fetch_add(1, std::memory_order_relaxed);
+    diagnostic_state_.route_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Skipping service route with empty service name");
     return;
   }
   if (route.msg_type.empty()) {
-    diagnostic_state_.routes_skipped_invalid_config.fetch_add(1, std::memory_order_relaxed);
+    diagnostic_state_.route_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Skipping service route '%s' with empty msg_type", route.service.c_str());
     return;
   }
   if (route.participant.empty()) {
-    diagnostic_state_.routes_skipped_invalid_config.fetch_add(1, std::memory_order_relaxed);
+    diagnostic_state_.route_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Skipping service route '%s' with empty participant", route.service.c_str());
     return;
   }
@@ -236,7 +236,7 @@ void ServiceForwarder::createService(const ServiceRoute& route,
   std::string support_error;
   auto support = introspection::RuntimeServiceTypeSupport::create(route.msg_type, support_error);
   if (!support) {
-    diagnostic_state_.routes_skipped_no_type_support.fetch_add(1, std::memory_order_relaxed);
+    diagnostic_state_.route_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Skipping service route '%s' [%s]: %s", route.service.c_str(), route.msg_type.c_str(),
                  support_error.c_str());
     return;
@@ -248,8 +248,7 @@ void ServiceForwarder::createService(const ServiceRoute& route,
         [this, route](const void* request_data, void* response_data) {
           forwardRequest(route, request_data, response_data);
         },
-        [this, service = route.service]() { recordHandlerException(service); },
-        [this, service = route.service]() { recordResponseSendTimeout(service); });
+        [this]() { recordHandlerException(); }, [this]() { recordResponseSendTimeout(); });
     node_interfaces_.node_services->add_service(service, callback_group);
     services_.push_back(std::move(service));
     RCLCPP_INFO(logger_, "Created forwarded service '%s' [%s] to LiveKit participant '%s'", route.service.c_str(),
@@ -270,14 +269,14 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
     (void)introspection::populateMessageFromYaml(
         route.msg_type + "_Response", std::string("success: false\nmessage: ") + kRoomNotConnectedError + "\n",
         response_data, ignored_error);
-    recordRequestFailure(route, "room_not_connected");
+    recordRequestFailure("room_not_connected");
     RCLCPP_WARN(logger_, "Cannot forward service '%s': %s", route.service.c_str(), kRoomNotConnectedError);
     return;
   }
 
   if (!livekit_methods_.has_participant(route.participant)) {
-    diagnostic_state_.failures_participant_not_found.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure(route, "participant_not_found");
+    diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
+    recordRequestFailure("participant_not_found");
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
                  route.participant.c_str());
     return;
@@ -285,8 +284,8 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
 
   const auto request_yaml = introspection::toYaml(route.msg_type + "_Request", request_data);
   if (!request_yaml) {
-    diagnostic_state_.failures_request_serialization.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure(route, "request_serialization");
+    diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
+    recordRequestFailure("request_serialization");
     RCLCPP_ERROR(logger_, "Cannot forward service '%s' [%s]: request message type could not be resolved",
                  route.service.c_str(), route.msg_type.c_str());
     return;
@@ -303,8 +302,8 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   const auto rpc_response = livekit_methods_.perform_rpc(route.participant, cli::kServiceCallRpcMethod, payload,
                                                          serviceCallRpcTimeout(service_timeout_sec));
   if (!rpc_response) {
-    diagnostic_state_.failures_rpc_transport.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure(route, "rpc_transport");
+    diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
+    recordRequestFailure("rpc_transport");
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' to participant '%s' failed while forwarding service '%s'",
                  cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str());
     return;
@@ -313,16 +312,16 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   std::string parse_error;
   const auto response = cliResponseFromJson<cli::ServiceCallSrv::Response>(*rpc_response, parse_error);
   if (!response) {
-    diagnostic_state_.failures_malformed_response.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure(route, "malformed_response");
+    diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
+    recordRequestFailure("malformed_response");
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' from participant '%s' returned malformed JSON for service '%s': %s",
                  cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str(), parse_error.c_str());
     return;
   }
 
   if (!response->success) {
-    diagnostic_state_.failures_remote_error.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure(route, "remote_error");
+    diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
+    recordRequestFailure("remote_error");
     RCLCPP_ERROR(logger_, "Remote service call '%s' on participant '%s' failed: %s", route.service.c_str(),
                  route.participant.c_str(), response->err_msg.c_str());
     return;
@@ -331,8 +330,8 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   std::string yaml_error;
   if (!introspection::populateMessageFromYaml(route.msg_type + "_Response", response->output, response_data,
                                               yaml_error)) {
-    diagnostic_state_.failures_response_deserialization.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure(route, "response_deserialization");
+    diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
+    recordRequestFailure("response_deserialization");
     RCLCPP_ERROR(logger_, "Failed to parse remote response for service '%s' [%s]: %s", route.service.c_str(),
                  route.msg_type.c_str(), yaml_error.c_str());
     return;
@@ -341,61 +340,47 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   diagnostic_state_.requests_succeeded.fetch_add(1, std::memory_order_relaxed);
 }
 
-void ServiceForwarder::recordRequestFailure(const ServiceRoute& route, const std::string& reason) {
+void ServiceForwarder::recordRequestFailure(const std::string& reason) {
   diagnostic_state_.requests_failed.fetch_add(1, std::memory_order_relaxed);
-  recordLastFailure(route.service, reason);
+  recordLastFailure(reason);
 }
 
-void ServiceForwarder::recordHandlerException(const std::string& service) {
+void ServiceForwarder::recordHandlerException() {
   diagnostic_state_.handler_exceptions.fetch_add(1, std::memory_order_relaxed);
   diagnostic_state_.requests_failed.fetch_add(1, std::memory_order_relaxed);
-  recordLastFailure(service, "handler_exception");
+  recordLastFailure("handler_exception");
 }
 
-void ServiceForwarder::recordResponseSendTimeout(const std::string& service) {
-  diagnostic_state_.response_send_timeouts.fetch_add(1, std::memory_order_relaxed);
-  recordLastFailure(service, "response_send_timeout");
+void ServiceForwarder::recordResponseSendTimeout() {
+  // A timeout returning the reply to the local ROS client is a response-path failure.
+  diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
+  recordLastFailure("response_send_timeout");
 }
 
-void ServiceForwarder::recordLastFailure(const std::string& service, const std::string& reason) {
+void ServiceForwarder::recordLastFailure(const std::string& reason) {
   const std::lock_guard<std::mutex> lock(diagnostic_state_.last_failure_mutex);
-  diagnostic_state_.last_failure_service = service;
   diagnostic_state_.last_failure_reason = reason;
 }
 
 void ServiceForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
-  const auto routes_skipped_invalid_config =
-      diagnostic_state_.routes_skipped_invalid_config.load(std::memory_order_relaxed);
-  const auto routes_skipped_no_type_support =
-      diagnostic_state_.routes_skipped_no_type_support.load(std::memory_order_relaxed);
+  const auto route_failures = diagnostic_state_.route_failures.load(std::memory_order_relaxed);
   const auto requests_forwarded = diagnostic_state_.requests_forwarded.load(std::memory_order_relaxed);
   const auto requests_succeeded = diagnostic_state_.requests_succeeded.load(std::memory_order_relaxed);
   const auto requests_failed = diagnostic_state_.requests_failed.load(std::memory_order_relaxed);
-  const auto failures_participant_not_found =
-      diagnostic_state_.failures_participant_not_found.load(std::memory_order_relaxed);
-  const auto failures_rpc_transport = diagnostic_state_.failures_rpc_transport.load(std::memory_order_relaxed);
-  const auto failures_malformed_response =
-      diagnostic_state_.failures_malformed_response.load(std::memory_order_relaxed);
-  const auto failures_remote_error = diagnostic_state_.failures_remote_error.load(std::memory_order_relaxed);
-  const auto failures_request_serialization =
-      diagnostic_state_.failures_request_serialization.load(std::memory_order_relaxed);
-  const auto failures_response_deserialization =
-      diagnostic_state_.failures_response_deserialization.load(std::memory_order_relaxed);
+  const auto request_failures = diagnostic_state_.request_failures.load(std::memory_order_relaxed);
+  const auto response_failures = diagnostic_state_.response_failures.load(std::memory_order_relaxed);
   const auto handler_exceptions = diagnostic_state_.handler_exceptions.load(std::memory_order_relaxed);
-  const auto response_send_timeouts = diagnostic_state_.response_send_timeouts.load(std::memory_order_relaxed);
 
-  std::string last_failure_service;
   std::string last_failure_reason;
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.last_failure_mutex);
-    last_failure_service = diagnostic_state_.last_failure_service;
     last_failure_reason = diagnostic_state_.last_failure_reason;
   }
 
   if (services_.size() != diagnostic_state_.routes_configured) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
                    "One or more configured service routes are unavailable");
-  } else if (requests_failed > 0U || handler_exceptions > 0U || response_send_timeouts > 0U) {
+  } else if (requests_failed > 0U || response_failures > 0U) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Service forwarding failures detected");
   } else {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Service forwarding healthy");
@@ -403,20 +388,13 @@ void ServiceForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrappe
 
   status.add("routes_configured", diagnostic_state_.routes_configured);
   status.add("services_created", services_.size());
-  status.add("routes_skipped_invalid_config", routes_skipped_invalid_config);
-  status.add("routes_skipped_no_type_support", routes_skipped_no_type_support);
+  status.add("route_failures", route_failures);
   status.add("requests_forwarded", requests_forwarded);
   status.add("requests_succeeded", requests_succeeded);
   status.add("requests_failed", requests_failed);
-  status.add("failures.participant_not_found", failures_participant_not_found);
-  status.add("failures.rpc_transport", failures_rpc_transport);
-  status.add("failures.malformed_response", failures_malformed_response);
-  status.add("failures.remote_error", failures_remote_error);
-  status.add("failures.request_serialization", failures_request_serialization);
-  status.add("failures.response_deserialization", failures_response_deserialization);
+  status.add("request_failures", request_failures);
+  status.add("response_failures", response_failures);
   status.add("handler_exceptions", handler_exceptions);
-  status.add("response_send_timeouts", response_send_timeouts);
-  status.add("last_failure_service", last_failure_service.empty() ? "none" : last_failure_service);
   status.add("last_failure_reason", last_failure_reason.empty() ? "none" : last_failure_reason);
 }
 

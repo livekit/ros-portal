@@ -199,6 +199,8 @@ std::optional<ServiceCall::ClientPtr> ServiceCall::getClient(const std::string& 
   }
   if (clients_.size() >= kMaxCachedServiceClients) {
     ++cache_full_rejections_;
+    RCLCPP_ERROR(logger_, "Rejecting service call to '%s': service client cache is full (%zu/%zu)", service.c_str(),
+                 clients_.size(), kMaxCachedServiceClients);
     error = "service client cache limit reached";
     return std::nullopt;
   }

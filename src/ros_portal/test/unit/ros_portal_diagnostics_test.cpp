@@ -117,8 +117,6 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   EXPECT_EQ(diagnosticValueFor(status, "config_path"), config.path().string());
   EXPECT_EQ(diagnosticValueFor(status, "graph_discovery_active"), "false");
   EXPECT_EQ(diagnosticValueFor(status, "local_identity"), "unset");
-  EXPECT_EQ(diagnosticValueFor(status, "rpc_register_failures"), "0");
-  EXPECT_EQ(diagnosticValueFor(status, "rpc_perform_failures"), "0");
   EXPECT_FALSE(diagnosticValueFor(status, "min_qos_depth").has_value());
   EXPECT_FALSE(diagnosticValueFor(status, "max_qos_depth").has_value());
   EXPECT_FALSE(diagnosticValueFor(status, "ros_threads").has_value());
@@ -146,18 +144,6 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
   portal.populateStatus(stalled_status);
   EXPECT_EQ(stalled_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(stalled_status.message, "ROS Portal is initialized without an active graph discovery worker");
-}
-
-TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures) {
-  RosPortal portal;
-
-  EXPECT_FALSE(portal.rpcPerform("robot-b", "test_method", "{}", 1).has_value());
-  EXPECT_FALSE(portal.rpcRegisterMethod("test_method", [](const std::string&) { return std::string("{}"); }));
-
-  diagnostic_updater::DiagnosticStatusWrapper status;
-  portal.populateStatus(status);
-  EXPECT_EQ(diagnosticValueFor(status, "rpc_perform_failures"), "1");
-  EXPECT_EQ(diagnosticValueFor(status, "rpc_register_failures"), "1");
 }
 
 } // namespace ros_portal

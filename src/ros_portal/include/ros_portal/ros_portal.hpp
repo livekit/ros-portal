@@ -123,10 +123,6 @@ private:
     std::atomic_bool cli_manager_active{false};
     /// @brief Whether the service forwarder is instantiated.
     std::atomic_bool service_forwarder_active{false};
-    /// @brief Count of shared LiveKit RPC method registration failures.
-    std::atomic<std::uint64_t> rpc_register_failures{0};
-    /// @brief Count of shared LiveKit outbound RPC failures.
-    std::atomic<std::uint64_t> rpc_perform_failures{0};
   };
 
   /// @brief Reconcile all graph-dependent forwarders from one shared snapshot.

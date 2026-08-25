@@ -175,17 +175,6 @@ forwarded and in which direction. Only forwarding the streams you actually need
 (and only in the required direction) keeps unnecessary traffic off the LiveKit
 connection, which matters for bandwidth on constrained links.
 
-### Topic discovery
-
-Outbound `topic` is an ECMAScript regex. ROS Portal waits for ROS graph-change
-events, takes one shared topic snapshot, and creates subscriptions for new
-matches. Subscriptions whose publishers remain absent for 30 seconds are
-removed; they are recreated if a matching publisher later reappears.
-
-Discovery has no tuning knob. Graph changes wake it immediately, and the only
-timed wake-up it needs — revisiting a subscription whose 30-second grace is
-about to elapse — is derived from that grace rather than configured.
-
 ### Preserving the publisher identity
 
 `preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is

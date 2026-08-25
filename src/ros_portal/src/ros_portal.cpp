@@ -502,7 +502,7 @@ bool RosPortal::startGraphDiscovery() {
     stop_graph_discovery_.store(false);
     graph_discovery_thread_ = std::thread(&RosPortal::graphDiscoveryLoop, this);
     diagnostic_state_.graph_discovery_active.store(true, std::memory_order_relaxed);
-    RCLCPP_INFO(this->get_logger(), "ROS graph discovery is event-driven");
+    RCLCPP_INFO(this->get_logger(), "ROS graph discovery started");
     return true;
   } catch (const std::exception& error) {
     RCLCPP_ERROR(this->get_logger(), "Failed to start graph discovery: %s", error.what());

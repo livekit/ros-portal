@@ -29,7 +29,6 @@
 #include <livekit/rpc_error.h>
 #include <livekit/video_source.h>
 
-#include <algorithm>
 #include <chrono>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -44,11 +43,11 @@
 #include "ros_portal/connection/connection_manager.hpp"
 #include "ros_portal/diagnostics/build_info.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/graph/graph_manager.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
-#include "ros_portal/utils/graph_snapshot_cache.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
 
@@ -112,7 +111,6 @@ bool RosPortal::initialize() {
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
   reentrant_callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  graph_snapshot_cache_ = std::make_shared<utils::GraphSnapshotCache>(this->get_node_graph_interface());
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   topics_ = config->topics;
@@ -175,9 +173,34 @@ bool RosPortal::initialize() {
   diagnostic_state_.connection_manager_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
   room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
+  try {
+    graph::GraphManager::Callbacks graph_callbacks{
+        [this](const TopicNamesAndTypes& topics) { reconcileGraphTopics(topics); },
+        [this]() {
+          std::lock_guard<std::mutex> lock(room_components_mutex_);
+          return topic_forwarder_ ? topic_forwarder_->nextExpiryDeadline()
+                                  : std::optional<std::chrono::steady_clock::time_point>{};
+        },
+        [this]() { reapInactiveSubscriptions(); },
+        [this](bool active) { diagnostic_state_.graph_discovery_active.store(active, std::memory_order_relaxed); },
+    };
+    graph_manager_ = std::make_unique<graph::GraphManager>(
+        graph::GraphManager::NodeInterfaces{
+            this->get_node_base_interface(),
+            this->get_node_graph_interface(),
+            this->get_node_logging_interface(),
+        },
+        std::move(graph_callbacks));
+  } catch (const std::exception& error) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to configure ROS graph discovery: %s", error.what());
+    return false;
+  }
+
   // Room::connect() may emit events for data tracks that were already
   // published. Install the forwarder before the first connection attempt so
-  // those events are not dropped while the receiver joins the room.
+  // those events are not dropped while the receiver joins the room. The
+  // forwarder captures graph_manager_'s snapshot provider, so construct the
+  // manager before this call and start its worker only after setup completes.
   if (!initializeTopicForwarder(topics_)) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder");
     return false;
@@ -188,8 +211,10 @@ bool RosPortal::initialize() {
     return false;
   }
 
-  if (!startGraphDiscovery()) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to start ROS graph discovery");
+  try {
+    graph_manager_->start();
+  } catch (const std::exception& error) {
+    RCLCPP_FATAL(this->get_logger(), "Failed to start ROS graph discovery: %s", error.what());
     return false;
   }
 
@@ -217,7 +242,9 @@ void RosPortal::shutdown() {
   }
 
   // Stop ROS callbacks before dismantling the objects they access.
-  stopGraphDiscovery();
+  if (graph_manager_) {
+    graph_manager_->stop();
+  }
   if (connection_timer_) {
     connection_timer_->cancel();
     connection_timer_.reset();
@@ -264,7 +291,7 @@ void RosPortal::shutdown() {
 
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
-  graph_snapshot_cache_.reset();
+  graph_manager_.reset();
   connection_manager_.reset();
   diagnostic_state_.connection_manager_active.store(false, std::memory_order_relaxed);
   build_info_diagnostics_.reset();
@@ -495,91 +522,7 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   }
 }
 
-bool RosPortal::startGraphDiscovery() {
-  try {
-    graph_event_ = this->get_graph_event();
-    graph_snapshot_cache_->invalidate();
-    stop_graph_discovery_.store(false);
-    graph_discovery_thread_ = std::thread(&RosPortal::graphDiscoveryLoop, this);
-    diagnostic_state_.graph_discovery_active.store(true, std::memory_order_relaxed);
-    RCLCPP_INFO(this->get_logger(), "ROS graph discovery started");
-    return true;
-  } catch (const std::exception& error) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to start graph discovery: %s", error.what());
-    graph_event_.reset();
-    diagnostic_state_.graph_discovery_active.store(false, std::memory_order_relaxed);
-    return false;
-  }
-}
-
-void RosPortal::stopGraphDiscovery() {
-  stop_graph_discovery_.store(true);
-  if (graph_event_) {
-    try {
-      this->get_node_graph_interface()->notify_graph_change();
-    } catch (const std::exception& error) {
-      RCLCPP_WARN(this->get_logger(), "Failed to wake graph discovery during shutdown: %s", error.what());
-    }
-  }
-  if (graph_discovery_thread_.joinable()) {
-    graph_discovery_thread_.join();
-  }
-  graph_event_.reset();
-  diagnostic_state_.graph_discovery_active.store(false, std::memory_order_relaxed);
-}
-
-void RosPortal::graphDiscoveryLoop() {
-  try {
-    reconcileGraphTopics();
-    constexpr auto kDebounce = std::chrono::milliseconds(20);
-
-    while (!stop_graph_discovery_.load() && rclcpp::ok(this->get_node_base_interface()->get_context())) {
-      this->wait_for_graph_change(graph_event_, nextGraphWait());
-      if (stop_graph_discovery_.load()) {
-        break;
-      }
-      if (graph_event_->check_and_clear()) {
-        std::this_thread::sleep_for(kDebounce);
-        graph_event_->check_and_clear();
-        graph_snapshot_cache_->invalidate();
-        reconcileGraphTopics();
-      }
-
-      reapInactiveSubscriptions();
-    }
-  } catch (const std::exception& error) {
-    if (!stop_graph_discovery_.load()) {
-      RCLCPP_ERROR(this->get_logger(), "ROS graph discovery stopped after an error: %s", error.what());
-    }
-  } catch (...) {
-    if (!stop_graph_discovery_.load()) {
-      RCLCPP_ERROR(this->get_logger(), "ROS graph discovery stopped after an unknown error");
-    }
-  }
-  diagnostic_state_.graph_discovery_active.store(false, std::memory_order_relaxed);
-}
-
-std::chrono::nanoseconds RosPortal::nextGraphWait() const {
-  std::optional<std::chrono::steady_clock::time_point> deadline;
-  {
-    const std::lock_guard<std::mutex> lock(room_components_mutex_);
-    if (!topic_forwarder_) {
-      return kMaxGraphWait;
-    }
-    deadline = topic_forwarder_->nextExpiryDeadline();
-  }
-
-  if (!deadline.has_value()) {
-    return kMaxGraphWait;
-  }
-
-  // An elapsed deadline still needs a zero wait rather than a negative one:
-  // the reap that follows clears the entry, so the next wait is a full one.
-  const auto remaining = *deadline - std::chrono::steady_clock::now();
-  return std::clamp<std::chrono::nanoseconds>(remaining, std::chrono::nanoseconds::zero(), kMaxGraphWait);
-}
-
-void RosPortal::reconcileGraphTopics() {
+void RosPortal::reconcileGraphTopics(const TopicNamesAndTypes& topics) {
   processEndedRoomSession();
   if (!roomOperationsEnabled()) {
     return;
@@ -590,24 +533,20 @@ void RosPortal::reconcileGraphTopics() {
     return;
   }
 
-  const bool topic_discovery = topic_forwarder_ && topic_forwarder_->needsGraphDiscovery();
-  const bool latched_discovery = latched_topic_forwarder_ && latched_topic_forwarder_->needsGraphDiscovery();
-  if (!topic_discovery && !latched_discovery) {
-    return;
+  if (topic_forwarder_ && topic_forwarder_->needsGraphDiscovery()) {
+    topic_forwarder_->reconcileTopics(topics);
   }
-
-  const auto topics = graph_snapshot_cache_->topics();
-  if (topic_discovery) {
-    topic_forwarder_->reconcileTopics(*topics);
-  }
-  if (latched_discovery) {
-    latched_topic_forwarder_->reconcileTopics(*topics);
+  if (latched_topic_forwarder_ && latched_topic_forwarder_->needsGraphDiscovery()) {
+    latched_topic_forwarder_->reconcileTopics(topics);
   }
 }
 
 void RosPortal::reapInactiveSubscriptions() {
   const std::lock_guard<std::mutex> lock(room_components_mutex_);
-  if (room_components_started_ && topic_forwarder_) {
+  if (!room_components_started_) {
+    return;
+  }
+  if (topic_forwarder_) {
     topic_forwarder_->reapExpiredSubscriptions();
   }
 }
@@ -710,7 +649,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     const auto best_effort_qos_topics = this->get_parameter("best_effort_qos_topics").as_string_array();
     auto forwarder_options = utils::topicForwarderOptions(topics, min_qos_depth_, max_qos_depth_,
                                                           best_effort_qos_topics, this->get_logger());
-    forwarder_options.topic_snapshot = [cache = graph_snapshot_cache_]() { return cache->topics(); };
+    forwarder_options.topic_snapshot = [manager = graph_manager_.get()]() { return manager->topics(); };
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
     forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
@@ -862,8 +801,8 @@ bool RosPortal::initializeCliManager() {
         this->get_node_graph_interface(),
         this->get_node_topics_interface(),
         this->get_node_logging_interface(),
-        [cache = graph_snapshot_cache_]() { return cache->topics(); },
-        [cache = graph_snapshot_cache_]() { return cache->services(); },
+        [manager = graph_manager_.get()]() { return manager->topics(); },
+        [manager = graph_manager_.get()]() { return manager->services(); },
     };
     cli_manager_ =
         std::make_unique<cli::Manager>(std::move(node_interfaces), reentrant_callback_group_, std::move(cli_lk_methods),

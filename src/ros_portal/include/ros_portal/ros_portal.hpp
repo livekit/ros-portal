@@ -20,7 +20,6 @@
 #include <livekit/room_delegate.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <memory>
@@ -28,10 +27,10 @@
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/types.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
@@ -49,21 +48,14 @@ namespace cli {
 class Manager;
 } // namespace cli
 class ConnectionManager;
-namespace utils {
-class GraphSnapshotCache;
-} // namespace utils
+namespace graph {
+class GraphManager;
+} // namespace graph
 class TopicForwarder;
 class LatchedTopicForwarder;
 
 /// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
 inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
-
-/// @brief Upper bound on a single graph-event wait.
-///
-/// Not a discovery interval: graph changes and context shutdown wake the wait
-/// on their own. This only keeps an idle worker from blocking indefinitely, so
-/// a missed notification cannot wedge it for the process lifetime.
-inline constexpr std::chrono::seconds kMaxGraphWait{5};
 
 /// @brief The main ROS Portal node.
 ///
@@ -137,27 +129,9 @@ private:
     std::atomic<std::uint64_t> rpc_perform_failures{0};
   };
 
-  /// @brief Start the graph-event discovery worker.
-  /// @return True when the event and worker were created successfully.
-  bool startGraphDiscovery();
-
-  /// @brief Stop and join the graph-event discovery worker.
-  void stopGraphDiscovery();
-
-  /// @brief Wait for graph events and reconcile dynamic topic subscriptions.
-  void graphDiscoveryLoop();
-
-  /// @brief Compute how long the discovery worker should wait for the next
-  /// graph event.
-  ///
-  /// Graph changes and context shutdown both wake the wait on their own, so
-  /// the only wake-up a timeout owes is an inactive subscription whose grace
-  /// period is about to elapse. The wait collapses to that deadline when one is
-  /// pending and falls back to @ref kMaxGraphWait otherwise.
-  std::chrono::nanoseconds nextGraphWait() const;
-
   /// @brief Reconcile all graph-dependent forwarders from one shared snapshot.
-  void reconcileGraphTopics();
+  /// @param topics Shared snapshot from the graph manager.
+  void reconcileGraphTopics(const TopicNamesAndTypes& topics);
 
   /// @brief Drop outbound subscriptions whose grace period has elapsed.
   void reapInactiveSubscriptions();
@@ -301,14 +275,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief Fixed-rate timer for LiveKit room connection attempts.
   rclcpp::TimerBase::SharedPtr connection_timer_;
-  //! @brief Lazily shared topic/service graph snapshots invalidated by events.
-  std::shared_ptr<utils::GraphSnapshotCache> graph_snapshot_cache_;
-  //! @brief Graph event registered before the discovery worker starts.
-  rclcpp::Event::SharedPtr graph_event_;
-  //! @brief Requests graph-discovery worker shutdown.
-  std::atomic_bool stop_graph_discovery_{false};
-  //! @brief Dedicated worker that waits without occupying an executor thread.
-  std::thread graph_discovery_thread_;
+  //! @brief Owns graph events, snapshots, and the discovery worker.
+  std::unique_ptr<graph::GraphManager> graph_manager_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;

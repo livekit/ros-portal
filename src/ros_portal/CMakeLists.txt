@@ -265,6 +265,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/connection/connection_diagnostics.cpp
   src/connection/connection_manager.cpp
   src/diagnostics/build_info.cpp
+  src/graph/graph_manager.cpp
   src/latched_topic_forwarder.cpp
   src/ros_portal.cpp
   src/schema/manager.cpp
@@ -273,7 +274,6 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/topic_forwarder.cpp
   src/utils/base64.cpp
   src/utils/config_mapping.cpp
-  src/utils/graph_snapshot_cache.cpp
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp

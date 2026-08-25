@@ -37,7 +37,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "ros_portal/graph_types.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/types.hpp"
 
 #ifdef BUILD_TESTING

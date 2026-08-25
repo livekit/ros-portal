@@ -34,7 +34,7 @@
 #include "ros_portal/cli/topic_pub.hpp"
 #include "ros_portal/cli/types.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
-#include "ros_portal/graph_types.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/types.hpp"
 
 #ifdef BUILD_TESTING

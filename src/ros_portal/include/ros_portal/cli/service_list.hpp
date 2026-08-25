@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "ros_portal/cli/types.hpp"
-#include "ros_portal/graph_types.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 
 namespace ros_portal::cli {
 

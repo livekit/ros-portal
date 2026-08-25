@@ -45,7 +45,7 @@
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
-#include "ros_portal/graph_types.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/types.hpp"
 

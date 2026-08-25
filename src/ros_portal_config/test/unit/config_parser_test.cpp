@@ -50,6 +50,17 @@ ros_portal:
   EXPECT_TRUE(config.topics.empty());
 }
 
+TEST(ConfigParserTest, IgnoresOptionalSchemaKey) {
+  const auto config = parse(R"(
+# Copyright 2026 LiveKit
+$schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
+ros_portal:
+  version: "0.0.1"
+)");
+
+  EXPECT_EQ(config.version, "0.0.1");
+}
+
 TEST(ConfigParserTest, ParsesFullConfig) {
   const auto config = parse(
       R"(

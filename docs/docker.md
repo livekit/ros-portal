@@ -1,6 +1,6 @@
 # Running with Docker
 
-ROS Portal publishes runtime images to `https://hub.docker.com/repository/docker/livekit/ros-portal/tags`.
+ROS Portal publishes runtime images to [Docker Hub](https://hub.docker.com/repository/docker/livekit/ros-portal/tags).
 Each distribution tag is a multi-architecture image containing native
 amd64 and arm64 variants.
 
@@ -23,18 +23,23 @@ A note on image tag versions:
 
 ## Run ROS Portal
 
-Define a configuration file as described in [Configuration](configuration.md), then run:
+Set `LIVEKIT_*` environment variables and define a configuration file `ros_portal.yaml` as described
+in [Configuration](configuration.md), then run:
 
 ```bash
 docker login
 
 # LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+# Assumes ros_portal.yaml exists in same location
+
+# Change to desired ROS distro, or skip this if already in a ROS environment
+export ROS_DISTRO=jazzy
 docker run --rm \
   --network host \
-  --env LIVEKIT_URL=<url> \
-  --env LIVEKIT_TOKEN=<token> \
-  --volume /path/on/host/config.yaml:/config/ros_portal.yaml:ro \
-  livekit/ros-portal:<distro> \
+  -e LIVEKIT_URL \
+  -e LIVEKIT_TOKEN \
+  --volume $(pwd)/ros_portal.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:$ROS_DISTRO \
   ros2 launch ros_portal ros_portal.launch.py \
   config_path:=/config/ros_portal.yaml
 ```
@@ -52,13 +57,18 @@ virtualized Docker installations can require a different DDS discovery setup.
 Set `ROS_DOMAIN_ID` when the host graph uses a non-default domain:
 
 ```bash
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+# Assumes ros_portal.yaml exists in same location
+
+# Change to desired ROS distro, or skip this if already in a ROS environment
+export ROS_DISTRO=jazzy
 docker run --rm \
   --network host \
+  -e LIVEKIT_URL \
+  -e LIVEKIT_TOKEN \
   --env ROS_DOMAIN_ID=42 \
-  --env LIVEKIT_URL=<url> \
-  --env LIVEKIT_TOKEN=<token> \
-  --volume /path/on/host/config.yaml:/config/ros_portal.yaml:ro \
-  livekit/ros-portal:jazzy \
+  --volume $(pwd)/ros_portal.yaml:/config/ros_portal.yaml:ro \
+  livekit/ros-portal:$ROS_DISTRO \
   ros2 launch ros_portal ros_portal.launch.py \
   config_path:=/config/ros_portal.yaml
 ```

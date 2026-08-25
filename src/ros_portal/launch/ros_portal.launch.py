@@ -21,17 +21,21 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import OpaqueFunction
 from launch.actions import SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
 
 
 def _launch_setup(context, *args, **kwargs):
     config_path_value = LaunchConfiguration('config_path').perform(context).strip()
-    if not config_path_value:
-        raise RuntimeError('The `config_path` launch argument is required.')
 
-    config_path = Path(config_path_value).expanduser()
-    if not config_path.is_file():
-        raise RuntimeError(f'Config file does not exist: {config_path}')
+    # An empty `config_path` lets the node fall back to its builtin default
+    # config, which forwards all topics bidirectionally.
+    if config_path_value:
+        config_path = Path(config_path_value).expanduser()
+        if not config_path.is_file():
+            raise RuntimeError(f'Config file does not exist: {config_path}')
+        config_path_value = str(config_path)
 
     return [
         Node(
@@ -40,17 +44,27 @@ def _launch_setup(context, *args, **kwargs):
             name='ros_portal',
             output='screen',
             emulate_tty=True,
-            parameters=[{'config_path': str(config_path)}],
+            parameters=[{'config_path': config_path_value}],
         ),
     ]
 
 
 def generate_launch_description():
+    default_config = PathJoinSubstitution([
+        FindPackageShare('ros_portal'),
+        'config',
+        'all_topics.yaml',
+    ])
+
     return LaunchDescription([
         SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'),
         DeclareLaunchArgument(
             'config_path',
-            description='Path to ROS Portal config YAML file.',
+            default_value=default_config,
+            description=(
+                'Path to ROS Portal config YAML file. When empty, the node uses '
+                'its builtin default config that forwards all topics bidirectionally.'
+            ),
         ),
         OpaqueFunction(function=_launch_setup),
     ])

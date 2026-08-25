@@ -310,7 +310,7 @@ RosPortalConfig parseRoot(const YAML::Node & root)
   const std::string root_path(kRootPath);
   const std::string ros_portal_path = utils::fieldPath(root_path, {{ root_const }});
 
-  utils::rejectUnknownFields(root, {std::string({{ root_const }})}, root_path);
+  utils::rejectUnknownFields(root, {{ root_allowed_field_set }}, root_path);
 
   const auto ros_portal_node = root[{{ root_const }}.data()];
   if (!ros_portal_node) {

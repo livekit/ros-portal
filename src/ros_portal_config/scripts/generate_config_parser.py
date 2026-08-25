@@ -140,9 +140,13 @@ class SchemaModel:
 
     def _find_root_config_key(self) -> str:
         properties = self.schema.get("properties", {})
-        if len(properties) != 1:
+        # Ignore JSON Schema meta keys such as `$schema` (editor-only).
+        config_properties = [
+            (key, value) for key, value in properties.items() if not key.startswith("$")
+        ]
+        if len(config_properties) != 1:
             fail("expected root schema to contain exactly one config object property")
-        key, value = next(iter(properties.items()))
+        key, value = config_properties[0]
         if resolve_type(value, self.defs).get("type") != "object":
             fail(f"expected root property {key!r} to be an object")
         return key
@@ -319,6 +323,7 @@ def make_template_context(model: SchemaModel) -> dict[str, Any]:
         "number_minimum_args": number_minimum_args,
         "prologue": HEADER_PROLOGUE.rstrip(),
         "requires_nonempty": requires_nonempty,
+        "root_allowed_field_set": root_allowed_field_set(model),
         "root_const": f"k{pascal_case(model.root_key)}",
     }
 
@@ -335,8 +340,11 @@ def render_template(template_dir: Path, template_name: str, model: SchemaModel) 
 
 
 def collect_field_constants(model: SchemaModel) -> list[tuple[str, str]]:
-    fields: list[tuple[str, str]] = [(model.root_key, f"k{pascal_case(model.root_key)}")]
-    seen = {model.root_key}
+    fields: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for yaml_name in model.schema.get("properties", {}):
+        fields.append((yaml_name, f"k{pascal_case(yaml_name)}"))
+        seen.add(yaml_name)
     for spec in [*model.object_specs, model.root_spec]:
         for field_spec in spec.fields:
             if field_spec.yaml_name in seen:
@@ -344,6 +352,15 @@ def collect_field_constants(model: SchemaModel) -> list[tuple[str, str]]:
             seen.add(field_spec.yaml_name)
             fields.append((field_spec.yaml_name, field_spec.const_name))
     return fields
+
+
+def root_allowed_field_set(model: SchemaModel) -> str:
+    values = ", ".join(
+        f"std::string(k{pascal_case(name)})" for name in model.schema.get("properties", {})
+    )
+    if not values:
+        return "{}"
+    return "{" + values + "}"
 
 
 def collect_const_values(model: SchemaModel) -> list[tuple[str, str]]:

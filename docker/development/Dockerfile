@@ -136,5 +136,5 @@ RUN if [ "${INSTALL_SIMULATION_DEPS}" = "true" ]; then \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-COPY ./setup-shell-env.sh /tmp/setup-shell-env.sh
+COPY ./scripts/setup-shell-env.sh /tmp/setup-shell-env.sh
 RUN chmod +x /tmp/setup-shell-env.sh && /tmp/setup-shell-env.sh && rm /tmp/setup-shell-env.sh

@@ -51,6 +51,13 @@ BuildInfo collectBuildInfo();
 /// @param status Diagnostic status wrapper to populate.
 void populateBuildInfoStatus(const BuildInfo& info, diagnostic_updater::DiagnosticStatusWrapper& status);
 
+/// Render build info as the LiveKit client info `other_sdks` field.
+/// This pure mapping function is shared by the connect path and unit tests.
+///
+/// @param info Build info to render.
+/// @return `ros_portal:<ros_distro>-<version>`
+std::string formatOtherSdks(const BuildInfo& info);
+
 /// Maintains the always-OK `build_info` diagnostic task.
 ///
 /// The reported values are immutable for the lifetime of the process, so this

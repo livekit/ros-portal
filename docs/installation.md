@@ -1,7 +1,5 @@
 # Installation
 
-<!-- TODO: document running ROS Portal from Docker directly. -->
-
 ## LiveKit
 
 ROS Portal depends on [LiveKit](https://livekit.com) server and CLI. The following table below is a quick reference for installing these components if not already present.
@@ -37,8 +35,6 @@ The remaining dependent packages are leveraged from the native ROS installation.
 
 > [!NOTE]
 > Future versions of ROS Portal will be available via `apt` installation and will follow standard ROS installation locations.
-
-<!-- TODO BOT-495: Register release repositories with rosdistro and enable bloom publication. -->
 
 ### Install
 

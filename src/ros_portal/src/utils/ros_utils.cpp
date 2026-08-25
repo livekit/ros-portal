@@ -114,8 +114,14 @@ void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rcl
 std::optional<ros_portal_config::RosPortalConfig> parseRosPortalConfig(const std::filesystem::path& path,
                                                                        rclcpp::Logger logger) {
   if (path.empty()) {
-    RCLCPP_FATAL(logger, "config_path parameter is empty");
-    return std::nullopt;
+    RCLCPP_INFO(logger,
+                "No config_path provided; using builtin default config that forwards all topics bidirectionally");
+    try {
+      return ros_portal_config::ConfigParser{}.parseString(kDefaultConfigYaml);
+    } catch (const std::exception& e) {
+      RCLCPP_FATAL(logger, "Failed to parse builtin default config: %s", e.what());
+      return std::nullopt;
+    }
   }
 
   try {

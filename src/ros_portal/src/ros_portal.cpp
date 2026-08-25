@@ -75,7 +75,7 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     const auto config_path = this->get_parameter("config_path").as_string();
-    diagnostic_state_.config_path = config_path.empty() ? "unset" : config_path;
+    diagnostic_state_.config_path = config_path.empty() ? "default" : config_path;
   }
   initializeDiagnostics();
 }
@@ -92,7 +92,7 @@ bool RosPortal::initialize() {
   const auto config_path = std::filesystem::path(this->get_parameter("config_path").as_string());
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
-    diagnostic_state_.config_path = config_path.empty() ? "unset" : config_path.string();
+    diagnostic_state_.config_path = config_path.empty() ? "default" : config_path.string();
   }
   const auto config = utils::parseRosPortalConfig(config_path, this->get_logger());
   if (!config) {
@@ -117,7 +117,7 @@ bool RosPortal::initialize() {
   topics_ = config->topics;
 
   RCLCPP_INFO(this->get_logger(),
-              "Polling period: %d ms, %zu configured topics, QoS depth range: [%zu, %zu], ros_threads: %d",
+              "Polling period: %d ms, %zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
@@ -159,6 +159,12 @@ bool RosPortal::initialize() {
   // ROS Portal owns retry cadence. Disable the Rust SDK's immediate inner join
   // retries so each 1 Hz manager tick represents one connection attempt.
   room_options.join_retries = 0U;
+  // Identify ROS Portal to the server as an SDK layered on top of the C++ SDK,
+  // using the version of this build rather than a hardcoded string. Immutable
+  // for the process, so the retry lambda below can capture it by value.
+  const std::string other_sdks = diagnostics::formatOtherSdks(diagnostics::collectBuildInfo());
+  room_options.other_sdks = other_sdks;
+  RCLCPP_DEBUG(this->get_logger(), "LiveKit client info other_sdks: %s", other_sdks.c_str());
 
   ConnectionManager::Methods connection_methods;
   connection_methods.try_connect = [this, livekit_url, livekit_token, room_options]() {

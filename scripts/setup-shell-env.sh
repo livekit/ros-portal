@@ -96,6 +96,11 @@ _prepare_test_env()
 
 _source_test_tokens_if_needed()
 {
+    # The stress harness mints its own Portal and observer tokens in a child
+    # process, so credentials must be exported as well as available to the
+    # shell-based test-token helper.
+    export LIVEKIT_API_KEY="\${LIVEKIT_API_KEY:-devkey}"
+    export LIVEKIT_API_SECRET="\${LIVEKIT_API_SECRET:-secret}"
     if [ -n "\${LIVEKIT_URL:-}" ] && [ -n "\${LIVEKIT_TOKEN_A:-}" ] && [ -n "\${LIVEKIT_TOKEN_B:-}" ]; then
         return 0
     fi

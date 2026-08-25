@@ -27,6 +27,16 @@ isolated room by default; pass `--room` only when intentionally sharing one.
 Artifacts, raw measurements, logs, and `report.md` are written below
 `artifacts/stress/<timestamp>/`.
 
+For LiveKit Cloud, export all three values before invoking `test_stress` so its
+child processes and token-minting step receive the same credentials:
+
+```bash
+export LIVEKIT_URL=wss://<project>.livekit.cloud
+export LIVEKIT_API_KEY=<api-key>
+export LIVEKIT_API_SECRET=<api-secret>
+test_stress --duration-s 600
+```
+
 After warmup, the supervisor prints a `t=<elapsed>s` line once per second with Portal RSS and
 CPU, RTC RTT/loss/bitrate, telemetry frames per second and average latency, and
 video frames per second. Use the final report for percentiles and totals.

@@ -43,6 +43,10 @@ namespace ros_portal {
 /// opens the barrier around @ref Methods::try_connect, enables operations only
 /// after a successful connect/reconnect transition, and closes the session on
 /// failure, disconnect, or @ref stop so waiters never hang.
+///
+/// @ref pauseForwarding and @ref resumeForwarding suspend and resume room operations
+/// without tearing the node down. A latched pause keeps operations disabled across
+/// connect and reconnect transitions.
 class ConnectionManager {
 public:
   using Clock = std::chrono::steady_clock;
@@ -81,6 +85,27 @@ public:
 
   /// @brief Return whether ROS Portal components may use the LiveKit room.
   bool isOperationsEnabled() const;
+
+  /// @brief Resume topic/service/video forwarding operations after @ref pauseForwarding.
+  ///
+  /// Clears the latched pause so connect and reconnect transitions may enable
+  /// operations again, and enables them immediately when the room is already
+  /// connected. Idempotent.
+  /// @return True when room operations are enabled, false when the manager must
+  /// still (re)connect before it can enable them.
+  bool resumeForwarding();
+
+  /// @brief Pause topic/service/video forwarding operations until @ref resumeForwarding.
+  ///
+  /// Disables operations, wakes @ref waitForOperations waiters so they drop
+  /// work, and latches the pause so connect and reconnect transitions leave
+  /// operations disabled. Connection attempts continue, so the room session
+  /// stays ready to resume. Idempotent.
+  /// @return True when room operations are disabled.
+  bool pauseForwarding();
+
+  /// @brief Return whether topic/service/video forwarding is paused by @ref pauseForwarding.
+  bool isForwardingPaused() const;
 
   /// @brief Lifetime-safe flag mirrored by readiness transitions.
   ///
@@ -176,9 +201,12 @@ private:
   std::atomic_bool has_connected_{false};
   Clock::time_point next_attempt_at_{Clock::time_point::min()};
   std::shared_ptr<std::atomic_bool> operations_enabled_{std::make_shared<std::atomic_bool>(false)};
-  std::mutex session_mutex_;
+  mutable std::mutex session_mutex_;
   std::condition_variable session_cv_;
   bool session_closed_{true};
+
+  //! @brief Operator-requested pause of forwarding operations; guarded by @p session_mutex_.
+  bool forwarding_paused_{false};
 };
 
 } // namespace ros_portal

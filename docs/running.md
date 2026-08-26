@@ -112,6 +112,30 @@ export LIVEKIT_URL=<url>
 ros2 launch ros_portal ros_portal.launch.py
 ```
 
+## Pause and Resume Forwarding
+
+ROS Portal advertises two `std_srvs/srv/Trigger` services that suspend and
+resume all room-facing work without restarting the node:
+
+```bash
+# Pause forwarding (topics, latched topics, services, and CLI RPC)
+ros2 service call /ros_portal/pause std_srvs/srv/Trigger
+
+# Resume forwarding
+ros2 service call /ros_portal/resume std_srvs/srv/Trigger
+```
+
+Pausing an already paused portal and resuming an already running one succeed
+and report the state in `message`. `success` is `false` only when the node
+has not initialized (for example when LiveKit credentials are missing) or
+when the node is shutting down.
+
+While paused, ROS Portal keeps its LiveKit room connection so `resume` continues
+without a fresh join, ROS subscriptions stay in place, and no frames, data
+tracks, or RPCs are sent to the room. The `ros_portal_status` diagnostic task
+reports `forwarding_paused` and a `WARN` summary for the duration; see the
+[diagnostics reference](./diagnostics.md#ros_portal_status).
+
 ## Next Steps
 
 Once ROS Portal is running, consider the following as possible next-steps:

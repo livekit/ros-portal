@@ -91,6 +91,7 @@ observable.
 | `graph_discovery_active` | Whether the graph-event discovery worker is running. |
 | `initialized` | Whether initialization completed. |
 | `local_identity` | Connected local participant identity, or `default`. |
+| `forwarding_paused` | Whether an operator paused forwarding operations with the `~/pause` service. |
 
 ## `connection_health`
 

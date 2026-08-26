@@ -2,6 +2,8 @@
 #
 # Helper for example repos:
 # - Downloads the appropriate prebuilt LiveKit C++ SDK release asset for the target OS/arch
+# - On Linux, uses the Ubuntu 22.04 ABI archive so Humble and newer ROS distros can share
+#   one prebuilt SDK
 # - Extracts it into a local directory (default: <build>/_deps/livekit-sdk)
 # - Prepends the extracted prefix to CMAKE_PREFIX_PATH so:
 #     find_package(LiveKit CONFIG REQUIRED)
@@ -47,7 +49,13 @@ endfunction()
 
 function(_lk_default_triple out_triple)
   _lk_detect_host(_os _arch)
-  set(${out_triple} "${_os}-${_arch}" PARENT_SCOPE)
+  if(_os STREQUAL "linux")
+    # Prefer the Ubuntu 22.04 (Jammy) ABI so one prebuilt SDK works on Humble
+    # and newer ROS distros (glibc 2.35 floor), matching the Foxglove model.
+    set(${out_triple} "ubuntu-22.04-${_arch}" PARENT_SCOPE)
+  else()
+    set(${out_triple} "${_os}-${_arch}" PARENT_SCOPE)
+  endif()
 endfunction()
 
 function(_lk_archive_ext out_ext)

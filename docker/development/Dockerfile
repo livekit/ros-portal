@@ -17,13 +17,13 @@ ARG ROS_IMAGE_REPOSITORY=ros
 ARG ROS_IMAGE_TAG=jazzy-ros-base-noble
 FROM ${ROS_IMAGE_REPOSITORY}:${ROS_IMAGE_TAG}@sha256:${ROS_IMAGE_DIGEST}
 
-ARG BUILD_LIVEKIT_SDK_FROM_SOURCE=false
+ARG LIVEKIT_BUILD_SDK_FROM_SOURCE=false
 ARG INSTALL_CPP_TOOLS=true
 ARG INSTALL_SIMULATION_DEPS=true
 ARG ROS_DISTRO=jazzy
 ARG WS_ROS
 ENV DEBIAN_FRONTEND=noninteractive
-ENV BUILD_LIVEKIT_SDK_FROM_SOURCE=${BUILD_LIVEKIT_SDK_FROM_SOURCE}
+ENV LIVEKIT_BUILD_SDK_FROM_SOURCE=${LIVEKIT_BUILD_SDK_FROM_SOURCE}
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENV USER=root
 ENV WS=/${WS_ROS}
@@ -90,10 +90,11 @@ RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-turtlesim \
     ros-${ROS_DISTRO}-teleop-twist-keyboard
 
-# Humble's Ubuntu 22.04 runtime is older than the generic LiveKit SDK release
-# artifacts. Install the toolchain needed for the colcon build to compile the
-# pinned SDK vcstool checkout in that image.
-RUN if [ "${BUILD_LIVEKIT_SDK_FROM_SOURCE}" = "true" ]; then \
+# Optional toolchain for compiling the pinned client-sdk-cpp checkout instead of
+# downloading the Ubuntu 22.04 prebuilt release. Not required for normal ROS
+# Portal builds. The same LIVEKIT_BUILD_SDK_FROM_SOURCE flag is the CMake option
+# that selects source vs prebuilt during configure.
+RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \
         clang \

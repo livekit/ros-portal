@@ -18,7 +18,6 @@ $schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_porta
 
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4          # keep > 1 so remote CLI calls have a free executor thread
 
   topics:
     # Velocity commands: received from LiveKit and re-exported so the
@@ -32,4 +31,12 @@ ros_portal:
     # Pose telemetry out to the controller (ROS -> LiveKit).
     - topic: "/turtle.*/pose"
       direction: "out"
-  
+
+  video_sources:
+    - track_name: "pattern_camera"
+      source:
+        type: "pattern"      # was "demo"
+        pattern:             # the block (was "demo:")
+          pattern: "logo"    # the pattern choice — stutters
+          resolution: { width: 1280, height: 720 }
+          framerate_fps: 15

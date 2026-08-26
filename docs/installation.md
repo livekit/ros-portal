@@ -78,6 +78,30 @@ Each package also installs a distro-specific convenience command:
 ros-portal-$ROS_DISTRO
 ```
 
+### GStreamer plugin availability
+
+The package depends on the GStreamer base, good, bad, ugly, and libav plugin
+sets, so `apt install` pulls in everything the encoded video sources need.
+
+It deliberately does not depend on `gstreamer1.0-x`, which would pull X11 client
+libraries onto a headless robot. That package provides the Pango plugin, so
+pipelines using `clockoverlay`, `textoverlay`, or `timeoverlay` — including the
+`ros_portal_tutorials` configuration — fail to start with:
+
+```log
+[ERROR] [ros_portal]: Video source 'pattern_camera' failed to start: invalid
+request: GStreamer pipeline error: failed to create pipeline: no element
+"clockoverlay"
+```
+
+Install it explicitly on machines whose pipelines stamp frames:
+
+```bash
+sudo apt install gstreamer1.0-x
+```
+
+The Docker images ship it already; see [Docker](docker.md).
+
 ### Troubleshooting
 
 Missing `diagnostic-updater` package:

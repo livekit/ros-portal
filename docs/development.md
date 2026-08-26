@@ -12,6 +12,17 @@ External repositories are tracked in `external.repos` using `vcstool`.
 
 __NOTE:__ Git Authentication From The Devcontainer is currently not supported.
 
+An existing container keeps the APT packages it was built with. When a commit
+adds a system dependency to `docker/development/Dockerfile` or a new
+`build_depend` to a `package.xml`, rebuild the container rather than reusing it;
+otherwise the build fails on the missing library. A stale GStreamer toolchain,
+for example, fails the LiveKit SDK source build at link time with
+`cannot find -lgstapp-1.0`.
+
+```bash
+devcontainer up --workspace-folder . --remove-existing-container
+```
+
 ## ROS Distribution
 
 The devcontainer defaults to ROS 2 Jazzy. Its Docker build accepts
@@ -50,15 +61,21 @@ The remaining overrides are independent feature choices:
 - `INSTALL_CPP_TOOLS` defaults to `true`. Set it to `false` when the formatter
   and static-analysis toolchain are unnecessary. The distro matrix disables it
   because those tools have a dedicated workflow.
-- `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `false`. Humble requires `true`
-  because its system toolchain is incompatible with the release archive.
+- `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `true`, which every distribution
+  currently needs. Setting it to `false` downloads the `LIVEKIT_SDK_VERSION`
+  release archive instead, and that archive does not build today.
 - `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
   other than the default `ros` repository.
 
-Humble must build the pinned LiveKit SDK from source because the generic Linux
-release artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04
-provides. CI installs the source-build toolchain in the Humble image and asks
-ROS Portal CMake configuration to build the SDK checkout from `external.repos`.
+Every distribution builds the pinned LiveKit SDK from source because capture
+(`livekit/capture_source.h`) only exists on the pre-release `client-sdk-cpp`
+branch pinned in `external.repos`, not in the `LIVEKIT_SDK_VERSION` release
+archive. Humble needs the source build regardless: the generic Linux release
+artifact requires a newer glibc/libstdc++ ABI than Ubuntu 22.04 provides. CI
+installs the source-build toolchain in each image and asks ROS Portal CMake
+configuration to build the SDK checkout from `external.repos`. Once capture
+ships in a tagged SDK release, the non-Humble distributions can go back to the
+downloaded archive.
 
 ## Shell Helpers
 
@@ -180,6 +197,19 @@ devcontainer:
 colcon build --packages-up-to ros_portal
 ./scripts/package-deb.sh
 ```
+
+The `ros_portal` test translation units are the workspace's largest, and a
+default-parallelism build of them exhausts a 8 GB Docker Desktop VM, which the
+kernel reports as `c++: fatal error: Killed signal terminated program cc1plus`.
+Bound the compiler jobs on a memory-constrained host:
+
+```bash
+CMAKE_BUILD_PARALLEL_LEVEL=3 colcon build --packages-up-to ros_portal \
+  --parallel-workers 1
+```
+
+The runtime image is built from the resulting `.deb`; see
+[Build a runtime image locally](docker.md#build-a-runtime-image-locally).
 
 The resulting self-contained package preserves the isolated prefixes for ROS
 Portal, config, message, and medkit packages under `/opt/livekit/ros/$ROS_DISTRO`;

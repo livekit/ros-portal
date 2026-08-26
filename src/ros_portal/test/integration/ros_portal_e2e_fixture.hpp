@@ -123,7 +123,6 @@ inline std::string rosPortalConfigYaml(const std::string& topic_pattern, bool pr
   stream << "ros_portal:\n"
          << "  version: \"0.0.1\"\n"
          << "  topic_polling_period_ms: 50\n"
-         << "  ros_threads: 4\n"
          << "  topics:\n"
          << "    - topic: \"" << topic_pattern << "\"\n"
          << "      direction: \"" << direction << "\"\n";
@@ -263,6 +262,28 @@ protected:
     graph_b_executor_->add_node(robot_b_node_);
 
     startGraphBSpin();
+  }
+
+  void initializeSinglePortalRuntime(const std::string& config_yaml) {
+    ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+
+    const auto [domain_id_a, domain_id_b] = testDomainIds();
+    (void)domain_id_b;
+    graph_a_ = std::make_unique<ScopedRosGraph>(domain_id_a);
+    SCOPED_TRACE("ROS graph A domain_id=" + std::to_string(graph_a_->domain_id()));
+
+    config_file_a_ = std::make_unique<TemporaryConfigFile>(config_yaml, "ros_portal_single_test_e2e_a_");
+    ros_portal_a_ = createRosPortal(*graph_a_, "/ros_portal_a_node", token_a_, config_file_a_->path().string());
+    ASSERT_NE(ros_portal_a_, nullptr);
+
+    graph_a_executor_ =
+        std::make_unique<rclcpp::executors::MultiThreadedExecutor>(executorOptions(graph_a_->context()), 2);
+    graph_a_executor_->add_node(ros_portal_a_);
+    graph_a_spinning_.store(true);
+    graph_a_spin_thread_ = std::thread([this]() {
+      graph_a_executor_->spin();
+      graph_a_spinning_.store(false);
+    });
   }
 
   bool verifyDirection(const std::shared_ptr<rclcpp::Publisher<std_msgs::msg::String>>& publisher,
@@ -517,6 +538,7 @@ protected:
   const std::string& identityB() const { return identity_b_; }
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
+  const std::string& tokenB() const { return token_b_; }
   std::shared_ptr<RosPortal> rosPortalA() const { return ros_portal_a_; }
 
   void setLiveKitUrl(std::string livekit_url) { livekit_url_ = std::move(livekit_url); }

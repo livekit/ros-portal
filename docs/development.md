@@ -49,10 +49,11 @@ The remaining overrides are independent feature choices:
 - `INSTALL_CPP_TOOLS` defaults to `true`. Set it to `false` when the formatter
   and static-analysis toolchain are unnecessary. The distro matrix disables it
   because those tools have a dedicated workflow.
-- `BUILD_LIVEKIT_SDK_FROM_SOURCE` defaults to `false`. Leave it off for normal
+- `LIVEKIT_BUILD_SDK_FROM_SOURCE` defaults to `false`. Leave it off for normal
   builds; the pinned Ubuntu 22.04 SDK archive works on Humble through Lyrical.
   Set it to `true` only when iterating on the SDK checkout itself (installs the
-  Rust/C++ toolchain needed to compile `client-sdk-cpp`).
+  Rust/C++ toolchain needed to compile `client-sdk-cpp`, and CMake defaults to
+  building that checkout instead of downloading the archive).
 - `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
   other than the default `ros` repository.
 ## Shell Helpers
@@ -138,8 +139,9 @@ colcon build --packages-select ros_portal \
   --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
 ```
 
-When building from source, enable `BUILD_LIVEKIT_SDK_FROM_SOURCE=true` for the
-devcontainer so the image installs the Rust/C++ toolchain. The SDK uses
+When building from source, enable `LIVEKIT_BUILD_SDK_FROM_SOURCE=true` for the
+devcontainer so the image installs the Rust/C++ toolchain (the same name is the
+CMake option, so that container default also selects the source build). The SDK uses
 isolated build and install directories under ROS Portal package's colcon build
 directory. Its source build defaults to two parallel jobs. Set
 `CMAKE_BUILD_PARALLEL_LEVEL` or `LIVEKIT_SDK_BUILD_JOBS` to override that bound;

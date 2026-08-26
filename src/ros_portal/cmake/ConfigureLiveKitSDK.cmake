@@ -52,11 +52,11 @@ function(livekit_configure_sdk)
   endif()
 
   set(_livekit_build_sdk_from_source_default OFF)
-  if(DEFINED ENV{BUILD_LIVEKIT_SDK_FROM_SOURCE})
+  if(DEFINED ENV{LIVEKIT_BUILD_SDK_FROM_SOURCE})
     set(_livekit_build_sdk_from_source_default
-      "$ENV{BUILD_LIVEKIT_SDK_FROM_SOURCE}")
+      "$ENV{LIVEKIT_BUILD_SDK_FROM_SOURCE}")
   endif()
-  option(LIVEKIT_BUILD_SDK_FROM_SOURCE
+  option(LIVEKIT_BUILD_SDK_FROM_SOURCE)
     "Build the pinned client-sdk-cpp checkout instead of downloading an SDK archive"
     "${_livekit_build_sdk_from_source_default}")
 

@@ -127,12 +127,10 @@ jobs:
             update_distro_tags="${UPDATE_DISTRO_TAGS_INPUT:-false}"
           fi
 
-          {
-            echo "tag=${RELEASE_TAG}"
-            echo "version=${package_version}"
-            echo "publish_docker=${publish_docker}"
-            echo "update_distro_tags=${update_distro_tags}"
-          } >> "${GITHUB_OUTPUT}"
+          echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${package_version}" >> "${GITHUB_OUTPUT}"
+          echo "publish_docker=${publish_docker}" >> "${GITHUB_OUTPUT}"
+          echo "update_distro_tags=${update_distro_tags}" >> "${GITHUB_OUTPUT}"
           echo "Release tag: ${RELEASE_TAG} (package version: ${package_version})"
           echo "Publish Docker images: ${publish_docker}"
           echo "Update Docker distro tags: ${update_distro_tags}"

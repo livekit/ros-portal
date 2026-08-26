@@ -4,7 +4,7 @@
     "context": "..",
     "dockerfile": "../docker/development/Dockerfile",
     "args": {
-      "BUILD_LIVEKIT_SDK_FROM_SOURCE": "${localEnv:BUILD_LIVEKIT_SDK_FROM_SOURCE:false}",
+      "LIVEKIT_BUILD_SDK_FROM_SOURCE": "${localEnv:LIVEKIT_BUILD_SDK_FROM_SOURCE:false}",
       "INSTALL_CPP_TOOLS": "${localEnv:INSTALL_CPP_TOOLS:true}",
       "INSTALL_SIMULATION_DEPS": "${localEnv:INSTALL_SIMULATION_DEPS:true}",
       "ROS_DISTRO": "${localEnv:ROS_DISTRO:jazzy}",

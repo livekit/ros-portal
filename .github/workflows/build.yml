@@ -24,6 +24,7 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:
+      LIVEKIT_BUILD_SDK_FROM_SOURCE: "false"
       CMAKE_BUILD_PARALLEL_LEVEL: 2
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"

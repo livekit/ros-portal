@@ -31,6 +31,7 @@ ros_portal:
       direction: "out"
       participant: "robot-a"
       msg_type: "std_srvs/srv/Trigger"
+      # Todo enable user timeout
 
   topics:
     - topic: "/camera/image_raw"

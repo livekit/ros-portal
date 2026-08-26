@@ -26,6 +26,7 @@
 #include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <string>
 #include <vector>
 
@@ -103,6 +104,10 @@ private:
   FRIEND_TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
+  FRIEND_TEST(RosPortalPauseResumeTest, ReportsNotInitializedWithoutConnectionManager);
+  FRIEND_TEST(RosPortalPauseResumeTest, PauseAndResumeForwardingAreIdempotent);
+  FRIEND_TEST(RosPortalPauseResumeTest, ResumeWithoutRoomConnectionDefersOperations);
+  FRIEND_TEST(RosPortalPauseResumeTest, ReportsPausedOperationsInDiagnostics);
 #endif
 
   /// @brief Mutable counters and state published by `ros_portal_status`.
@@ -158,6 +163,33 @@ private:
 
   /// @brief Return whether room-facing ROS Portal operations are currently allowed.
   bool roomOperationsEnabled() const;
+
+  /// @brief Advertise the `~/pause` and `~/resume` operation control services.
+  ///
+  /// Both services are advertised for the lifetime of the node so an operator
+  /// can control ROS Portal even when initialization has not (yet) completed.
+  void initializeForwardingServices();
+
+  /// @brief Resume forwarding operations.
+  /// @param request Unused trigger request.
+  /// @param response Populated with `success` and a human-readable message.
+  ///
+  /// Succeeds and reports `already running` when operations are not paused.
+  void handleResumeForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& request,
+                                     const std::shared_ptr<std_srvs::srv::Trigger::Response>& response);
+
+  /// @brief Pause forwarding operations.
+  /// @param request Unused trigger request.
+  /// @param response Populated with `success` and a human-readable message.
+  ///
+  /// Succeeds and reports `already paused` when operations are already paused.
+  /// The LiveKit room connection is kept so operations can resume without a
+  /// fresh join.
+  void handlePauseForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& request,
+                                    const std::shared_ptr<std_srvs::srv::Trigger::Response>& response);
+
+  /// @brief Return whether forwarding operations are paused.
+  bool isForwardingPaused() const;
 
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
@@ -280,6 +312,10 @@ private:
   rclcpp::TimerBase::SharedPtr connection_timer_;
   //! @brief Owns graph events, snapshots, and the discovery worker.
   std::unique_ptr<graph::GraphManager> graph_manager_;
+  //! @brief `~/resume` service that resumes room-facing operations.
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr resume_service_;
+  //! @brief `~/pause` service that pauses room-facing operations.
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr pause_service_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;

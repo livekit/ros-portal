@@ -75,6 +75,7 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     diagnostic_state_.config_path = config_path.empty() ? "default" : config_path;
   }
   initializeDiagnostics();
+  initializeForwardingServices();
 }
 
 bool RosPortal::initialize() {
@@ -418,6 +419,78 @@ bool RosPortal::roomOperationsEnabled() const {
   return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_->load();
 }
 
+bool RosPortal::isForwardingPaused() const {
+  return connection_manager_ != nullptr && connection_manager_->isForwardingPaused();
+}
+
+void RosPortal::initializeForwardingServices() {
+  if (resume_service_ && pause_service_) {
+    return;
+  }
+
+  // Advertised on the node's default callback group so the services stay
+  // available for the whole node lifetime, independent of the polling timers
+  // and of whether initialization succeeded.
+  try {
+    // NOLINTBEGIN(performance-unnecessary-value-param): ROS Jazzy matches service callbacks on their exact
+    // argument types, so the shared pointers cannot be taken by const reference here.
+    resume_service_ = this->create_service<std_srvs::srv::Trigger>(
+        "~/resume", [this](std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+                           std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          handleResumeForwardingRequest(request, response);
+        });
+    pause_service_ = this->create_service<std_srvs::srv::Trigger>(
+        "~/pause", [this](std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+                          std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          handlePauseForwardingRequest(request, response);
+        });
+    // NOLINTEND(performance-unnecessary-value-param)
+  } catch (const std::exception& error) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to advertise the ROS Portal pause/resume services: %s", error.what());
+  }
+}
+
+void RosPortal::handleResumeForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& /*request*/,
+                                              const std::shared_ptr<std_srvs::srv::Trigger::Response>& response) {
+  if (shutting_down_.load(std::memory_order_relaxed) || !connection_manager_) {
+    response->success = false;
+    response->message = "ROS Portal is not initialized";
+    RCLCPP_WARN(this->get_logger(), "Rejecting resume request: %s", response->message.c_str());
+    return;
+  }
+
+  // Not paused: room operations already follow the room connection state.
+  if (!connection_manager_->isForwardingPaused()) {
+    response->success = true;
+    response->message = roomOperationsEnabled() ? "ROS Portal is already running"
+                                                : "ROS Portal is already running; waiting for a room connection";
+    return;
+  }
+
+  const bool enabled = connection_manager_->resumeForwarding();
+  response->success = true;
+  response->message = enabled ? "ROS Portal resumed" : "ROS Portal resumed; waiting for a room connection";
+}
+
+void RosPortal::handlePauseForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& /*request*/,
+                                             const std::shared_ptr<std_srvs::srv::Trigger::Response>& response) {
+  if (shutting_down_.load(std::memory_order_relaxed) || !connection_manager_) {
+    response->success = false;
+    response->message = "ROS Portal is not initialized";
+    RCLCPP_WARN(this->get_logger(), "Rejecting pause request: %s", response->message.c_str());
+    return;
+  }
+
+  if (connection_manager_->isForwardingPaused()) {
+    response->success = true;
+    response->message = "ROS Portal is already paused";
+    return;
+  }
+
+  response->success = connection_manager_->pauseForwarding();
+  response->message = response->success ? "ROS Portal paused" : "Failed to pause ROS Portal";
+}
+
 void RosPortal::pollConnection() {
   if (!initialized_.load(std::memory_order_relaxed)) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
@@ -447,6 +520,13 @@ void RosPortal::pollConnection() {
 
   connection_manager_->poll(*room_);
   if (!connection_manager_->isConnected()) {
+    return;
+  }
+
+  // Operations paused by `~/pause`: hold the room connection so a later
+  // `~/resume` continues without a fresh join, but do not start the room-bound
+  // components that would immediately fail on the disabled operations gate.
+  if (connection_manager_->isForwardingPaused()) {
     return;
   }
 
@@ -507,18 +587,22 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
 
   const bool initialized = initialized_.load(std::memory_order_relaxed);
   const bool graph_discovery_active = diagnostic_state_.graph_discovery_active.load(std::memory_order_relaxed);
+  const bool forwarding_paused = isForwardingPaused();
 
   status.add("initialized", initialized ? "true" : "false");
   status.add("components_inactive", has_inactive_components ? components_inactive : "none");
   status.add("config_path", config_path);
   status.add("graph_discovery_active", graph_discovery_active ? "true" : "false");
   status.add("local_identity", local_identity);
+  status.add("forwarding_paused", forwarding_paused ? "true" : "false");
 
   if (!initialized) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal is not initialized");
   } else if (!graph_discovery_active) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
                    "ROS Portal is initialized without an active graph discovery worker");
+  } else if (forwarding_paused) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "ROS Portal operations are paused");
   } else if (has_inactive_components) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal has inactive components");
   } else {
@@ -701,7 +785,8 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
         if (!operations_enabled->load()) {
           return livekit::Result<void, std::string>::success();
         }
-        const auto push_result = track->tryPush(data, size);
+        std::vector<std::uint8_t> payload(data, data + size);
+        const auto push_result = track->tryPush(std::move(payload));
         if (!push_result) {
           const auto& error = push_result.error();
           return livekit::Result<void, std::string>::failure(

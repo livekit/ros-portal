@@ -41,6 +41,7 @@ ament_auto_find_build_dependencies(REQUIRED
   rosidl_typesupport_introspection_cpp
   sensor_msgs
   std_msgs
+  std_srvs
   yaml_cpp_vendor)
 
 # Use rosbag2's renderer where its header is available.

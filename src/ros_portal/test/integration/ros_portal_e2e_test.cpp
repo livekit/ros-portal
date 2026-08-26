@@ -220,6 +220,42 @@ TEST_F(RosPortalTestE2E, DoesNotRepublishTopicNotAllowedOnReceiver) {
                                           "message that should stay blocked"));
 }
 
+// End-to-end check of the operation control services: `~/pause` suspends
+// forwarding for the whole node and `~/resume` restores it, both without
+// restarting ROS Portal or rejoining the LiveKit room.
+TEST_F(RosPortalTestE2E, PauseSuspendsForwardingAndResumeRestoresIt) {
+  initializeRuntime(kBidirectionalTopic);
+
+  ASSERT_TRUE(
+      verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic, "message before pause"));
+
+  const auto paused = callTriggerService(robotANode(), "ros_portal/pause");
+  ASSERT_NE(paused, nullptr);
+  EXPECT_TRUE(paused->success);
+  EXPECT_EQ(paused->message, "ROS Portal paused");
+
+  const auto paused_again = callTriggerService(robotANode(), "ros_portal/pause");
+  ASSERT_NE(paused_again, nullptr);
+  EXPECT_TRUE(paused_again->success);
+  EXPECT_EQ(paused_again->message, "ROS Portal is already paused");
+
+  EXPECT_TRUE(verifyDirectionNotForwarded(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic,
+                                          "message while paused"));
+
+  const auto resumed = callTriggerService(robotANode(), "ros_portal/resume");
+  ASSERT_NE(resumed, nullptr);
+  EXPECT_TRUE(resumed->success);
+  EXPECT_EQ(resumed->message, "ROS Portal resumed");
+
+  const auto resumed_again = callTriggerService(robotANode(), "ros_portal/resume");
+  ASSERT_NE(resumed_again, nullptr);
+  EXPECT_TRUE(resumed_again->success);
+  EXPECT_EQ(resumed_again->message, "ROS Portal is already running");
+
+  EXPECT_TRUE(
+      verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, kBidirectionalTopic, "message after resume"));
+}
+
 // Case: A valid track published after ROS Portal startup but before a ROS
 // subscriber appears should begin forwarding when the subscriber joins.
 // 1. Start the receiving ROS Portal node without a ROS subscriber.

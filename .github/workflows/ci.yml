@@ -55,9 +55,10 @@ jobs:
       os: ${{ matrix.os }}
       ros_image_tag: ${{ matrix.ros_image_tag }}
       ros_image_digest: ${{ matrix.ros_image_digest }}
-      test_repetitions: 1
-      test_timeout_minutes: 90
-      run_package: true
+      # Temporary: stress this PR before merge. Revert this block after validation.
+      test_repetitions: ${{ github.event_name == 'pull_request' && github.head_ref == 'sderosa/BOT-531-nightly-stress' && 100 || 1 }}
+      test_timeout_minutes: ${{ github.event_name == 'pull_request' && github.head_ref == 'sderosa/BOT-531-nightly-stress' && 360 || 90 }}
+      run_package: ${{ github.event_name != 'pull_request' || github.head_ref != 'sderosa/BOT-531-nightly-stress' }}
     secrets: inherit
 
   ci:

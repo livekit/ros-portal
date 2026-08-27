@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       test_repetitions:
-        description: Number of times to run the complete test suite per ROS distribution and architecture
+        description: Number of successful executions required for each selected CTest test
         required: false
         default: 100
         type: number

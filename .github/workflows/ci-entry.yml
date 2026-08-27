@@ -15,7 +15,7 @@ on:
       ros_image_digest: {required: true, type: string}
       git_ref: {required: false, type: string}
       test_repetitions:
-        description: Number of times to run the complete test suite
+        description: Number of successful executions required for each selected CTest test
         required: false
         default: 1
         type: number

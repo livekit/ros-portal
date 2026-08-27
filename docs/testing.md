@@ -4,8 +4,9 @@ There are unit and integration tests which are run in CI. For more manual integr
 
 CI uses the reusable `CI Matrix Entry` workflow for every supported ROS
 distribution and architecture. The `Nightly Stress Tests` workflow uses the
-same workflow and runs the complete test suite 100 times per matrix entry. It
-can also be started manually with different repetition and timeout values.
+same workflow and requires each selected CTest test to pass 100 times per
+matrix entry. It can also be started manually with different repetition and
+timeout values.
 
 ## Unit Tests
 

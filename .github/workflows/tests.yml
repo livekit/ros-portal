@@ -15,7 +15,7 @@ on:
       ros_image_digest: {required: true, type: string}
       git_ref: {required: false, type: string}
       test_repetitions:
-        description: Number of times to run the complete test suite
+        description: Number of successful executions required for each selected CTest test
         required: false
         default: 1
         type: number
@@ -81,15 +81,13 @@ jobs:
               source "/opt/ros/${ROS_DISTRO}/setup.bash"
               source install/setup.bash
               set -u
-              for iteration in $(seq 1 "${TEST_REPETITIONS}"); do
-                echo "===== Unit test iteration ${iteration}/${TEST_REPETITIONS} ====="
-                test_exit=0
-                GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_unit_tests || test_exit=$?
-                colcon test-result --verbose --all
-                if [ "${test_exit}" -ne 0 ]; then
-                  exit "${test_exit}"
-                fi
-              done
+              test_repetitions="${{ inputs.test_repetitions }}"
+              retest_until_fail=$((test_repetitions - 1))
+              echo "===== Run each unit CTest test ${test_repetitions} times ====="
+              test_exit=0
+              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --retest-until-fail "${retest_until_fail}" --ctest-args -R ros_portal_unit_tests || test_exit=$?
+              colcon test-result --verbose --all
+              exit "${test_exit}"
             '
       - name: Start livekit-server
         id: livekit_server
@@ -116,15 +114,13 @@ jobs:
               source install/setup.bash
               set -u
               source .token_helpers/set_test_tokens.bash
-              for iteration in $(seq 1 "${TEST_REPETITIONS}"); do
-                echo "===== Integration test iteration ${iteration}/${TEST_REPETITIONS} ====="
-                test_exit=0
-                GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_integration_tests || test_exit=$?
-                colcon test-result --verbose --all
-                if [ "${test_exit}" -ne 0 ]; then
-                  exit "${test_exit}"
-                fi
-              done
+              test_repetitions="${{ inputs.test_repetitions }}"
+              retest_until_fail=$((test_repetitions - 1))
+              echo "===== Run each integration CTest test ${test_repetitions} times ====="
+              test_exit=0
+              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --retest-until-fail "${retest_until_fail}" --ctest-args -R ros_portal_integration_tests || test_exit=$?
+              colcon test-result --verbose --all
+              exit "${test_exit}"
             '
       - name: "colcon test: connection faults"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -144,15 +140,13 @@ jobs:
               set -u
               source .token_helpers/set_test_tokens.bash
               export ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1
-              for iteration in $(seq 1 "${TEST_REPETITIONS}"); do
-                echo "===== Connection-fault test iteration ${iteration}/${TEST_REPETITIONS} ====="
-                test_exit=0
-                GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_connection_fault_tests || test_exit=$?
-                colcon test-result --verbose --all
-                if [ "${test_exit}" -ne 0 ]; then
-                  exit "${test_exit}"
-                fi
-              done
+              test_repetitions="${{ inputs.test_repetitions }}"
+              retest_until_fail=$((test_repetitions - 1))
+              echo "===== Run each connection-fault CTest test ${test_repetitions} times ====="
+              test_exit=0
+              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --retest-until-fail "${retest_until_fail}" --ctest-args -R ros_portal_connection_fault_tests || test_exit=$?
+              colcon test-result --verbose --all
+              exit "${test_exit}"
             '
       - name: Dump LiveKit server log on failure
         if: failure()

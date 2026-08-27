@@ -18,6 +18,8 @@
 
 #include <gtest/gtest.h>
 
+#include "test_common.hpp"
+
 #include <atomic>
 #include <chrono>
 #include <functional>
@@ -135,14 +137,16 @@ TEST(GraphManagerTest, StartsWorkerAndReconcilesInitialSnapshot) {
 }
 
 TEST(GraphManagerTest, SkipsRedundantReconcileForUnchangedTopicGraph) {
-  const auto node = std::make_shared<rclcpp::Node>("graph_manager_unchanged_test");
+  // Runs on an isolated ROS domain: the default domain is shared with the launch tests,
+  // whose nodes add and remove real topics and would legitimately trigger reconciliation.
+  const ros_portal::test::ScopedRosGraph graph(ros_portal::test::testDomainIds().first);
+  const auto node = std::make_shared<rclcpp::Node>("graph_manager_unchanged_test",
+                                                   rclcpp::NodeOptions().context(graph.context()));
   GraphManager::Callbacks graph_callbacks;
-  std::mutex mutex;
-  std::vector<TopicNamesAndTypes> observed;
+  std::atomic_int reconciles{0};
 
-  graph_callbacks.reconcile_topics = [&mutex, &observed](const TopicNamesAndTypes& topics) {
-    const std::lock_guard<std::mutex> lock(mutex);
-    observed.push_back(topics);
+  graph_callbacks.reconcile_topics = [&reconciles](const TopicNamesAndTypes&) {
+    reconciles.fetch_add(1);
     return true;
   };
   graph_callbacks.next_expiry_deadline = []() { return std::optional<std::chrono::steady_clock::time_point>{}; };
@@ -150,10 +154,7 @@ TEST(GraphManagerTest, SkipsRedundantReconcileForUnchangedTopicGraph) {
   GraphManager manager(nodeInterfaces(*node), std::move(graph_callbacks));
 
   ASSERT_TRUE(manager.start());
-  ASSERT_TRUE(waitUntil([&mutex, &observed]() {
-    const std::lock_guard<std::mutex> lock(mutex);
-    return !observed.empty();
-  }));
+  ASSERT_TRUE(waitUntil([&reconciles]() { return reconciles.load() == 1; }));
 
   // Graph events that leave the topic set untouched must not re-run reconciliation.
   // ROS raises such an event for the node's own entities shortly after startup.
@@ -161,15 +162,9 @@ TEST(GraphManagerTest, SkipsRedundantReconcileForUnchangedTopicGraph) {
     node->get_node_graph_interface()->notify_graph_change();
     std::this_thread::sleep_for(std::chrono::milliseconds(40));
   }
-  manager.stop();
+  EXPECT_EQ(reconciles.load(), 1);
 
-  // Other tests may share this ROS domain, so the topic set can legitimately change
-  // mid-test. Assert the invariant instead: no two consecutive reconciles are identical.
-  const std::lock_guard<std::mutex> lock(mutex);
-  ASSERT_FALSE(observed.empty());
-  for (std::size_t i = 1; i < observed.size(); ++i) {
-    EXPECT_NE(observed[i], observed[i - 1]) << "reconciled twice for an unchanged topic graph at index " << i;
-  }
+  manager.stop();
 }
 
 TEST(GraphManagerTest, RetriesReconcileWhenCallbackDidNotApplySnapshot) {

@@ -90,9 +90,19 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   if (!topic_publish_allowed_) {
     topic_publish_allowed_ = [](const std::string&) { return true; };
   }
+  if (!node_interfaces_.topic_snapshot) {
+    node_interfaces_.topic_snapshot = [graph = node_interfaces_.node_graph]() {
+      return std::make_shared<const TopicNamesAndTypes>(graph->get_topic_names_and_types());
+    };
+  }
+  if (!node_interfaces_.service_snapshot) {
+    node_interfaces_.service_snapshot = [graph = node_interfaces_.node_graph]() {
+      return std::make_shared<const ServiceNamesAndTypes>(graph->get_service_names_and_types());
+    };
+  }
 
-  topic_publisher_ =
-      std::make_unique<TopicPub>(node_interfaces_.node_topics, node_interfaces_.node_graph, topic_publish_allowed_);
+  topic_publisher_ = std::make_unique<TopicPub>(node_interfaces_.node_topics, node_interfaces_.node_graph,
+                                                topic_publish_allowed_, node_interfaces_.topic_snapshot);
   service_caller_ = std::make_unique<ServiceCall>(node_interfaces_.node_base, node_interfaces_.node_graph, logger_);
 
   // Service and RPC creation are best-effort: on failure we log and continue so
@@ -169,6 +179,8 @@ Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_g
               node.get_node_graph_interface(),
               node.get_node_topics_interface(),
               node.get_node_logging_interface(),
+              {},
+              {},
           },
           callback_group, std::move(livekit_methods), std::move(topic_publish_allowed), std::move(diagnostics)) {}
 
@@ -430,8 +442,13 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
   }
 
   try {
+    // List RPCs promise the graph state at request time. Discovery and topic
+    // publishing can use a shared snapshot, but a cached snapshot may still
+    // represent the generation before a just-observed graph event.
+    const auto topics =
+        std::make_shared<const TopicNamesAndTypes>(node_interfaces_.node_graph->get_topic_names_and_types());
     const auto output =
-        formatTopicList(collectTopicInfo(*node_interfaces_.node_graph, options.value()), options.value());
+        formatTopicList(collectTopicInfo(*topics, *node_interfaces_.node_graph, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicListRpcMethod, error.what());
@@ -463,8 +480,11 @@ std::string Manager::handleServiceListRpc(const std::string& payload) const {
   }
 
   try {
-    const auto output =
-        formatServiceList(collectServiceInfo(*node_interfaces_.node_graph, options.value()), options.value());
+    // See handleTopicListRpc: list RPCs must not return a stale cached graph
+    // snapshot while the discovery worker is processing a graph event.
+    const auto services =
+        std::make_shared<const ServiceNamesAndTypes>(node_interfaces_.node_graph->get_service_names_and_types());
+    const auto output = formatServiceList(collectServiceInfo(*services, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceListRpcMethod, error.what());

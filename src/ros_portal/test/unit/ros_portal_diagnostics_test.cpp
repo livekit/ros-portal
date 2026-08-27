@@ -72,7 +72,6 @@ public:
     std::ofstream output(path_);
     output << R"(ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 250
   ros_threads: 3
   topics: []
 )";
@@ -116,21 +115,19 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   EXPECT_EQ(diagnosticValueFor(status, "components_inactive"),
             "connection_manager,topic_forwarder,latched_topic_forwarder,service_forwarder,cli_manager");
   EXPECT_EQ(diagnosticValueFor(status, "config_path"), config.path().string());
-  EXPECT_EQ(diagnosticValueFor(status, "topic_polling_period_ms"), "250");
+  EXPECT_EQ(diagnosticValueFor(status, "graph_discovery_active"), "false");
   EXPECT_EQ(diagnosticValueFor(status, "local_identity"), "unset");
   EXPECT_EQ(diagnosticValueFor(status, "rpc_register_failures"), "0");
   EXPECT_EQ(diagnosticValueFor(status, "rpc_perform_failures"), "0");
-  EXPECT_EQ(diagnosticValueFor(status, "topic_poll_overruns"), "0");
   EXPECT_FALSE(diagnosticValueFor(status, "min_qos_depth").has_value());
   EXPECT_FALSE(diagnosticValueFor(status, "max_qos_depth").has_value());
   EXPECT_FALSE(diagnosticValueFor(status, "ros_threads").has_value());
-  EXPECT_FALSE(diagnosticValueFor(status, "poll_timer_active").has_value());
 }
 
-TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates) {
+TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
   RosPortal portal;
   portal.initialized_.store(true);
-  portal.poll_timer_ = portal.create_wall_timer(std::chrono::hours(24), []() {});
+  portal.diagnostic_state_.graph_discovery_active.store(true);
   portal.diagnostic_state_.connection_manager_active.store(true);
   portal.diagnostic_state_.topic_forwarder_active.store(true);
   portal.diagnostic_state_.latched_topic_forwarder_active.store(true);
@@ -144,11 +141,11 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates) {
   EXPECT_EQ(healthy_status.message, "ROS Portal is initialized");
   EXPECT_EQ(diagnosticValueFor(healthy_status, "components_inactive"), "none");
 
-  portal.diagnostic_state_.topic_poll_overruns.store(1);
-  diagnostic_updater::DiagnosticStatusWrapper overrun_status;
-  portal.populateStatus(overrun_status);
-  EXPECT_EQ(overrun_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(overrun_status.message, "ROS Portal topic polling has overrun");
+  portal.diagnostic_state_.graph_discovery_active.store(false);
+  diagnostic_updater::DiagnosticStatusWrapper stalled_status;
+  portal.populateStatus(stalled_status);
+  EXPECT_EQ(stalled_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(stalled_status.message, "ROS Portal is initialized without an active graph discovery worker");
 }
 
 TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures) {

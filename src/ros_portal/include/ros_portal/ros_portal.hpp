@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/types.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
@@ -47,6 +48,9 @@ namespace cli {
 class Manager;
 } // namespace cli
 class ConnectionManager;
+namespace graph {
+class GraphManager;
+} // namespace graph
 class TopicForwarder;
 class LatchedTopicForwarder;
 
@@ -55,7 +59,7 @@ inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
 
 /// @brief The main ROS Portal node.
 ///
-/// This node is responsible for polling the ROS2 topic graph, matching topics
+/// This node is responsible for reacting to ROS2 graph events, matching topics
 /// against user-defined patterns, and creating subscribers for the allowed
 /// topics. ROS Portal treats video and audio as LK video/audio tracks and other
 /// topics as data tracks.
@@ -67,7 +71,7 @@ public:
   ~RosPortal() override;
 
   /// @brief Initialize ROS Portal configuration, LiveKit connection management,
-  /// and polling.
+  /// and graph discovery.
   /// @return True if initialization completed, false for expected startup
   /// failures that have already been logged.
   bool initialize();
@@ -95,7 +99,7 @@ private:
   void pollConnection();
 #ifdef BUILD_TESTING
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
-  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndOverrunStates);
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
 #endif
 
@@ -107,8 +111,8 @@ private:
     std::string config_path{"unset"};
     /// @brief Connected local LiveKit identity, or `unset`.
     std::string local_identity{"unset"};
-    /// @brief Effective topic polling period.
-    std::atomic<int> topic_polling_period_ms{0};
+    /// @brief Whether the graph-event discovery worker is running.
+    std::atomic_bool graph_discovery_active{false};
     /// @brief Whether the connection manager is instantiated.
     std::atomic_bool connection_manager_active{false};
     /// @brief Whether the topic forwarder is instantiated.
@@ -119,16 +123,20 @@ private:
     std::atomic_bool cli_manager_active{false};
     /// @brief Whether the service forwarder is instantiated.
     std::atomic_bool service_forwarder_active{false};
-    /// @brief Count of topic polls that exceeded the configured period.
-    std::atomic<std::uint64_t> topic_poll_overruns{0};
     /// @brief Count of shared LiveKit RPC method registration failures.
     std::atomic<std::uint64_t> rpc_register_failures{0};
     /// @brief Count of shared LiveKit outbound RPC failures.
     std::atomic<std::uint64_t> rpc_perform_failures{0};
   };
 
-  /// @brief Poll the topics and create subscribers for the allowed topics
-  void pollTopics();
+  /// @brief Reconcile all graph-dependent forwarders from one shared snapshot.
+  /// @param topics Shared snapshot from the graph manager.
+  /// @return True when the snapshot was applied to the active forwarders; false when
+  ///         room components are not yet started, so the snapshot is reconciled again later.
+  bool reconcileGraphTopics(const TopicNamesAndTypes& topics);
+
+  /// @brief Drop outbound subscriptions whose grace period has elapsed.
+  void reapInactiveSubscriptions();
 
   /// @brief Create components whose LiveKit state belongs to the current room
   /// session.
@@ -252,9 +260,6 @@ private:
   /// the forwarder could not be initialized.
   bool initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics);
 
-  //! @brief The period for polling the topics
-  int topic_polling_period_ms_;
-
   //! @brief The minimum QoS depth
   size_t min_qos_depth_;
   //! @brief The maximum QoS depth
@@ -270,10 +275,10 @@ private:
   std::atomic_bool shutting_down_;
   //! @brief Reentrant callback group shared by all subscriptions
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
-  //! @brief The timer for the polling for new topics
-  rclcpp::TimerBase::SharedPtr poll_timer_;
   //! @brief Fixed-rate timer for LiveKit room connection attempts.
   rclcpp::TimerBase::SharedPtr connection_timer_;
+  //! @brief Owns graph events, snapshots, and the discovery worker.
+  std::unique_ptr<graph::GraphManager> graph_manager_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
@@ -292,8 +297,8 @@ private:
   bool room_session_prepared_{false};
   //! @brief Whether room-session-bound forwarding components are active.
   bool room_components_started_{false};
-  //! @brief Serializes room component start, stop, polling, and delegate access.
-  std::mutex room_components_mutex_;
+  //! @brief Serializes room component start, stop, discovery, and delegate access.
+  mutable std::mutex room_components_mutex_;
   //! @brief Stored topic configuration used to recreate components after reconnect.
   std::vector<ros_portal_config::TopicConfig> topics_;
   //! @brief Topic forwarding component for ROS-to-LiveKit and LiveKit-to-ROS.

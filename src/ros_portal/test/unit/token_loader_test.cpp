@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
+#include "ros_portal/token_loader.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cstdlib>
 
-#include "ros_portal/token_loader.hpp"
 #include "test_common.hpp"
 
-namespace ros_portal::token {
+namespace ros_portal {
 namespace {
 
 using ros_portal::test::ScopedEnvVar;
+using ros_portal::test::setEnv;
 
 class TokenLoaderTest : public ::testing::Test {
 protected:
@@ -42,8 +44,8 @@ protected:
 };
 
 TEST_F(TokenLoaderTest, LoadsLiteralSource) {
-  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:7880", 1), 0);
-  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "participant-token", 1), 0);
+  ASSERT_TRUE(setEnv("LIVEKIT_URL", "ws://127.0.0.1:7880"));
+  ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", "participant-token"));
 
   TokenLoader token_loader;
 
@@ -53,9 +55,9 @@ TEST_F(TokenLoaderTest, LoadsLiteralSource) {
 }
 
 TEST_F(TokenLoaderTest, RejectsMultipleTokenSources) {
-  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:7880", 1), 0);
-  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "participant-token", 1), 0);
-  ASSERT_EQ(setenv("LIVEKIT_TOKEN_ENDPOINT", "https://example.com/token", 1), 0);
+  ASSERT_TRUE(setEnv("LIVEKIT_URL", "ws://127.0.0.1:7880"));
+  ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", "participant-token"));
+  ASSERT_TRUE(setEnv("LIVEKIT_TOKEN_ENDPOINT", "https://example.com/token"));
 
   TokenLoader token_loader;
 
@@ -63,7 +65,7 @@ TEST_F(TokenLoaderTest, RejectsMultipleTokenSources) {
 }
 
 TEST_F(TokenLoaderTest, RejectsLiteralSourceWithoutUrl) {
-  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "participant-token", 1), 0);
+  ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", "participant-token"));
 
   TokenLoader token_loader;
 
@@ -71,4 +73,4 @@ TEST_F(TokenLoaderTest, RejectsLiteralSourceWithoutUrl) {
 }
 
 } // namespace
-} // namespace ros_portal::token
+} // namespace ros_portal

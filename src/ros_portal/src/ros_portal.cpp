@@ -120,7 +120,7 @@ bool RosPortal::initialize() {
   RCLCPP_INFO(this->get_logger(),
               "Polling period: %d ms, %zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
-              
+
   TokenLoader token_loader;
   if (!token_loader.valid()) {
     return false;
@@ -191,12 +191,11 @@ bool RosPortal::initialize() {
   connection_timer_ = this->create_wall_timer(
       ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
 
-  // Intentionally mark as initialized here so pollConnection() can run immediately below
+  // Mark initialized before the first poll so pollConnection() is not skipped.
+  // Connect immediately to avoid a 1s timer delay, then log initialized.
   initialized_.store(true, std::memory_order_relaxed);
-  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
-
-  // Call once to immediately connect, avoiding 1 second delay before the first connection attempt in the timer
   pollConnection();
+  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
   return true;
 }
 

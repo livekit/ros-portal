@@ -78,13 +78,14 @@ jobs:
       - name: "colcon test: integration"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
-          CI: true
           GITHUB_TOKEN: ${{ github.token }}
-          LIVEKIT_URL: ws://127.0.0.1:7880
-          LIVEKIT_ROOM: ros_portal_test_room
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
+          env: |
+            CI=true
+            LIVEKIT_URL=ws://127.0.0.1:7880
+            LIVEKIT_ROOM=ros_portal_test_room
           runCmd: |
             bash -lc '
               set -eo pipefail
@@ -100,13 +101,14 @@ jobs:
       - name: "colcon test: connection faults"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         env:
-          CI: true
           GITHUB_TOKEN: ${{ github.token }}
-          LIVEKIT_URL: ws://127.0.0.1:7880
-          LIVEKIT_ROOM: ros_portal_test_room
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
+          env: |
+            CI=true
+            LIVEKIT_URL=ws://127.0.0.1:7880
+            LIVEKIT_ROOM=ros_portal_test_room
           runCmd: |
             bash -lc '
               set -eo pipefail
@@ -129,11 +131,13 @@ jobs:
           api-secret: secret
       - name: "ros2 run: endpoint token server"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
-        env:
-          LIVEKIT_TOKEN_ENDPOINT: ${{ steps.token_server.outputs.token-url }}
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
+          # Must be the `env` input: a step-level `env:` only reaches the runner,
+          # not the dev container that runs `runCmd`.
+          env: |
+            LIVEKIT_TOKEN_ENDPOINT=${{ steps.token_server.outputs.token-url }}
           runCmd: |
             bash -lc '
               set -eo pipefail
@@ -142,6 +146,12 @@ jobs:
               set -u
               unset LIVEKIT_TOKEN
               unset LIVEKIT_TOKEN_SERVER_ID
+
+              if [ -z "${LIVEKIT_TOKEN_ENDPOINT:-}" ]; then
+                echo "LIVEKIT_TOKEN_ENDPOINT is not set inside the dev container"
+                exit 1
+              fi
+              echo "Using token endpoint: ${LIVEKIT_TOKEN_ENDPOINT}"
 
               log_path="$(mktemp)"
               ros2 run ros_portal ros_portal_node --ros-args --disable-external-lib-logs >"${log_path}" 2>&1 &

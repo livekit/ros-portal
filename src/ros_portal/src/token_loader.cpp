@@ -24,14 +24,9 @@
 #include "ros_portal/utils/ros_utils.hpp"
 
 namespace ros_portal {
-namespace {
-
-constexpr char kTokenLoaderLoggerName[] = "ros_portal.token";
-
-} // namespace
 
 TokenLoader::TokenLoader()
-    : logger_(rclcpp::get_logger(kTokenLoaderLoggerName)),
+    : logger_(rclcpp::get_logger("ros_portal.token")),
       livekit_url_(utils::environmentVariable("LIVEKIT_URL")),
       token_(utils::environmentVariable("LIVEKIT_TOKEN")),
       endpoint_(utils::environmentVariable("LIVEKIT_TOKEN_ENDPOINT")),
@@ -41,17 +36,22 @@ bool TokenLoader::valid() const {
   const bool has_token = token_.has_value();
   const bool has_endpoint = endpoint_.has_value();
   const bool has_server_id = server_id_.has_value();
-  return (has_token || has_endpoint || has_server_id) && !(has_token && has_endpoint) &&
-         !(has_token && has_server_id) && !(has_endpoint && has_server_id);
+  const bool valid = (has_token || has_endpoint || has_server_id) && !(has_token && has_endpoint) &&
+                     !(has_token && has_server_id) && !(has_endpoint && has_server_id);
+
+  if (!valid) {
+    RCLCPP_ERROR(logger_,
+                 "Invalid LiveKit token source configuration: set exactly one of LIVEKIT_TOKEN, "
+                 "LIVEKIT_TOKEN_ENDPOINT, or LIVEKIT_TOKEN_SERVER_ID");
+    return false;
+  }
+  return true;
 }
 
 std::optional<livekit::TokenSourceResponse> TokenLoader::load() const {
   RCLCPP_DEBUG(logger_, "Attempting to resolve LiveKit token source");
 
   if (!valid()) {
-    RCLCPP_ERROR(logger_,
-                 "Invalid LiveKit token source configuration: set exactly one of LIVEKIT_TOKEN, "
-                 "LIVEKIT_TOKEN_ENDPOINT, or LIVEKIT_TOKEN_SERVER_ID");
     return std::nullopt;
   }
   livekit::Result<livekit::TokenSourceResponse, livekit::TokenSourceError> result =

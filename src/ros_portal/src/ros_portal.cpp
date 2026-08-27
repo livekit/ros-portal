@@ -157,10 +157,8 @@ bool RosPortal::initialize() {
       return false;
     }
 
-    // This is a new Room::connect after a terminal disconnect, not an SDK
-    // in-session reconnect: delegate events handle the latter without calling
-    // try_connect. Load credentials from the construction-time configured
-    // source for this new connection.
+    // Note: Tokens are only loaded/fetched during initial room connect.
+    // Connection manager handles SDK reconnect to existing room
     const auto credentials = token_loader.load();
     if (!credentials) {
       return false;

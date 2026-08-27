@@ -1,0 +1,53 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+name: Nightly Stress Tests
+
+on:
+  schedule:
+    # 06:00 UTC daily.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      test_repetitions:
+        description: Number of times to run the complete test suite per ROS distribution and architecture
+        required: false
+        default: 100
+        type: number
+      test_timeout_minutes:
+        description: Maximum duration of each ROS distribution and architecture test job in minutes
+        required: false
+        default: 360
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-stress-tests
+  cancel-in-progress: true
+
+jobs:
+  ros-build-matrix:
+    name: Load ROS Build Matrix
+    uses: ./.github/workflows/ros-build-matrix.yml
+
+  stress-matrix:
+    name: Stress Tests (${{ matrix.ros_distro }}, ${{ matrix.arch }})
+    needs: ros-build-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ros-build-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/ci-entry.yml
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      ros_image_tag: ${{ matrix.ros_image_tag }}
+      ros_image_digest: ${{ matrix.ros_image_digest }}
+      test_repetitions: ${{ inputs.test_repetitions || 100 }}
+      test_timeout_minutes: ${{ inputs.test_timeout_minutes || 360 }}
+      run_package: false
+    secrets: inherit

@@ -55,6 +55,9 @@ jobs:
       os: ${{ matrix.os }}
       ros_image_tag: ${{ matrix.ros_image_tag }}
       ros_image_digest: ${{ matrix.ros_image_digest }}
+      test_repetitions: 1
+      test_timeout_minutes: 90
+      run_package: true
     secrets: inherit
 
   ci:

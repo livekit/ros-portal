@@ -14,6 +14,21 @@ on:
       ros_image_tag: {required: true, type: string}
       ros_image_digest: {required: true, type: string}
       git_ref: {required: false, type: string}
+      test_repetitions:
+        description: Number of times to run the complete test suite
+        required: false
+        default: 1
+        type: number
+      test_timeout_minutes:
+        description: Maximum duration of the test job in minutes
+        required: false
+        default: 90
+        type: number
+      run_package:
+        description: Whether to build the Debian package after tests pass
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -40,12 +55,15 @@ jobs:
       ros_image_tag: ${{ inputs.ros_image_tag }}
       ros_image_digest: ${{ inputs.ros_image_digest }}
       git_ref: ${{ inputs.git_ref }}
+      test_repetitions: ${{ inputs.test_repetitions }}
+      timeout_minutes: ${{ inputs.test_timeout_minutes }}
     secrets: inherit
 
   package:
     needs:
       - build
       - test
+    if: ${{ inputs.run_package }}
     uses: ./.github/workflows/package.yml
     with:
       ros_distro: ${{ inputs.ros_distro }}

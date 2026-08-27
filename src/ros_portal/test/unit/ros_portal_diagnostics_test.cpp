@@ -27,10 +27,13 @@
 #include <string>
 
 #include "ros_portal/ros_portal.hpp"
+#include "test_common.hpp"
 
 namespace ros_portal {
 
 namespace {
+
+using ros_portal::test::ScopedEnvVar;
 
 std::optional<std::string> diagnosticValueFor(const diagnostic_updater::DiagnosticStatusWrapper& status,
                                               const std::string& key) {
@@ -41,27 +44,6 @@ std::optional<std::string> diagnosticValueFor(const diagnostic_updater::Diagnost
   }
   return std::nullopt;
 }
-
-class ScopedEnvironmentVariable {
-public:
-  explicit ScopedEnvironmentVariable(const char* name) : name_(name) {
-    if (const char* value = std::getenv(name)) {
-      original_value_ = value;
-    }
-  }
-
-  ~ScopedEnvironmentVariable() {
-    if (original_value_) {
-      setenv(name_.c_str(), original_value_->c_str(), 1);
-    } else {
-      unsetenv(name_.c_str());
-    }
-  }
-
-private:
-  std::string name_;
-  std::optional<std::string> original_value_;
-};
 
 class TemporaryDiagnosticsConfig {
 public:
@@ -92,8 +74,8 @@ private:
 } // namespace
 
 TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration) {
-  ScopedEnvironmentVariable scoped_url{"LIVEKIT_URL"};
-  ScopedEnvironmentVariable scoped_token{"LIVEKIT_TOKEN"};
+  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   unsetenv("LIVEKIT_URL");
   unsetenv("LIVEKIT_TOKEN");
   TemporaryDiagnosticsConfig config;

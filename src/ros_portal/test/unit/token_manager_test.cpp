@@ -17,36 +17,14 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
-#include <string>
 
 #include "ros_portal/token_loader.hpp"
+#include "test_common.hpp"
 
 namespace ros_portal::token {
 namespace {
 
-class ScopedEnvironmentVariable {
-public:
-  explicit ScopedEnvironmentVariable(const char* name) : name_(name) {
-    const char* value = std::getenv(name);
-    if (value != nullptr) {
-      had_value_ = true;
-      original_value_ = value;
-    }
-  }
-
-  ~ScopedEnvironmentVariable() {
-    if (had_value_) {
-      setenv(name_.c_str(), original_value_.c_str(), 1);
-    } else {
-      unsetenv(name_.c_str());
-    }
-  }
-
-private:
-  std::string name_;
-  bool had_value_{false};
-  std::string original_value_;
-};
+using ros_portal::test::ScopedEnvVar;
 
 class TokenLoaderTest : public ::testing::Test {
 protected:
@@ -57,10 +35,10 @@ protected:
     unsetenv("LIVEKIT_TOKEN_SERVER_ID");
   }
 
-  ScopedEnvironmentVariable url_{"LIVEKIT_URL"};
-  ScopedEnvironmentVariable token_{"LIVEKIT_TOKEN"};
-  ScopedEnvironmentVariable endpoint_{"LIVEKIT_TOKEN_ENDPOINT"};
-  ScopedEnvironmentVariable server_id_{"LIVEKIT_TOKEN_SERVER_ID"};
+  ScopedEnvVar url_{"LIVEKIT_URL"};
+  ScopedEnvVar token_{"LIVEKIT_TOKEN"};
+  ScopedEnvVar endpoint_{"LIVEKIT_TOKEN_ENDPOINT"};
+  ScopedEnvVar server_id_{"LIVEKIT_TOKEN_SERVER_ID"};
 };
 
 TEST_F(TokenLoaderTest, LoadsLiteralSource) {

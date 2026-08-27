@@ -24,33 +24,12 @@
 #include <string>
 
 #include "ros_portal/ros_portal.hpp"
+#include "test_common.hpp"
 
 namespace ros_portal {
 namespace {
 
-class ScopedEnvVar {
-public:
-  explicit ScopedEnvVar(const char* name) : name_(name) {
-    const char* value = std::getenv(name);
-    if (value) {
-      had_value_ = true;
-      original_value_ = value;
-    }
-  }
-
-  ~ScopedEnvVar() {
-    if (had_value_) {
-      setenv(name_.c_str(), original_value_.c_str(), 1);
-    } else {
-      unsetenv(name_.c_str());
-    }
-  }
-
-private:
-  std::string name_;
-  bool had_value_{false};
-  std::string original_value_;
-};
+using ros_portal::test::ScopedEnvVar;
 
 class TemporaryConfigFile {
 public:

@@ -16,11 +16,11 @@
 
 #include "ros_portal/diagnostics/build_info.hpp"
 
-#include <cstdlib>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <stdexcept>
 #include <utility>
 
+#include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/version.hpp"
 
 namespace ros_portal::diagnostics {
@@ -38,7 +38,7 @@ BuildInfo collectBuildInfo() {
   BuildInfo info;
   info.livekit_sdk_version = valueOrUnknown(ROS_PORTAL_LIVEKIT_SDK_VERSION);
   info.ros_portal_version = valueOrUnknown(ROS_PORTAL_VERSION);
-  info.ros_distro = valueOrUnknown(std::getenv("ROS_DISTRO"));
+  info.ros_distro = utils::environmentVariable("ROS_DISTRO").value_or(kUnknownValue);
   return info;
 }
 

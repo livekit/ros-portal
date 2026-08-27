@@ -146,23 +146,19 @@ protected:
   static void TearDownTestSuite() { livekit::shutdown(); }
 
   void SetUp() override {
-    std::string source;
-    livekit_url_ = utils::resolveEnvironmentCredential("LIVEKIT_URL", source);
-    token_a_ = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN_A", source);
-    token_b_ = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN_B", source);
+    livekit_url_ = utils::environmentVariable("LIVEKIT_URL").value_or("");
+    token_a_ = utils::environmentVariable("LIVEKIT_TOKEN_A").value_or("");
+    token_b_ = utils::environmentVariable("LIVEKIT_TOKEN_B").value_or("");
 
-    const auto original_token = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", source);
-    original_token_ = original_token.empty() ? std::nullopt : std::optional<std::string>(original_token);
+    original_token_ = utils::environmentVariable("LIVEKIT_TOKEN");
 
-    const auto original_livekit_url = utils::resolveEnvironmentCredential("LIVEKIT_URL", source);
-    original_livekit_url_ =
-        original_livekit_url.empty() ? std::nullopt : std::optional<std::string>(original_livekit_url);
+    original_livekit_url_ = utils::environmentVariable("LIVEKIT_URL");
 
-    identity_a_ = utils::resolveEnvironmentCredential("LIVEKIT_IDENTITY_A", source);
+    identity_a_ = utils::environmentVariable("LIVEKIT_IDENTITY_A").value_or("");
     if (identity_a_.empty()) {
       identity_a_ = "ros-portal-test-a";
     }
-    identity_b_ = utils::resolveEnvironmentCredential("LIVEKIT_IDENTITY_B", source);
+    identity_b_ = utils::environmentVariable("LIVEKIT_IDENTITY_B").value_or("");
     if (identity_b_.empty()) {
       identity_b_ = "ros-portal-test-b";
     }

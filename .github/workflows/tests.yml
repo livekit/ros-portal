@@ -70,6 +70,16 @@ jobs:
             echo "test_repetitions must be a positive integer; got: ${TEST_REPETITIONS}" >&2
             exit 1
           fi
+
+          timeout_minutes="${{ inputs.timeout_minutes }}"
+          if ! [[ "${timeout_minutes}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "timeout_minutes must be a positive integer; got: ${timeout_minutes}" >&2
+            exit 1
+          fi
+          if [ "${timeout_minutes}" -gt 360 ]; then
+            echo "timeout_minutes must be <= 360; got: ${timeout_minutes}" >&2
+            exit 1
+          fi
       - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         with:

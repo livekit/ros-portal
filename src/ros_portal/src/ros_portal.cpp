@@ -175,7 +175,7 @@ bool RosPortal::initialize() {
 
   try {
     graph::GraphManager::Callbacks graph_callbacks{
-        [this](const TopicNamesAndTypes& topics) { reconcileGraphTopics(topics); },
+        [this](const TopicNamesAndTypes& topics) { return reconcileGraphTopics(topics); },
         [this]() {
           std::lock_guard<std::mutex> lock(room_components_mutex_);
           return topic_forwarder_ ? topic_forwarder_->nextExpiryDeadline()
@@ -522,15 +522,15 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   }
 }
 
-void RosPortal::reconcileGraphTopics(const TopicNamesAndTypes& topics) {
+bool RosPortal::reconcileGraphTopics(const TopicNamesAndTypes& topics) {
   processEndedRoomSession();
   if (!roomOperationsEnabled()) {
-    return;
+    return false;
   }
 
   const std::lock_guard<std::mutex> lock(room_components_mutex_);
   if (!room_components_started_) {
-    return;
+    return false;
   }
 
   if (topic_forwarder_ && topic_forwarder_->needsGraphDiscovery()) {
@@ -539,6 +539,7 @@ void RosPortal::reconcileGraphTopics(const TopicNamesAndTypes& topics) {
   if (latched_topic_forwarder_ && latched_topic_forwarder_->needsGraphDiscovery()) {
     latched_topic_forwarder_->reconcileTopics(topics);
   }
+  return true;
 }
 
 void RosPortal::reapInactiveSubscriptions() {

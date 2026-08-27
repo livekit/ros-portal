@@ -27,13 +27,14 @@
 #include <std_msgs/msg/string.hpp>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 namespace ros_portal::graph {
 namespace {
 
 GraphManager::Callbacks callbacks() {
   return GraphManager::Callbacks{
-      [](const TopicNamesAndTypes&) {},
+      [](const TopicNamesAndTypes&) { return true; },
       []() { return std::optional<std::chrono::steady_clock::time_point>{}; },
       []() {},
       {},
@@ -117,7 +118,10 @@ TEST(GraphManagerTest, StartsWorkerAndReconcilesInitialSnapshot) {
   GraphManager::Callbacks graph_callbacks;
   std::atomic_int reconciles{0};
 
-  graph_callbacks.reconcile_topics = [&reconciles](const TopicNamesAndTypes&) { reconciles.fetch_add(1); };
+  graph_callbacks.reconcile_topics = [&reconciles](const TopicNamesAndTypes&) {
+    reconciles.fetch_add(1);
+    return true;
+  };
   graph_callbacks.next_expiry_deadline = []() { return std::optional<std::chrono::steady_clock::time_point>{}; };
   graph_callbacks.reap_expired_subscriptions = []() {};
   GraphManager manager(nodeInterfaces(*node), std::move(graph_callbacks));
@@ -128,6 +132,72 @@ TEST(GraphManagerTest, StartsWorkerAndReconcilesInitialSnapshot) {
 
   manager.stop();
   EXPECT_FALSE(manager.active());
+}
+
+TEST(GraphManagerTest, SkipsRedundantReconcileForUnchangedTopicGraph) {
+  const auto node = std::make_shared<rclcpp::Node>("graph_manager_unchanged_test");
+  GraphManager::Callbacks graph_callbacks;
+  std::mutex mutex;
+  std::vector<TopicNamesAndTypes> observed;
+
+  graph_callbacks.reconcile_topics = [&mutex, &observed](const TopicNamesAndTypes& topics) {
+    const std::lock_guard<std::mutex> lock(mutex);
+    observed.push_back(topics);
+    return true;
+  };
+  graph_callbacks.next_expiry_deadline = []() { return std::optional<std::chrono::steady_clock::time_point>{}; };
+  graph_callbacks.reap_expired_subscriptions = []() {};
+  GraphManager manager(nodeInterfaces(*node), std::move(graph_callbacks));
+
+  ASSERT_TRUE(manager.start());
+  ASSERT_TRUE(waitUntil([&mutex, &observed]() {
+    const std::lock_guard<std::mutex> lock(mutex);
+    return !observed.empty();
+  }));
+
+  // Graph events that leave the topic set untouched must not re-run reconciliation.
+  // ROS raises such an event for the node's own entities shortly after startup.
+  for (int i = 0; i < 5; ++i) {
+    node->get_node_graph_interface()->notify_graph_change();
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+  }
+  manager.stop();
+
+  // Other tests may share this ROS domain, so the topic set can legitimately change
+  // mid-test. Assert the invariant instead: no two consecutive reconciles are identical.
+  const std::lock_guard<std::mutex> lock(mutex);
+  ASSERT_FALSE(observed.empty());
+  for (std::size_t i = 1; i < observed.size(); ++i) {
+    EXPECT_NE(observed[i], observed[i - 1]) << "reconciled twice for an unchanged topic graph at index " << i;
+  }
+}
+
+TEST(GraphManagerTest, RetriesReconcileWhenCallbackDidNotApplySnapshot) {
+  const auto node = std::make_shared<rclcpp::Node>("graph_manager_retry_test");
+  GraphManager::Callbacks graph_callbacks;
+  std::atomic_int attempts{0};
+  std::atomic_bool applied{false};
+
+  // Mirrors the node rejecting snapshots until its room components are started: the
+  // same topic set must be reconciled again rather than recorded as already consumed.
+  graph_callbacks.reconcile_topics = [&attempts, &applied](const TopicNamesAndTypes&) {
+    attempts.fetch_add(1);
+    return applied.load();
+  };
+  graph_callbacks.next_expiry_deadline = []() { return std::optional<std::chrono::steady_clock::time_point>{}; };
+  graph_callbacks.reap_expired_subscriptions = []() {};
+  GraphManager manager(nodeInterfaces(*node), std::move(graph_callbacks));
+
+  ASSERT_TRUE(manager.start());
+  ASSERT_TRUE(waitUntil([&attempts]() { return attempts.load() >= 1; }));
+
+  applied.store(true);
+  const int before = attempts.load();
+  node->get_node_graph_interface()->notify_graph_change();
+  ASSERT_TRUE(waitUntil([&attempts, before]() { return attempts.load() > before; }))
+      << "unapplied snapshot was never retried";
+
+  manager.stop();
 }
 
 } // namespace

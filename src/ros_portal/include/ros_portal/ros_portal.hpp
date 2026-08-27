@@ -131,7 +131,9 @@ private:
 
   /// @brief Reconcile all graph-dependent forwarders from one shared snapshot.
   /// @param topics Shared snapshot from the graph manager.
-  void reconcileGraphTopics(const TopicNamesAndTypes& topics);
+  /// @return True when the snapshot was applied to the active forwarders; false when
+  ///         room components are not yet started, so the snapshot is reconciled again later.
+  bool reconcileGraphTopics(const TopicNamesAndTypes& topics);
 
   /// @brief Drop outbound subscriptions whose grace period has elapsed.
   void reapInactiveSubscriptions();

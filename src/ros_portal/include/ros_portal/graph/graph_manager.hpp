@@ -50,7 +50,11 @@ public:
   /// @brief Node-owned callbacks invoked by the graph worker.
   struct Callbacks {
     /// @brief Reconcile active graph-discovery participants from a snapshot.
-    std::function<void(const TopicNamesAndTypes&)> reconcile_topics;
+    ///
+    /// Returns true when the snapshot was actually applied. Returning false (for
+    /// example while the room is still connecting) leaves the snapshot unrecorded
+    /// so the next event reconciles it again rather than treating it as consumed.
+    std::function<bool(const TopicNamesAndTypes&)> reconcile_topics;
     /// @brief Return the earliest expiry deadline among active participants.
     std::function<std::optional<std::chrono::steady_clock::time_point>()> next_expiry_deadline;
     /// @brief Reap expired subscriptions from active participants.
@@ -90,9 +94,9 @@ private:
   /// @brief Wait for graph events and run the registered callbacks.
   void discoveryLoop();
 
-  /// @brief Reconcile participants when the topic graph differs from the last reconciled snapshot.
+  /// @brief Reconcile participants when the topic graph differs from the last applied snapshot.
   /// @param topics Topic snapshot for the current graph generation.
-  /// @return True when the snapshot changed and the reconcile callback ran.
+  /// @return True when the reconcile callback ran and applied the snapshot.
   bool reconcileIfChanged(const TopicGraphSnapshot& topics);
 
   /// @brief Compute the next bounded graph-event wait.
@@ -116,11 +120,13 @@ private:
   /// @brief Node-owned reconciliation, expiry, and diagnostics callbacks.
   Callbacks callbacks_;
 
-  /// @brief Topic graph last passed to the reconcile callback, used to drop no-op graph events.
+  /// @brief Topic graph last successfully applied by the reconcile callback.
   ///
   /// ROS delivers a graph event for the node's own entities shortly after startup, and
   /// further events fire for graph changes that leave the topic set untouched. Comparing
-  /// against this snapshot keeps reconciliation tied to real topic changes.
+  /// against this snapshot keeps reconciliation tied to real topic changes. Only snapshots
+  /// the callback reports as applied are recorded, so a reconcile skipped while the room
+  /// is still connecting is retried instead of being treated as consumed.
   TopicGraphSnapshot last_reconciled_topics_;
   /// @brief ROS event that wakes the worker after graph changes.
   rclcpp::Event::SharedPtr event_;

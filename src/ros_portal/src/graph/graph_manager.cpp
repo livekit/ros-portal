@@ -146,9 +146,15 @@ bool GraphManager::reconcileIfChanged(const TopicGraphSnapshot& topics) {
     if (last_reconciled_topics_ && *last_reconciled_topics_ == *topics) {
       return false;
     }
-    last_reconciled_topics_ = topics;
   }
-  callbacks_.reconcile_topics(*topics);
+  // Record the snapshot only once the callback confirms it was applied. A reconcile
+  // skipped while the room is still connecting must be retried on the next event,
+  // which may otherwise carry an identical topic set and be dropped as a no-op.
+  if (!callbacks_.reconcile_topics(*topics)) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  last_reconciled_topics_ = topics;
   return true;
 }
 

@@ -16,9 +16,13 @@
 
 #include "ros_portal/connection/connection_manager.hpp"
 
+#include <livekit/local_participant.h>
+#include <livekit/room.h>
+
 #include <exception>
 #include <rclcpp/logging.hpp>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -115,7 +119,7 @@ void ConnectionManager::poll(livekit::Room& room) {
   }
 
   if (state_.compare_exchange_strong(expected, State::Connected)) {
-    markConnectionGained();
+    markConnectionGained(room);
     enableOperations();
     connection_diagnostics_.markConnected(room);
   } else {
@@ -139,7 +143,7 @@ void ConnectionManager::onConnectionStateChanged(livekit::Room& room,
                                                  const livekit::ConnectionStateChangedEvent& event) {
   switch (event.state) {
     case livekit::ConnectionState::Connected:
-      transitionToReconnected();
+      transitionToReconnected(room);
       break;
     case livekit::ConnectionState::Reconnecting:
       transitionToReconnecting();
@@ -157,7 +161,7 @@ void ConnectionManager::onReconnecting(livekit::Room& room, const livekit::Recon
 }
 
 void ConnectionManager::onReconnected(livekit::Room& room, const livekit::ReconnectedEvent& event) {
-  transitionToReconnected();
+  transitionToReconnected(room);
   connection_diagnostics_.onReconnected(room, event);
 }
 
@@ -174,10 +178,10 @@ void ConnectionManager::transitionToReconnecting() {
   }
 }
 
-void ConnectionManager::transitionToReconnected() {
+void ConnectionManager::transitionToReconnected(livekit::Room& room) {
   State expected = State::Reconnecting;
   if (state_.compare_exchange_strong(expected, State::Connected)) {
-    markConnectionGained();
+    markConnectionGained(room);
     enableOperations();
   }
 }
@@ -272,11 +276,15 @@ void ConnectionManager::closeSession() {
   session_cv_.notify_all();
 }
 
-void ConnectionManager::markConnectionGained() {
+void ConnectionManager::markConnectionGained(livekit::Room& room) {
+  const auto local_participant = room.localParticipant().lock();
+  const std::string identity = local_participant ? local_participant->identity() : "unknown";
+  const std::string room_name = room.roomInfo().name;
   if (has_connected_.exchange(true)) {
-    RCLCPP_INFO(logger_, "LiveKit room connection restored");
+    RCLCPP_INFO(logger_, "LiveKit room connection restored to '%s' with identity '%s'", room_name.c_str(),
+                identity.c_str());
   } else {
-    RCLCPP_INFO(logger_, "Connected to LiveKit room");
+    RCLCPP_INFO(logger_, "Connected to LiveKit room '%s' with identity '%s'", room_name.c_str(), identity.c_str());
   }
 }
 

@@ -157,13 +157,15 @@ private:
   void closeSession();
 
   /// @brief Mark a connection as available and log the transition.
-  void markConnectionGained();
+  /// @param room LiveKit room that is now connected.
+  void markConnectionGained(livekit::Room& room);
 
   /// @brief Handle notification that the SDK is attempting an in-session reconnect.
   void transitionToReconnecting();
 
   /// @brief Handle notification that the SDK recovered an in-session reconnect.
-  void transitionToReconnected();
+  /// @param room LiveKit room that recovered.
+  void transitionToReconnected(livekit::Room& room);
 
   /// @brief Handle notification that the room terminally disconnected.
   /// @param reason LiveKit disconnect reason.

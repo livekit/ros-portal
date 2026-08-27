@@ -120,9 +120,7 @@ bool RosPortal::initialize() {
   RCLCPP_INFO(this->get_logger(),
               "Polling period: %d ms, %zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
-
-  RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
-
+              
   TokenLoader token_loader;
   if (!token_loader.valid()) {
     return false;
@@ -369,8 +367,6 @@ bool RosPortal::prepareRoomSession() {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     diagnostic_state_.local_identity = local_participant->identity();
   }
-  RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
-              local_participant->identity().c_str());
   room_session_prepared_ = true;
   return true;
 }

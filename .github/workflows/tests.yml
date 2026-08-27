@@ -120,6 +120,61 @@ jobs:
               colcon test-result --verbose --all
               exit $test_exit
             '
+      - name: Start token server
+        id: token_server
+        uses: livekit/token-server-action@a1e42c649a1998d5b224f5102f252c07762024f0 # v0.0.1
+        with:
+          livekit-url: ws://127.0.0.1:7880
+          api-key: devkey
+          api-secret: secret
+      - name: "ros2 run: endpoint token server"
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
+        env:
+          LIVEKIT_TOKEN_ENDPOINT: ${{ steps.token_server.outputs.token-url }}
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          runCmd: |
+            bash -lc '
+              set -eo pipefail
+              source "/opt/ros/${ROS_DISTRO}/setup.bash"
+              source install/setup.bash
+              set -u
+              unset LIVEKIT_TOKEN
+              unset LIVEKIT_TOKEN_SERVER_ID
+
+              log_path="$(mktemp)"
+              ros2 run ros_portal ros_portal_node --ros-args --disable-external-lib-logs >"${log_path}" 2>&1 &
+              portal_pid=$!
+              cleanup() {
+                if kill -0 "${portal_pid}" 2>/dev/null; then
+                  kill "${portal_pid}" 2>/dev/null || true
+                  wait "${portal_pid}" || true
+                fi
+              }
+              trap cleanup EXIT
+
+              for _ in $(seq 1 45); do
+                if grep -q "Connected to LiveKit room" "${log_path}"; then
+                  echo "ROS Portal connected through endpoint token server"
+                  exit 0
+                fi
+                if ! kill -0 "${portal_pid}" 2>/dev/null; then
+                  echo "ROS Portal exited before connecting"
+                  cat "${log_path}"
+                  wait "${portal_pid}"
+                  exit 1
+                fi
+                sleep 1
+              done
+
+              echo "Timed out waiting for ROS Portal to connect through endpoint token server"
+              cat "${log_path}"
+              exit 1
+            '
       - name: Dump LiveKit server log on failure
         if: failure()
         run: tail -n 500 "${{ steps.livekit_server.outputs.log-path }}" || true
+      - name: Dump token server log on failure
+        if: failure() && steps.token_server.outputs.log-path != ''
+        run: tail -n 200 "${{ steps.token_server.outputs.log-path }}" || true

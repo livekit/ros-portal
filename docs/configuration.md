@@ -3,6 +3,27 @@
 ROS Portal is configured via environment variables for LiveKit parameters and
 a YAML configuration file for runtime parameters.
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Environment Variables](#environment-variables)
+  - [Token Configuration](#token-configuration)
+    - [Token requirements](#token-requirements)
+    - [Literal token](#literal-token)
+    - [Endpoint token server](#endpoint-token-server)
+    - [Development token server](#development-token-server)
+- [Configuration File](#configuration-file)
+  - [Examples](#examples)
+  - [Minimal Config](#minimal-config)
+  - [Top-Level Fields](#top-level-fields)
+  - [Services](#services)
+  - [Topics](#topics)
+    - [Preserving the publisher identity](#preserving-the-publisher-identity)
+    - [Capping the outbound forward rate](#capping-the-outbound-forward-rate)
+    - [Latched topics (`latched: true`)](#latched-topics-latched-true)
+    - [Data track encoding (`encoding`)](#data-track-encoding-encoding)
+  - [Video Options](#video-options)
+
 ## Prerequisites
 
 Follow [Installation](./installation.md) before this guide.
@@ -17,39 +38,45 @@ This guide assumes the following:
 Environment variables are used to configure ROS Portal's connection and access to a
 LiveKit server.
 
-| Variable | Required | Description |
-|---|---:|---|
-| `LIVEKIT_URL` | with `LIVEKIT_TOKEN` | WebSocket URL of the LiveKit server for the literal-token source. |
-| `LIVEKIT_TOKEN` | one token source | LiveKit access JWT for the ROS Portal participant; uses the literal-token source with `LIVEKIT_URL`. |
-| `LIVEKIT_TOKEN_ENDPOINT` | one token source | Token endpoint URL; ROS Portal requests connection credentials from this endpoint. Recommended for production. |
-| `LIVEKIT_TOKEN_SERVER_ID` | one token source | LiveKit Cloud development token server ID. For development only; do not use in production. |
-| `LIVEKIT_API_KEY` | no | LiveKit Cloud only: API key used to mint `LIVEKIT_TOKEN` with LiveKit CLI (not read by ROS Portal). |
-| `LIVEKIT_API_SECRET` | no | LiveKit Cloud only: API secret used to mint `LIVEKIT_TOKEN` with LiveKit CLI (not read by ROS Portal). |
-
 ### Token Configuration
 
-Configure exactly one token source. ROS Portal fails to start if more than one
-of `LIVEKIT_TOKEN`, `LIVEKIT_TOKEN_ENDPOINT`, and `LIVEKIT_TOKEN_SERVER_ID` is
-set. The literal-token source uses `LIVEKIT_URL` and a JWT minted using
-`lk token create`. The following table lists the required token options:
+ROS Portal supports literal tokens, an endpoint token server, and a development token server.
+Select **one** of the following options:
 
-| Option/Grant | `lk` flag | Why ROS Portal needs it |
+| Token source | Environment variables | Use case | Token issuer |
+|---|---|---|---|
+| [Literal token](#literal-token) | `LIVEKIT_URL` + `LIVEKIT_TOKEN`<br><br>`LIVEKIT_API_KEY` + `LIVEKIT_API_SECRET` (optional - LiveKit Cloud) | Local LiveKit development, or direct control over token grants and lifetime | User, via `lk token create` or another token-generation service |
+| [Endpoint token server](#endpoint-token-server) | `LIVEKIT_TOKEN_ENDPOINT` | Production, server authenticates requests and mints tokens | User-developed backend |
+| [Development token server](#development-token-server) | `LIVEKIT_TOKEN_SERVER_ID` | Quick prototypes and testing with LiveKit Cloud only; never use in production | LiveKit Cloud |
+
+Note the following:
+
+- ROS Portal fails to start if more than one of `LIVEKIT_TOKEN`, `LIVEKIT_TOKEN_ENDPOINT`,
+and `LIVEKIT_TOKEN_SERVER_ID` is set.
+- `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are used by LiveKit CLI to mint literal tokens
+against a LiveKit Cloud project. ROS Portal does not read either variable, only the resulting
+`LIVEKIT_TOKEN`.
+
+#### Token requirements
+
+Any token minted by the user (literal) or the user's endpoint backend must grant room join,
+identify the participant and room, and allow the participant to update its
+metadata. The LiveKit Cloud development token server handles these grants.
+
+| Option/Grant | `lk` flag | Description |
 |---|---|---|
 | Room join | `--join` | Connect to the LiveKit room. |
 | Room name | `--room <name>` | Identifies the room to join. |
-| Identity | `--identity <identity>` | Identifies the ROS Portal participant. |
+| Identity | `--identity <identity>` | Identifies the ROS Portal participant. Example: `ros-portal-robot` |
 | `canUpdateOwnMetadata` | `--allow-update-metadata` | ROS Portal advertises its LiveKit participant with the `lk.robot` attribute set to `"true"`. |
 
-### Development Server Examples
+#### Literal token
 
-Use the following two example commands to quickly configure the environment for a local
-LiveKit server instance (started using `--dev`):
+Set `LIVEKIT_URL` and a participant JWT in `LIVEKIT_TOKEN`. For a local LiveKit
+server started with `--dev`:
 
 ```bash
 export LIVEKIT_URL=ws://127.0.0.1:7880
-```
-
-```bash
 export LIVEKIT_TOKEN="$(lk token create \
   --join \
   --room robo_room \
@@ -61,18 +88,10 @@ export LIVEKIT_TOKEN="$(lk token create \
   --dev)"
 ```
 
-### LiveKit Cloud Examples
-
-Use the following commands as reference for configuring the environment for a LiveKit Cloud
-project:
+For LiveKit Cloud, set the project credentials before minting the token:
 
 ```bash
 export LIVEKIT_URL=wss://<project details>.livekit.cloud
-```
-
-Export `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` from the project before minting `LIVEKIT_TOKEN`:
-
-```bash
 export LIVEKIT_API_KEY=<api-key>
 export LIVEKIT_API_SECRET=<api-secret>
 export LIVEKIT_TOKEN="$(lk token create \
@@ -83,26 +102,35 @@ export LIVEKIT_TOKEN="$(lk token create \
   --valid-for 24h \
   --token-only \
   --yes)"
+
+# Then run ROS Portal
 ```
 
-### Endpoint Token Source
+#### Endpoint token server
 
-For production, point ROS Portal at a backend token endpoint that returns the
-LiveKit server URL and a freshly minted participant JWT:
+For production, point ROS Portal at a backend
+[token endpoint](https://docs.livekit.io/frontends/build/authentication/endpoint/)
+that returns the LiveKit server URL and a freshly minted participant JWT:
 
 ```bash
 export LIVEKIT_TOKEN_ENDPOINT=https://example.com/livekit/token
+
+# Then run ROS Portal
 ```
 
-### Development Token Source
+#### Development token server
 
-For local development, use a LiveKit Cloud development token server ID:
+For development or testing with LiveKit Cloud, enable a
+[development token server](https://docs.livekit.io/frontends/build/authentication/development-token-server/)
+in project settings and export its token server ID:
 
 ```bash
 export LIVEKIT_TOKEN_SERVER_ID=token-server-xxxxxx
+
+# Then run ROS Portal
 ```
 
-Do not use the development token source in production.
+This source is insecure and must not be used in production.
 
 ## Configuration File
 
@@ -195,9 +223,9 @@ or `direction: "bidirectional"`. Topic patterns are ECMAScript regular
 expressions matched against the full topic name.
 
 Unlike services, topic direction is load-bearing: it controls which topics are
-forwarded and in which direction. Only forwarding the streams you actually need
-(and only in the required direction) keeps unnecessary traffic off the LiveKit
-connection, which matters for bandwidth on constrained links.
+forwarded and in which direction. Forwarding only the required streams (and only
+in the required direction) keeps unnecessary traffic off the LiveKit connection,
+which matters for bandwidth on constrained links.
 
 #### Preserving the publisher identity
 

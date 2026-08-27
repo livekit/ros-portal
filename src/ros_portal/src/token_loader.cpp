@@ -16,38 +16,46 @@
 
 #include "ros_portal/token_loader.hpp"
 
-#include <cstddef>
 #include <cstdlib>
 #include <exception>
+#include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace ros_portal {
 namespace {
 
-constexpr char kTokenLoaderLoggerName[] = "ros_portal.token_loader";
+constexpr char kTokenLoaderLoggerName[] = "ros_portal.token";
 
-std::string environmentValue(const char* name) {
+std::optional<std::string> environmentVariable(const char* name) {
   const char* value = std::getenv(name);
-  return value == nullptr ? std::string{} : std::string{value};
+  if (value == nullptr || value[0] == '\0') {
+    return std::nullopt;
+  }
+  return std::string{value};
 }
 
 } // namespace
 
 TokenLoader::TokenLoader() {
-  const std::string token = environmentValue("LIVEKIT_TOKEN");
-  const std::string endpoint = environmentValue("LIVEKIT_TOKEN_ENDPOINT");
-  const std::string server_id = environmentValue("LIVEKIT_TOKEN_SERVER_ID");
-  const std::size_t source_count = static_cast<std::size_t>(!token.empty()) + static_cast<std::size_t>(!endpoint.empty()) +
-                                   static_cast<std::size_t>(!server_id.empty());
+  RCLCPP_DEBUG(rclcpp::get_logger(kTokenLoaderLoggerName), "Attempting to resolve LiveKit token source");
 
-  if (source_count > 1U) {
+  const auto token = environmentVariable("LIVEKIT_TOKEN");
+  const auto endpoint = environmentVariable("LIVEKIT_TOKEN_ENDPOINT");
+  const auto server_id = environmentVariable("LIVEKIT_TOKEN_SERVER_ID");
+  const bool has_literal_token = token.has_value();
+  const bool has_endpoint = endpoint.has_value();
+  const bool has_development_server = server_id.has_value();
+
+  if ((has_literal_token && has_endpoint) || (has_literal_token && has_development_server) ||
+      (has_endpoint && has_development_server)) {
     configuration_error_ = "multiple token sources are configured; set exactly one of LIVEKIT_TOKEN, "
                            "LIVEKIT_TOKEN_ENDPOINT, or LIVEKIT_TOKEN_SERVER_ID";
     return;
   }
-  if (source_count == 0U) {
+  if (!has_literal_token && !has_endpoint && !has_development_server) {
     configuration_error_ = "no token source is configured; set LIVEKIT_TOKEN (with LIVEKIT_URL), "
                            "LIVEKIT_TOKEN_ENDPOINT, or LIVEKIT_TOKEN_SERVER_ID";
     return;
@@ -56,19 +64,22 @@ TokenLoader::TokenLoader() {
       livekit::Result<livekit::TokenSourceResponse, livekit::TokenSourceError>::failure(
           livekit::TokenSourceError{"unsupported token source"});
   try {
-    if (!token.empty()) {
-      const std::string server_url = environmentValue("LIVEKIT_URL");
-      if (server_url.empty()) {
+    if (has_literal_token) {
+      const auto server_url = environmentVariable("LIVEKIT_URL");
+      if (!server_url) {
         configuration_error_ = "LIVEKIT_TOKEN is configured but LIVEKIT_URL is missing";
         return;
       }
-      auto source = livekit::LiteralTokenSource::create(server_url, token);
+      RCLCPP_INFO(rclcpp::get_logger(kTokenLoaderLoggerName), "Using LiveKit literal token source");
+      auto source = livekit::LiteralTokenSource::create(*server_url, *token);
       result = source->fetch().get();
-    } else if (!endpoint.empty()) {
-      auto source = livekit::EndpointTokenSource::create(endpoint);
+    } else if (has_endpoint) {
+      RCLCPP_INFO(rclcpp::get_logger(kTokenLoaderLoggerName), "Using LiveKit endpoint token source");
+      auto source = livekit::EndpointTokenSource::create(*endpoint);
       result = source->fetch().get();
     } else {
-      auto source = livekit::DevelopmentTokenSource::create(server_id);
+      RCLCPP_INFO(rclcpp::get_logger(kTokenLoaderLoggerName), "Using LiveKit development token server source");
+      auto source = livekit::DevelopmentTokenSource::create(*server_id);
       result = source->fetch().get();
     }
   } catch (const std::exception& error) {

@@ -18,8 +18,6 @@
 
 #include <gtest/gtest.h>
 
-#include "test_common.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <functional>
@@ -30,6 +28,8 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
+
+#include "test_common.hpp"
 
 namespace ros_portal::graph {
 namespace {
@@ -140,8 +140,8 @@ TEST(GraphManagerTest, SkipsRedundantReconcileForUnchangedTopicGraph) {
   // Runs on an isolated ROS domain: the default domain is shared with the launch tests,
   // whose nodes add and remove real topics and would legitimately trigger reconciliation.
   const ros_portal::test::ScopedRosGraph graph(ros_portal::test::testDomainIds().first);
-  const auto node = std::make_shared<rclcpp::Node>("graph_manager_unchanged_test",
-                                                   rclcpp::NodeOptions().context(graph.context()));
+  const auto node =
+      std::make_shared<rclcpp::Node>("graph_manager_unchanged_test", rclcpp::NodeOptions().context(graph.context()));
   GraphManager::Callbacks graph_callbacks;
   std::atomic_int reconciles{0};
 

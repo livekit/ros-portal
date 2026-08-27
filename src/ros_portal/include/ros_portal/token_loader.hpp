@@ -20,32 +20,37 @@
 #include <livekit/token_source.h>
 
 #include <optional>
+#include <rclcpp/logger.hpp>
 #include <string>
 
 namespace ros_portal {
 
 /// @brief Loads LiveKit credentials using one environment-configured token source.
-///
-/// The constructor reads exactly one of `LIVEKIT_TOKEN`,
-/// `LIVEKIT_TOKEN_ENDPOINT`, or `LIVEKIT_TOKEN_SERVER_ID`. `LIVEKIT_TOKEN`
-/// additionally requires `LIVEKIT_URL`.
 class TokenLoader {
 public:
-  /// @brief Read the environment and load credentials from its token source.
+  /// @brief Construct a token loader from the current environment.
   TokenLoader();
 
-  /// @brief Return whether construction loaded valid credentials.
-  ///
-  /// Logs the configuration error when environment validation failed.
+  /// @brief Return whether exactly one token source is configured.
+  /// @return true when one non-empty token source environment variable is set.
   [[nodiscard]] bool valid() const;
 
-  /// @brief Return the credentials loaded during construction.
-  /// @pre `valid()` returned true.
-  [[nodiscard]] const livekit::TokenSourceResponse& get() const;
+  /// @brief Fetch credentials from the configured token source.
+  /// @return Loaded LiveKit token source credentials, or std::nullopt on
+  /// configuration or fetch failure.
+  [[nodiscard]] std::optional<livekit::TokenSourceResponse> load() const;
 
 private:
-  std::string configuration_error_;
-  std::optional<livekit::TokenSourceResponse> credentials_;
+  /// Dedicated logger for token-source configuration and fetch diagnostics.
+  rclcpp::Logger logger_;
+  /// Construction-time value of `LIVEKIT_URL`.
+  std::optional<std::string> livekit_url_;
+  /// Construction-time value of `LIVEKIT_TOKEN`.
+  std::optional<std::string> token_;
+  /// Construction-time value of `LIVEKIT_TOKEN_ENDPOINT`.
+  std::optional<std::string> endpoint_;
+  /// Construction-time value of `LIVEKIT_TOKEN_SERVER_ID`.
+  std::optional<std::string> server_id_;
 };
 
 } // namespace ros_portal

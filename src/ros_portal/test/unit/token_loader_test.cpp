@@ -48,10 +48,12 @@ TEST_F(TokenLoaderTest, LoadsLiteralSource) {
   ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", "participant-token"));
 
   TokenLoader token_loader;
+  const auto credentials = token_loader.load();
 
   ASSERT_TRUE(token_loader.valid());
-  EXPECT_EQ(token_loader.get().server_url, "ws://127.0.0.1:7880");
-  EXPECT_EQ(token_loader.get().participant_token, "participant-token");
+  ASSERT_TRUE(credentials.has_value());
+  EXPECT_EQ(credentials->server_url, "ws://127.0.0.1:7880");
+  EXPECT_EQ(credentials->participant_token, "participant-token");
 }
 
 TEST_F(TokenLoaderTest, RejectsMultipleTokenSources) {
@@ -69,7 +71,8 @@ TEST_F(TokenLoaderTest, RejectsLiteralSourceWithoutUrl) {
 
   TokenLoader token_loader;
 
-  EXPECT_FALSE(token_loader.valid());
+  EXPECT_TRUE(token_loader.valid());
+  EXPECT_FALSE(token_loader.load().has_value());
 }
 
 } // namespace

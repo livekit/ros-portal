@@ -164,7 +164,9 @@ jobs:
               }
               trap cleanup EXIT
 
-              for _ in $(seq 1 45); do
+              # Wait up to 30 seconds for ROS Portal to connect through endpoint token server
+              # Exits once connection log is found
+              for _ in $(seq 1 30); do
                 if grep -q "Connected to LiveKit room" "${log_path}"; then
                   echo "ROS Portal connected through endpoint token server"
                   exit 0

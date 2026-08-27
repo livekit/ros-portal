@@ -122,6 +122,7 @@ bool RosPortal::initialize() {
               topic_polling_period_ms_, config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
 
   TokenLoader token_loader;
+  // Fail fast if environment isn't configured correctly
   if (!token_loader.valid()) {
     return false;
   }
@@ -151,20 +152,20 @@ bool RosPortal::initialize() {
   RCLCPP_DEBUG(this->get_logger(), "LiveKit client info other_sdks: %s", other_sdks.c_str());
 
   ConnectionManager::Methods connection_methods;
-  connection_methods.try_connect = [this, token_loader, room_options, first_attempt = true]() mutable {
+  connection_methods.try_connect = [this, token_loader, room_options]() {
     if (!room_) {
       return false;
     }
 
-    if (!first_attempt) {
-      token_loader = TokenLoader{};
-    }
-    first_attempt = false;
-    if (!token_loader.valid()) {
+    // This is a new Room::connect after a terminal disconnect, not an SDK
+    // in-session reconnect: delegate events handle the latter without calling
+    // try_connect. Load credentials from the construction-time configured
+    // source for this new connection.
+    const auto credentials = token_loader.load();
+    if (!credentials) {
       return false;
     }
-    const auto& credentials = token_loader.get();
-    return room_->connect(credentials.server_url, credentials.participant_token, room_options);
+    return room_->connect(credentials->server_url, credentials->participant_token, room_options);
   };
   connection_manager_ = std::make_unique<ConnectionManager>(
       std::move(connection_methods), this->get_logger().get_child("connection"), makeDiagnosticsFns());

@@ -65,10 +65,8 @@ inline CorrelationContext makeCorrelationContext(const rclcpp::MessageInfo& mess
 
 inline bool correlationEventsEnabled() noexcept {
 #if defined(ROS_PORTAL_HAS_LTTNG)
-  return tracepoint_enabled(ros_portal, outbound_received) ||
-         tracepoint_enabled(ros_portal, livekit_push) ||
-         tracepoint_enabled(ros_portal, livekit_received) ||
-         tracepoint_enabled(ros_portal, ros_publish);
+  return tracepoint_enabled(ros_portal, outbound_received) || tracepoint_enabled(ros_portal, livekit_push) ||
+         tracepoint_enabled(ros_portal, livekit_received) || tracepoint_enabled(ros_portal, ros_publish);
 #else
   return false;
 #endif

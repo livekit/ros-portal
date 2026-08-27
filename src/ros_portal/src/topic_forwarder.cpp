@@ -238,7 +238,6 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       return;
     }
 
-
     auto& rcl_msg = msg->get_rcl_serialized_message();
     std::optional<tracing::CorrelationContext> trace_context;
     if (tracing::correlationEventsEnabled()) {

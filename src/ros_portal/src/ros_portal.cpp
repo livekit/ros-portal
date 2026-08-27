@@ -44,6 +44,7 @@
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
 #include "ros_portal/service_forwarder.hpp"
+#include "ros_portal/token_loader.hpp"
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
@@ -122,23 +123,8 @@ bool RosPortal::initialize() {
 
   RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
 
-  // ----- Resolve LiveKit credentials from environment variables only -----
-  std::string url_source, token_source;
-  const std::string livekit_url = utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
-  const std::string livekit_token = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
-
-  RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s", url_source.c_str());
-  RCLCPP_INFO(this->get_logger(), "LiveKit token resolved from %s", token_source.c_str());
-
-  if (livekit_url.empty() || livekit_token.empty()) {
-    RCLCPP_WARN(this->get_logger(),
-                "LiveKit credentials not fully provided — ROS Portal will not connect.\n"
-                "  livekit_url   : %s\n"
-                "  livekit_token : %s\n"
-                "Set them via environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
-                livekit_url.empty() ? "(missing)" : url_source.c_str(),
-                livekit_token.empty() ? "(missing)" : token_source.c_str());
-
+  TokenLoader token_loader;
+  if (!token_loader.valid()) {
     return false;
   }
 
@@ -167,8 +153,20 @@ bool RosPortal::initialize() {
   RCLCPP_DEBUG(this->get_logger(), "LiveKit client info other_sdks: %s", other_sdks.c_str());
 
   ConnectionManager::Methods connection_methods;
-  connection_methods.try_connect = [this, livekit_url, livekit_token, room_options]() {
-    return room_ && room_->connect(livekit_url, livekit_token, room_options);
+  connection_methods.try_connect = [this, token_loader, room_options, first_attempt = true]() mutable {
+    if (!room_) {
+      return false;
+    }
+
+    if (!first_attempt) {
+      token_loader = TokenLoader{};
+    }
+    first_attempt = false;
+    if (!token_loader.valid()) {
+      return false;
+    }
+    const auto& credentials = token_loader.get();
+    return room_->connect(credentials.server_url, credentials.participant_token, room_options);
   };
   connection_manager_ = std::make_unique<ConnectionManager>(
       std::move(connection_methods), this->get_logger().get_child("connection"), makeDiagnosticsFns());

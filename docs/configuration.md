@@ -19,15 +19,19 @@ LiveKit server.
 
 | Variable | Required | Description |
 |---|---:|---|
-| `LIVEKIT_URL` | yes | WebSocket URL of the LiveKit server. |
-| `LIVEKIT_TOKEN` | yes | LiveKit access JWT for the ROS Portal participant. |
+| `LIVEKIT_URL` | with `LIVEKIT_TOKEN` | WebSocket URL of the LiveKit server for the literal-token source. |
+| `LIVEKIT_TOKEN` | one token source | LiveKit access JWT for the ROS Portal participant; uses the literal-token source with `LIVEKIT_URL`. |
+| `LIVEKIT_TOKEN_ENDPOINT` | one token source | Token endpoint URL; ROS Portal requests connection credentials from this endpoint. Recommended for production. |
+| `LIVEKIT_TOKEN_SERVER_ID` | one token source | LiveKit Cloud development token server ID. For development only; do not use in production. |
 | `LIVEKIT_API_KEY` | no | LiveKit Cloud only: API key used to mint `LIVEKIT_TOKEN` with LiveKit CLI (not read by ROS Portal). |
 | `LIVEKIT_API_SECRET` | no | LiveKit Cloud only: API secret used to mint `LIVEKIT_TOKEN` with LiveKit CLI (not read by ROS Portal). |
 
 ### Token Configuration
 
-`LIVEKIT_TOKEN` allows ROS Portal to connect to the LiveKit room and is minted
-using `lk token create`. The following table lists the required token options:
+Configure exactly one token source. ROS Portal fails to start if more than one
+of `LIVEKIT_TOKEN`, `LIVEKIT_TOKEN_ENDPOINT`, and `LIVEKIT_TOKEN_SERVER_ID` is
+set. The literal-token source uses `LIVEKIT_URL` and a JWT minted using
+`lk token create`. The following table lists the required token options:
 
 | Option/Grant | `lk` flag | Why ROS Portal needs it |
 |---|---|---|
@@ -80,6 +84,25 @@ export LIVEKIT_TOKEN="$(lk token create \
   --token-only \
   --yes)"
 ```
+
+### Endpoint Token Source
+
+For production, point ROS Portal at a backend token endpoint that returns the
+LiveKit server URL and a freshly minted participant JWT:
+
+```bash
+export LIVEKIT_TOKEN_ENDPOINT=https://example.com/livekit/token
+```
+
+### Development Token Source
+
+For local development, use a LiveKit Cloud development token server ID:
+
+```bash
+export LIVEKIT_TOKEN_SERVER_ID=token-server-xxxxxx
+```
+
+Do not use the development token source in production.
 
 ## Configuration File
 

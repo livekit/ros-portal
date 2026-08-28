@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL_UTILS_ROS_UTILS_HPP_
-#define ROS_PORTAL_UTILS_ROS_UTILS_HPP_
+#pragma once
 
 #include <livekit/video_frame.h>
 
@@ -157,5 +156,3 @@ std::unordered_set<std::string> latchedOutboundTopics(const std::vector<ros_port
 /// @return Set of normalized ROS topic names accepted as inbound latched state.
 std::unordered_set<std::string> latchedInboundTopics(const std::vector<ros_portal_config::TopicConfig>& topics);
 } // namespace ros_portal::utils
-
-#endif // ROS_PORTAL_UTILS_ROS_UTILS_HPP_

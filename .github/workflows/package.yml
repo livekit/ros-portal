@@ -24,8 +24,7 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:
-      # TODO(revert): drop alan/feature-span-dt override after SDK span API ships.
-      BUILD_LIVEKIT_SDK_FROM_SOURCE: ${{ (github.head_ref == 'alan/feature-span-dt' || github.ref_name == 'alan/feature-span-dt') && 'true' || (inputs.ros_distro == 'humble' && 'true' || 'false') }}
+      LIVEKIT_BUILD_SDK_FROM_SOURCE: "false"
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
       ROS_DISTRO: ${{ inputs.ros_distro }}

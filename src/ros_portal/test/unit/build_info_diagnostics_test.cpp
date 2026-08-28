@@ -28,6 +28,8 @@
 #include "ros_portal/diagnostics/build_info.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 
+// Note: the versions in this file don't matter, just that they're set correctly
+
 namespace ros_portal::diagnostics {
 namespace {
 
@@ -42,17 +44,17 @@ std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWr
 
 TEST(BuildInfoDiagnosticsTest, PopulatesOkStatusWithVersionFields) {
   BuildInfo info;
-  info.livekit_sdk_version = "1.7.0";
-  info.ros_portal_version = "0.1.0";
+  info.livekit_sdk_version = "1.2.3";
+  info.ros_portal_version = "3.2.1";
   info.ros_distro = "humble";
   diagnostic_updater::DiagnosticStatusWrapper status;
 
   populateBuildInfoStatus(info, status);
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(status.message, "LiveKit SDK 1.7.0");
-  EXPECT_EQ(valueFor(status, "livekit_sdk_version"), "1.7.0");
-  EXPECT_EQ(valueFor(status, "ros_portal_version"), "0.1.0");
+  EXPECT_EQ(status.message, "LiveKit SDK 1.2.3");
+  EXPECT_EQ(valueFor(status, "livekit_sdk_version"), "1.2.3");
+  EXPECT_EQ(valueFor(status, "ros_portal_version"), "3.2.1");
   EXPECT_EQ(valueFor(status, "ros_distro"), "humble");
 }
 
@@ -66,19 +68,19 @@ TEST(BuildInfoDiagnosticsTest, CollectedInfoHasNoEmptyFields) {
 
 TEST(BuildInfoDiagnosticsTest, FormatsOtherSdksAsPortalDistroVersion) {
   BuildInfo info;
-  info.livekit_sdk_version = "1.7.0";
-  info.ros_portal_version = "0.1.0";
+  info.livekit_sdk_version = "1.2.3";
+  info.ros_portal_version = "3.2.1";
   info.ros_distro = "jazzy";
 
-  EXPECT_EQ(formatOtherSdks(info), "ros-portal:jazzy-v0.1.0");
+  EXPECT_EQ(formatOtherSdks(info), "ros-portal:jazzy-v3.2.1");
 }
 
 TEST(BuildInfoDiagnosticsTest, FormatsOtherSdksWithUnknownDistro) {
   BuildInfo info;
-  info.ros_portal_version = "0.1.0";
+  info.ros_portal_version = "3.2.1";
   info.ros_distro = "unknown";
 
-  EXPECT_EQ(formatOtherSdks(info), "ros-portal:unknown-v0.1.0");
+  EXPECT_EQ(formatOtherSdks(info), "ros-portal:unknown-v3.2.1");
 }
 
 TEST(BuildInfoDiagnosticsTest, FormatsOtherSdksFromCollectedInfo) {

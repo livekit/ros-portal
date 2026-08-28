@@ -24,7 +24,6 @@
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
-#include <map>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -122,15 +121,25 @@ TopicForwarder::~TopicForwarder() {
   image_topic_states_.clear();
 }
 
-void TopicForwarder::pollTopics() {
-  std::map<std::string, std::vector<std::string>> topic_names_and_types;
+bool TopicForwarder::needsGraphDiscovery() const { return !options_.outgoing_topic_patterns.empty(); }
+
+void TopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_types) {
+  const auto now = std::chrono::steady_clock::now();
   {
-    const auto node = node_.lock();
-    if (!node) {
-      RCLCPP_ERROR(logger_, "Skipping topic poll; ROS node has been destroyed");
-      return;
+    std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    for (auto& [topic_name, subscription] : subscriptions_) {
+      (void)topic_name;
+      if (!subscription.handle) {
+        continue;
+      }
+      if (subscription.handle->get_publisher_count() == 0U) {
+        if (!subscription.publishers_absent_since.has_value()) {
+          subscription.publishers_absent_since = now;
+        }
+      } else {
+        subscription.publishers_absent_since.reset();
+      }
     }
-    topic_names_and_types = node->get_topic_names_and_types();
   }
 
   for (const auto& [topic_name, topic_types] : topic_names_and_types) {
@@ -153,6 +162,52 @@ void TopicForwarder::pollTopics() {
     RCLCPP_INFO(logger_, "Discovered matching topic: '%s' [%s]", topic_name.c_str(), topic_type.c_str());
     createSubscriber(topic_name, topic_type);
   }
+}
+
+bool TopicForwarder::reapExpiredSubscriptions() {
+  const auto now = std::chrono::steady_clock::now();
+  bool removed = false;
+  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  for (auto it = subscriptions_.begin(); it != subscriptions_.end();) {
+    auto& subscription = it->second;
+    if (!subscription.publishers_absent_since.has_value()) {
+      ++it;
+      continue;
+    }
+    if (subscription.handle && subscription.handle->get_publisher_count() > 0U) {
+      subscription.publishers_absent_since.reset();
+      ++it;
+      continue;
+    }
+    if ((now - *subscription.publishers_absent_since) < options_.inactive_subscription_grace) {
+      ++it;
+      continue;
+    }
+
+    const auto topic_name = it->first;
+    data_topic_states_.erase(topic_name);
+    image_topic_states_.erase(topic_name);
+    it = subscriptions_.erase(it);
+    removed = true;
+    RCLCPP_INFO(logger_, "Removed inactive subscription for '%s'", topic_name.c_str());
+  }
+  return removed;
+}
+
+std::optional<std::chrono::steady_clock::time_point> TopicForwarder::nextExpiryDeadline() const {
+  std::optional<std::chrono::steady_clock::time_point> earliest;
+  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  for (const auto& [topic_name, subscription] : subscriptions_) {
+    (void)topic_name;
+    if (!subscription.publishers_absent_since.has_value()) {
+      continue;
+    }
+    const auto deadline = *subscription.publishers_absent_since + options_.inactive_subscription_grace;
+    if (!earliest.has_value() || deadline < *earliest) {
+      earliest = deadline;
+    }
+  }
+  return earliest;
 }
 
 void TopicForwarder::createSubscriber(const std::string& topic_name, const std::string& topic_type) {
@@ -258,7 +313,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     sub_options.callback_group = callback_group_;
     auto subscription =
         utils::createGenericSubscription(node, topic_name, topic_type, qos, std::move(callback), sub_options);
-    subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create generic subscription for '%s' [%s]: %s", topic_name.c_str(),
@@ -427,7 +482,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     sub_options.callback_group = callback_group_;
     auto subscription =
         node->create_subscription<sensor_msgs::msg::Image>(topic_name, qos, std::move(callback), sub_options);
-    subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     image_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create image subscription for '%s' [%s]: %s", topic_name.c_str(), kImageMsgType,
@@ -648,17 +703,20 @@ std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(
     return std::nullopt;
   }
 
-  std::map<std::string, std::vector<std::string>> topics;
-  {
+  TopicGraphSnapshot topics;
+  if (options_.topic_snapshot) {
+    topics = options_.topic_snapshot();
+  }
+  if (!topics) {
     const auto node = node_.lock();
     if (!node) {
       return std::nullopt;
     }
-    topics = node->get_topic_names_and_types();
+    topics = std::make_shared<const TopicNamesAndTypes>(node->get_topic_names_and_types());
   }
 
-  const auto topic_it = topics.find(*normalized_track_name);
-  if (topic_it == topics.end() || topic_it->second.empty()) {
+  const auto topic_it = topics->find(*normalized_track_name);
+  if (topic_it == topics->end() || topic_it->second.empty()) {
     if (schema.has_value() && !schema->name.empty()) {
       RCLCPP_INFO(logger_,
                   "Inbound track '%s' has no local ROS endpoint yet; using advertised "

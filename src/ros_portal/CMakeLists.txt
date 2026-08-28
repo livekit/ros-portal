@@ -71,9 +71,9 @@ endif()
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
 #
-# Build the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE or
-# download a release asset from GitHub. The same version pin is mirrored in
-# this package's colcon.pkg.
+# Download the pinned Ubuntu 22.04 release asset from GitHub (default), or build
+# the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE. The same
+# version pin is mirrored in this package's colcon.pkg.
 #
 # Examples:
 #   colcon build --packages-select ros_portal
@@ -86,7 +86,7 @@ endif()
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "1.7.0" CACHE STRING
+set(LIVEKIT_SDK_VERSION "1.10.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 include(ConfigureLiveKitSDK)
 livekit_configure_sdk(
@@ -265,6 +265,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/connection/connection_diagnostics.cpp
   src/connection/connection_manager.cpp
   src/diagnostics/build_info.cpp
+  src/graph/graph_manager.cpp
   src/latched_topic_forwarder.cpp
   src/ros_portal.cpp
   src/schema/manager.cpp

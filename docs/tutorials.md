@@ -334,10 +334,9 @@ package:
 export ROS_DOMAIN_ID=100
 ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/turtle1/cmd_vel
 ```
-Press `q` a few times to increase the speed.
 
-Keystrokes on the controller now steer the turtle on the other domain, entirely
-over LiveKit!
+Following the `teleop_twist_keyboard` command output for available controls,
+keystrokes on the controller now steer the turtle on the other domain, entirely over LiveKit!
 
 ---
 

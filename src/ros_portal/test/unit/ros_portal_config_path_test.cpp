@@ -67,7 +67,6 @@ protected:
 constexpr const char* kGoodConfig =
     R"(ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 250
   ros_threads: 3
   topics:
     - topic: "/camera/image_raw"

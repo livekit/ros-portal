@@ -26,6 +26,7 @@
 #include <unordered_map>
 
 #include "ros_portal/cli/types.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 
 namespace ros_portal::cli {
 
@@ -53,8 +54,8 @@ public:
   ///   direction/allow rules. When omitted, all resolved topics are allowed.
   /// @throws std::invalid_argument if either node interface is null.
   TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
-           rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
-           TopicPublishAllowed topic_publish_allowed = {});
+           rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph, TopicPublishAllowed topic_publish_allowed = {},
+           TopicGraphSnapshotFn topic_snapshot = {});
 
   /// @brief Publish one native YAML payload to a ROS topic.
   ///
@@ -85,6 +86,8 @@ private:
   rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_;
   /// @brief Node graph interface for discovered topic type validation.
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph_;
+  /// @brief Shared/cached topic graph query used for type validation.
+  TopicGraphSnapshotFn topic_snapshot_;
   /// @brief Predicate enforcing whether a resolved topic may be published.
   TopicPublishAllowed topic_publish_allowed_;
   /// @brief Guards access to the generic publisher cache.

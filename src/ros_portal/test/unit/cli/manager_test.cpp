@@ -27,6 +27,7 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -800,6 +801,31 @@ TEST_F(ManagerTest, MalformedInboundServiceListRpcReturnsFailureJson) {
   EXPECT_EQ(response.at("success"), false);
   EXPECT_NE(response.at("err_msg").get<std::string>().find("parse error"), std::string::npos);
   EXPECT_EQ(response.at("output"), "");
+}
+
+TEST_F(ManagerTest, InboundTopicListRpcReadsCurrentGraphInsteadOfCachedSnapshot) {
+  manager.reset();
+  const auto stale_topics = std::make_shared<const TopicNamesAndTypes>();
+  cli::Manager::NodeInterfaces node_interfaces{
+      node->get_node_base_interface(),
+      node->get_node_services_interface(),
+      node->get_node_graph_interface(),
+      node->get_node_topics_interface(),
+      node->get_node_logging_interface(),
+      [stale_topics]() { return stale_topics; },
+      {},
+  };
+  manager = std::make_unique<cli::Manager>(std::move(node_interfaces), callback_group, rpc_client->makeLiveKitMethods(),
+                                           cli::TopicPublishAllowed{}, diagnostics_fns);
+
+  constexpr const char* kHiddenTopic = "/_fresh_hidden_topic";
+  const auto publisher = node->create_publisher<std_msgs::msg::String>(kHiddenTopic, 10);
+  ASSERT_NE(publisher, nullptr);
+  ASSERT_NE(node->get_topic_names_and_types().count(kHiddenTopic), 0U);
+
+  const auto response = json::parse(manager->handleTopicListRpc(R"({"include_hidden_topics":true})"));
+  EXPECT_TRUE(response.at("success"));
+  EXPECT_NE(response.at("output").get<std::string>().find(kHiddenTopic), std::string::npos);
 }
 
 TEST_F(ManagerTest, MalformedInboundServiceCallRpcReturnsFailureJson) {

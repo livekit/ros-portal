@@ -30,14 +30,22 @@ namespace ros_portal::cli {
 
 TopicPub::TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
                    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
-                   TopicPublishAllowed topic_publish_allowed)
-    : topics_(std::move(topics)), graph_(std::move(graph)), topic_publish_allowed_(std::move(topic_publish_allowed)) {
+                   TopicPublishAllowed topic_publish_allowed, TopicGraphSnapshotFn topic_snapshot)
+    : topics_(std::move(topics)),
+      graph_(std::move(graph)),
+      topic_snapshot_(std::move(topic_snapshot)),
+      topic_publish_allowed_(std::move(topic_publish_allowed)) {
   if (!topics_ || !graph_) {
     throw std::invalid_argument("TopicPub requires node topics and graph interfaces");
   }
 
   if (!topic_publish_allowed_) {
     topic_publish_allowed_ = [](const std::string&) { return true; };
+  }
+  if (!topic_snapshot_) {
+    topic_snapshot_ = [graph = graph_]() {
+      return std::make_shared<const TopicNamesAndTypes>(graph->get_topic_names_and_types());
+    };
   }
 }
 
@@ -78,9 +86,9 @@ TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
 
   // Case: create a new generic publisher.
   if (!publisher) {
-    const auto topic_names_and_types = graph_->get_topic_names_and_types();
-    const auto graph_entry = topic_names_and_types.find(resolved_topic);
-    if (graph_entry != topic_names_and_types.end() && !graph_entry->second.empty() &&
+    const auto topic_names_and_types = topic_snapshot_();
+    const auto graph_entry = topic_names_and_types->find(resolved_topic);
+    if (graph_entry != topic_names_and_types->end() && !graph_entry->second.empty() &&
         !topicTypeMatches(graph_entry->second, options.msg_type)) {
       return makeCliResponse<TopicPubSrv::Response>(false, "topic '" + resolved_topic + "' has type(s) '" +
                                                                joinTypes(graph_entry->second) + "', not '" +

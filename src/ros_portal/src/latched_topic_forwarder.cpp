@@ -19,7 +19,6 @@
 #include <cstring>
 #include <exception>
 #include <functional>
-#include <map>
 #include <nlohmann/json.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -125,25 +124,13 @@ void LatchedTopicForwarder::start() {
   worker_ = std::thread(&LatchedTopicForwarder::runWorker, this);
 }
 
+bool LatchedTopicForwarder::needsGraphDiscovery() const { return !options_.outbound_topics.empty(); }
+
 rclcpp::QoS LatchedTopicForwarder::latchedQoS() const {
   return rclcpp::QoS(rclcpp::KeepLast(kLatchedQosDepth)).reliable().transient_local();
 }
 
-void LatchedTopicForwarder::poll() {
-  if (options_.outbound_topics.empty()) {
-    return;
-  }
-
-  std::map<std::string, std::vector<std::string>> topic_names_and_types;
-  {
-    const auto node = node_.lock();
-    if (!node) {
-      RCLCPP_ERROR(logger_, "Skipping latched topic poll; ROS node has been destroyed");
-      return;
-    }
-    topic_names_and_types = node->get_topic_names_and_types();
-  }
-
+void LatchedTopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_types) {
   for (const auto& topic_name : options_.outbound_topics) {
     {
       std::lock_guard<std::mutex> lock(subscriptions_mutex_);

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL_CONFIG__CONFIG__UTILS_HPP_
-#define ROS_PORTAL_CONFIG__CONFIG__UTILS_HPP_
+#ifndef ROS_PORTAL_CONFIG_CONFIG_UTILS_HPP_
+#define ROS_PORTAL_CONFIG_CONFIG_UTILS_HPP_
 
 #include <yaml-cpp/yaml.h>
 
@@ -64,4 +64,4 @@ void rejectUnknownFields(const YAML::Node& node, const std::set<std::string>& al
 
 } // namespace ros_portal_config::utils
 
-#endif // ROS_PORTAL_CONFIG__CONFIG__UTILS_HPP_
+#endif // ROS_PORTAL_CONFIG_CONFIG_UTILS_HPP_

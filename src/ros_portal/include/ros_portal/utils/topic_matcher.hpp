@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL__UTILS__TOPIC_MATCHER_HPP_
-#define ROS_PORTAL__UTILS__TOPIC_MATCHER_HPP_
+#ifndef ROS_PORTAL_UTILS_TOPIC_MATCHER_HPP_
+#define ROS_PORTAL_UTILS_TOPIC_MATCHER_HPP_
 
 #include <regex>
 #include <string>
@@ -35,4 +35,4 @@ bool matchesAnyPattern(const std::string& value, const std::vector<std::regex>& 
 
 } // namespace ros_portal::utils
 
-#endif // ROS_PORTAL__UTILS__TOPIC_MATCHER_HPP_
+#endif // ROS_PORTAL_UTILS_TOPIC_MATCHER_HPP_

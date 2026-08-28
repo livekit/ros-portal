@@ -84,7 +84,7 @@ std::optional<std::string> sanitizeRosNameToken(const std::string& token) {
 }
 
 std::optional<std::string> liveKitToRosTopicName(const std::string& track_name) {
-  const auto normalized_track_name = normalizeTrackTopicName(track_name);
+  auto normalized_track_name = normalizeTrackTopicName(track_name);
   if (!normalized_track_name.has_value() || *normalized_track_name == "/") {
     return std::nullopt;
   }

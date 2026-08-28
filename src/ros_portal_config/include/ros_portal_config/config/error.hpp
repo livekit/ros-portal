@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL_CONFIG__CONFIG__ERROR_HPP_
-#define ROS_PORTAL_CONFIG__CONFIG__ERROR_HPP_
+#ifndef ROS_PORTAL_CONFIG_CONFIG_ERROR_HPP_
+#define ROS_PORTAL_CONFIG_CONFIG_ERROR_HPP_
 
 #include <stdexcept>
 #include <string>
@@ -56,4 +56,4 @@ private:
 
 } // namespace ros_portal_config
 
-#endif // ROS_PORTAL_CONFIG__CONFIG__ERROR_HPP_
+#endif // ROS_PORTAL_CONFIG_CONFIG_ERROR_HPP_

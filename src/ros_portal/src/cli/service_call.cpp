@@ -58,7 +58,7 @@ struct ServiceCall::ServiceClient : public rclcpp::ClientBase {
                 rclcpp::node_interfaces::NodeBaseInterface* node_base,
                 rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph)
       : rclcpp::ClientBase(node_base, std::move(node_graph)), msg_type(msg_type), support(std::move(support)) {
-    rcl_client_options_t options = rcl_client_get_default_options();
+    const rcl_client_options_t options = rcl_client_get_default_options();
     const rcl_ret_t ret = rcl_client_init(get_client_handle().get(), get_rcl_node_handle(), this->support->handle,
                                           service_name.c_str(), &options);
     if (ret != RCL_RET_OK) {
@@ -123,7 +123,7 @@ ServiceCall::ServiceCall(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr b
 ServiceCall::~ServiceCall() = default;
 
 CacheStats ServiceCall::cacheStats() const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   return CacheStats{clients_.size(), kMaxCachedServiceClients, cache_full_rejections_};
 }
 
@@ -162,7 +162,7 @@ ServiceCallSrv::Response ServiceCall::call(ServiceCallOptions options) {
   // Serialize all send+take operations on the same client so concurrent
   // callers cannot interleave rcl_send_request / take_type_erased_response
   // and steal each other's responses.
-  std::lock_guard<std::mutex> client_lock(client->call_mutex);
+  const std::lock_guard<std::mutex> client_lock(client->call_mutex);
 
   // rcl_send_request assigns the outgoing sequence number via this out-param.
   std::int64_t sequence_number = 0;
@@ -189,7 +189,7 @@ ServiceCallSrv::Response ServiceCall::call(ServiceCallOptions options) {
 
 std::optional<ServiceCall::ClientPtr> ServiceCall::getClient(const std::string& service, const std::string& msg_type,
                                                              std::string& error) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   const std::string key = service + ":" + msg_type;
   const auto existing = clients_.find(key);
   if (existing != clients_.end()) {

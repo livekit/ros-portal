@@ -385,7 +385,7 @@ ConnectionHealthDiagnostics::~ConnectionHealthDiagnostics() { diagnostics_.remov
 
 void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     state_.kind = ConnectionHealthStateKind::Connected;
     state_.room_name = room.roomInfo().name;
   }
@@ -393,7 +393,7 @@ void ConnectionHealthDiagnostics::markConnected(livekit::Room& room) {
 }
 
 void ConnectionHealthDiagnostics::markDisconnected() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   if (state_.kind == ConnectionHealthStateKind::Connected) {
     ++state_.connection_loss_count;
   }
@@ -408,7 +408,7 @@ void ConnectionHealthDiagnostics::pollStats(livekit::Room& room) {
   updateStatsFromReadyFuture();
 
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     if (pending_stats_.has_value() || state_.kind != ConnectionHealthStateKind::Connected) {
       return;
     }
@@ -416,19 +416,19 @@ void ConnectionHealthDiagnostics::pollStats(livekit::Room& room) {
 
   try {
     auto stats = room.getStats();
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     if (state_.kind == ConnectionHealthStateKind::Connected && !pending_stats_.has_value()) {
       pending_stats_ = std::move(stats);
     }
   } catch (const std::exception&) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     clearRtcSummary(state_);
     pending_stats_.reset();
   }
 }
 
 ConnectionHealthState ConnectionHealthDiagnostics::snapshot() const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   return state_;
 }
 
@@ -471,7 +471,7 @@ void ConnectionHealthDiagnostics::onReconnected(livekit::Room& room, const livek
 
 void ConnectionHealthDiagnostics::onRoomUpdated(livekit::Room& room, const livekit::RoomUpdatedEvent&) {
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     state_.room_name = room.roomInfo().name;
   }
   updatePeerCount(room);
@@ -487,7 +487,7 @@ void ConnectionHealthDiagnostics::populateStatus(diagnostic_updater::DiagnosticS
 
 void ConnectionHealthDiagnostics::markReconnecting(livekit::Room& room) {
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     // Only count SDK in-session reconnects that start from an established
     // connection. Terminal disconnect + later Room::connect is not a reconnect.
     if (state_.kind == ConnectionHealthStateKind::Connected) {
@@ -503,7 +503,7 @@ void ConnectionHealthDiagnostics::markReconnecting(livekit::Room& room) {
 
 void ConnectionHealthDiagnostics::updatePeerCount(livekit::Room& room) {
   const auto num_peers = room.remoteParticipants().size();
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   state_.num_peers = num_peers;
 }
 
@@ -511,7 +511,7 @@ void ConnectionHealthDiagnostics::updateStatsFromReadyFuture() {
   std::optional<std::future<livekit::SessionStats>> ready_stats;
 
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     if (!pending_stats_.has_value()) {
       return;
     }
@@ -526,12 +526,12 @@ void ConnectionHealthDiagnostics::updateStatsFromReadyFuture() {
 
   try {
     auto stats = ready_stats->get();
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     if (state_.kind == ConnectionHealthStateKind::Connected) {
       updateConnectionHealthStatsSnapshot(state_, stats);
     }
   } catch (const std::exception&) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     clearRtcSummary(state_);
   }
 }

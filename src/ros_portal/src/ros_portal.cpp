@@ -177,7 +177,7 @@ bool RosPortal::initialize() {
     graph::GraphManager::Callbacks graph_callbacks{
         [this](const TopicNamesAndTypes& topics) { return reconcileGraphTopics(topics); },
         [this]() {
-          std::lock_guard<std::mutex> lock(room_components_mutex_);
+          const std::lock_guard<std::mutex> lock(room_components_mutex_);
           return topic_forwarder_ ? topic_forwarder_->nextExpiryDeadline()
                                   : std::optional<std::chrono::steady_clock::time_point>{};
         },

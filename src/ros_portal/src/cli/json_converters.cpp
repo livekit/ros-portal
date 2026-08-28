@@ -138,7 +138,7 @@ livekit::Result<TopicListOptions, std::string> topicListOptionsFromJson(const st
     options.count_topics = request.value("count_topics", false);
     options.include_hidden_topics = request.value("include_hidden_topics", false);
     options.verbose = request.value("verbose", false);
-    return livekit::Result<TopicListOptions, std::string>::success(std::move(options));
+    return livekit::Result<TopicListOptions, std::string>::success(options);
   } catch (const std::exception& parse_error) {
     return livekit::Result<TopicListOptions, std::string>::failure(parse_error.what());
   }
@@ -170,7 +170,7 @@ livekit::Result<ServiceListOptions, std::string> serviceListOptionsFromJson(cons
     options.show_types = request.value("show_types", false);
     options.count_services = request.value("count_services", false);
     options.include_hidden_services = request.value("include_hidden_services", false);
-    return livekit::Result<ServiceListOptions, std::string>::success(std::move(options));
+    return livekit::Result<ServiceListOptions, std::string>::success(options);
   } catch (const std::exception& parse_error) {
     return livekit::Result<ServiceListOptions, std::string>::failure(parse_error.what());
   }

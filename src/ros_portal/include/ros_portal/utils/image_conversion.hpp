@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL__UTILS__IMAGE_CONVERSION_HPP_
-#define ROS_PORTAL__UTILS__IMAGE_CONVERSION_HPP_
+#ifndef ROS_PORTAL_UTILS_IMAGE_CONVERSION_HPP_
+#define ROS_PORTAL_UTILS_IMAGE_CONVERSION_HPP_
 
 #include <cstdint>
 #include <sensor_msgs/msg/image.hpp>
@@ -27,4 +27,4 @@ bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_
 
 } // namespace ros_portal::utils
 
-#endif // ROS_PORTAL__UTILS__IMAGE_CONVERSION_HPP_
+#endif // ROS_PORTAL_UTILS_IMAGE_CONVERSION_HPP_

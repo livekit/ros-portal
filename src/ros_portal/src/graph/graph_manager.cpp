@@ -44,7 +44,7 @@ bool GraphManager::start() {
     event_ = graph_->get_graph_event();
     invalidate();
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      const std::lock_guard<std::mutex> lock(mutex_);
       last_reconciled_topics_.reset();
     }
     stop_requested_.store(false);
@@ -86,13 +86,13 @@ void GraphManager::stop() {
 bool GraphManager::active() const { return active_.load(std::memory_order_relaxed); }
 
 void GraphManager::invalidate() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   topics_.reset();
   services_.reset();
 }
 
 TopicGraphSnapshot GraphManager::topics() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   if (!topics_) {
     topics_ = std::make_shared<const TopicNamesAndTypes>(graph_->get_topic_names_and_types());
   }
@@ -100,7 +100,7 @@ TopicGraphSnapshot GraphManager::topics() {
 }
 
 ServiceGraphSnapshot GraphManager::services() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   if (!services_) {
     services_ = std::make_shared<const ServiceNamesAndTypes>(graph_->get_service_names_and_types());
   }
@@ -142,7 +142,7 @@ void GraphManager::discoveryLoop() {
 
 bool GraphManager::reconcileIfChanged(const TopicGraphSnapshot& topics) {
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     if (last_reconciled_topics_ && *last_reconciled_topics_ == *topics) {
       return false;
     }
@@ -153,7 +153,7 @@ bool GraphManager::reconcileIfChanged(const TopicGraphSnapshot& topics) {
   if (!callbacks_.reconcile_topics(*topics)) {
     return false;
   }
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   last_reconciled_topics_ = topics;
   return true;
 }

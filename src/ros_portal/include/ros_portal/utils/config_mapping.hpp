@@ -42,7 +42,7 @@ namespace ros_portal::utils {
 TopicForwarder::Options topicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics,
                                               std::size_t min_qos_depth, std::size_t max_qos_depth,
                                               const std::vector<std::string>& best_effort_qos_topics,
-                                              rclcpp::Logger logger);
+                                              const rclcpp::Logger& logger);
 
 /// @brief Build outbound ServiceForwarder routes from the configured services.
 /// @param services Configured services; only `Direction::Out` entries yield a

@@ -72,7 +72,7 @@ public:
   /// @return Service-call response with success false and err_msg filled when
   ///   validation, request conversion, client creation, dispatch, timeout, or
   ///   response conversion fails.
-  ServiceCallSrv::Response call(ServiceCallOptions options);
+  ServiceCallSrv::Response call(const ServiceCallOptions& options);
 
   /// @brief Snapshot the runtime service-client cache utilization.
   /// @return Current size, capacity, and cumulative cache-full rejection count.

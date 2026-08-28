@@ -53,11 +53,13 @@ constexpr std::uint8_t kMaxStaleResponseDrains = 25;
 /// @brief Runtime service client for an arbitrary service type.
 struct ServiceCall::ServiceClient : public rclcpp::ClientBase {
   /// @brief Construct a ClientBase-backed runtime service client.
-  ServiceClient(const std::string& service_name, const std::string& msg_type,
+  ServiceClient(const std::string& service_name, std::string msg_type,
                 std::shared_ptr<introspection::RuntimeServiceTypeSupport> support,
                 rclcpp::node_interfaces::NodeBaseInterface* node_base,
                 rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph)
-      : rclcpp::ClientBase(node_base, std::move(node_graph)), msg_type(msg_type), support(std::move(support)) {
+      : rclcpp::ClientBase(node_base, std::move(node_graph)),
+        msg_type(std::move(msg_type)),
+        support(std::move(support)) {
     const rcl_client_options_t options = rcl_client_get_default_options();
     const rcl_ret_t ret = rcl_client_init(get_client_handle().get(), get_rcl_node_handle(), this->support->handle,
                                           service_name.c_str(), &options);
@@ -127,7 +129,7 @@ CacheStats ServiceCall::cacheStats() const {
   return CacheStats{clients_.size(), kMaxCachedServiceClients, cache_full_rejections_};
 }
 
-ServiceCallSrv::Response ServiceCall::call(ServiceCallOptions options) {
+ServiceCallSrv::Response ServiceCall::call(const ServiceCallOptions& options) {
   std::string resolved_service;
   try {
     resolved_service =

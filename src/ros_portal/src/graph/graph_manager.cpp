@@ -71,6 +71,7 @@ void GraphManager::stop() {
       graph_->notify_graph_change();
     } catch (...) {
       // Shutdown proceeds even when the graph event cannot be explicitly woken.
+      RCLCPP_WARN(logger_, "Could not wake graph event during shutdown");
     }
   }
   if (worker_.joinable()) {

@@ -171,10 +171,8 @@ void accumulateRtcStats(RtcStatsAccumulator& accumulator, const livekit::RtcStat
         } else if constexpr (std::is_same_v<StatsType, livekit::RtcCandidatePairStats>) {
           accumulator.candidate_pairs.push_back(
               {typed_stats.rtc.id, typed_stats.rtc.timestamp_ms, typed_stats.candidate_pair});
-        } else if constexpr (std::is_same_v<StatsType, livekit::RtcInboundRtpStats>) {
-          accumulator.packets_lost += typed_stats.received.packets_lost;
-          updateMaxJitter(accumulator, typed_stats.received.jitter);
-        } else if constexpr (std::is_same_v<StatsType, livekit::RtcRemoteInboundRtpStats>) {
+        } else if constexpr (std::is_same_v<StatsType, livekit::RtcInboundRtpStats> ||
+                             std::is_same_v<StatsType, livekit::RtcRemoteInboundRtpStats>) {
           accumulator.packets_lost += typed_stats.received.packets_lost;
           updateMaxJitter(accumulator, typed_stats.received.jitter);
         } else if constexpr (std::is_same_v<StatsType, livekit::RtcDataChannelStats>) {

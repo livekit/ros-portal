@@ -156,10 +156,13 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
     return;
   }
 
-  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-    const auto& rcl_msg = msg->get_rcl_serialized_message();
-    storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
-  };
+  auto callback =
+      [this, topic_name, topic_type](
+          std::shared_ptr<rclcpp::SerializedMessage> msg) { // NOLINT(performance-unnecessary-value-param): ROS Jazzy
+                                                            // does not accept the suggested const-reference callback.
+        const auto& rcl_msg = msg->get_rcl_serialized_message();
+        storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
+      };
 
   const std::lock_guard<std::mutex> lock(subscriptions_mutex_);
   if (subscriptions_.count(topic_name) > 0) {

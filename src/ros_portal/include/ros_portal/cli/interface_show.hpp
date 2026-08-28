@@ -27,10 +27,8 @@
 #include "ros_portal/cli/types.hpp"
 #include "ros_portal/cli/utils.hpp"
 
-namespace ros_portal::cli::interface_show {
-
 /// @brief Parsing and rendering helpers for `ros2 interface show`.
-namespace utils {
+namespace ros_portal::cli::interface_show::utils {
 
 /// @brief Split an interface type identifier on `/` separators.
 /// @param type Interface type identifier, such as `std_msgs/msg/String`.
@@ -182,9 +180,7 @@ inline void appendRenderedInterfaceLine(std::ostringstream& output, const std::s
   output << std::string(static_cast<size_t>(indent_level), '\t') << without_comment << '\n';
 }
 
-} // namespace utils
-
-} // namespace ros_portal::cli::interface_show
+} // namespace ros_portal::cli::interface_show::utils
 
 namespace ros_portal::cli {
 

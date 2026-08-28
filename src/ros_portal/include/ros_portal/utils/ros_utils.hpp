@@ -86,7 +86,7 @@ std::optional<std::string> liveKitToRosTopicName(const std::string& track_name);
 std::optional<std::string> liveKitToRosTopicName(const std::string& participant_identity,
                                                  const std::string& track_name);
 
-void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger);
+void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, const rclcpp::Logger& logger);
 
 /// @brief Builtin default ROS Portal config, applied when no `config_path` is
 /// provided. Forwards all topics bidirectionally. Kept in sync with the
@@ -106,7 +106,7 @@ inline constexpr const char* kDefaultConfigYaml = R"(ros_portal:
 /// @param logger Logger for parse diagnostics.
 /// @return Parsed config, or std::nullopt on failure.
 std::optional<ros_portal_config::RosPortalConfig> parseRosPortalConfig(const std::filesystem::path& path,
-                                                                       rclcpp::Logger logger);
+                                                                       const rclcpp::Logger& logger);
 
 /// @brief Collect ROS-to-LiveKit topic patterns for the DataTrack forwarding
 /// path. Topics flagged `latched` are excluded because they are handled by the

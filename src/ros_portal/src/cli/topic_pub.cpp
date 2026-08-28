@@ -49,7 +49,7 @@ TopicPub::TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topic
   }
 }
 
-TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
+TopicPubSrv::Response TopicPub::publish(const TopicPubOptions& options) {
   // Error: unresolvable topic name.
   std::string resolved_topic;
   try {

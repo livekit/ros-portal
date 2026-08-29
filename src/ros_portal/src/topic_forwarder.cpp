@@ -62,8 +62,8 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
               "code=" + std::to_string(static_cast<std::uint32_t>(error.code)) + " message=" + error.message);
         }
 
-        auto livekit_stream = subscribe_result.value();
-        const auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
+        const auto& livekit_stream = subscribe_result.value();
+        auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
         // Forward read() to the underlying LiveKit stream.
         stream->read = [livekit_stream](livekit::DataTrackFrame& frame) { return livekit_stream->read(frame); };
         // Forward close() to tear down the LiveKit stream.
@@ -555,6 +555,12 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     return;
   }
 
+  if (!descriptor.frame_encoding.has_value()) {
+    RCLCPP_ERROR(logger_, "Ignoring LiveKit data track '%s' from '%s' because frame encoding is unset",
+                 descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return;
+  }
+
   // Pin the owning ROS Portal node before any lock: this may be the last reference, and
   // releasing it under inbound_data_track_states_mutex_ deadlocks in
   // ~TopicForwarder -> stopAllInboundDataTracks().
@@ -580,8 +586,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     state->publisher_identity = descriptor.publisher_identity;
     state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
-    // descriptor.frame_encoding guaranteed to be set by SchemaManager::validateInboundSchema()
-    state->frame_encoding = descriptor.frame_encoding.value();
+    state->frame_encoding = *descriptor.frame_encoding;
 
     try {
       state->publisher = node->create_generic_publisher(*ros_topic_name, *topic_type, rclcpp::QoS(10));

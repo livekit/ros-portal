@@ -111,17 +111,13 @@ Manager::Manager(NodeInterfaces node_interfaces, const rclcpp::CallbackGroup::Sh
   topic_list_service_ = tryCreateService<TopicListSrv>(
       node_interfaces_, kTopicListServiceName,
       [this](const std::shared_ptr<TopicListSrv::Request>& request,
-             const std::shared_ptr<TopicListSrv::Response>& response) {
-        handleTopicListRosService(request, response);
-      },
+             const std::shared_ptr<TopicListSrv::Response>& response) { handleTopicListRosService(request, response); },
       callback_group, logger_);
 
   topic_pub_service_ = tryCreateService<TopicPubSrv>(
       node_interfaces_, kTopicPubServiceName,
       [this](const std::shared_ptr<TopicPubSrv::Request>& request,
-             const std::shared_ptr<TopicPubSrv::Response>& response) {
-        handleTopicPubRosService(request, response);
-      },
+             const std::shared_ptr<TopicPubSrv::Response>& response) { handleTopicPubRosService(request, response); },
       callback_group, logger_);
 
   service_list_service_ = tryCreateService<ServiceListSrv>(

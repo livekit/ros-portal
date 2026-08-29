@@ -341,7 +341,7 @@ private:
                              ImageTopicState& state);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
-  void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);
+  void readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state);
   /// @brief Stop and join all active inbound LiveKit data track readers.
   void stopAllInboundDataTracks();
   /// @brief Populate the topic-forwarder diagnostic status.

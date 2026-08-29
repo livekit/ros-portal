@@ -31,7 +31,9 @@ bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_
       std::memcpy(out.data(), image.data.data(), num_pixels * 4);
     } else {
       for (std::uint32_t y = 0; y < image.height; ++y) {
-        std::memcpy(out.data() + y * image.width * 4, image.data.data() + y * image.step, image.width * 4);
+        std::memcpy(out.data() + static_cast<std::size_t>(y) * image.width * 4,
+                    image.data.data() + static_cast<std::size_t>(y) * image.step,
+                    static_cast<std::size_t>(image.width) * 4);
       }
     }
     return true;
@@ -39,10 +41,10 @@ bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_
 
   if (encoding == "rgb8") {
     for (std::uint32_t y = 0; y < image.height; ++y) {
-      const auto* row = image.data.data() + y * image.step;
+      const auto* row = image.data.data() + static_cast<std::size_t>(y) * image.step;
       for (std::uint32_t x = 0; x < image.width; ++x) {
-        const auto* px = row + x * 3;
-        auto* dst = out.data() + (y * image.width + x) * 4;
+        const auto* px = row + static_cast<std::size_t>(x) * 3;
+        auto* dst = out.data() + (static_cast<std::size_t>(y) * image.width + x) * 4;
         dst[0] = px[0];
         dst[1] = px[1];
         dst[2] = px[2];
@@ -54,10 +56,10 @@ bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_
 
   if (encoding == "bgr8") {
     for (std::uint32_t y = 0; y < image.height; ++y) {
-      const auto* row = image.data.data() + y * image.step;
+      const auto* row = image.data.data() + static_cast<std::size_t>(y) * image.step;
       for (std::uint32_t x = 0; x < image.width; ++x) {
-        const auto* px = row + x * 3;
-        auto* dst = out.data() + (y * image.width + x) * 4;
+        const auto* px = row + static_cast<std::size_t>(x) * 3;
+        auto* dst = out.data() + (static_cast<std::size_t>(y) * image.width + x) * 4;
         dst[0] = px[2];
         dst[1] = px[1];
         dst[2] = px[0];
@@ -69,10 +71,10 @@ bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_
 
   if (encoding == "bgra8") {
     for (std::uint32_t y = 0; y < image.height; ++y) {
-      const auto* row = image.data.data() + y * image.step;
+      const auto* row = image.data.data() + static_cast<std::size_t>(y) * image.step;
       for (std::uint32_t x = 0; x < image.width; ++x) {
-        const auto* px = row + x * 4;
-        auto* dst = out.data() + (y * image.width + x) * 4;
+        const auto* px = row + static_cast<std::size_t>(x) * 4;
+        auto* dst = out.data() + (static_cast<std::size_t>(y) * image.width + x) * 4;
         dst[0] = px[2];
         dst[1] = px[1];
         dst[2] = px[0];
@@ -84,9 +86,9 @@ bool convertToRgba(const sensor_msgs::msg::Image& image, std::vector<std::uint8_
 
   if (encoding == "mono8") {
     for (std::uint32_t y = 0; y < image.height; ++y) {
-      const auto* row = image.data.data() + y * image.step;
+      const auto* row = image.data.data() + static_cast<std::size_t>(y) * image.step;
       for (std::uint32_t x = 0; x < image.width; ++x) {
-        auto* dst = out.data() + (y * image.width + x) * 4;
+        auto* dst = out.data() + (static_cast<std::size_t>(y) * image.width + x) * 4;
         dst[0] = row[x];
         dst[1] = row[x];
         dst[2] = row[x];

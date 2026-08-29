@@ -61,12 +61,7 @@ constexpr char kRosPortalStatusDiagnosticTaskName[] = "ros_portal_status";
 } // namespace
 
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
-    : rclcpp::Node("ros_portal", options),
-      min_qos_depth_(0),
-      max_qos_depth_(0),
-      ros_threads_(0),
-      initialized_(false),
-      shutting_down_(false) {
+    : rclcpp::Node("ros_portal", options), initialized_(false), shutting_down_(false) {
   this->declare_parameter<std::string>("config_path", "");
   const std::vector<std::string> kEmptyStringVec{};
   this->declare_parameter<int>("min_qos_depth", static_cast<int>(kDefaultMinQosDepth));

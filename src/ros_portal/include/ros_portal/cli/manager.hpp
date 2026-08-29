@@ -100,7 +100,7 @@ public:
   /// cli-manager diagnostic task.
   /// @throws std::invalid_argument when any interface, @p livekit_methods
   /// callback, or @p diagnostics is unset.
-  Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
+  Manager(NodeInterfaces node_interfaces, const rclcpp::CallbackGroup::SharedPtr& callback_group,
           LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
           diagnostics::DiagnosticsManagerFns diagnostics);
 
@@ -115,7 +115,7 @@ public:
   /// cli-manager diagnostic task.
   /// @throws std::invalid_argument when any extracted interface, @p
   /// livekit_methods callback, or @p diagnostics is unset.
-  Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
+  Manager(rclcpp::Node& node, const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods,
           TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Unregister the LiveKit RPC method before destruction.
@@ -203,32 +203,32 @@ private:
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
-  void handleTopicListRosService(const std::shared_ptr<TopicListSrv::Request> request,
-                                 std::shared_ptr<TopicListSrv::Response> response) const;
+  void handleTopicListRosService(const std::shared_ptr<TopicListSrv::Request>& request,
+                                 const std::shared_ptr<TopicListSrv::Response>& response) const;
 
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
-  void handleTopicPubRosService(const std::shared_ptr<TopicPubSrv::Request> request,
-                                std::shared_ptr<TopicPubSrv::Response> response) const;
+  void handleTopicPubRosService(const std::shared_ptr<TopicPubSrv::Request>& request,
+                                const std::shared_ptr<TopicPubSrv::Response>& response) const;
 
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
-  void handleServiceListRosService(const std::shared_ptr<ServiceListSrv::Request> request,
-                                   std::shared_ptr<ServiceListSrv::Response> response) const;
+  void handleServiceListRosService(const std::shared_ptr<ServiceListSrv::Request>& request,
+                                   const std::shared_ptr<ServiceListSrv::Response>& response) const;
 
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
-  void handleServiceCallRosService(const std::shared_ptr<ServiceCallSrv::Request> request,
-                                   std::shared_ptr<ServiceCallSrv::Response> response) const;
+  void handleServiceCallRosService(const std::shared_ptr<ServiceCallSrv::Request>& request,
+                                   const std::shared_ptr<ServiceCallSrv::Response>& response) const;
 
   /// @brief Service callback that maps a ROS request into a service response.
   /// @param request Shared ROS service request.
   /// @param response Shared ROS service response to populate.
-  void handleInterfaceShowRosService(const std::shared_ptr<InterfaceShowSrv::Request> request,
-                                     std::shared_ptr<InterfaceShowSrv::Response> response) const;
+  void handleInterfaceShowRosService(const std::shared_ptr<InterfaceShowSrv::Request>& request,
+                                     const std::shared_ptr<InterfaceShowSrv::Response>& response) const;
 
   /// @brief Perform one LiveKit RPC and parse its JSON response.
   ///

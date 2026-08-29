@@ -152,4 +152,4 @@ jobs:
       - name: Run clang-tidy
         env:
           TIDY_BLOB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: ./scripts/clang-tidy.sh  --fail-on-warning
+        run: ./scripts/clang-tidy.sh

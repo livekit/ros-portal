@@ -84,7 +84,7 @@ std::optional<std::string> sanitizeRosNameToken(const std::string& token) {
 }
 
 std::optional<std::string> liveKitToRosTopicName(const std::string& track_name) {
-  const auto normalized_track_name = normalizeTrackTopicName(track_name);
+  auto normalized_track_name = normalizeTrackTopicName(track_name);
   if (!normalized_track_name.has_value() || *normalized_track_name == "/") {
     return std::nullopt;
   }
@@ -105,14 +105,14 @@ std::optional<std::string> liveKitToRosTopicName(const std::string& participant_
   return "/" + *participant_prefix + *ros_topic_name;
 }
 
-void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger) {
+void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, const rclcpp::Logger& logger) {
   for (const auto& error : errors) {
     RCLCPP_ERROR(logger, "Invalid regex pattern '%s': %s", error.pattern.c_str(), error.message.c_str());
   }
 }
 
 std::optional<ros_portal_config::RosPortalConfig> parseRosPortalConfig(const std::filesystem::path& path,
-                                                                       rclcpp::Logger logger) {
+                                                                       const rclcpp::Logger& logger) {
   if (path.empty()) {
     RCLCPP_INFO(logger,
                 "No config_path provided; using builtin default config that forwards all topics bidirectionally");

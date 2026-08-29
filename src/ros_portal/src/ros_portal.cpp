@@ -61,12 +61,7 @@ constexpr char kRosPortalStatusDiagnosticTaskName[] = "ros_portal_status";
 } // namespace
 
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
-    : rclcpp::Node("ros_portal", options),
-      min_qos_depth_(0),
-      max_qos_depth_(0),
-      ros_threads_(0),
-      initialized_(false),
-      shutting_down_(false) {
+    : rclcpp::Node("ros_portal", options), initialized_(false), shutting_down_(false) {
   this->declare_parameter<std::string>("config_path", "");
   const std::vector<std::string> kEmptyStringVec{};
   this->declare_parameter<int>("min_qos_depth", static_cast<int>(kDefaultMinQosDepth));
@@ -177,7 +172,7 @@ bool RosPortal::initialize() {
     graph::GraphManager::Callbacks graph_callbacks{
         [this](const TopicNamesAndTypes& topics) { return reconcileGraphTopics(topics); },
         [this]() {
-          std::lock_guard<std::mutex> lock(room_components_mutex_);
+          const std::lock_guard<std::mutex> lock(room_components_mutex_);
           return topic_forwarder_ ? topic_forwarder_->nextExpiryDeadline()
                                   : std::optional<std::chrono::steady_clock::time_point>{};
         },

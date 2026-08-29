@@ -26,7 +26,7 @@ namespace ros_portal::utils {
 namespace {
 
 /// @brief Compile @p patterns, logging any invalid regexes via @p logger.
-std::vector<std::regex> compileAndLog(const std::vector<std::string>& patterns, rclcpp::Logger logger) {
+std::vector<std::regex> compileAndLog(const std::vector<std::string>& patterns, const rclcpp::Logger& logger) {
   std::vector<PatternCompileError> errors;
   auto compiled = compileRegexPatterns(patterns, &errors);
   logPatternCompileErrors(errors, logger);
@@ -67,7 +67,7 @@ std::unordered_map<std::string, OutboundEncoding> outboundEncodings(
 TopicForwarder::Options topicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics,
                                               std::size_t min_qos_depth, std::size_t max_qos_depth,
                                               const std::vector<std::string>& best_effort_qos_topics,
-                                              rclcpp::Logger logger) {
+                                              const rclcpp::Logger& logger) {
   TopicForwarder::Options options;
   options.outgoing_topic_patterns = compileAndLog(outgoingTopicPatterns(topics), logger);
   options.incoming_topic_patterns = compileAndLog(incomingTopicPatterns(topics), logger);

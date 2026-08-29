@@ -261,12 +261,12 @@ private:
   bool initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics);
 
   //! @brief The minimum QoS depth
-  size_t min_qos_depth_;
+  size_t min_qos_depth_{0};
   //! @brief The maximum QoS depth
-  size_t max_qos_depth_;
+  size_t max_qos_depth_{0};
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
-  int ros_threads_;
+  int ros_threads_{0};
   //! @brief Tracks whether ROS Portal initialization has completed.
   std::atomic_bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.

@@ -49,7 +49,7 @@ TopicPub::TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topic
   }
 }
 
-TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
+TopicPubSrv::Response TopicPub::publish(const TopicPubOptions& options) {
   // Error: unresolvable topic name.
   std::string resolved_topic;
   try {
@@ -67,7 +67,7 @@ TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
   rclcpp::GenericPublisher::SharedPtr publisher;
   bool was_cached = false;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     const auto cached = publishers_.find(resolved_topic);
     if (cached != publishers_.end()) {
       if (cached->second.msg_type != options.msg_type) {
@@ -118,7 +118,7 @@ TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
 
   // Case: cache publisher after first successful publish.
   if (!was_cached) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     if (publishers_.find(resolved_topic) == publishers_.end() && publishers_.size() < kMaxCachedTopicPublishers) {
       publishers_.emplace(resolved_topic, Entry{options.msg_type, std::move(publisher)});
     }
@@ -128,7 +128,7 @@ TopicPubSrv::Response TopicPub::publish(TopicPubOptions options) {
 }
 
 CacheStats TopicPub::cacheStats() const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   return CacheStats{publishers_.size(), kMaxCachedTopicPublishers, cache_full_rejections_};
 }
 

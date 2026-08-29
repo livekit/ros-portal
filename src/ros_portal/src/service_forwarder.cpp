@@ -160,8 +160,9 @@ struct ServiceForwarder::DynamicService : public rclcpp::ServiceBase {
   RequestHandler handler;
 };
 
-ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, NodeInterfaces node_interfaces,
-                                   rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods)
+ServiceForwarder::ServiceForwarder(const std::vector<ServiceRoute>& routes, NodeInterfaces node_interfaces,
+                                   const rclcpp::CallbackGroup::SharedPtr& callback_group,
+                                   LiveKitMethods livekit_methods)
     : node_interfaces_(std::move(node_interfaces)),
       livekit_methods_(std::move(livekit_methods)),
       logger_(rclcpp::get_logger("service_forwarder")) {
@@ -181,19 +182,21 @@ ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, NodeInterfa
   }
 }
 
-ServiceForwarder::ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Node& node,
-                                   rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods)
-    : ServiceForwarder(std::move(routes),
+ServiceForwarder::ServiceForwarder(const std::vector<ServiceRoute>& routes, rclcpp::Node& node,
+                                   const rclcpp::CallbackGroup::SharedPtr& callback_group,
+                                   LiveKitMethods livekit_methods)
+    : ServiceForwarder(routes,
                        NodeInterfaces{
                            node.get_node_base_interface(),
                            node.get_node_services_interface(),
                            node.get_node_logging_interface(),
                        },
-                       std::move(callback_group), std::move(livekit_methods)) {}
+                       callback_group, std::move(livekit_methods)) {}
 
 std::size_t ServiceForwarder::serviceCount() const { return services_.size(); }
 
-void ServiceForwarder::createService(const ServiceRoute& route, rclcpp::CallbackGroup::SharedPtr callback_group) {
+void ServiceForwarder::createService(const ServiceRoute& route,
+                                     const rclcpp::CallbackGroup::SharedPtr& callback_group) {
   if (route.service.empty()) {
     RCLCPP_ERROR(logger_, "Skipping service route with empty service name");
     return;

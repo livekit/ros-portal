@@ -37,10 +37,10 @@ int main(int argc, char* argv[]) {
       RCLCPP_FATAL(logger, "Failed to initialize ROS Portal");
       exit_code = EXIT_FAILURE;
     } else {
-      rclcpp::ExecutorOptions exec_options;
+      const rclcpp::ExecutorOptions exec_options;
       const size_t num_threads = node->rosThreads() > 0 ? static_cast<size_t>(node->rosThreads()) : 0;
 
-      std::cout << "Starting executor with " << num_threads << " threads" << std::endl;
+      std::cout << "Starting executor with " << num_threads << " threads\n";
       rclcpp::executors::MultiThreadedExecutor executor(exec_options, num_threads);
       executor.add_node(node);
       executor.spin();

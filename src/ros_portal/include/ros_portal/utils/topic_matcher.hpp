@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL__UTILS__TOPIC_MATCHER_HPP_
-#define ROS_PORTAL__UTILS__TOPIC_MATCHER_HPP_
+#pragma once
 
 #include <regex>
 #include <string>
@@ -34,5 +33,3 @@ std::vector<std::regex> compileRegexPatterns(const std::vector<std::string>& pat
 bool matchesAnyPattern(const std::string& value, const std::vector<std::regex>& patterns);
 
 } // namespace ros_portal::utils
-
-#endif // ROS_PORTAL__UTILS__TOPIC_MATCHER_HPP_

@@ -110,7 +110,7 @@ std::set<std::string> definitionDependencies(const DefinitionSpec& spec, Definit
       continue;
     }
     if (format == DefinitionFormat::kMsg && type.find('/') == std::string::npos) {
-      type = spec.package_name + "/" + type;
+      type.insert(0, spec.package_name + "/");
     }
     dependencies.insert(std::move(type));
   }

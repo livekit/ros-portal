@@ -67,7 +67,7 @@ public:
   /// @param options Topic, interface type, and YAML payload for the publish.
   /// @return A response with success set false and err_msg filled when
   ///   validation, conversion, publisher creation, or publish fails.
-  TopicPubSrv::Response publish(TopicPubOptions options);
+  TopicPubSrv::Response publish(const TopicPubOptions& options);
 
   /// @brief Snapshot the generic-publisher cache utilization.
   /// @return Current size, capacity, and cumulative cache-full rejection count.

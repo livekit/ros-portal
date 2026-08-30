@@ -74,16 +74,16 @@ public:
   /// @param livekit_methods LiveKit methods supplied by ROS Portal.
   /// @throws std::invalid_argument when required interfaces or callbacks are
   /// unset.
-  ServiceForwarder(std::vector<ServiceRoute> routes, NodeInterfaces node_interfaces,
-                   rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods);
+  ServiceForwarder(const std::vector<ServiceRoute>& routes, NodeInterfaces node_interfaces,
+                   const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods);
 
   /// @brief Construct a service forwarder from a ROS node.
   /// @param routes Service routes that should be exposed locally.
   /// @param node ROS Portal node used for service hosting and logs.
   /// @param callback_group Callback group used by created services.
   /// @param livekit_methods LiveKit methods supplied by ROS Portal.
-  ServiceForwarder(std::vector<ServiceRoute> routes, rclcpp::Node& node,
-                   rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods);
+  ServiceForwarder(const std::vector<ServiceRoute>& routes, rclcpp::Node& node,
+                   const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods);
 
   /// @brief Return the number of local service servers created.
   std::size_t serviceCount() const;
@@ -94,7 +94,7 @@ private:
   /// @brief Create one runtime-typed service server.
   /// @param route Service route metadata.
   /// @param callback_group Callback group used by the created service.
-  void createService(const ServiceRoute& route, rclcpp::CallbackGroup::SharedPtr callback_group);
+  void createService(const ServiceRoute& route, const rclcpp::CallbackGroup::SharedPtr& callback_group);
 
   /// @brief Forward one local ROS service request to the configured remote
   /// participant.

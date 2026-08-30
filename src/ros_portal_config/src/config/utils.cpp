@@ -112,7 +112,8 @@ void rejectUnknownFields(const YAML::Node& node, const std::set<std::string>& al
   for (const auto& item : node) {
     const auto key = mapKeyToString(item.first, path);
     if (allowed.count(key) == 0) {
-      fail(path + "." + key, item.first, "known field", "unknown field '" + key + "'");
+      fail(std::string(path).append(".").append(key), item.first, "known field",
+           std::string("unknown field '").append(key).append("'"));
     }
   }
 }

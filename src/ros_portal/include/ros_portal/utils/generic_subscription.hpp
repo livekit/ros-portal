@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL__UTILS__GENERIC_SUBSCRIPTION_HPP_
-#define ROS_PORTAL__UTILS__GENERIC_SUBSCRIPTION_HPP_
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -104,5 +103,3 @@ inline std::shared_ptr<rclcpp::GenericSubscription> createGenericSubscription(
 }
 
 } // namespace ros_portal::utils
-
-#endif // ROS_PORTAL__UTILS__GENERIC_SUBSCRIPTION_HPP_

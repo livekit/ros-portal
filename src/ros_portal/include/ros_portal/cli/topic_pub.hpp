@@ -86,7 +86,7 @@ private:
   rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_;
   /// @brief Node graph interface for discovered topic type validation.
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph_;
-  /// @brief Shared/cached topic graph query used for type validation.
+  /// @brief Topic graph query used for type validation.
   TopicGraphSnapshotFn topic_snapshot_;
   /// @brief Predicate enforcing whether a resolved topic may be published.
   TopicPublishAllowed topic_publish_allowed_;

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -288,6 +289,19 @@ TEST_F(RosPortalTestE2E, PublishesToRemoteRosTopicOverRpc) {
   EXPECT_TRUE(response->success) << response->err_msg;
   EXPECT_TRUE(delivered) << "Remote ROS Portal node did not deliver the published payload";
 
+  // Robot B sees its own publisher immediately, but Portal B receives the ROS
+  // graph update asynchronously. Wait for the graph used by the remote RPC
+  // handler before asserting its type-mismatch response.
+  ASSERT_TRUE(waitFor(
+      [&]() {
+        const auto topics = rosPortalB()->get_topic_names_and_types();
+        const auto topic = topics.find(kBidirectionalTopic);
+        return topic != topics.end() &&
+               std::find(topic->second.begin(), topic->second.end(), kStringType) != topic->second.end();
+      },
+      kGraphTimeout))
+      << "ROS Portal B did not discover " << kBidirectionalTopic << " as " << kStringType;
+
   // A topic outside the configured incoming patterns must be rejected by the
   // remote ROS Portal node before any publisher is created.
   const auto denied_response = callTopicPubService(robotANode(), identityB(), "/forbidden/topic", kStringType,
@@ -304,7 +318,7 @@ TEST_F(RosPortalTestE2E, PublishesToRemoteRosTopicOverRpc) {
   ASSERT_NE(type_mismatch_response, nullptr);
   EXPECT_FALSE(type_mismatch_response->success);
   EXPECT_TRUE(contains(type_mismatch_response->err_msg, kBidirectionalTopic));
-  EXPECT_TRUE(contains(type_mismatch_response->err_msg, "std_msgs/msg/String"));
+  EXPECT_TRUE(contains(type_mismatch_response->err_msg, kStringType)) << type_mismatch_response->err_msg;
 
   const auto missing_response = callTopicPubService(robotANode(), "missing-livekit-participant", kPubTopic, kStringType,
                                                     std::string("{data: ") + kPayload + "}");

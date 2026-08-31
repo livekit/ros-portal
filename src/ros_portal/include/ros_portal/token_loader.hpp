@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL__TOKEN_LOADER_HPP_
-#define ROS_PORTAL__TOKEN_LOADER_HPP_
+#pragma once
 
 #include <livekit/token_source.h>
 
@@ -54,5 +53,3 @@ private:
 };
 
 } // namespace ros_portal
-
-#endif // ROS_PORTAL__TOKEN_LOADER_HPP_

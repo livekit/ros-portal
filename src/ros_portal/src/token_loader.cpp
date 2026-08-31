@@ -52,6 +52,7 @@ std::optional<livekit::TokenSourceResponse> TokenLoader::load() const {
   RCLCPP_DEBUG(logger_, "Attempting to resolve LiveKit token source");
 
   if (!valid()) {
+    RCLCPP_ERROR(logger_, "Cannot load token: invalid configuration");
     return std::nullopt;
   }
   livekit::Result<livekit::TokenSourceResponse, livekit::TokenSourceError> result =
@@ -72,10 +73,13 @@ std::optional<livekit::TokenSourceResponse> TokenLoader::load() const {
       RCLCPP_INFO(logger_, "Using LiveKit endpoint token source");
       auto source = livekit::EndpointTokenSource::create(*endpoint_);
       result = source->fetch().get();
-    } else {
+    } else if (server_id_) {
       RCLCPP_INFO(logger_, "Using LiveKit development token server source");
       auto source = livekit::DevelopmentTokenSource::create(*server_id_);
       result = source->fetch().get();
+    } else {
+      // Shouldn't get here if `valid()` is checked above
+      throw std::runtime_error("No token source specified");
     }
   } catch (const std::exception& error) {
     RCLCPP_ERROR(logger_, "Failed to fetch LiveKit credentials: %s", error.what());

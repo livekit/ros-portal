@@ -114,7 +114,7 @@ bool RosPortal::initialize() {
   RCLCPP_INFO(this->get_logger(), "%zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
 
-  TokenLoader token_loader;
+  const TokenLoader token_loader;
   // Fail fast if environment isn't configured correctly
   if (!token_loader.valid()) {
     return false;

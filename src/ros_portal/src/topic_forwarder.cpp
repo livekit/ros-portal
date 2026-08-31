@@ -24,7 +24,6 @@
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
-#include <map>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -63,8 +62,8 @@ TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackD
               "code=" + std::to_string(static_cast<std::uint32_t>(error.code)) + " message=" + error.message);
         }
 
-        const auto livekit_stream = subscribe_result.value();
-        const auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
+        const auto& livekit_stream = subscribe_result.value();
+        auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
         // Forward read() to the underlying LiveKit stream.
         stream->read = [livekit_stream](livekit::DataTrackFrame& frame) { return livekit_stream->read(frame); };
         // Forward close() to tear down the LiveKit stream.
@@ -116,26 +115,36 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
 TopicForwarder::~TopicForwarder() {
   diagnostics_.remove(kTopicForwarderDiagnosticTaskName);
   stopAllInboundDataTracks();
-  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
   subscriptions_.clear();
   data_topic_states_.clear();
   image_topic_states_.clear();
 }
 
-void TopicForwarder::pollTopics() {
-  std::map<std::string, std::vector<std::string>> topic_names_and_types;
+bool TopicForwarder::needsGraphDiscovery() const { return !options_.outgoing_topic_patterns.empty(); }
+
+void TopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_types) {
+  const auto now = std::chrono::steady_clock::now();
   {
-    const auto node = node_.lock();
-    if (!node) {
-      RCLCPP_ERROR(logger_, "Skipping topic poll; ROS node has been destroyed");
-      return;
+    const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    for (auto& [topic_name, subscription] : subscriptions_) {
+      (void)topic_name;
+      if (!subscription.handle) {
+        continue;
+      }
+      if (subscription.handle->get_publisher_count() == 0U) {
+        if (!subscription.publishers_absent_since.has_value()) {
+          subscription.publishers_absent_since = now;
+        }
+      } else {
+        subscription.publishers_absent_since.reset();
+      }
     }
-    topic_names_and_types = node->get_topic_names_and_types();
   }
 
   for (const auto& [topic_name, topic_types] : topic_names_and_types) {
     {
-      std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+      const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
       if (subscriptions_.count(topic_name) > 0) {
         continue;
       }
@@ -155,6 +164,52 @@ void TopicForwarder::pollTopics() {
   }
 }
 
+bool TopicForwarder::reapExpiredSubscriptions() {
+  const auto now = std::chrono::steady_clock::now();
+  bool removed = false;
+  const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  for (auto it = subscriptions_.begin(); it != subscriptions_.end();) {
+    auto& subscription = it->second;
+    if (!subscription.publishers_absent_since.has_value()) {
+      ++it;
+      continue;
+    }
+    if (subscription.handle && subscription.handle->get_publisher_count() > 0U) {
+      subscription.publishers_absent_since.reset();
+      ++it;
+      continue;
+    }
+    if ((now - *subscription.publishers_absent_since) < options_.inactive_subscription_grace) {
+      ++it;
+      continue;
+    }
+
+    const auto topic_name = it->first;
+    data_topic_states_.erase(topic_name);
+    image_topic_states_.erase(topic_name);
+    it = subscriptions_.erase(it);
+    removed = true;
+    RCLCPP_INFO(logger_, "Removed inactive subscription for '%s'", topic_name.c_str());
+  }
+  return removed;
+}
+
+std::optional<std::chrono::steady_clock::time_point> TopicForwarder::nextExpiryDeadline() const {
+  std::optional<std::chrono::steady_clock::time_point> earliest;
+  const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  for (const auto& [topic_name, subscription] : subscriptions_) {
+    (void)topic_name;
+    if (!subscription.publishers_absent_since.has_value()) {
+      continue;
+    }
+    const auto deadline = *subscription.publishers_absent_since + options_.inactive_subscription_grace;
+    if (!earliest.has_value() || deadline < *earliest) {
+      earliest = deadline;
+    }
+  }
+  return earliest;
+}
+
 void TopicForwarder::createSubscriber(const std::string& topic_name, const std::string& topic_type) {
   if (topic_type == kImageMsgType) {
     createImageSubscriber(topic_name);
@@ -171,7 +226,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     return;
   }
 
-  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg,
+  auto callback = [this, topic_name, topic_type](const std::shared_ptr<rclcpp::SerializedMessage>& msg,
                                                  const rclcpp::MessageInfo& message_info) {
     if (isInboundPublication(message_info) || !livekit_methods_.is_room_available()) {
       return;
@@ -182,7 +237,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     std::shared_ptr<DataTrackWriter> writer;
     OutboundEncoding encoding = OutboundEncoding::Ros2Msg;
     {
-      std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+      const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
       const auto state_it = data_topic_states_.find(topic_name);
       if (state_it == data_topic_states_.end()) {
         return;
@@ -236,7 +291,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     }
   };
 
-  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
   if (subscriptions_.count(topic_name) > 0) {
     return;
   }
@@ -259,7 +314,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     sub_options.callback_group = callback_group_;
     auto subscription =
         utils::createGenericSubscription(node, topic_name, topic_type, qos, std::move(callback), sub_options);
-    subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     data_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create generic subscription for '%s' [%s]: %s", topic_name.c_str(),
@@ -320,13 +375,13 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     return;
   }
 
-  auto callback = [this, topic_name](sensor_msgs::msg::Image::ConstSharedPtr msg,
+  auto callback = [this, topic_name](const sensor_msgs::msg::Image::ConstSharedPtr& msg,
                                      const rclcpp::MessageInfo& message_info) {
     if (isInboundPublication(message_info) || !livekit_methods_.is_room_available()) {
       return;
     }
 
-    std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
     const auto state_it = image_topic_states_.find(topic_name);
     if (state_it == image_topic_states_.end()) {
       return;
@@ -401,7 +456,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     }
   };
 
-  std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+  const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
   if (subscriptions_.count(topic_name) > 0) {
     return;
   }
@@ -413,7 +468,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     sub_options.callback_group = callback_group_;
     auto subscription =
         node->create_subscription<sensor_msgs::msg::Image>(topic_name, qos, std::move(callback), sub_options);
-    subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+    subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     image_topic_states_.erase(topic_name);
     RCLCPP_ERROR(logger_, "Failed to create image subscription for '%s' [%s]: %s", topic_name.c_str(), kImageMsgType,
@@ -500,6 +555,12 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     return;
   }
 
+  if (!descriptor.frame_encoding.has_value()) {
+    RCLCPP_ERROR(logger_, "Ignoring LiveKit data track '%s' from '%s' because frame encoding is unset",
+                 descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return;
+  }
+
   // Pin the owning ROS Portal node before any lock: this may be the last reference, and
   // releasing it under inbound_data_track_states_mutex_ deadlocks in
   // ~TopicForwarder -> stopAllInboundDataTracks().
@@ -514,7 +575,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
 
   std::shared_ptr<InboundDataTrackState> state;
   {
-    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+    const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
     if (inbound_data_track_states_.count(descriptor.sid) > 0) {
       return;
     }
@@ -525,7 +586,6 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
     state->publisher_identity = descriptor.publisher_identity;
     state->ros_topic_name = *ros_topic_name;
     state->ros_topic_type = *topic_type;
-    // descriptor.frame_encoding guaranteed to be set by SchemaManager::validateInboundSchema()
     state->frame_encoding = *descriptor.frame_encoding;
 
     try {
@@ -584,7 +644,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
       state->stream->close();
     }
     {
-      std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+      const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
       inbound_data_track_states_.erase(descriptor.sid);
     }
   }
@@ -593,7 +653,7 @@ void TopicForwarder::onDataTrackPublished(RemoteDataTrackDescriptor descriptor) 
 void TopicForwarder::onDataTrackUnpublished(const std::string& sid) {
   std::shared_ptr<InboundDataTrackState> state;
   {
-    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+    const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
     const auto it = inbound_data_track_states_.find(sid);
     if (it == inbound_data_track_states_.end()) {
       return;
@@ -620,7 +680,7 @@ bool TopicForwarder::isIncomingTopicAllowed(const std::string& topic_name) const
 
 bool TopicForwarder::isInboundPublication(const rclcpp::MessageInfo& message_info) {
   const auto& publisher_gid = message_info.get_rmw_message_info().publisher_gid;
-  std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+  const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
   return std::any_of(inbound_data_track_states_.begin(), inbound_data_track_states_.end(), [&](const auto& entry) {
     const auto& state = entry.second;
     return state && state->publisher && *state->publisher == publisher_gid;
@@ -634,17 +694,20 @@ std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(
     return std::nullopt;
   }
 
-  std::map<std::string, std::vector<std::string>> topics;
-  {
+  TopicGraphSnapshot topics;
+  if (options_.topic_snapshot) {
+    topics = options_.topic_snapshot();
+  }
+  if (!topics) {
     const auto node = node_.lock();
     if (!node) {
       return std::nullopt;
     }
-    topics = node->get_topic_names_and_types();
+    topics = std::make_shared<const TopicNamesAndTypes>(node->get_topic_names_and_types());
   }
 
-  const auto topic_it = topics.find(*normalized_track_name);
-  if (topic_it == topics.end() || topic_it->second.empty()) {
+  const auto topic_it = topics->find(*normalized_track_name);
+  if (topic_it == topics->end() || topic_it->second.empty()) {
     if (schema.has_value() && !schema->name.empty()) {
       RCLCPP_INFO(logger_,
                   "Inbound track '%s' has no local ROS endpoint yet; using advertised "
@@ -749,7 +812,7 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
   return qos;
 }
 
-void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state) {
+void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state) {
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
     if (!livekit_methods_.is_room_available()) {
@@ -804,7 +867,7 @@ void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState>
 void TopicForwarder::stopAllInboundDataTracks() {
   std::vector<std::string> inbound_sids;
   {
-    std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+    const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
     inbound_sids.reserve(inbound_data_track_states_.size());
     for (const auto& [sid, _] : inbound_data_track_states_) {
       inbound_sids.push_back(sid);

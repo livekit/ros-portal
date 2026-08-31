@@ -181,7 +181,6 @@ All config lives under `ros_portal`.
 |---|---:|---:|---:|---|
 | `$schema` | string | no | - | Link to JSON schema. Use `https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json` and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
-| `topic_polling_period_ms` | integer | no | `500` | ROS graph polling interval in milliseconds. Must be positive. |
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
@@ -227,7 +226,7 @@ forwarded and in which direction. Forwarding only the required streams (and only
 in the required direction) keeps unnecessary traffic off the LiveKit connection,
 which matters for bandwidth on constrained links.
 
-#### Preserving the publisher identity
+### Preserving the publisher identity
 
 `preserve_id` applies only to inbound (`in` / `bidirectional`) topics and is
 ignored for outbound topics. It defaults to `false` to preserve the original

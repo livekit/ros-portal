@@ -22,6 +22,7 @@
 #include <livekit/video_frame.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -35,6 +36,7 @@
 #include <rclcpp/message_info.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/qos.hpp>
+#include <rclcpp/subscription_base.hpp>
 #include <rclcpp/time.hpp>
 #include <regex>
 #include <string>
@@ -43,6 +45,7 @@
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/types.hpp"
 
@@ -71,9 +74,6 @@ inline constexpr std::size_t kDefaultMaxQosDepth = 25U;
 /// lifecycle at the edge and forwards inbound remote data tracks here.
 class TopicForwarder {
 public:
-  /// @brief Type-erased ROS subscription handle stored by topic name.
-  using SubscriptionHandle = std::shared_ptr<void>;
-
   /// @brief Outbound LiveKit data-track writer.
   struct DataTrackWriter {
     /// @brief Push a serialized ROS payload onto the LiveKit data track.
@@ -116,6 +116,10 @@ public:
     /// @ref OutboundEncoding::Ros2Msg. Only outbound/bidirectional topics
     /// contribute entries.
     std::unordered_map<std::string, OutboundEncoding> outbound_encodings;
+    /// @brief Shared graph-snapshot provider used by inbound type validation.
+    TopicGraphSnapshotFn topic_snapshot;
+    /// @brief Grace period before a subscription with no publishers is removed.
+    std::chrono::milliseconds inactive_subscription_grace{std::chrono::seconds(30)};
   };
 
   /// @brief LiveKit-facing callbacks needed by the forwarder.
@@ -148,9 +152,27 @@ public:
   /// @brief Stop inbound streams before destruction.
   ~TopicForwarder();
 
-  /// @brief Poll ROS topics and create forwarding subscriptions for new
-  /// matches.
-  void pollTopics();
+  /// @brief Return whether regex-based outbound graph discovery is required.
+  bool needsGraphDiscovery() const;
+
+  /// @brief Reconcile outbound subscriptions against one shared graph snapshot.
+  /// @param topics Current ROS topic names and types.
+  void reconcileTopics(const TopicNamesAndTypes& topics);
+
+  /// @brief Remove subscriptions whose publishers have been absent for the
+  /// configured grace period.
+  /// @return True when at least one subscription was removed.
+  bool reapExpiredSubscriptions();
+
+  /// @brief Return when the next subscription becomes eligible for reaping.
+  ///
+  /// Lets the graph-discovery worker sleep until a pending grace period
+  /// actually elapses instead of waking on a fixed interval. Only a graph
+  /// event can start a grace period, so an empty result means no timed wake-up
+  /// is owed.
+  /// @return The earliest expiry deadline, or nullopt when no subscription is
+  /// waiting out its grace period.
+  std::optional<std::chrono::steady_clock::time_point> nextExpiryDeadline() const;
 
   /// @brief Handle a remote LiveKit data track becoming available.
   void onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTrack> track);
@@ -168,6 +190,7 @@ private:
   FRIEND_TEST(TopicForwarderTest, QoSFallsBackForMixedPolicies);
   FRIEND_TEST(TopicForwarderTest, QoSBestEffortOverrideWins);
   FRIEND_TEST(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears);
+  FRIEND_TEST(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNull);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure);
   FRIEND_TEST(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho);
 #endif
@@ -258,6 +281,14 @@ private:
     std::optional<rclcpp::Time> last_forward_time;
   };
 
+  /// @brief Outbound ROS subscription plus discovery lifecycle metadata.
+  struct OutboundSubscription {
+    /// @brief ROS subscription handle used to inspect matched publishers.
+    rclcpp::SubscriptionBase::SharedPtr handle;
+    /// @brief First observation of zero matched publishers for the topic.
+    std::optional<std::chrono::steady_clock::time_point> publishers_absent_since;
+  };
+
   /// @brief Per-track state for inbound LiveKit-to-ROS data forwarding.
   struct InboundDataTrackState {
     /// @brief LiveKit track SID used for teardown and logging.
@@ -293,7 +324,7 @@ private:
   bool ensureWriterLocked(const std::string& topic_name, const std::string& topic_type, DataTopicState& state);
 
   /// @brief Read LiveKit data frames and publish them on the mapped ROS topic.
-  void readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state);
+  void readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state);
   /// @brief Stop and join all active inbound LiveKit data track readers.
   void stopAllInboundDataTracks();
   /// @brief Populate the topic-forwarder diagnostic status.
@@ -318,9 +349,9 @@ private:
   rclcpp::Clock::SharedPtr clock_;
   /// @brief Protects outbound subscriptions and topic state during setup,
   /// teardown, and subscription callbacks.
-  std::mutex outbound_topics_mutex_;
+  mutable std::mutex outbound_topics_mutex_;
   /// @brief Outbound ROS subscriptions keyed by topic name.
-  std::unordered_map<std::string, SubscriptionHandle> subscriptions_;
+  std::unordered_map<std::string, OutboundSubscription> subscriptions_;
   /// @brief Outbound image-topic state keyed by ROS topic name.
   std::unordered_map<std::string, ImageTopicState> image_topic_states_;
   /// @brief Outbound data-topic state keyed by ROS topic name.

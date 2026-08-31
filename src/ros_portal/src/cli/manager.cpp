@@ -63,7 +63,7 @@ typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeIn
 
 } // namespace
 
-Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPtr callback_group,
+Manager::Manager(NodeInterfaces node_interfaces, const rclcpp::CallbackGroup::SharedPtr& callback_group,
                  LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
                  diagnostics::DiagnosticsManagerFns diagnostics)
     : node_interfaces_(std::move(node_interfaces)),
@@ -90,9 +90,19 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   if (!topic_publish_allowed_) {
     topic_publish_allowed_ = [](const std::string&) { return true; };
   }
+  if (!node_interfaces_.topic_snapshot) {
+    node_interfaces_.topic_snapshot = [graph = node_interfaces_.node_graph]() {
+      return std::make_shared<const TopicNamesAndTypes>(graph->get_topic_names_and_types());
+    };
+  }
+  if (!node_interfaces_.service_snapshot) {
+    node_interfaces_.service_snapshot = [graph = node_interfaces_.node_graph]() {
+      return std::make_shared<const ServiceNamesAndTypes>(graph->get_service_names_and_types());
+    };
+  }
 
-  topic_publisher_ =
-      std::make_unique<TopicPub>(node_interfaces_.node_topics, node_interfaces_.node_graph, topic_publish_allowed_);
+  topic_publisher_ = std::make_unique<TopicPub>(node_interfaces_.node_topics, node_interfaces_.node_graph,
+                                                topic_publish_allowed_, node_interfaces_.topic_snapshot);
   service_caller_ = std::make_unique<ServiceCall>(node_interfaces_.node_base, node_interfaces_.node_graph, logger_);
 
   // Service and RPC creation are best-effort: on failure we log and continue so
@@ -100,34 +110,36 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   // which command pairs are incomplete.
   topic_list_service_ = tryCreateService<TopicListSrv>(
       node_interfaces_, kTopicListServiceName,
-      [this](const std::shared_ptr<TopicListSrv::Request> request, std::shared_ptr<TopicListSrv::Response> response) {
-        handleTopicListRosService(request, response);
-      },
+      [this](const std::shared_ptr<TopicListSrv::Request>& request,
+             const std::shared_ptr<TopicListSrv::Response>& response) { handleTopicListRosService(request, response); },
       callback_group, logger_);
 
   topic_pub_service_ = tryCreateService<TopicPubSrv>(
       node_interfaces_, kTopicPubServiceName,
-      [this](const std::shared_ptr<TopicPubSrv::Request> request, std::shared_ptr<TopicPubSrv::Response> response) {
-        handleTopicPubRosService(request, response);
-      },
+      [this](const std::shared_ptr<TopicPubSrv::Request>& request,
+             const std::shared_ptr<TopicPubSrv::Response>& response) { handleTopicPubRosService(request, response); },
       callback_group, logger_);
 
   service_list_service_ = tryCreateService<ServiceListSrv>(
       node_interfaces_, kServiceListServiceName,
-      [this](const std::shared_ptr<ServiceListSrv::Request> request,
-             std::shared_ptr<ServiceListSrv::Response> response) { handleServiceListRosService(request, response); },
+      [this](const std::shared_ptr<ServiceListSrv::Request>& request,
+             const std::shared_ptr<ServiceListSrv::Response>& response) {
+        handleServiceListRosService(request, response);
+      },
       callback_group, logger_);
 
   service_call_service_ = tryCreateService<ServiceCallSrv>(
       node_interfaces_, kServiceCallServiceName,
-      [this](const std::shared_ptr<ServiceCallSrv::Request> request,
-             std::shared_ptr<ServiceCallSrv::Response> response) { handleServiceCallRosService(request, response); },
+      [this](const std::shared_ptr<ServiceCallSrv::Request>& request,
+             const std::shared_ptr<ServiceCallSrv::Response>& response) {
+        handleServiceCallRosService(request, response);
+      },
       callback_group, logger_);
 
   interface_show_service_ = tryCreateService<InterfaceShowSrv>(
       node_interfaces_, kInterfaceShowServiceName,
-      [this](const std::shared_ptr<InterfaceShowSrv::Request> request,
-             std::shared_ptr<InterfaceShowSrv::Response> response) {
+      [this](const std::shared_ptr<InterfaceShowSrv::Request>& request,
+             const std::shared_ptr<InterfaceShowSrv::Response>& response) {
         handleInterfaceShowRosService(request, response);
       },
       callback_group, logger_);
@@ -160,8 +172,9 @@ Manager::Manager(NodeInterfaces node_interfaces, rclcpp::CallbackGroup::SharedPt
   RCLCPP_DEBUG(logger_, "CLI Manager initialized");
 }
 
-Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_group, LiveKitMethods livekit_methods,
-                 TopicPublishAllowed topic_publish_allowed, diagnostics::DiagnosticsManagerFns diagnostics)
+Manager::Manager(rclcpp::Node& node, const rclcpp::CallbackGroup::SharedPtr& callback_group,
+                 LiveKitMethods livekit_methods, TopicPublishAllowed topic_publish_allowed,
+                 diagnostics::DiagnosticsManagerFns diagnostics)
     : Manager(
           NodeInterfaces{
               node.get_node_base_interface(),
@@ -169,6 +182,8 @@ Manager::Manager(rclcpp::Node& node, rclcpp::CallbackGroup::SharedPtr callback_g
               node.get_node_graph_interface(),
               node.get_node_topics_interface(),
               node.get_node_logging_interface(),
+              {},
+              {},
           },
           callback_group, std::move(livekit_methods), std::move(topic_publish_allowed), std::move(diagnostics)) {}
 
@@ -249,28 +264,28 @@ void Manager::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status
   }
 }
 
-void Manager::handleTopicListRosService(const std::shared_ptr<TopicListSrv::Request> request,
-                                        std::shared_ptr<TopicListSrv::Response> response) const {
+void Manager::handleTopicListRosService(const std::shared_ptr<TopicListSrv::Request>& request,
+                                        const std::shared_ptr<TopicListSrv::Response>& response) const {
   *response = callRemoteTopicList(*request);
 }
 
-void Manager::handleTopicPubRosService(const std::shared_ptr<TopicPubSrv::Request> request,
-                                       std::shared_ptr<TopicPubSrv::Response> response) const {
+void Manager::handleTopicPubRosService(const std::shared_ptr<TopicPubSrv::Request>& request,
+                                       const std::shared_ptr<TopicPubSrv::Response>& response) const {
   *response = callRemoteTopicPub(*request);
 }
 
-void Manager::handleServiceListRosService(const std::shared_ptr<ServiceListSrv::Request> request,
-                                          std::shared_ptr<ServiceListSrv::Response> response) const {
+void Manager::handleServiceListRosService(const std::shared_ptr<ServiceListSrv::Request>& request,
+                                          const std::shared_ptr<ServiceListSrv::Response>& response) const {
   *response = callRemoteServiceList(*request);
 }
 
-void Manager::handleServiceCallRosService(const std::shared_ptr<ServiceCallSrv::Request> request,
-                                          std::shared_ptr<ServiceCallSrv::Response> response) const {
+void Manager::handleServiceCallRosService(const std::shared_ptr<ServiceCallSrv::Request>& request,
+                                          const std::shared_ptr<ServiceCallSrv::Response>& response) const {
   *response = callRemoteServiceCall(*request);
 }
 
-void Manager::handleInterfaceShowRosService(const std::shared_ptr<InterfaceShowSrv::Request> request,
-                                            std::shared_ptr<InterfaceShowSrv::Response> response) const {
+void Manager::handleInterfaceShowRosService(const std::shared_ptr<InterfaceShowSrv::Request>& request,
+                                            const std::shared_ptr<InterfaceShowSrv::Response>& response) const {
   *response = callRemoteInterfaceShow(*request);
 }
 
@@ -430,8 +445,13 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
   }
 
   try {
+    // List RPCs promise the graph state at request time. Discovery and topic
+    // publishing can use a shared snapshot, but a cached snapshot may still
+    // represent the generation before a just-observed graph event.
+    const auto topics =
+        std::make_shared<const TopicNamesAndTypes>(node_interfaces_.node_graph->get_topic_names_and_types());
     const auto output =
-        formatTopicList(collectTopicInfo(*node_interfaces_.node_graph, options.value()), options.value());
+        formatTopicList(collectTopicInfo(*topics, *node_interfaces_.node_graph, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicListRpcMethod, error.what());
@@ -463,8 +483,11 @@ std::string Manager::handleServiceListRpc(const std::string& payload) const {
   }
 
   try {
-    const auto output =
-        formatServiceList(collectServiceInfo(*node_interfaces_.node_graph, options.value()), options.value());
+    // See handleTopicListRpc: list RPCs must not return a stale cached graph
+    // snapshot while the discovery worker is processing a graph event.
+    const auto services =
+        std::make_shared<const ServiceNamesAndTypes>(node_interfaces_.node_graph->get_service_names_and_types());
+    const auto output = formatServiceList(collectServiceInfo(*services, options.value()), options.value());
     return cliResponseToJson(true, "", output);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceListRpcMethod, error.what());

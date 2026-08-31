@@ -80,7 +80,7 @@ TEST_F(RosPortalTestE2E, InboundTrackCreatesPublisher) {
   const auto schema_text = renderSchemaText("std_msgs/msg/String");
   ASSERT_TRUE(schema_text.has_value()) << "std_msgs/msg/String schema was unavailable";
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_TRUE(publisher->defineSchema(schema_id, *schema_text));
+  ASSERT_TRUE(publisher->defineSchema(schema_id, schema_text.value()));
 
   // Publish the inbound track
   livekit::DataTrackPublishOptions options;
@@ -178,7 +178,7 @@ TEST_F(RosPortalTestE2E, AcceptsTrackBeforeRosSubscriber) {
   const auto schema_text = renderSchemaText("std_msgs/msg/String");
   ASSERT_TRUE(schema_text.has_value()) << "std_msgs/msg/String schema was unavailable";
   const livekit::DataTrackSchemaId schema_id{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::Ros2Msg};
-  ASSERT_TRUE(publisher->defineSchema(schema_id, *schema_text));
+  ASSERT_TRUE(publisher->defineSchema(schema_id, schema_text.value()));
 
   // Publish the inbound track
   livekit::DataTrackPublishOptions options;

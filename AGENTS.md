@@ -52,8 +52,12 @@ prerequisites are missing. Project-specific commands are documented in
 - If an integration test requires external services or credentials, keep the
  test deterministic and document/emit the exact environment assumptions.
 - If tests cannot be run in the current environment, explicitly state what was
- not run and why, including the concrete credential-helper or service failure,
- and provide the exact command(s) to run.
+  not run and why, including the concrete credential-helper or service failure,
+  and provide the exact command(s) to run.
+- After C++ changes, run `./scripts/clang-tidy.sh` (optionally pass specific
+  source files). The wrapper fails on warnings. This needs
+  `compile_commands.json` from a compile-commands-enabled build; see
+  `docs/development.md`.
 
 ## Architecture
 

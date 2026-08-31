@@ -58,7 +58,6 @@ std::string latchedConfigYaml(const std::string& topic, const std::string& direc
   std::ostringstream stream;
   stream << "ros_portal:\n"
          << "  version: \"0.0.1\"\n"
-         << "  topic_polling_period_ms: 50\n"
          << "  ros_threads: 4\n"
          << "  topics:\n"
          << "    - topic: \"" << topic << "\"\n"

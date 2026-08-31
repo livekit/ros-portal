@@ -15,7 +15,7 @@ Please make sure your change passes all of the following:
 ```sh
 colcon build --packages-up-to ros_portal                                     # building
 ./scripts/clang-format.sh --fix                                              # formatting
-./scripts/clang-tidy.sh                                                      # correctness (note: CI blocks errors only)
+./scripts/clang-tidy.sh                                                      # correctness (fails on all warnings/errors)
 colcon test --packages-up-to ros_portal                                      # tests (be sure to set credentials)
 ros2 launch ros_portal ros_portal.launch.py config_path=/path/to/config.yaml # app still launches and behaves correctly
 ```

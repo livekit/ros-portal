@@ -12,7 +12,7 @@ ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
 
 1. Parses parameters from a YAML config declaring which topics and services to
    route.
-2. Polls the ROS2 graph at a configurable interval using
+2. Waits for ROS graph-change events, then takes one shared snapshot with
    `get_topic_names_and_types()`. This is a DDS graph-cache lookup and does not
    add traffic to the network or affect other nodes.
 3. Matches discovered topics against the configured ECMAScript regular
@@ -28,6 +28,18 @@ ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
 7. Subscribes to allowed remote LiveKit data tracks, validates their schemas
    against the local ROS installation, and republishes accepted CDR payloads
    into ROS using the track name as the local topic name.
+
+## Topic Discovery
+
+For outbound topic patterns, ROS Portal reconciles subscriptions after each ROS
+graph-change event. It creates subscriptions for newly matched topics and
+removes subscriptions whose publishers have remained absent for 30 seconds.
+When a publisher for a matching topic reappears, ROS Portal recreates the
+subscription.
+
+Graph changes wake discovery immediately. Its only timed wake-up is to revisit
+a subscription when its 30-second publisher-absence grace period expires; this
+timeout is derived from the grace period and is not configurable.
 
 ## Message-Type Handling
 

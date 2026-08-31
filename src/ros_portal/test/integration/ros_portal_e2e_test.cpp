@@ -45,7 +45,7 @@ TEST_F(RosPortalTestE2E, AdvertisesRobotParticipantAttribute) {
   initializeInboundOnlyRuntime("/participant_attributes");
 
   livekit::Room observer_room;
-  livekit::RoomOptions room_options;
+  const livekit::RoomOptions room_options;
   ASSERT_TRUE(observer_room.connect(liveKitUrl(), tokenA(), room_options));
 
   // ROS Portal sets kRobotParticipantAttribute after connect; the observer may join first or receive
@@ -67,7 +67,7 @@ TEST_F(RosPortalTestE2E, AdvertisesRobotParticipantAttribute) {
       kGraphTimeout))
       << "ROS Portal did not advertise " << kRobotParticipantAttribute << " on participant " << identityB();
 
-  EXPECT_EQ(*attribute_value, "true");
+  EXPECT_EQ(attribute_value.value(), "true");
 }
 
 std::optional<std::string> renderSchemaText(const std::string& topic_type) {
@@ -204,7 +204,7 @@ TEST_F(RosPortalTestE2E, PreserveIdPrefixesInboundTopicWithPublisherIdentity) {
 
   const auto prefix = utils::sanitizeRosNameToken(identityA());
   ASSERT_TRUE(prefix.has_value());
-  const std::string expected_inbound_topic = "/" + *prefix + kBidirectionalTopic;
+  const std::string expected_inbound_topic = "/" + prefix.value() + kBidirectionalTopic;
 
   EXPECT_TRUE(verifyDirection(publisherA(), robotBNode(), kBidirectionalTopic, expected_inbound_topic,
                               "message from ROS Portal A"));

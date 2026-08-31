@@ -39,4 +39,5 @@ exec "${shared_script}" \
   --file-regex '^.*/src/(ros_portal|ros_portal_config)/src/.*\.(c|cc|cpp|cxx)$' \
   --header-filter '^.*/src/(ros_portal|ros_portal_config)/(include|src)/.*\.(h|hh|hpp|hxx)$' \
   --exclude-header-filter '(.*/test/.*)|(.*/build/.*)|(.*/install/.*)|(.*/src/externals/.*)' \
+  --fail-on-warning \
   "$@"

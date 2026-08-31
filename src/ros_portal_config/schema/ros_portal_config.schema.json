@@ -18,10 +18,6 @@
         "version": {
           "const": "0.0.1"
         },
-        "topic_polling_period_ms": {
-          "$ref": "#/$defs/positiveInteger",
-          "default": 500
-        },
         "ros_threads": {
           "$ref": "#/$defs/nonNegativeInteger",
           "default": 0

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ROS_PORTAL__UTILS__ROS_UTILS_HPP_
-#define ROS_PORTAL__UTILS__ROS_UTILS_HPP_
+#pragma once
 
 #include <livekit/video_frame.h>
 
@@ -92,14 +91,13 @@ std::optional<std::string> liveKitToRosTopicName(const std::string& track_name);
 std::optional<std::string> liveKitToRosTopicName(const std::string& participant_identity,
                                                  const std::string& track_name);
 
-void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, rclcpp::Logger logger);
+void logPatternCompileErrors(const std::vector<PatternCompileError>& errors, const rclcpp::Logger& logger);
 
 /// @brief Builtin default ROS Portal config, applied when no `config_path` is
 /// provided. Forwards all topics bidirectionally. Kept in sync with the
 /// installed `config/all_topics.yaml` example (verified by unit test).
 inline constexpr const char* kDefaultConfigYaml = R"(ros_portal:
   version: "0.0.1"
-  topic_polling_period_ms: 500
 
   topics:
     - topic: ".*"
@@ -113,7 +111,7 @@ inline constexpr const char* kDefaultConfigYaml = R"(ros_portal:
 /// @param logger Logger for parse diagnostics.
 /// @return Parsed config, or std::nullopt on failure.
 std::optional<ros_portal_config::RosPortalConfig> parseRosPortalConfig(const std::filesystem::path& path,
-                                                                       rclcpp::Logger logger);
+                                                                       const rclcpp::Logger& logger);
 
 /// @brief Collect ROS-to-LiveKit topic patterns for the DataTrack forwarding
 /// path. Topics flagged `latched` are excluded because they are handled by the
@@ -164,5 +162,3 @@ std::unordered_set<std::string> latchedOutboundTopics(const std::vector<ros_port
 /// @return Set of normalized ROS topic names accepted as inbound latched state.
 std::unordered_set<std::string> latchedInboundTopics(const std::vector<ros_portal_config::TopicConfig>& topics);
 } // namespace ros_portal::utils
-
-#endif // ROS_PORTAL__UTILS__ROS_UTILS_HPP_

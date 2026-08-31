@@ -19,7 +19,6 @@
 #include <cstring>
 #include <exception>
 #include <functional>
-#include <map>
 #include <nlohmann/json.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -37,7 +36,7 @@ namespace {
 
 /// @brief LiveKit RPC payload hard limit (15 KiB, UTF-8). A request larger than
 /// this cannot be sent, so an oversize latched message is dropped.
-constexpr std::size_t kMaxRpcPayloadBytes = 15U * 1024U;
+constexpr std::size_t kMaxRpcPayloadBytes = std::size_t{15U} * 1024U;
 
 /// @brief History depth for latched publishers/subscriptions. Deep enough to
 /// hold one latched sample from each of many static broadcasters.
@@ -101,7 +100,7 @@ LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::Weak
 
 LatchedTopicForwarder::~LatchedTopicForwarder() {
   {
-    std::lock_guard<std::mutex> lock(state_mutex_);
+    const std::lock_guard<std::mutex> lock(state_mutex_);
     stop_.store(true);
   }
   state_cv_.notify_all();
@@ -113,7 +112,7 @@ LatchedTopicForwarder::~LatchedTopicForwarder() {
     livekit_methods_.unregister_rpc_method(kLatchedStateRpcMethod);
   }
 
-  std::lock_guard<std::mutex> sub_lock(subscriptions_mutex_);
+  const std::lock_guard<std::mutex> sub_lock(subscriptions_mutex_);
   subscriptions_.clear();
 }
 
@@ -125,28 +124,16 @@ void LatchedTopicForwarder::start() {
   worker_ = std::thread(&LatchedTopicForwarder::runWorker, this);
 }
 
+bool LatchedTopicForwarder::needsGraphDiscovery() const { return !options_.outbound_topics.empty(); }
+
 rclcpp::QoS LatchedTopicForwarder::latchedQoS() const {
   return rclcpp::QoS(rclcpp::KeepLast(kLatchedQosDepth)).reliable().transient_local();
 }
 
-void LatchedTopicForwarder::poll() {
-  if (options_.outbound_topics.empty()) {
-    return;
-  }
-
-  std::map<std::string, std::vector<std::string>> topic_names_and_types;
-  {
-    const auto node = node_.lock();
-    if (!node) {
-      RCLCPP_ERROR(logger_, "Skipping latched topic poll; ROS node has been destroyed");
-      return;
-    }
-    topic_names_and_types = node->get_topic_names_and_types();
-  }
-
+void LatchedTopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_types) {
   for (const auto& topic_name : options_.outbound_topics) {
     {
-      std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+      const std::lock_guard<std::mutex> lock(subscriptions_mutex_);
       if (subscriptions_.count(topic_name) > 0) {
         continue;
       }
@@ -169,12 +156,15 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
     return;
   }
 
-  auto callback = [this, topic_name, topic_type](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-    const auto& rcl_msg = msg->get_rcl_serialized_message();
-    storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
-  };
+  auto callback =
+      [this, topic_name, topic_type](
+          std::shared_ptr<rclcpp::SerializedMessage> msg) { // NOLINT(performance-unnecessary-value-param): ROS Jazzy
+                                                            // does not accept the suggested const-reference callback.
+        const auto& rcl_msg = msg->get_rcl_serialized_message();
+        storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
+      };
 
-  std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+  const std::lock_guard<std::mutex> lock(subscriptions_mutex_);
   if (subscriptions_.count(topic_name) > 0) {
     return;
   }
@@ -184,7 +174,7 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
     sub_options.callback_group = callback_group_;
     auto subscription =
         node->create_generic_subscription(topic_name, topic_type, latchedQoS(), std::move(callback), sub_options);
-    subscriptions_[topic_name] = std::static_pointer_cast<void>(std::move(subscription));
+    subscriptions_[topic_name] = std::static_pointer_cast<void>(subscription);
   } catch (const std::exception& e) {
     RCLCPP_ERROR(logger_, "Failed to create latched subscription for '%s' [%s]: %s", topic_name.c_str(),
                  topic_type.c_str(), e.what());
@@ -207,7 +197,7 @@ void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, 
   // means we already hold this state and can skip re-encoding it entirely.
   const std::size_t hash = contentHash(topic_name, topic_type, data, size);
   {
-    std::lock_guard<std::mutex> lock(state_mutex_);
+    const std::lock_guard<std::mutex> lock(state_mutex_);
     if (message_hashes_.count(hash) > 0) {
       return; // duplicate content; no state change, no re-push
     }
@@ -229,7 +219,7 @@ void LatchedTopicForwarder::storeOutboundMessage(const std::string& topic_name, 
     return;
   }
 
-  std::lock_guard<std::mutex> lock(state_mutex_);
+  const std::lock_guard<std::mutex> lock(state_mutex_);
   if (message_hashes_.count(hash) > 0) {
     return; // another callback stored identical content while we encoded
   }
@@ -276,7 +266,7 @@ void LatchedTopicForwarder::pushToPeers() {
   std::uint64_t version = 0;
   std::vector<std::string> targets;
   {
-    std::lock_guard<std::mutex> lock(state_mutex_);
+    const std::lock_guard<std::mutex> lock(state_mutex_);
     reconcileRosterLocked(identities);
     if (messages_.empty()) {
       return; // nothing latched to deliver yet
@@ -303,7 +293,7 @@ void LatchedTopicForwarder::pushToPeers() {
       }
     }
 
-    std::lock_guard<std::mutex> lock(state_mutex_);
+    const std::lock_guard<std::mutex> lock(state_mutex_);
     const auto it = participant_states_.find(id);
     if (it == participant_states_.end()) {
       continue; // participant left mid-push; a rejoin re-pushes from scratch
@@ -364,7 +354,7 @@ std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payl
 
   rclcpp::GenericPublisher::SharedPtr publisher;
   {
-    std::lock_guard<std::mutex> lock(publishers_mutex_);
+    const std::lock_guard<std::mutex> lock(publishers_mutex_);
     const auto it = inbound_publishers_.find(topic);
     if (it != inbound_publishers_.end()) {
       publisher = it->second;

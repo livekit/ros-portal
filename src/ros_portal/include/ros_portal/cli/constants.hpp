@@ -62,7 +62,7 @@ inline constexpr std::size_t kMaxCachedServiceClients = 20U;
 inline constexpr std::size_t kTopicPublisherHistoryDepth = 10U;
 
 /// @brief Maximum accepted byte length of a `ros2 topic pub` YAML payload.
-inline constexpr std::size_t kMaxYamlPayloadBytes = 256U * 1024U;
+inline constexpr std::size_t kMaxYamlPayloadBytes = std::size_t{256U} * 1024U;
 
 /// @brief Maximum element count accepted for a single resizable ROS sequence.
 inline constexpr std::size_t kMaxResizableSequenceLength = 65536U;

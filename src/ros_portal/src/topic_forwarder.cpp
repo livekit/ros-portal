@@ -366,35 +366,6 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
   return true;
 }
 
-bool TopicForwarder::ensureVideoSinkLocked(const std::string& topic_name, const sensor_msgs::msg::Image& image,
-                                           ImageTopicState& state) {
-  if (state.sink) {
-    return true;
-  }
-
-  if (!livekit_methods_.is_room_available()) {
-    return false;
-  }
-
-  const auto sink_result =
-      livekit_methods_.publish_video_track(topic_name, static_cast<int>(image.width), static_cast<int>(image.height));
-  if (!sink_result) {
-    RCLCPP_ERROR(logger_, "Failed to create video track for '%s': %s", topic_name.c_str(), sink_result.error().c_str());
-    return false;
-  }
-
-  state.sink = sink_result.value();
-  if (!state.sink || !state.sink->capture_frame) {
-    RCLCPP_ERROR(logger_, "publish_video_track('%s') returned an invalid sink", topic_name.c_str());
-    state.sink.reset();
-    return false;
-  }
-
-  RCLCPP_INFO(logger_, "Created video track '%s' (%ux%u, %s)", topic_name.c_str(), image.width, image.height,
-              image.encoding.c_str());
-  return true;
-}
-
 void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
   const auto qos = determineQoS(topic_name);
   const auto node = node_.lock();
@@ -409,65 +380,79 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
       return;
     }
 
+    const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+    const auto state_it = image_topic_states_.find(topic_name);
+    if (state_it == image_topic_states_.end()) {
+      return;
+    }
+    auto& state = state_it->second;
+
+    if (!state.sink) {
+      if (!livekit_methods_.is_room_available()) {
+        return;
+      }
+
+      const auto sink_result =
+          livekit_methods_.publish_video_track(topic_name, static_cast<int>(msg->width), static_cast<int>(msg->height));
+      if (!sink_result) {
+        RCLCPP_ERROR(logger_, "Failed to create video track for '%s': %s", topic_name.c_str(),
+                     sink_result.error().c_str());
+        return;
+      }
+
+      state.sink = sink_result.value();
+      if (!state.sink || !state.sink->capture_frame) {
+        RCLCPP_ERROR(logger_, "publish_video_track('%s') returned an invalid sink", topic_name.c_str());
+        state.sink.reset();
+        return;
+      }
+
+      RCLCPP_INFO(logger_, "Created video track '%s' (%ux%u, %s)", topic_name.c_str(), msg->width, msg->height,
+                  msg->encoding.c_str());
+    }
+
+    if (state.sink->width != static_cast<int>(msg->width) || state.sink->height != static_cast<int>(msg->height)) {
+      RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
+                           "Skipping frame for '%s' because image size changed from %dx%d to "
+                           "%ux%u after the track was published",
+                           topic_name.c_str(), state.sink->width, state.sink->height, msg->width, msg->height);
+      return;
+    }
+
     const auto& stamp = msg->header.stamp;
     const std::int64_t timestamp_us =
         static_cast<std::int64_t>(stamp.sec) * 1'000'000 + static_cast<std::int64_t>(stamp.nanosec) / 1'000;
 
-    const bool is_rgba8 = msg->encoding == "rgba8" && msg->step == msg->width * 4;
-
-    std::shared_ptr<VideoTrackSink> sink;
-    const std::uint8_t* rgba = nullptr;
-    std::size_t rgba_size = 0;
-    std::vector<std::uint8_t> converted_rgba;
-
-    {
-      const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
-      const auto state_it = image_topic_states_.find(topic_name);
-      if (state_it == image_topic_states_.end()) {
-        return;
-      }
-      auto& state = state_it->second;
-
-      if (!ensureVideoSinkLocked(topic_name, *msg, state)) {
-        return;
-      }
-
-      if (state.sink->width != static_cast<int>(msg->width) || state.sink->height != static_cast<int>(msg->height)) {
+    if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
+      auto frame = utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height),
+                                             msg->data.data(), msg->data.size());
+      if (!frame) {
         RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
-                             "Skipping frame for '%s' because image size changed from %dx%d to "
-                             "%ux%u after the track was published",
-                             topic_name.c_str(), state.sink->width, state.sink->height, msg->width, msg->height);
+                             "Skipping RGBA image on topic '%s' because buffer size %zu does "
+                             "not match %ux%u geometry",
+                             topic_name.c_str(), msg->data.size(), msg->width, msg->height);
         return;
       }
 
-      sink = state.sink;
-
-      if (is_rgba8) {
-        rgba = msg->data.data();
-        rgba_size = msg->data.size();
-      } else {
-        if (!utils::convertToRgba(*msg, state.rgba_buf)) {
-          RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Unsupported image encoding '%s' on topic '%s'",
-                               msg->encoding.c_str(), topic_name.c_str());
-          return;
-        }
-        converted_rgba = state.rgba_buf;
-        rgba = converted_rgba.data();
-        rgba_size = converted_rgba.size();
+      state.sink->capture_frame(*frame, timestamp_us);
+    } else {
+      if (!utils::convertToRgba(*msg, state.rgba_buf)) {
+        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Unsupported image encoding '%s' on topic '%s'",
+                             msg->encoding.c_str(), topic_name.c_str());
+        return;
       }
-    }
+      auto frame = utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height),
+                                             state.rgba_buf.data(), state.rgba_buf.size());
+      if (!frame) {
+        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
+                             "Skipping converted image on topic '%s' because RGBA buffer size "
+                             "%zu does not match %ux%u geometry",
+                             topic_name.c_str(), state.rgba_buf.size(), msg->width, msg->height);
+        return;
+      }
 
-    auto frame =
-        utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height), rgba, rgba_size);
-    if (!frame) {
-      RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
-                           "Skipping image on topic '%s' because RGBA buffer size %zu does "
-                           "not match %ux%u geometry",
-                           topic_name.c_str(), rgba_size, msg->width, msg->height);
-      return;
+      state.sink->capture_frame(*frame, timestamp_us);
     }
-
-    sink->capture_frame(*frame, timestamp_us);
   };
 
   const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);

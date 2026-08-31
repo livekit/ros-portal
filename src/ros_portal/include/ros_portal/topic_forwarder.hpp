@@ -80,9 +80,6 @@ public:
     ///
     /// @param payload Non-null serialized payload bytes.
     /// @param payload_size Number of bytes at @p payload.
-    ///
-    /// The writer consumes the borrowed payload before this call returns.
-    /// This avoids copying a serialized ROS message into an intermediate vector.
     std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size)> try_push;
   };
 

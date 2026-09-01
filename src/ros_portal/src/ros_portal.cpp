@@ -483,8 +483,9 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     config_path = diagnostic_state_.config_path;
     local_identity = diagnostic_state_.local_identity;
-    latched_topic_forwarder_inactive = diagnostic_state_.latched_topic_forwarder_active.has_value() &&
-                                       !diagnostic_state_.latched_topic_forwarder_active->load(std::memory_order_relaxed);
+    latched_topic_forwarder_inactive =
+        diagnostic_state_.latched_topic_forwarder_active.has_value() &&
+        !diagnostic_state_.latched_topic_forwarder_active->load(std::memory_order_relaxed);
   }
 
   std::string components_inactive;
@@ -898,7 +899,7 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
       const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
       if (diagnostic_state_.latched_topic_forwarder_active.has_value()) {
         diagnostic_state_.latched_topic_forwarder_active->store(latched_topic_forwarder_ != nullptr,
-                                                               std::memory_order_relaxed);
+                                                                std::memory_order_relaxed);
       } else {
         diagnostic_state_.latched_topic_forwarder_active.emplace(latched_topic_forwarder_ != nullptr);
       }

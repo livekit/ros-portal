@@ -86,7 +86,7 @@ endif()
 #     --cmake-args -DLIVEKIT_SDK_VERSION=latest
 #
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "1.9.0" CACHE STRING
+set(LIVEKIT_SDK_VERSION "1.10.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 include(ConfigureLiveKitSDK)
 livekit_configure_sdk(

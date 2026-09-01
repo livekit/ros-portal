@@ -148,7 +148,7 @@ TEST_F(RosPortalTestE2E, InboundWebJsonControlFrameCreatesTypedRosMessage) {
   EXPECT_TRUE(waitFor(
       [&]() {
         if (!received.load()) {
-          (void)track_result.value()->tryPush(std::vector<std::uint8_t>(payload));
+          (void)track_result.value()->tryPush(payload.data(), payload.size());
         }
         return received.load();
       },
@@ -216,7 +216,7 @@ TEST_F(RosPortalTestE2E, AcceptsTrackBeforeRosSubscriber) {
   EXPECT_TRUE(waitFor(
       [&]() {
         if (!received.load()) {
-          (void)track_result.value()->tryPush(std::vector<std::uint8_t>(payload));
+          (void)track_result.value()->tryPush(payload.data(), payload.size());
         }
         return received.load();
       },

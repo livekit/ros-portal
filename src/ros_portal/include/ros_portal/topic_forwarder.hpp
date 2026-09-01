@@ -77,7 +77,10 @@ public:
   /// @brief Outbound LiveKit data-track writer.
   struct DataTrackWriter {
     /// @brief Push a serialized ROS payload onto the LiveKit data track.
-    std::function<livekit::Result<void, std::string>(std::vector<std::uint8_t>)> try_push;
+    ///
+    /// @param payload Non-null serialized payload bytes.
+    /// @param payload_size Number of bytes at @p payload.
+    std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size)> try_push;
   };
 
   /// @brief Outbound LiveKit video-track sink.

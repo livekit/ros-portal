@@ -75,22 +75,22 @@ function(livekit_configure_sdk)
   include(LiveKitSDK)
   _lk_default_triple(_livekit_sdk_triple)
 
-  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.9.0")
+  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.10.0")
     if(_livekit_sdk_triple STREQUAL "ubuntu-22.04-x64")
       set(LIVEKIT_SDK_SHA256
-        "b5440fe55ce5d4cdb57c4db05917d74bb471024bea7c9c4fbb75b4c736ef60d0")
+        "736f878f5d255397261f0c88260763025b0d3a9552cdaf5b532b4ffcb0abd54c")
     elseif(_livekit_sdk_triple STREQUAL "ubuntu-22.04-arm64")
       set(LIVEKIT_SDK_SHA256
-        "36e6b4b0cf270413614999bd5a6d708b3116fb1a1aad743046f1561119060e7e")
+        "5d73fe5ab6ef4212d34c8f957cd12e3bbc356d6b4cbac6f1b2c5be1c5020158d")
     elseif(_livekit_sdk_triple STREQUAL "macos-arm64")
       set(LIVEKIT_SDK_SHA256
-        "d92ffbd0b2a6971267f05f84a884b371ce2d55fb0f8cdb381d57bd4f278910d1")
+        "5867b8c9f4bf24d8598eee46952bbe6cf361dfbd7cc13226b354f1d3ef28f41e")
     elseif(_livekit_sdk_triple STREQUAL "macos-x64")
       set(LIVEKIT_SDK_SHA256
-        "aa46d0f1444c9254db48a5234453274de5cc4eccb4eebd813c53bd11ffe609f6")
+        "93d7cac004f009c4f6258c509733e4bc7528164b17516406bff0fd64ecad5dd5")
     elseif(_livekit_sdk_triple STREQUAL "windows-x64")
       set(LIVEKIT_SDK_SHA256
-        "564997f6709b7885b58fe17393e90b26d85eb048f2cfe94569ae6dddf0d7e965")
+        "6808b44e8ef8fdb31194ac084049f416eae144a34c51a6233f43a5106a54b6d2")
     endif()
   endif()
 

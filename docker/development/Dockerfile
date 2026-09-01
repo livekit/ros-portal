@@ -82,7 +82,7 @@ RUN if [ "${INSTALL_CPP_TOOLS}" = "true" ]; then \
 RUN git lfs install --system
 
 # Install LiveKit CLI
-RUN curl -sSL https://get.livekit.io/cli --retry 3 --retry-delay 3 | bash
+RUN curl -sSL --retry 3 --retry-delay 3 https://get.livekit.io/cli | bash
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-example-interfaces \

@@ -797,7 +797,9 @@ bool RosPortal::initializeCliManager() {
         this->get_node_graph_interface(),
         this->get_node_topics_interface(),
         this->get_node_logging_interface(),
-        [manager = graph_manager_.get()]() { return manager->topics(); },
+        [graph = this->get_node_graph_interface()]() {
+          return std::make_shared<const TopicNamesAndTypes>(graph->get_topic_names_and_types());
+        },
         [manager = graph_manager_.get()]() { return manager->services(); },
     };
     cli_manager_ =

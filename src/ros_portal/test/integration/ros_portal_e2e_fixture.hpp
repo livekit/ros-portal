@@ -517,6 +517,7 @@ protected:
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
   std::shared_ptr<RosPortal> rosPortalA() const { return ros_portal_a_; }
+  std::shared_ptr<RosPortal> rosPortalB() const { return ros_portal_b_; }
 
   void setLiveKitUrl(std::string livekit_url) { livekit_url_ = std::move(livekit_url); }
 

@@ -81,7 +81,7 @@ public:
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics;
     //! @brief Node logger used to create the manager's child logger.
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
-    //! @brief Shared/cached topic graph snapshot provider.
+    //! @brief Topic graph snapshot provider used for type validation.
     TopicGraphSnapshotFn topic_snapshot;
     //! @brief Shared/cached service graph snapshot provider.
     ServiceGraphSnapshotFn service_snapshot;

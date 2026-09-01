@@ -51,8 +51,8 @@ version information at the top of the diagnostics tree.
 | Key | Value |
 |---|---|
 | `livekit_sdk_version` | LiveKit C++ SDK version ROS Portal was built against, as exported by the SDK package found by CMake (falls back to the requested `LIVEKIT_SDK_VERSION` pin, then `unknown`). |
-| `ros_portal_version` | `ros_portal` package version from `package.xml`, or `unknown`. |
 | `ros_distro` | ROS distribution from the `ROS_DISTRO` environment variable at startup, or `unknown`. |
+| `ros_portal_version` | `ros_portal` package version from `package.xml`, or `unknown`. |
 
 The reported SDK version is resolved at build time; the prebuilt SDK exposes no
 runtime version API, so a mismatched library swapped in after the build cannot
@@ -86,10 +86,10 @@ observable.
 
 | Key | Value |
 |---|---|
-| `initialized` | Whether initialization completed. |
 | `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_manager`, `topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and `cli_manager`. Any inactive component triggers an `ERROR` status. |
 | `config_path` | Effective configuration file path, or `unset`. |
 | `graph_discovery_active` | Whether the graph-event discovery worker is running. |
+| `initialized` | Whether initialization completed. |
 | `local_identity` | Connected local participant identity, or `default`. |
 
 ## `connection_health`
@@ -122,11 +122,11 @@ Every `connection_health` status includes these fields:
 
 | Key | Value |
 |---|---|
-| `state` | `connected`, `reconnecting`, or `disconnected`. |
+| `connection_loss_count` | Number of transitions from connected to unavailable, including both SDK reconnects and direct terminal disconnects. |
 | `num_peers` | Current number of known remote LiveKit participants. |
 | `reconnect_count` | Number of times the LiveKit SDK entered an in-session reconnecting state after an established connection dropped. A terminal disconnect followed by a new `Room::connect` does not increment this counter. |
-| `connection_loss_count` | Number of transitions from connected to unavailable, including both SDK reconnects and direct terminal disconnects. |
 | `room_name` | LiveKit room name from the active room connection. |
+| `state` | `connected`, `reconnecting`, or `disconnected`. |
 
 ### RTC Summary Fields
 
@@ -135,21 +135,21 @@ fields are omitted while disconnected or reconnecting.
 
 | Key | Value |
 |---|---|
-| `rtc.stats_available` | `true` when a LiveKit stats snapshot has been summarized, otherwise `false`. |
-| `rtc.transport.ice_state` | Selected transport ICE state, or `unset`. |
-| `rtc.transport.dtls_state` | Selected transport DTLS state, or `unset`. |
-| `rtc.transport.candidate_pair_state` | Selected ICE candidate pair state, or `unset`. |
-| `rtc.transport.current_round_trip_time_ms` | Selected candidate pair RTT in milliseconds, or `unset`. |
-| `rtc.transport.available_outgoing_bitrate_bps` | Available outgoing bitrate reported by the selected candidate pair, or `unset`. |
-| `rtc.transport.available_incoming_bitrate_bps` | Available incoming bitrate reported by the selected candidate pair, or `unset`. |
-| `rtc.traffic.bytes_sent` | Selected candidate pair bytes sent, or `unset`. |
-| `rtc.traffic.bytes_received` | Selected candidate pair bytes received, or `unset`. |
-| `rtc.traffic.send_bitrate_bps` | Send bitrate computed from consecutive selected candidate pair byte counters, or `unset`. |
-| `rtc.traffic.receive_bitrate_bps` | Receive bitrate computed from consecutive selected candidate pair byte counters, or `unset`. |
-| `rtc.traffic.packets_lost` | Sum of packet loss from local inbound RTP stats and remote inbound RTP stats. |
-| `rtc.traffic.max_jitter_ms` | Maximum jitter from local inbound RTP stats and remote inbound RTP stats, in milliseconds, or `unset`. |
 | `rtc.data_channels.open` | Number of open WebRTC data channels. |
 | `rtc.data_channels.total` | Total number of WebRTC data channels. |
+| `rtc.stats_available` | `true` when a LiveKit stats snapshot has been summarized, otherwise `false`. |
+| `rtc.traffic.bytes_received` | Selected candidate pair bytes received, or `unset`. |
+| `rtc.traffic.bytes_sent` | Selected candidate pair bytes sent, or `unset`. |
+| `rtc.traffic.max_jitter_ms` | Maximum jitter from local inbound RTP stats and remote inbound RTP stats, in milliseconds, or `unset`. |
+| `rtc.traffic.packets_lost` | Sum of packet loss from local inbound RTP stats and remote inbound RTP stats. |
+| `rtc.traffic.receive_bitrate_bps` | Receive bitrate computed from consecutive selected candidate pair byte counters, or `unset`. |
+| `rtc.traffic.send_bitrate_bps` | Send bitrate computed from consecutive selected candidate pair byte counters, or `unset`. |
+| `rtc.transport.available_incoming_bitrate_bps` | Available incoming bitrate reported by the selected candidate pair, or `unset`. |
+| `rtc.transport.available_outgoing_bitrate_bps` | Available outgoing bitrate reported by the selected candidate pair, or `unset`. |
+| `rtc.transport.candidate_pair_state` | Selected ICE candidate pair state, or `unset`. |
+| `rtc.transport.current_round_trip_time_ms` | Selected candidate pair RTT in milliseconds, or `unset`. |
+| `rtc.transport.dtls_state` | Selected transport DTLS state, or `unset`. |
+| `rtc.transport.ice_state` | Selected transport ICE state, or `unset`. |
 
 The selected candidate pair is the transport's selected candidate pair when it
 can be matched. If not, ROS Portal uses the nominated, succeeded candidate pair
@@ -196,16 +196,16 @@ inbound reader thread has stopped.
 
 | Key | Value |
 |---|---|
-| `outbound.data_tracks` | Number of discovered outbound data topics. |
-| `outbound.video_tracks` | Number of discovered outbound image topics. |
-| `outbound.subscriptions` | Number of active outbound ROS subscriptions. |
-| `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. |
 | `inbound.data_tracks` | Number of inbound LiveKit data tracks being republished. |
+| `inbound.empty_payload_drops` | Cumulative empty inbound CDR payloads. |
 | `inbound.failures` | Cumulative inbound failures, aggregating tracks rejected because no ROS type could be resolved, because they matched no topic pattern, or because a ROS topic name could not be produced, plus failures publishing inbound frames on ROS and inbound schema validation rejections. |
 | `inbound.json_decode_failures` | Cumulative invalid inbound JSON frames. |
-| `inbound.empty_payload_drops` | Cumulative empty inbound CDR payloads. |
-| `inbound.terminal_errors` | Cumulative inbound streams that ended with a terminal error. |
 | `inbound.last_terminal_error` | Most recent terminal error text, or `none`. |
+| `inbound.terminal_errors` | Cumulative inbound streams that ended with a terminal error. |
+| `outbound.data_tracks` | Number of discovered outbound data topics. |
+| `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. |
+| `outbound.subscriptions` | Number of active outbound ROS subscriptions. |
+| `outbound.video_tracks` | Number of discovered outbound image topics. |
 
 `outbound.failures` and `inbound.failures` are deliberately coarse. Every
 increment is logged individually with its specific cause, including the track,
@@ -236,12 +236,12 @@ outbound and inbound failures.
 
 | Key | Value |
 |---|---|
-| `rpc_registered` | Whether the inbound latched-state RPC handler is registered. This is `false` when no inbound latched topics are configured because no handler is required. |
+| `inbound.failures` | Cumulative inbound latched-state request failures, aggregating malformed payloads, requests for topics not configured inbound, payloads that were not valid base64, and requests that could not create or use the required ROS publisher. |
 | `outbound.failures` | Cumulative outbound failures, aggregating messages dropped for exceeding the LiveKit RPC payload limit and failed outbound latched-state RPC calls. |
-| `peers.total` | Number of remote participants in delivery bookkeeping. |
 | `peers.behind` | Peers that have not acknowledged the current version and remain eligible for retries. |
 | `peers.given_up` | Peers that reached the consecutive-failure cap. |
-| `inbound.failures` | Cumulative inbound latched-state request failures, aggregating malformed payloads, requests for topics not configured inbound, payloads that were not valid base64, and requests that could not create or use the required ROS publisher. |
+| `peers.total` | Number of remote participants in delivery bookkeeping. |
+| `rpc_registered` | Whether the inbound latched-state RPC handler is registered. This is `false` when no inbound latched topics are configured because no handler is required. |
 
 `outbound.failures` and `inbound.failures` are deliberately coarse. Every
 increment is logged individually with its specific cause, including the topic or
@@ -286,16 +286,16 @@ forwarding outcomes.
 
 | Key | Value |
 |---|---|
-| `routes_configured` | Number of configured outgoing service routes. |
-| `services_created` | Number of local forwarded ROS services successfully created. |
-| `route_failures` | Cumulative route setup failures, aggregating routes skipped because service, type, or participant was empty, and routes skipped because runtime service type support could not be loaded. |
-| `requests_forwarded` | Cumulative local requests handled by the forwarder. |
-| `requests_succeeded` | Cumulative requests whose remote response populated the local response. |
-| `requests_failed` | Total cumulative forwarding failures, for any reason. |
-| `request_failures` | Cumulative failures on the request path, aggregating an absent target LiveKit participant, requests that could not be serialized for RPC, and failed LiveKit RPCs. |
-| `response_failures` | Cumulative failures on the response path, aggregating malformed RPC responses, errors returned by the remote service, remote responses that could not populate the local ROS response, and timeouts sending the response to the local ROS client. |
 | `handler_exceptions` | Exceptions caught while handling forwarded requests. |
 | `last_failure_reason` | Stable category for the most recent failure, or `none`. |
+| `request_failures` | Cumulative failures on the request path, aggregating an absent target LiveKit participant, requests that could not be serialized for RPC, and failed LiveKit RPCs. |
+| `requests_failed` | Total cumulative forwarding failures, for any reason. |
+| `requests_forwarded` | Cumulative local requests handled by the forwarder. |
+| `requests_succeeded` | Cumulative requests whose remote response populated the local response. |
+| `response_failures` | Cumulative failures on the response path, aggregating malformed RPC responses, errors returned by the remote service, remote responses that could not populate the local ROS response, and timeouts sending the response to the local ROS client. |
+| `route_failures` | Cumulative route setup failures, aggregating routes skipped because service, type, or participant was empty, and routes skipped because runtime service type support could not be loaded. |
+| `routes_configured` | Number of configured outgoing service routes. |
+| `services_created` | Number of local forwarded ROS services successfully created. |
 
 `route_failures`, `request_failures`, and `response_failures` are deliberately
 coarse. Every increment is logged individually with its specific cause, including
@@ -329,18 +329,18 @@ Each CLI command pair is reported under its RPC method name:
 
 | Key | Value |
 |---|---|
-| `ros2_topic_list` | `ok`, or `service missing`, `rpc missing`, or `service and rpc missing`. |
-| `ros2_topic_pub` | Same as above. |
-| `ros2_service_list` | Same as above. |
+| `ros2_interface_show` | `ok`, or `service missing`, `rpc missing`, or `service and rpc missing`. |
 | `ros2_service_call` | Same as above. |
-| `ros2_interface_show` | Same as above. |
+| `ros2_service_list` | Same as above. |
+| `ros2_topic_list` | Same as above. |
+| `ros2_topic_pub` | Same as above. |
 
 ### Cache Fields
 
 | Key | Value |
 |---|---|
-| `topic_pub_cache_full_rejections` | Number of topic publish requests rejected because the cache was full. |
 | `service_call_cache_full_rejections` | Number of service call requests rejected because the cache was full. |
+| `topic_pub_cache_full_rejections` | Number of topic publish requests rejected because the cache was full. |
 
 Cache size and capacity are not published as fields. Each rejection logs the
 cache utilization at the moment it filled, as

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2026 LiveKit
+# Copyright 2026 LiveKit, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,37 +14,29 @@
 # limitations under the License.
 
 # Generate two LiveKit access tokens via `lk` and set the environment variables
-# required by the ROS Portal participant-ID integration test.
+# required by ROS Portal's integration tests.
 #
-#   source .token_helpers/set_test_tokens.bash
-#   eval "$(bash .token_helpers/set_test_tokens.bash)"
+#   source scripts/set-test-tokens.sh
+#   eval "$(bash scripts/set-test-tokens.sh)"
 #
 # Exports:
-#   LIVEKIT_URL
 #   LIVEKIT_TOKEN_A
 #   LIVEKIT_TOKEN_B
+#   LIVEKIT_URL
 
 _sourced=0
-if [[ -n "${BASH_VERSION:-}" && "${BASH_SOURCE[0]}" != "${0}" ]]; then
+if [[ -n "${BASH_VERSION:-}" ]] && [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   _sourced=1
 elif [[ -n "${ZSH_VERSION:-}" && "${ZSH_EVAL_CONTEXT:-}" == *:file* ]]; then
   _sourced=1
 fi
 
 _fail() {
-  echo "set_test_tokens.bash: $1" >&2
-  if [[ "$_sourced" -eq 1 ]]; then
-    return "${2:-1}"
-  fi
-  exit "${2:-1}"
+  echo "set-test-tokens: $1" >&2
 }
 
 if [[ "$_sourced" -eq 0 ]]; then
   set -euo pipefail
-fi
-
-if [[ $# -ne 0 ]]; then
-  _fail "this script is configured through environment variables and does not accept arguments" 2
 fi
 
 LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-devkey}"
@@ -66,53 +58,97 @@ if [[ -z "${LIVEKIT_URL:-}" ]]; then
   fi
 fi
 
+if [[ $# -ne 0 ]]; then
+  _fail "this script is configured through environment variables and does not accept arguments" 2
+  if [[ "$_sourced" -eq 1 ]]; then
+    return 2
+  fi
+  exit 2
+fi
+
+_grant_json='{"canPublish":true,"canSubscribe":true,"canPublishData":true}'
+
 if ! command -v lk >/dev/null 2>&1; then
   _fail "'lk' CLI not found. Install: https://docs.livekit.io/home/cli/" 2
+  if [[ "$_sourced" -eq 1 ]]; then
+    return 2
+  fi
+  exit 2
 fi
 
 _create_token() {
   local identity="$1"
   local output=""
+  local command_status=0
+  local token=""
 
   output="$(
-    lk token create \
-      --api-key "$LIVEKIT_API_KEY" \
-      --api-secret "$LIVEKIT_API_SECRET" \
-      --identity "$identity" \
-      --name "$identity" \
-      --join \
-      --valid-for "$LIVEKIT_VALID_FOR" \
-      --room "$LIVEKIT_ROOM" \
-      --allow-update-metadata \
-      --token-only
-    )"
-
-  if [[ -z "$output" ]]; then
-    _fail "lk token create produced an empty token for identity '$identity'" 1
+    bash -c '
+      lk token create \
+        --api-key "$1" \
+        --api-secret "$2" \
+        -i "$3" \
+        --join \
+        --valid-for "$4" \
+        --room "$5" \
+        --grant "$6" \
+        --allow-update-metadata 2>&1
+    ' _ "$LIVEKIT_API_KEY" "$LIVEKIT_API_SECRET" "$identity" \
+      "$LIVEKIT_VALID_FOR" "$LIVEKIT_ROOM" "$_grant_json"
+  )"
+  command_status=$?
+  if [[ "$command_status" -ne 0 ]]; then
+    echo "$output" >&2
+    _fail "lk token create failed for identity '$identity'" 1
+    return 1
   fi
 
-  printf '%s' "$output"
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "$line" == "Access token: "* ]]; then
+      token="${line#Access token: }"
+      break
+    fi
+  done <<< "$output"
+
+  if [[ -z "$token" ]]; then
+    echo "$output" >&2
+    _fail "could not parse Access token for identity '$identity'" 1
+    return 1
+  fi
+
+  printf '%s' "$token"
 }
 
-LIVEKIT_TOKEN_A="$(_create_token "$LIVEKIT_IDENTITY_A")"
-LIVEKIT_TOKEN_B="$(_create_token "$LIVEKIT_IDENTITY_B")"
+if ! LIVEKIT_TOKEN_A="$(_create_token "$LIVEKIT_IDENTITY_A")"; then
+  if [[ "$_sourced" -eq 1 ]]; then
+    return 1
+  fi
+  exit 1
+fi
+
+if ! LIVEKIT_TOKEN_B="$(_create_token "$LIVEKIT_IDENTITY_B")"; then
+  if [[ "$_sourced" -eq 1 ]]; then
+    return 1
+  fi
+  exit 1
+fi
 
 _apply() {
-  export LIVEKIT_URL
   export LIVEKIT_TOKEN_A
   export LIVEKIT_TOKEN_B
+  export LIVEKIT_URL
 }
 
 _emit_eval() {
-  printf 'export LIVEKIT_URL=%q\n' "$LIVEKIT_URL"
   printf 'export LIVEKIT_TOKEN_A=%q\n' "$LIVEKIT_TOKEN_A"
   printf 'export LIVEKIT_TOKEN_B=%q\n' "$LIVEKIT_TOKEN_B"
+  printf 'export LIVEKIT_URL=%q\n' "$LIVEKIT_URL"
 }
 
 if [[ "$_sourced" -eq 1 ]]; then
   _apply
-  echo "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B set for this shell. using LIVEKIT_ROOM: $LIVEKIT_ROOM" >&2
+  echo "LIVEKIT_TOKEN_A, LIVEKIT_TOKEN_B, and LIVEKIT_URL set for this shell. using LIVEKIT_ROOM: $LIVEKIT_ROOM" >&2
 else
   _emit_eval
-  echo "set_test_tokens.bash: for this shell run: source $0   or: eval \"\$(bash $0)\"" >&2
+  echo "set-test-tokens: for this shell run: source $0   or: eval \"\$(bash $0)\"" >&2
 fi

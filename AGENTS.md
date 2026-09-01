@@ -41,9 +41,9 @@ prerequisites are missing. Project-specific commands are documented in
   - `colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests`
   - `colcon test-result --verbose`
 - Before treating integration credentials as unavailable, source
-  `.token_helpers/set_test_tokens.bash` in the same shell that runs the tests.
+  `scripts/set-test-tokens.sh` in the same shell that runs the tests.
   For example:
-  `source .token_helpers/set_test_tokens.bash && colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests`.
+  `source scripts/set-test-tokens.sh && colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests`.
 - If an integration test requires external services or credentials, keep the
  test deterministic and document/emit the exact environment assumptions.
 - If tests cannot be run in the current environment, explicitly state what was

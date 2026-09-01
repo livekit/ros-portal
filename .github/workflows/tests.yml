@@ -91,7 +91,7 @@ jobs:
               source "/opt/ros/${ROS_DISTRO}/setup.bash"
               source install/setup.bash
               set -u
-              source .token_helpers/set_test_tokens.bash
+              source scripts/set-test-tokens.sh
               test_exit=0
               GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_integration_tests || test_exit=$?
               colcon test-result --verbose --all
@@ -113,7 +113,7 @@ jobs:
               source "/opt/ros/${ROS_DISTRO}/setup.bash"
               source install/setup.bash
               set -u
-              source .token_helpers/set_test_tokens.bash
+              source scripts/set-test-tokens.sh
               export ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1
               test_exit=0
               GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_connection_fault_tests || test_exit=$?

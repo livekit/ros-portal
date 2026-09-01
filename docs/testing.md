@@ -15,7 +15,7 @@ Integration tests require a local LiveKit server and participant tokens. Source
 the helper from the workspace root:
 
 ```bash
-source .token_helpers/set_test_tokens.bash
+source scripts/set-test-tokens.sh
 ```
 
 Then run the integration tests:
@@ -51,7 +51,7 @@ LiveKit server and does not affect other clients connected to that server.
 After sourcing the test tokens, enable and select the dedicated CTest target:
 
 ```bash
-source .token_helpers/set_test_tokens.bash
+source scripts/set-test-tokens.sh
 ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1 \
   colcon test --packages-select ros_portal \
   --ctest-args -R ros_portal_connection_fault_tests

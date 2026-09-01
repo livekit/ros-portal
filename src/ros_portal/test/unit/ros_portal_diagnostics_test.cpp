@@ -65,16 +65,15 @@ private:
 
 class TemporaryDiagnosticsConfig {
 public:
-  TemporaryDiagnosticsConfig()
+  explicit TemporaryDiagnosticsConfig(const char* topics_yaml = "  topics: []\n")
       : path_(std::filesystem::temp_directory_path() /
               ("ros_portal_diagnostics_test_" +
                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".yaml")) {
     std::ofstream output(path_);
-    output << R"(ros_portal:
-  version: "0.0.1"
-  ros_threads: 3
-  topics: []
-)";
+    output << "ros_portal:\n"
+              "  version: \"0.0.1\"\n"
+              "  ros_threads: 3\n"
+           << topics_yaml;
   }
 
   ~TemporaryDiagnosticsConfig() {
@@ -113,7 +112,7 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   EXPECT_EQ(status.message, "ROS Portal is not initialized");
   EXPECT_EQ(diagnosticValueFor(status, "initialized"), "false");
   EXPECT_EQ(diagnosticValueFor(status, "components_inactive"),
-            "connection_manager,topic_forwarder,latched_topic_forwarder,service_forwarder,cli_manager");
+            "connection_manager,topic_forwarder,service_forwarder,cli_manager");
   EXPECT_EQ(diagnosticValueFor(status, "config_path"), config.path().string());
   EXPECT_EQ(diagnosticValueFor(status, "graph_discovery_active"), "false");
   EXPECT_EQ(diagnosticValueFor(status, "local_identity"), "unset");
@@ -128,7 +127,6 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
   portal.diagnostic_state_.graph_discovery_active.store(true);
   portal.diagnostic_state_.connection_manager_active.store(true);
   portal.diagnostic_state_.topic_forwarder_active.store(true);
-  portal.diagnostic_state_.latched_topic_forwarder_active.store(true);
   portal.diagnostic_state_.service_forwarder_active.store(true);
   portal.diagnostic_state_.cli_manager_active.store(true);
 
@@ -144,6 +142,65 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
   portal.populateStatus(stalled_status);
   EXPECT_EQ(stalled_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(stalled_status.message, "ROS Portal is initialized without an active graph discovery worker");
+}
+
+TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured) {
+  RosPortal portal;
+  portal.initialized_.store(true);
+  portal.diagnostic_state_.graph_discovery_active.store(true);
+  portal.diagnostic_state_.connection_manager_active.store(true);
+  portal.diagnostic_state_.topic_forwarder_active.store(true);
+  portal.diagnostic_state_.service_forwarder_active.store(true);
+  portal.diagnostic_state_.cli_manager_active.store(true);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  portal.populateStatus(status);
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(status.message, "ROS Portal is initialized");
+  EXPECT_EQ(diagnosticValueFor(status, "components_inactive"), "none");
+}
+
+TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured) {
+  ScopedEnvironmentVariable scoped_url{"LIVEKIT_URL"};
+  ScopedEnvironmentVariable scoped_token{"LIVEKIT_TOKEN"};
+  unsetenv("LIVEKIT_URL");
+  unsetenv("LIVEKIT_TOKEN");
+  TemporaryDiagnosticsConfig config(R"(  topics:
+    - topic: "/tf_static"
+      direction: "out"
+      latched: true
+)");
+
+  const rclcpp::NodeOptions options = rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("config_path", config.path().string()),
+  });
+  RosPortal portal(options);
+
+  EXPECT_FALSE(portal.initialize());
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  portal.populateStatus(status);
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(status.message, "ROS Portal is not initialized");
+  EXPECT_EQ(diagnosticValueFor(status, "components_inactive"),
+            "connection_manager,topic_forwarder,latched_topic_forwarder,service_forwarder,cli_manager");
+
+  portal.initialized_.store(true);
+  portal.diagnostic_state_.graph_discovery_active.store(true);
+  portal.diagnostic_state_.connection_manager_active.store(true);
+  portal.diagnostic_state_.topic_forwarder_active.store(true);
+  portal.diagnostic_state_.service_forwarder_active.store(true);
+  portal.diagnostic_state_.cli_manager_active.store(true);
+  ASSERT_TRUE(portal.diagnostic_state_.latched_topic_forwarder_active.has_value());
+  portal.diagnostic_state_.latched_topic_forwarder_active->store(false, std::memory_order_relaxed);
+
+  diagnostic_updater::DiagnosticStatusWrapper inactive_status;
+  portal.populateStatus(inactive_status);
+  EXPECT_EQ(inactive_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(inactive_status.message, "ROS Portal has inactive components");
+  EXPECT_EQ(diagnosticValueFor(inactive_status, "components_inactive"), "latched_topic_forwarder");
 }
 
 } // namespace ros_portal

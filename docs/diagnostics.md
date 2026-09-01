@@ -80,13 +80,13 @@ observable.
 | `OK` | `ROS Portal is initialized` | Initialization completed and the graph discovery worker is running. |
 | `ERROR` | `ROS Portal is not initialized` | Initialization has not completed, including configuration, credential, or connection failures. |
 | `ERROR` | `ROS Portal is initialized without an active graph discovery worker` | Lifecycle state says initialized but the graph-event discovery worker is not running. |
-| `ERROR` | `ROS Portal has inactive components` | At least one expected component is not active. |
+| `ERROR` | `ROS Portal has inactive components` | At least one expected component is not active. `latched_topic_forwarder` is expected only when at least one latched topic is configured. |
 
 ### Fields
 
 | Key | Value |
 |---|---|
-| `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_manager`, `topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and `cli_manager`. Any inactive component triggers an `ERROR` status. |
+| `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_manager`, `topic_forwarder`, `service_forwarder`, and `cli_manager`. `latched_topic_forwarder` is included only when at least one latched topic is configured. Any listed inactive component triggers an `ERROR` status. |
 | `config_path` | Effective configuration file path, or `unset`. |
 | `graph_discovery_active` | Whether the graph-event discovery worker is running. |
 | `initialized` | Whether initialization completed. |
@@ -197,11 +197,7 @@ inbound reader thread has stopped.
 | Key | Value |
 |---|---|
 | `inbound.data_tracks` | Number of inbound LiveKit data tracks being republished. |
-| `inbound.empty_payload_drops` | Cumulative empty inbound CDR payloads. |
-| `inbound.failures` | Cumulative inbound failures, aggregating tracks rejected because no ROS type could be resolved, because they matched no topic pattern, or because a ROS topic name could not be produced, plus failures publishing inbound frames on ROS and inbound schema validation rejections. |
-| `inbound.json_decode_failures` | Cumulative invalid inbound JSON frames. |
-| `inbound.last_terminal_error` | Most recent terminal error text, or `none`. |
-| `inbound.terminal_errors` | Cumulative inbound streams that ended with a terminal error. |
+| `inbound.failures` | Cumulative inbound failures, aggregating tracks rejected because no ROS type could be resolved, because they matched no topic pattern, or because a ROS topic name could not be produced, plus failures publishing inbound frames on ROS, invalid inbound JSON frames, empty inbound CDR payloads, streams that ended with a terminal error, and inbound schema validation rejections. |
 | `outbound.data_tracks` | Number of discovered outbound data topics. |
 | `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. |
 | `outbound.subscriptions` | Number of active outbound ROS subscriptions. |
@@ -210,8 +206,9 @@ inbound reader thread has stopped.
 `outbound.failures` and `inbound.failures` are deliberately coarse. Every
 increment is logged individually with its specific cause, including the track,
 topic, and participant involved, so the log is the place to identify which
-failure occurred. Schema rejections additionally log both the remote and local
-schema SHA-256 hashes.
+failure occurred. A stream that ends with a terminal error logs that error text,
+and schema rejections additionally log both the remote and local schema SHA-256
+hashes.
 
 The counts of outbound tracks awaiting a LiveKit writer or video sink and of
 running inbound reader threads are not published as fields. They only raise the
@@ -279,7 +276,7 @@ forwarding outcomes.
 | Level | Message | Meaning |
 |---|---|---|
 | `OK` | `Service forwarding healthy` | Every configured route was created and no request failure has been observed. |
-| `WARN` | `Service forwarding failures detected` | A request failed, a handler threw, or a response-path failure occurred. |
+| `WARN` | `Service forwarding failures detected` | A request-path failure, a response-path failure, or a handler exception occurred. |
 | `ERROR` | `One or more configured service routes are unavailable` | The number of created services does not match the configured route count. |
 
 ### Key/Value Fields
@@ -288,9 +285,7 @@ forwarding outcomes.
 |---|---|
 | `handler_exceptions` | Exceptions caught while handling forwarded requests. |
 | `last_failure_reason` | Stable category for the most recent failure, or `none`. |
-| `request_failures` | Cumulative failures on the request path, aggregating an absent target LiveKit participant, requests that could not be serialized for RPC, and failed LiveKit RPCs. |
-| `requests_failed` | Total cumulative forwarding failures, for any reason. |
-| `requests_forwarded` | Cumulative local requests handled by the forwarder. |
+| `request_failures` | Cumulative failures on the request path, aggregating requests rejected because the room was not connected, an absent target LiveKit participant, requests that could not be serialized for RPC, and failed LiveKit RPCs. |
 | `requests_succeeded` | Cumulative requests whose remote response populated the local response. |
 | `response_failures` | Cumulative failures on the response path, aggregating malformed RPC responses, errors returned by the remote service, remote responses that could not populate the local ROS response, and timeouts sending the response to the local ROS client. |
 | `route_failures` | Cumulative route setup failures, aggregating routes skipped because service, type, or participant was empty, and routes skipped because runtime service type support could not be loaded. |
@@ -303,10 +298,9 @@ the service, message type, and participant involved, so the log is the place to
 identify which failure occurred. `last_failure_reason` additionally names the
 category of the most recent one.
 
-`requests_failed` is the total across all causes and is not the sum of
-`request_failures` and `response_failures`. It also counts requests rejected
-because the room was not connected, and handler exceptions, while excluding the
-response-send timeouts that `response_failures` includes.
+Every forwarded request lands in exactly one of `requests_succeeded`,
+`request_failures`, `response_failures`, or `handler_exceptions`, so the four
+counters partition request volume and no separate total is published.
 
 ## `cli_manager`
 

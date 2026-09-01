@@ -119,15 +119,11 @@ private:
     /// incomplete configuration and routes whose runtime type support could not be
     /// loaded. Every occurrence is logged with its specific cause.
     std::atomic<std::uint64_t> route_failures{0};
-    /// @brief Count of local requests handled by the forwarder.
-    std::atomic<std::uint64_t> requests_forwarded{0};
     /// @brief Count of requests completed with a populated local response.
     std::atomic<std::uint64_t> requests_succeeded{0};
-    /// @brief Total count of requests that failed during forwarding, for any reason.
-    std::atomic<std::uint64_t> requests_failed{0};
-    /// @brief Count of failures on the request path, aggregating an unavailable
-    /// target participant, a request that could not be serialized, and a failed
-    /// LiveKit RPC. Every occurrence is logged with its specific cause.
+    /// @brief Count of failures on the request path, aggregating a disconnected room,
+    /// an unavailable target participant, a request that could not be serialized, and
+    /// a failed LiveKit RPC. Every occurrence is logged with its specific cause.
     std::atomic<std::uint64_t> request_failures{0};
     /// @brief Count of failures on the response path, aggregating malformed RPC
     /// responses, errors returned by the remote service, responses that could not
@@ -154,8 +150,10 @@ private:
   /// @param response_data Runtime-typed response message memory to populate.
   void forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data);
 
-  /// @brief Record one failed forwarded request under a stable failure category.
+  /// @brief Record one request-path failure under a stable failure category.
   void recordRequestFailure(const std::string& reason);
+  /// @brief Record one response-path failure under a stable failure category.
+  void recordResponseFailure(const std::string& reason);
   /// @brief Record an exception escaping a forwarding handler.
   void recordHandlerException();
   /// @brief Record a timeout sending a response to the local ROS client.

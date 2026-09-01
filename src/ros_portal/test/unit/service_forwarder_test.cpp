@@ -201,11 +201,12 @@ TEST_F(ServiceForwarderTest, ForwardsSetBoolRequestAndPopulatesResponse) {
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(valueFor(status, "routes_configured"), "1");
   EXPECT_EQ(valueFor(status, "services_created"), "1");
-  EXPECT_EQ(valueFor(status, "requests_forwarded"), "1");
   EXPECT_EQ(valueFor(status, "requests_succeeded"), "1");
-  EXPECT_EQ(valueFor(status, "requests_failed"), "0");
   EXPECT_EQ(valueFor(status, "request_failures"), "0");
   EXPECT_EQ(valueFor(status, "response_failures"), "0");
+  // Request volume is derivable from the outcome counters and is no longer published.
+  EXPECT_FALSE(valueFor(status, "requests_forwarded").has_value());
+  EXPECT_FALSE(valueFor(status, "requests_failed").has_value());
   EXPECT_EQ(valueFor(status, "route_failures"), "0");
 }
 
@@ -236,8 +237,6 @@ TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
   diagnostic_updater::DiagnosticStatusWrapper status;
   diagnostics.populate(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(status, "requests_forwarded"), "1");
-  EXPECT_EQ(valueFor(status, "requests_failed"), "1");
   // A missing participant fails on the request path.
   EXPECT_EQ(valueFor(status, "request_failures"), "1");
   EXPECT_EQ(valueFor(status, "response_failures"), "0");
@@ -353,9 +352,10 @@ TEST_F(ServiceForwarderTest, DiagnosticsReportHandlerExceptions) {
   diagnostic_updater::DiagnosticStatusWrapper status;
   diagnostics.populate(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(status, "requests_forwarded"), "1");
-  EXPECT_EQ(valueFor(status, "requests_failed"), "1");
   EXPECT_EQ(valueFor(status, "handler_exceptions"), "1");
+  // A handler exception is counted only as a handler exception, not on either path.
+  EXPECT_EQ(valueFor(status, "request_failures"), "0");
+  EXPECT_EQ(valueFor(status, "response_failures"), "0");
   EXPECT_EQ(valueFor(status, "last_failure_reason"), "handler_exception");
   EXPECT_FALSE(valueFor(status, "last_failure_service").has_value());
 }

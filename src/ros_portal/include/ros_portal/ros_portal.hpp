@@ -100,6 +100,8 @@ private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates);
+  FRIEND_TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured);
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
 #endif
 
@@ -117,8 +119,11 @@ private:
     std::atomic_bool connection_manager_active{false};
     /// @brief Whether the topic forwarder is instantiated.
     std::atomic_bool topic_forwarder_active{false};
-    /// @brief Whether the latched-topic forwarder is instantiated.
-    std::atomic_bool latched_topic_forwarder_active{false};
+    /// @brief Engaged only when latched topics are configured; the stored value is
+    /// `true` when the latched-topic forwarder is instantiated. Engaging or
+    /// resetting this optional is guarded by @ref metadata_mutex; the atomic may
+    /// be stored/loaded independently once engaged.
+    std::optional<std::atomic_bool> latched_topic_forwarder_active;
     /// @brief Whether the CLI manager is instantiated.
     std::atomic_bool cli_manager_active{false};
     /// @brief Whether the service forwarder is instantiated.

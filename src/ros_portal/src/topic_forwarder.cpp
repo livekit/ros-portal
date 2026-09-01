@@ -830,7 +830,7 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
   return qos;
 }
 
-void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState> state) {
+void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state) {
   const ReaderAliveGuard reader_alive(state->reader_thread_alive);
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
@@ -844,7 +844,7 @@ void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState>
       serialized_msg = introspection::serializedMessageFromJson(
           state->ros_topic_type, std::string(frame.payload.begin(), frame.payload.end()), error);
       if (!serialized_msg) {
-        diagnostic_state_.inbound_json_decode_failures.fetch_add(1, std::memory_order_relaxed);
+        diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
         RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
                              "Dropping invalid JSON frame from LiveKit data track '%s' from '%s': %s",
                              state->track_name.c_str(), state->publisher_identity.c_str(), error.c_str());
@@ -856,7 +856,7 @@ void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState>
       if (!frame.payload.empty()) {
         std::memcpy(rcl_msg.buffer, frame.payload.data(), frame.payload.size());
       } else {
-        diagnostic_state_.inbound_empty_payload_drops.fetch_add(1, std::memory_order_relaxed);
+        diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
         RCLCPP_WARN(logger_, "Received empty payload from LiveKit data track '%s' from '%s'", state->track_name.c_str(),
                     state->publisher_identity.c_str());
         return;
@@ -880,11 +880,7 @@ void TopicForwarder::readInboundDataTrack(std::shared_ptr<InboundDataTrackState>
   if (state->stream && state->stream->terminal_error) {
     const auto terminal_error = state->stream->terminal_error();
     if (terminal_error) {
-      {
-        const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
-        diagnostic_state_.inbound_last_terminal_error = *terminal_error;
-      }
-      diagnostic_state_.inbound_terminal_errors.fetch_add(1, std::memory_order_relaxed);
+      diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_WARN(logger_, "LiveKit data track '%s' from '%s' ended with error: %s", state->track_name.c_str(),
                   state->publisher_identity.c_str(), terminal_error->c_str());
     }
@@ -920,11 +916,6 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
       diagnostic_state_.outbound_failures.load(std::memory_order_relaxed) + schema_outbound_failures;
   const auto inbound_failures =
       diagnostic_state_.inbound_failures.load(std::memory_order_relaxed) + schema_inbound_rejections;
-  const auto inbound_json_decode_failures =
-      diagnostic_state_.inbound_json_decode_failures.load(std::memory_order_relaxed);
-  const auto inbound_empty_payload_drops =
-      diagnostic_state_.inbound_empty_payload_drops.load(std::memory_order_relaxed);
-  const auto inbound_terminal_errors = diagnostic_state_.inbound_terminal_errors.load(std::memory_order_relaxed);
 
   std::size_t outbound_data_tracks = 0U;
   std::size_t outbound_video_tracks = 0U;
@@ -942,22 +933,19 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
 
   std::size_t inbound_data_tracks = 0U;
   std::size_t inbound_reader_threads_alive = 0U;
-  std::string inbound_last_terminal_error;
   {
     const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
     inbound_data_tracks = inbound_data_track_states_.size();
     inbound_reader_threads_alive = static_cast<std::size_t>(std::count_if(
         inbound_data_track_states_.begin(), inbound_data_track_states_.end(),
         [](const auto& entry) { return entry.second->reader_thread_alive.load(std::memory_order_relaxed); }));
-    inbound_last_terminal_error = diagnostic_state_.inbound_last_terminal_error;
   }
 
   // Pending writers and stopped reader threads are not published as fields; they only
   // raise the summary to ERROR, which names the unavailable forwarding path.
   const bool forwarding_unavailable =
       outbound_data_tracks_pending_writer > 0U || inbound_reader_threads_alive < inbound_data_tracks;
-  const bool failures_detected = outbound_failures > 0U || inbound_failures > 0U || inbound_json_decode_failures > 0U ||
-                                 inbound_empty_payload_drops > 0U || inbound_terminal_errors > 0U;
+  const bool failures_detected = outbound_failures > 0U || inbound_failures > 0U;
 
   if (forwarding_unavailable) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "One or more forwarding paths are unavailable");
@@ -973,10 +961,6 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
   status.add("outbound.failures", outbound_failures);
   status.add("inbound.data_tracks", inbound_data_tracks);
   status.add("inbound.failures", inbound_failures);
-  status.add("inbound.json_decode_failures", inbound_json_decode_failures);
-  status.add("inbound.empty_payload_drops", inbound_empty_payload_drops);
-  status.add("inbound.terminal_errors", inbound_terminal_errors);
-  status.add("inbound.last_terminal_error", inbound_last_terminal_error.empty() ? "none" : inbound_last_terminal_error);
 }
 
 } // namespace ros_portal

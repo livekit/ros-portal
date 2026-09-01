@@ -263,7 +263,6 @@ void ServiceForwarder::createService(const ServiceRoute& route,
 }
 
 void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data) {
-  diagnostic_state_.requests_forwarded.fetch_add(1, std::memory_order_relaxed);
   if (!livekit_methods_.is_room_available()) {
     std::string ignored_error;
     (void)introspection::populateMessageFromYaml(
@@ -275,7 +274,6 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   }
 
   if (!livekit_methods_.has_participant(route.participant)) {
-    diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
     recordRequestFailure("participant_not_found");
     RCLCPP_ERROR(logger_, "Cannot forward service '%s': LiveKit participant '%s' was not found", route.service.c_str(),
                  route.participant.c_str());
@@ -284,7 +282,6 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
 
   const auto request_yaml = introspection::toYaml(route.msg_type + "_Request", request_data);
   if (!request_yaml) {
-    diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
     recordRequestFailure("request_serialization");
     RCLCPP_ERROR(logger_, "Cannot forward service '%s' [%s]: request message type could not be resolved",
                  route.service.c_str(), route.msg_type.c_str());
@@ -302,7 +299,6 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   const auto rpc_response = livekit_methods_.perform_rpc(route.participant, cli::kServiceCallRpcMethod, payload,
                                                          serviceCallRpcTimeout(service_timeout_sec));
   if (!rpc_response) {
-    diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
     recordRequestFailure("rpc_transport");
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' to participant '%s' failed while forwarding service '%s'",
                  cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str());
@@ -312,16 +308,14 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   std::string parse_error;
   const auto response = cliResponseFromJson<cli::ServiceCallSrv::Response>(*rpc_response, parse_error);
   if (!response) {
-    diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure("malformed_response");
+    recordResponseFailure("malformed_response");
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' from participant '%s' returned malformed JSON for service '%s': %s",
                  cli::kServiceCallRpcMethod, route.participant.c_str(), route.service.c_str(), parse_error.c_str());
     return;
   }
 
   if (!response->success) {
-    diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure("remote_error");
+    recordResponseFailure("remote_error");
     RCLCPP_ERROR(logger_, "Remote service call '%s' on participant '%s' failed: %s", route.service.c_str(),
                  route.participant.c_str(), response->err_msg.c_str());
     return;
@@ -330,8 +324,7 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
   std::string yaml_error;
   if (!introspection::populateMessageFromYaml(route.msg_type + "_Response", response->output, response_data,
                                               yaml_error)) {
-    diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
-    recordRequestFailure("response_deserialization");
+    recordResponseFailure("response_deserialization");
     RCLCPP_ERROR(logger_, "Failed to parse remote response for service '%s' [%s]: %s", route.service.c_str(),
                  route.msg_type.c_str(), yaml_error.c_str());
     return;
@@ -341,20 +334,23 @@ void ServiceForwarder::forwardRequest(const ServiceRoute& route, const void* req
 }
 
 void ServiceForwarder::recordRequestFailure(const std::string& reason) {
-  diagnostic_state_.requests_failed.fetch_add(1, std::memory_order_relaxed);
+  diagnostic_state_.request_failures.fetch_add(1, std::memory_order_relaxed);
+  recordLastFailure(reason);
+}
+
+void ServiceForwarder::recordResponseFailure(const std::string& reason) {
+  diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
   recordLastFailure(reason);
 }
 
 void ServiceForwarder::recordHandlerException() {
   diagnostic_state_.handler_exceptions.fetch_add(1, std::memory_order_relaxed);
-  diagnostic_state_.requests_failed.fetch_add(1, std::memory_order_relaxed);
   recordLastFailure("handler_exception");
 }
 
 void ServiceForwarder::recordResponseSendTimeout() {
   // A timeout returning the reply to the local ROS client is a response-path failure.
-  diagnostic_state_.response_failures.fetch_add(1, std::memory_order_relaxed);
-  recordLastFailure("response_send_timeout");
+  recordResponseFailure("response_send_timeout");
 }
 
 void ServiceForwarder::recordLastFailure(const std::string& reason) {
@@ -364,9 +360,7 @@ void ServiceForwarder::recordLastFailure(const std::string& reason) {
 
 void ServiceForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
   const auto route_failures = diagnostic_state_.route_failures.load(std::memory_order_relaxed);
-  const auto requests_forwarded = diagnostic_state_.requests_forwarded.load(std::memory_order_relaxed);
   const auto requests_succeeded = diagnostic_state_.requests_succeeded.load(std::memory_order_relaxed);
-  const auto requests_failed = diagnostic_state_.requests_failed.load(std::memory_order_relaxed);
   const auto request_failures = diagnostic_state_.request_failures.load(std::memory_order_relaxed);
   const auto response_failures = diagnostic_state_.response_failures.load(std::memory_order_relaxed);
   const auto handler_exceptions = diagnostic_state_.handler_exceptions.load(std::memory_order_relaxed);
@@ -380,7 +374,7 @@ void ServiceForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrappe
   if (services_.size() != diagnostic_state_.routes_configured) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
                    "One or more configured service routes are unavailable");
-  } else if (requests_failed > 0U || response_failures > 0U) {
+  } else if (request_failures > 0U || response_failures > 0U || handler_exceptions > 0U) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Service forwarding failures detected");
   } else {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Service forwarding healthy");
@@ -389,9 +383,7 @@ void ServiceForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrappe
   status.add("routes_configured", diagnostic_state_.routes_configured);
   status.add("services_created", services_.size());
   status.add("route_failures", route_failures);
-  status.add("requests_forwarded", requests_forwarded);
   status.add("requests_succeeded", requests_succeeded);
-  status.add("requests_failed", requests_failed);
   status.add("request_failures", request_failures);
   status.add("response_failures", response_failures);
   status.add("handler_exceptions", handler_exceptions);

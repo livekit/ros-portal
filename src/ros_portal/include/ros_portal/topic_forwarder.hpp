@@ -329,18 +329,11 @@ private:
     std::atomic<std::uint64_t> outbound_failures{0};
     /// @brief Count of inbound track and frame failures, aggregating tracks rejected
     /// because no ROS type was available, because they did not match the configured
-    /// topic patterns, or because ROS topic name resolution failed, plus frames that
-    /// failed ROS publication. Every occurrence is logged with its specific cause.
+    /// topic patterns, or because ROS topic name resolution failed, frames that failed
+    /// ROS publication, JSON frames that could not be decoded, empty CDR payloads
+    /// dropped, and streams that ended with a terminal error. Every occurrence is
+    /// logged with its specific cause.
     std::atomic<std::uint64_t> inbound_failures{0};
-    /// @brief Count of inbound JSON frames that could not be decoded.
-    std::atomic<std::uint64_t> inbound_json_decode_failures{0};
-    /// @brief Count of inbound empty CDR payloads dropped.
-    std::atomic<std::uint64_t> inbound_empty_payload_drops{0};
-    /// @brief Count of inbound streams that reported terminal errors.
-    std::atomic<std::uint64_t> inbound_terminal_errors{0};
-    /// @brief Most recent inbound stream terminal error. Protected by
-    /// @ref inbound_data_track_states_mutex_.
-    std::string inbound_last_terminal_error;
   };
 
   /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,

@@ -102,6 +102,7 @@ bool RosPortal::initialize() {
   room_components_started_ = false;
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
+  latched_topic_forwarder_.reset();
   build_info_diagnostics_.reset();
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
@@ -109,6 +110,15 @@ bool RosPortal::initialize() {
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   topics_ = config->topics;
+  const auto latched_options = utils::latchedTopicForwarderOptions(topics_);
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    if (!latched_options.outbound_topics.empty() || !latched_options.inbound_topics.empty()) {
+      diagnostic_state_.latched_topic_forwarder_active.emplace(false);
+    } else {
+      diagnostic_state_.latched_topic_forwarder_active.reset();
+    }
+  }
 
   RCLCPP_INFO(this->get_logger(), "%zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
@@ -354,7 +364,12 @@ void RosPortal::stopRoomComponents() {
   cli_manager_.reset();
   diagnostic_state_.cli_manager_active.store(false, std::memory_order_relaxed);
   latched_topic_forwarder_.reset();
-  diagnostic_state_.latched_topic_forwarder_active.store(false, std::memory_order_relaxed);
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    if (diagnostic_state_.latched_topic_forwarder_active.has_value()) {
+      diagnostic_state_.latched_topic_forwarder_active->store(false, std::memory_order_relaxed);
+    }
+  }
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   room_components_started_ = false;
@@ -463,10 +478,13 @@ void RosPortal::initializeDiagnostics() {
 void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
   std::string config_path;
   std::string local_identity;
+  bool latched_topic_forwarder_inactive = false;
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     config_path = diagnostic_state_.config_path;
     local_identity = diagnostic_state_.local_identity;
+    latched_topic_forwarder_inactive = diagnostic_state_.latched_topic_forwarder_active.has_value() &&
+                                       !diagnostic_state_.latched_topic_forwarder_active->load(std::memory_order_relaxed);
   }
 
   std::string components_inactive;
@@ -482,7 +500,7 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   if (!diagnostic_state_.topic_forwarder_active.load(std::memory_order_relaxed)) {
     append_component("topic_forwarder");
   }
-  if (!diagnostic_state_.latched_topic_forwarder_active.load(std::memory_order_relaxed)) {
+  if (latched_topic_forwarder_inactive) {
     append_component("latched_topic_forwarder");
   }
   if (!diagnostic_state_.service_forwarder_active.load(std::memory_order_relaxed)) {
@@ -838,8 +856,12 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
 
 bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics) {
   auto options = utils::latchedTopicForwarderOptions(topics);
-  if (options.outbound_topics.empty() && options.inbound_topics.empty()) {
-    diagnostic_state_.latched_topic_forwarder_active.store(false, std::memory_order_relaxed);
+  const bool latched_topics_configured = !options.outbound_topics.empty() || !options.inbound_topics.empty();
+  if (!latched_topics_configured) {
+    {
+      const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+      diagnostic_state_.latched_topic_forwarder_active.reset();
+    }
     RCLCPP_INFO(this->get_logger(), "No latched topics configured; skipping latched topic forwarder");
     return true;
   }
@@ -871,9 +893,16 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
     latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(std::move(options),
                                                                        this->weak_from_this(), // after constructor
                                                                        std::move(methods), makeDiagnosticsFns());
-    diagnostic_state_.latched_topic_forwarder_active.store(latched_topic_forwarder_ != nullptr,
-                                                           std::memory_order_relaxed);
     latched_topic_forwarder_->start();
+    {
+      const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+      if (diagnostic_state_.latched_topic_forwarder_active.has_value()) {
+        diagnostic_state_.latched_topic_forwarder_active->store(latched_topic_forwarder_ != nullptr,
+                                                               std::memory_order_relaxed);
+      } else {
+        diagnostic_state_.latched_topic_forwarder_active.emplace(latched_topic_forwarder_ != nullptr);
+      }
+    }
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder: %s", error.what());
     return false;

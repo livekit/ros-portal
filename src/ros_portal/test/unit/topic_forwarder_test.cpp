@@ -846,8 +846,9 @@ TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) 
   const auto reader_stopped = [&]() {
     std::lock_guard<std::mutex> lock(forwarder.inbound_data_track_states_mutex_);
     const auto state = forwarder.inbound_data_track_states_.find("stopped-reader");
+    // Three synchronous track rejections, then the terminal error from this reader.
     return state != forwarder.inbound_data_track_states_.end() &&
-           forwarder.diagnostic_state_.inbound_terminal_errors.load(std::memory_order_relaxed) == 1U &&
+           forwarder.diagnostic_state_.inbound_failures.load(std::memory_order_relaxed) == 4U &&
            !state->second->reader_thread_alive.load(std::memory_order_relaxed);
   };
   ASSERT_TRUE(spinUntil(reader_stopped));
@@ -856,18 +857,19 @@ TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) 
   forwarder.populateStatus(status);
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(valueFor(status, "inbound.data_tracks"), "1");
-  // One track rejected for each of: no ROS type, topic patterns, and name resolution.
-  EXPECT_EQ(valueFor(status, "inbound.failures"), "3");
+  // One track rejected for each of: no ROS type, topic patterns, and name resolution,
+  // plus the stream that ended with a terminal error.
+  EXPECT_EQ(valueFor(status, "inbound.failures"), "4");
   // The stopped reader thread raises the summary to ERROR but is not published as a field.
   EXPECT_FALSE(valueFor(status, "inbound.reader_threads_alive").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_no_type").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_not_allowed").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_name_resolution_failed").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.publish_failures").has_value());
-  EXPECT_EQ(valueFor(status, "inbound.json_decode_failures"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.empty_payload_drops"), "0");
-  EXPECT_EQ(valueFor(status, "inbound.terminal_errors"), "1");
-  EXPECT_EQ(valueFor(status, "inbound.last_terminal_error"), "reader stopped");
+  EXPECT_FALSE(valueFor(status, "inbound.json_decode_failures").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.empty_payload_drops").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.terminal_errors").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.last_terminal_error").has_value());
 }
 
 } // namespace ros_portal

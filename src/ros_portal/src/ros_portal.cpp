@@ -679,12 +679,12 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
       }
 
       auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-      writer->try_push = [operations_enabled = room_operations_enabled_,
-                          track = std::move(track)](std::vector<std::uint8_t> payload) {
+      writer->try_push = [operations_enabled = room_operations_enabled_, track = std::move(track)](
+                             const std::uint8_t* data, std::size_t size) {
         if (!operations_enabled->load()) {
           return livekit::Result<void, std::string>::success();
         }
-        const auto push_result = track->tryPush(std::move(payload));
+        const auto push_result = track->tryPush(data, size);
         if (!push_result) {
           const auto& error = push_result.error();
           return livekit::Result<void, std::string>::failure(
@@ -789,7 +789,9 @@ bool RosPortal::initializeCliManager() {
         this->get_node_graph_interface(),
         this->get_node_topics_interface(),
         this->get_node_logging_interface(),
-        [manager = graph_manager_.get()]() { return manager->topics(); },
+        [graph = this->get_node_graph_interface()]() {
+          return std::make_shared<const TopicNamesAndTypes>(graph->get_topic_names_and_types());
+        },
         [manager = graph_manager_.get()]() { return manager->services(); },
     };
     cli_manager_ =

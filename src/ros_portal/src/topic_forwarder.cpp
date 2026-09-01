@@ -270,7 +270,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       encoding = state.encoding;
     }
 
-    std::vector<std::uint8_t> payload;
+    livekit::Result<void, std::string> push_result = livekit::Result<void, std::string>::success();
     if (encoding == OutboundEncoding::JsonSchema) {
       std::string error;
       const auto json = introspection::jsonFromSerializedMessage(topic_type, *msg, error);
@@ -279,12 +279,11 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
                              topic_name.c_str(), error.c_str());
         return;
       }
-      payload.assign(json->begin(), json->end());
+      push_result = writer->try_push(reinterpret_cast<const std::uint8_t*>(json->data()), json->size());
     } else {
-      payload.assign(rcl_msg.buffer, rcl_msg.buffer + rcl_msg.buffer_length);
+      push_result = writer->try_push(rcl_msg.buffer, rcl_msg.buffer_length);
     }
 
-    auto push_result = writer->try_push(std::move(payload));
     if (!push_result) {
       RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Failed to push data frame for '%s': %s", topic_name.c_str(),
                            push_result.error().c_str());

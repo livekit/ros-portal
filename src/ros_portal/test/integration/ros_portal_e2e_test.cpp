@@ -146,7 +146,7 @@ protected:
     return waitFor(
         [&]() {
           if (!received.load()) {
-            (void)track->tryPush(std::vector<std::uint8_t>(payload));
+            (void)track->tryPush(payload.data(), payload.size());
           }
           return received.load();
         },

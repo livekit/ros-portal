@@ -445,9 +445,9 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
   }
 
   try {
-    // List RPCs promise the graph state at request time. Discovery and topic
-    // publishing can use a shared snapshot, but a cached snapshot may still
-    // represent the generation before a just-observed graph event.
+    // List RPCs and type-sensitive topic publishing require graph state at
+    // request time. Discovery can use a shared snapshot, but a cached snapshot
+    // may still represent the generation before a just-observed graph event.
     const auto topics =
         std::make_shared<const TopicNamesAndTypes>(node_interfaces_.node_graph->get_topic_names_and_types());
     const auto output =

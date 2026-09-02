@@ -29,6 +29,22 @@ ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
    against the local ROS installation, and republishes accepted CDR payloads
    into ROS using the track name as the local topic name.
 
+The node supports two deployment layouts. `ros_portal_node` runs it in a
+dedicated process with its own multithreaded executor. The registered
+`ros_portal::RosPortalComponent` adapter loads the same implementation into a
+generic ROS2 component container. Component mode defers the initial blocking
+LiveKit connection attempt until after construction, when the container's
+executor is running.
+
+The bundled launch file uses a multithreaded component container. The container
+owns its executor, so `thread_num` replaces the standalone `ros_threads`
+configuration in this layout. A single worker is supported. More workers let
+other callbacks run during synchronous LiveKit RPC operations.
+
+Component instances in one process share a reference-counted LiveKit SDK
+runtime. They release the runtime after the last ROS Portal component destroys
+its LiveKit resources.
+
 ## Topic Discovery
 
 For outbound topic patterns, ROS Portal reconciles subscriptions after each ROS

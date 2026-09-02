@@ -1,5 +1,17 @@
 # Current Limitations
 
+## ROS2 Composition
+
+- A component container can use one worker thread. A synchronous LiveKit RPC
+  operation occupies that worker until the operation completes. Other ROS
+  callbacks in the container wait during this time.
+- `LIVEKIT_URL`, `LIVEKIT_TOKEN`, LiveKit logging, memory, and fault isolation
+  are process-wide in composition. A failure that terminates the container
+  also terminates every component it hosts.
+- ROS Portal reference-counts the LiveKit runtime across its component
+  instances. Other LiveKit components must coordinate process-global SDK
+  ownership with ROS Portal.
+
 ## Video Tracks
 - `VideoSource` and `LocalVideoTrack` are created from the first received image
   dimensions. If camera resolution changes mid-stream, the track is not

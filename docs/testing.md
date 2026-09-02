@@ -2,6 +2,12 @@
 
 There are unit and integration tests which are run in CI. For more manual integration testing, see [`ros_portal_tutorials`](../src/ros_portal_tutorials/README.md), which drives ROS Portal against turtlesim. For a full robot in simulation and on hardware, see [`waver_ros`](https://github.com/livekit-examples/waver_ros).
 
+CI uses the reusable `CI Matrix Entry` workflow for every supported ROS
+distribution and architecture. The `Nightly Stress Tests` workflow uses the
+same workflow and requires each selected CTest test to pass 100 times per
+matrix entry. It can also be started manually with different repetition and
+timeout values.
+
 ## Unit Tests
 
 ```bash

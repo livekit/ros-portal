@@ -14,6 +14,16 @@ on:
       ros_image_tag: {required: true, type: string}
       ros_image_digest: {required: true, type: string}
       git_ref: {required: false, type: string}
+      test_repetitions:
+        description: Number of successful executions required for each selected CTest test
+        required: false
+        default: 1
+        type: number
+      timeout_minutes:
+        description: Maximum duration of this test job in minutes
+        required: false
+        default: 90
+        type: number
 
 permissions:
   contents: read
@@ -22,7 +32,7 @@ jobs:
   test:
     name: Tests
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
       LIVEKIT_BUILD_SDK_FROM_SOURCE: "false"
       INSTALL_CPP_TOOLS: "false"
@@ -31,6 +41,7 @@ jobs:
       ROS_IMAGE_DIGEST: ${{ inputs.ros_image_digest }}
       ROS_IMAGE_REPOSITORY: ros
       ROS_IMAGE_TAG: ${{ inputs.ros_image_tag }}
+      TEST_REPETITIONS: ${{ inputs.test_repetitions }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -51,6 +62,24 @@ jobs:
           path: /tmp/ros-build-output
       - name: Restore colcon build output
         run: tar --extract --gzip --file /tmp/ros-build-output/ros-build-output.tar.gz
+      - name: Validate test configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "${TEST_REPETITIONS}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "test_repetitions must be a positive integer; got: ${TEST_REPETITIONS}" >&2
+            exit 1
+          fi
+
+          timeout_minutes="${{ inputs.timeout_minutes }}"
+          if ! [[ "${timeout_minutes}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "timeout_minutes must be a positive integer; got: ${timeout_minutes}" >&2
+            exit 1
+          fi
+          if [ "${timeout_minutes}" -gt 360 ]; then
+            echo "timeout_minutes must be <= 360; got: ${timeout_minutes}" >&2
+            exit 1
+          fi
       - name: "colcon test: unit"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
         with:
@@ -62,10 +91,13 @@ jobs:
               source "/opt/ros/${ROS_DISTRO}/setup.bash"
               source install/setup.bash
               set -u
+              test_repetitions="${{ inputs.test_repetitions }}"
+              retest_until_fail=$((test_repetitions - 1))
+              echo "===== Run each unit CTest test ${test_repetitions} times ====="
               test_exit=0
-              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_unit_tests || test_exit=$?
+              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --retest-until-fail "${retest_until_fail}" --ctest-args -R ros_portal_unit_tests || test_exit=$?
               colcon test-result --verbose --all
-              exit $test_exit
+              exit "${test_exit}"
             '
       - name: Start livekit-server
         id: livekit_server
@@ -93,10 +125,13 @@ jobs:
               source install/setup.bash
               set -u
               source .token_helpers/set_test_tokens.bash
+              test_repetitions="${{ inputs.test_repetitions }}"
+              retest_until_fail=$((test_repetitions - 1))
+              echo "===== Run each integration CTest test ${test_repetitions} times ====="
               test_exit=0
-              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_integration_tests || test_exit=$?
+              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --retest-until-fail "${retest_until_fail}" --ctest-args -R ros_portal_integration_tests || test_exit=$?
               colcon test-result --verbose --all
-              exit $test_exit
+              exit "${test_exit}"
             '
       - name: "colcon test: connection faults"
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3
@@ -117,10 +152,13 @@ jobs:
               set -u
               source .token_helpers/set_test_tokens.bash
               export ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS=1
+              test_repetitions="${{ inputs.test_repetitions }}"
+              retest_until_fail=$((test_repetitions - 1))
+              echo "===== Run each connection-fault CTest test ${test_repetitions} times ====="
               test_exit=0
-              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_connection_fault_tests || test_exit=$?
+              GTEST_COLOR=1 colcon test --packages-select ros_portal --event-handlers console_direct+ --return-code-on-test-failure --retest-until-fail "${retest_until_fail}" --ctest-args -R ros_portal_connection_fault_tests || test_exit=$?
               colcon test-result --verbose --all
-              exit $test_exit
+              exit "${test_exit}"
             '
       - name: Start token server
         id: token_server

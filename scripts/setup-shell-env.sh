@@ -99,8 +99,8 @@ _source_test_tokens_if_needed()
     if [ -n "\${LIVEKIT_URL:-}" ] && [ -n "\${LIVEKIT_TOKEN_A:-}" ] && [ -n "\${LIVEKIT_TOKEN_B:-}" ]; then
         return 0
     fi
-    if [ -f "\${WS}/.token_helpers/set_test_tokens.bash" ]; then
-        source "\${WS}/.token_helpers/set_test_tokens.bash"
+    if [ -f "\${WS}/scripts/set-test-tokens.sh" ]; then
+        source "\${WS}/scripts/set-test-tokens.sh"
     fi
 }
 

@@ -23,7 +23,7 @@
 // publisher, and ROS Portal-to-ROS Portal arrival + forwarding.
 //
 // Requires a running LiveKit server and credentials; see
-// .token_helpers/set_test_tokens.bash. The test skips when they are absent.
+// scripts/set-test-tokens.sh. The test skips when they are absent.
 
 #include <gtest/gtest.h>
 #include <livekit/livekit.h>
@@ -212,7 +212,7 @@ protected:
 TEST_F(LatchedTfStaticE2E, RepublishesLatchedStatePublishedBeforePeerJoined) {
   if (!configured()) {
     GTEST_SKIP() << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set "
-                    "(source .token_helpers/set_test_tokens.bash)";
+                    "(source scripts/set-test-tokens.sh)";
   }
 
   const auto [domain_a, domain_b] = testDomainIds();

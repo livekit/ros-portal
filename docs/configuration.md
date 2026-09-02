@@ -130,7 +130,7 @@ All config lives under `ros_portal`.
 |---|---:|---:|---:|---|
 | `$schema` | string | no | - | Link to JSON schema. Use `https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json` and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
-| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
+| `ros_threads` | integer | no | `0` | Standalone `ros_portal_node` executor thread count. `0` uses the available CPU-core count. In composition, configure the container's `thread_num` parameter instead. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
 

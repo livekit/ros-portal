@@ -93,7 +93,25 @@ public:
   /// should poll this until it returns true rather than assuming immediacy.
   bool hasParticipant(const std::string& participant_id) const;
 
+protected:
+  /// @brief Initialize ROS Portal without making the initial blocking LiveKit
+  /// connection attempt.
+  ///
+  /// Component containers own the executor and must not be blocked while a
+  /// component is being constructed. The regular connection timer makes the
+  /// first attempt after construction instead.
+  /// @return True if local initialization completed, false for expected
+  /// startup failures that have already been logged.
+  bool initializeForComposition();
+
 private:
+  /// @brief Initialize ROS Portal and optionally connect immediately.
+  /// @param connect_immediately Whether to make the first LiveKit connection
+  /// attempt before returning.
+  /// @return True if initialization completed, false for expected startup
+  /// failures that have already been logged.
+  bool initializeImpl(const bool connect_immediately);
+
   /// @brief Poll the room connection state and make a scheduled connection
   /// attempt when needed.
   void pollConnection();

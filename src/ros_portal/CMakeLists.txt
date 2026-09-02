@@ -295,6 +295,25 @@ target_link_libraries(ros_portal_lib
 livekit_set_runtime_rpath(ros_portal_lib)
 
 # ---------------------------------------------------------------------------
+# Composable ROS Portal node
+# ---------------------------------------------------------------------------
+ament_auto_add_library(ros_portal_component SHARED
+  src/ros_portal_component.cpp
+)
+target_link_libraries(ros_portal_component
+  ros_portal_lib
+  "${LIVEKIT_CORE_TARGET}"
+  ${LIVEKIT_EXTRA_LINK_LIBS}
+)
+medkit_target_dependencies(ros_portal_component
+  rclcpp_components
+)
+livekit_set_runtime_rpath(ros_portal_component)
+rclcpp_components_register_nodes(ros_portal_component
+  "ros_portal::RosPortalComponent"
+)
+
+# ---------------------------------------------------------------------------
 # Main ROS Portal node
 # ---------------------------------------------------------------------------
 ament_auto_add_executable(ros_portal_node

@@ -76,7 +76,11 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
   initializeDiagnostics();
 }
 
-bool RosPortal::initialize() {
+bool RosPortal::initialize() { return initializeImpl(true); }
+
+bool RosPortal::initializeForComposition() { return initializeImpl(false); }
+
+bool RosPortal::initializeImpl(const bool connect_immediately) {
   if (initialized_.load(std::memory_order_relaxed)) {
     RCLCPP_WARN(this->get_logger(), "ROS Portal is already initialized");
     return true;
@@ -230,8 +234,11 @@ bool RosPortal::initialize() {
   initialized_.store(true, std::memory_order_relaxed);
   RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
 
-  // Call once to immediately connect, avoiding 1 second delay before the first connection attempt in the timer
-  pollConnection();
+  if (connect_immediately) {
+    // Standalone startup retains its immediate first connection attempt. A
+    // component lets the timer perform this blocking work after construction.
+    pollConnection();
+  }
   return true;
 }
 

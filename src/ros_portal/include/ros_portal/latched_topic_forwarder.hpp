@@ -100,7 +100,7 @@ public:
     /// @brief Normalized ROS topic names accepted inbound as latched state.
     std::unordered_set<std::string> inbound_topics;
     /// @brief Outbound latched topics whose subscriptions publish ROS 2 topic
-    /// statistics on `/statistics`.
+    /// statistics on `<topic>/statistics` (a child topic per measured topic).
     std::unordered_set<std::string> ros_topic_stats_topics;
     /// @brief Per-attempt LiveKit RPC timeout in seconds.
     std::uint8_t rpc_timeout_sec{5};

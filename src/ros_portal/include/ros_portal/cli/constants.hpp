@@ -53,6 +53,8 @@ inline constexpr std::uint8_t kDefaultTimeoutSec = 10;
 /// @brief Extra LiveKit RPC timeout margin for remote `ros2 service call`.
 /// The RPC round-trip must outlive the remote ROS service-call wait.
 inline constexpr std::uint8_t kServiceCallRpcTimeoutMarginSec = 1;
+/// @brief Stable error returned when a local ROS service call times out.
+inline constexpr const char* kServiceCallTimeoutError = "Service call timed out.";
 
 /// @brief Maximum number of reusable generic topic publishers cached by topic.
 inline constexpr std::size_t kMaxCachedTopicPublishers = 20U;

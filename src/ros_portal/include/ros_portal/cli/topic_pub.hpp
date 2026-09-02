@@ -20,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <rclcpp/generic_publisher.hpp>
+#include <rclcpp/logger.hpp>
 #include <rclcpp/node_interfaces/node_graph_interface.hpp>
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <string>
@@ -52,10 +53,13 @@ public:
   ///   against discovered topic type information.
   /// @param topic_publish_allowed Optional predicate for enforcing ROS Portal topic
   ///   direction/allow rules. When omitted, all resolved topics are allowed.
+  /// @param topic_snapshot Optional shared topic graph query used for type validation.
+  /// @param logger Logger used to report generic-publisher cache pressure.
   /// @throws std::invalid_argument if either node interface is null.
   TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
            rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph, TopicPublishAllowed topic_publish_allowed = {},
-           TopicGraphSnapshotFn topic_snapshot = {});
+           TopicGraphSnapshotFn topic_snapshot = {},
+           rclcpp::Logger logger = rclcpp::get_logger("ros_portal.cli.topic_pub"));
 
   /// @brief Publish one native YAML payload to a ROS topic.
   ///
@@ -90,6 +94,8 @@ private:
   TopicGraphSnapshotFn topic_snapshot_;
   /// @brief Predicate enforcing whether a resolved topic may be published.
   TopicPublishAllowed topic_publish_allowed_;
+  /// @brief Logger used to report generic-publisher cache pressure.
+  rclcpp::Logger logger_;
   /// @brief Guards access to the generic publisher cache.
   mutable std::mutex mutex_;
   /// @brief Bounded cache of generic publishers keyed by resolved topic name.

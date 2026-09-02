@@ -20,6 +20,7 @@
 #include <livekit/data_track_schema.h>
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -63,6 +64,26 @@ enum class OutboundEncoding {
 /// may be retried. The class is thread-safe.
 class SchemaManager {
 public:
+  /// @brief Snapshot of counters reported under `schema.*`.
+  struct DiagnosticsSnapshot {
+    /// @brief Number of schema definitions currently cached or in flight.
+    std::size_t definitions_active{0};
+    /// @brief Schema definitions rejected by the SDK or an exception.
+    std::uint64_t define_failures{0};
+    /// @brief Local ROS or JSON schema render failures.
+    std::uint64_t render_failures{0};
+    /// @brief Explicit ros2idl requests skipped due to another local encoding.
+    std::uint64_t encoding_mismatch_skips{0};
+    /// @brief Inbound tracks missing a supported frame/schema encoding.
+    std::uint64_t inbound_rejected_no_encoding{0};
+    /// @brief Inbound tracks whose advertised type differs from the local type.
+    std::uint64_t inbound_rejected_name_mismatch{0};
+    /// @brief Inbound tracks whose remote definition could not be retrieved.
+    std::uint64_t inbound_rejected_remote_unavailable{0};
+    /// @brief Inbound tracks whose local and remote definitions differ.
+    std::uint64_t inbound_rejected_definition_differs{0};
+  };
+
   /// @brief LiveKit operations needed to store and retrieve schema definitions.
   struct LiveKitMethods {
     /// @brief Define schema text on the local LiveKit participant.
@@ -125,6 +146,10 @@ public:
   /// conversion uses local introspection only.
   bool validateInboundSchema(const InboundSchemaContext& context) const;
 
+  /// @brief Snapshot schema definition and validation diagnostics.
+  /// @return Current cache size and cumulative failure counters.
+  DiagnosticsSnapshot diagnosticsSnapshot() const;
+
 private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(SchemaManagerTest, SchemaEncodingFromRosDefinition);
@@ -157,13 +182,32 @@ private:
     bool defined{false};
   };
 
+  /// @brief Mutable counters consumed by TopicForwarder's diagnostic task.
+  struct DiagnosticState {
+    /// @brief Schema definitions rejected by the SDK or an exception.
+    std::atomic<std::uint64_t> define_failures{0};
+    /// @brief Local ROS or JSON schema render failures.
+    std::atomic<std::uint64_t> render_failures{0};
+    /// @brief Explicit ros2idl requests skipped due to another local encoding.
+    std::atomic<std::uint64_t> encoding_mismatch_skips{0};
+    /// @brief Inbound tracks missing a supported frame/schema encoding.
+    std::atomic<std::uint64_t> inbound_rejected_no_encoding{0};
+    /// @brief Inbound tracks whose advertised type differs from the local type.
+    std::atomic<std::uint64_t> inbound_rejected_name_mismatch{0};
+    /// @brief Inbound tracks whose remote definition could not be retrieved.
+    std::atomic<std::uint64_t> inbound_rejected_remote_unavailable{0};
+    /// @brief Inbound tracks whose local and remote definitions differ.
+    std::atomic<std::uint64_t> inbound_rejected_definition_differs{0};
+  };
+
   LiveKitMethods livekit_methods_;
   RenderSchemaFn render_schema_;
   RenderJsonSchemaFn render_json_schema_;
   rclcpp::Logger logger_;
-  std::mutex defined_schemas_mutex_;
+  mutable std::mutex defined_schemas_mutex_;
   std::condition_variable defined_schemas_cv_;
   std::unordered_map<std::string, DefinitionState> defined_schemas_;
+  mutable DiagnosticState diagnostic_state_;
 };
 
 } // namespace ros_portal

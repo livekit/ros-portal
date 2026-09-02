@@ -16,8 +16,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <rclcpp/callback_group.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
@@ -27,8 +29,13 @@
 #include <string>
 #include <vector>
 
+#include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/introspection/runtime_type_support.hpp"
 #include "ros_portal/types.hpp"
+
+namespace diagnostic_updater {
+class DiagnosticStatusWrapper;
+}
 
 namespace ros_portal {
 
@@ -72,24 +79,64 @@ public:
   /// @param node_interfaces Node interfaces used to create services.
   /// @param callback_group Callback group used by created services.
   /// @param livekit_methods LiveKit methods supplied by ROS Portal.
+  /// @param diagnostics ROS Portal-owned diagnostics functions used to register
+  /// the service-forwarder diagnostic task.
   /// @throws std::invalid_argument when required interfaces or callbacks are
   /// unset.
   ServiceForwarder(const std::vector<ServiceRoute>& routes, NodeInterfaces node_interfaces,
-                   const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods);
+                   const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods,
+                   diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Construct a service forwarder from a ROS node.
   /// @param routes Service routes that should be exposed locally.
   /// @param node ROS Portal node used for service hosting and logs.
   /// @param callback_group Callback group used by created services.
   /// @param livekit_methods LiveKit methods supplied by ROS Portal.
+  /// @param diagnostics ROS Portal-owned diagnostics functions used to register
+  /// the service-forwarder diagnostic task.
   ServiceForwarder(const std::vector<ServiceRoute>& routes, rclcpp::Node& node,
-                   const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods);
+                   const rclcpp::CallbackGroup::SharedPtr& callback_group, LiveKitMethods livekit_methods,
+                   diagnostics::DiagnosticsManagerFns diagnostics);
+
+  /// @brief Deregister the service-forwarder diagnostic task.
+  ~ServiceForwarder();
 
   /// @brief Return the number of local service servers created.
   std::size_t serviceCount() const;
 
 private:
   struct DynamicService;
+
+  /// @brief Mutable counters and metadata published by the diagnostic task.
+  struct DiagnosticState {
+    /// @brief Construct diagnostic state for the configured route count.
+    /// @param configured_routes Number of outgoing service routes.
+    explicit DiagnosticState(std::size_t configured_routes) : routes_configured(configured_routes) {}
+
+    /// @brief Number of configured outgoing service routes.
+    std::size_t routes_configured{0U};
+    /// @brief Count of route setup failures, aggregating routes rejected for
+    /// incomplete configuration and routes whose runtime type support could not be
+    /// loaded. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> route_failures{0};
+    /// @brief Count of requests completed with a populated local response.
+    std::atomic<std::uint64_t> requests_succeeded{0};
+    /// @brief Count of failures on the request path, aggregating a disconnected room,
+    /// an unavailable target participant, a request that could not be serialized, and
+    /// a failed LiveKit RPC. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> request_failures{0};
+    /// @brief Count of failures on the response path, aggregating malformed RPC
+    /// responses, errors returned by the remote service, responses that could not
+    /// populate the ROS response, and timeouts sending the response to the local ROS
+    /// client. Every occurrence is logged with its specific cause.
+    std::atomic<std::uint64_t> response_failures{0};
+    /// @brief Count of exceptions caught around forwarding handlers.
+    std::atomic<std::uint64_t> handler_exceptions{0};
+    /// @brief Protects the most recent failure metadata.
+    std::mutex last_failure_mutex;
+    /// @brief Stable category associated with the most recent failure.
+    std::string last_failure_reason;
+  };
 
   /// @brief Create one runtime-typed service server.
   /// @param route Service route metadata.
@@ -101,12 +148,28 @@ private:
   /// @param route Route metadata for this service.
   /// @param request_data Runtime-typed request message memory.
   /// @param response_data Runtime-typed response message memory to populate.
-  void forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data) const;
+  void forwardRequest(const ServiceRoute& route, const void* request_data, void* response_data);
+
+  /// @brief Record one request-path failure under a stable failure category.
+  void recordRequestFailure(const std::string& reason);
+  /// @brief Record one response-path failure under a stable failure category.
+  void recordResponseFailure(const std::string& reason);
+  /// @brief Record an exception escaping a forwarding handler.
+  void recordHandlerException();
+  /// @brief Record a timeout sending a response to the local ROS client.
+  void recordResponseSendTimeout();
+  /// @brief Update the most recent failure metadata.
+  void recordLastFailure(const std::string& reason);
+  /// @brief Populate the service-forwarder diagnostic status.
+  void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
   NodeInterfaces node_interfaces_;
   LiveKitMethods livekit_methods_;
+  diagnostics::DiagnosticsManagerFns diagnostics_;
   rclcpp::Logger logger_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
+  /// @brief Mutable state owned exclusively for diagnostics reporting.
+  DiagnosticState diagnostic_state_;
 };
 
 } // namespace ros_portal

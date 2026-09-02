@@ -285,7 +285,18 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   diagnostic_updater::DiagnosticStatusWrapper ok_status;
   forwarder.populateStatus(ok_status);
   EXPECT_EQ(ok_status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(valueFor(ok_status, "inbound_schemas_incorrect"), "0");
+  EXPECT_EQ(valueFor(ok_status, "inbound.failures"), "0");
+  // Schema outcomes are folded into the inbound/outbound failure counters and are no
+  // longer published as their own fields.
+  EXPECT_FALSE(valueFor(ok_status, "inbound_schemas_incorrect").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.definitions_active").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.define_failures").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.render_failures").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.encoding_mismatch_skips").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_no_encoding").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_name_mismatch").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_remote_unavailable").has_value());
+  EXPECT_FALSE(valueFor(ok_status, "schema.inbound_rejected_definition_differs").has_value());
 
   TopicForwarder::RemoteDataTrackDescriptor descriptor;
   descriptor.sid = "schema-mismatch-sid";
@@ -299,7 +310,8 @@ TEST_F(TopicForwarderTest, DiagnosticsWarnsAfterInboundSchemaValidationFailure) 
   diagnostic_updater::DiagnosticStatusWrapper warn_status;
   forwarder.populateStatus(warn_status);
   EXPECT_EQ(warn_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(valueFor(warn_status, "inbound_schemas_incorrect"), "1");
+  // The rejected track's schema name mismatch is counted as an inbound failure.
+  EXPECT_EQ(valueFor(warn_status, "inbound.failures"), "1");
 }
 
 // Case: A remote track claims a bidirectional topic before its local publisher appears.
@@ -750,6 +762,114 @@ TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
   }
 
   EXPECT_EQ(push_count->load(), kSamples);
+}
+
+TEST_F(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures) {
+  auto push_count = std::make_shared<std::atomic<int>>(0);
+  auto remaining_failures = std::make_shared<std::atomic<int>>(1);
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_,
+                           makeFlakyLiveKitMethods(push_count, remaining_failures), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  diagnostic_updater::DiagnosticStatusWrapper pending_status;
+  forwarder.populateStatus(pending_status);
+  EXPECT_EQ(pending_status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(pending_status, "outbound.data_tracks"), "1");
+  EXPECT_EQ(valueFor(pending_status, "outbound.video_tracks"), "0");
+  EXPECT_EQ(valueFor(pending_status, "outbound.subscriptions"), "1");
+  EXPECT_EQ(valueFor(pending_status, "outbound.failures"), "0");
+  // The pending writer raises the summary to ERROR but is no longer published as a field.
+  EXPECT_FALSE(valueFor(pending_status, "outbound.data_tracks_pending_writer").has_value());
+  EXPECT_FALSE(valueFor(pending_status, "outbound.image_tracks_pending_sink").has_value());
+
+  std_msgs::msg::String msg;
+  msg.data = "dropped by writer";
+  publisher->publish(msg);
+  ASSERT_TRUE(spinUntil([&]() { return remaining_failures->load() <= 0; }));
+
+  diagnostic_updater::DiagnosticStatusWrapper failed_status;
+  forwarder.populateStatus(failed_status);
+  EXPECT_EQ(failed_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  // The rejected push is the only outbound failure observed.
+  EXPECT_EQ(valueFor(failed_status, "outbound.failures"), "1");
+  EXPECT_FALSE(valueFor(failed_status, "outbound.push_failures").has_value());
+  EXPECT_FALSE(valueFor(failed_status, "outbound.json_conversion_failures").has_value());
+  EXPECT_FALSE(valueFor(failed_status, "outbound.subscription_create_failures").has_value());
+}
+
+TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) {
+  auto options = makeOptions();
+  options.preserve_id_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/remote/name"});
+  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  TopicForwarder::RemoteDataTrackDescriptor not_allowed;
+  not_allowed.sid = "not-allowed";
+  not_allowed.track_name = "/blocked/topic";
+  not_allowed.publisher_identity = "remote_robot";
+  forwarder.onDataTrackPublished(std::move(not_allowed));
+
+  TopicForwarder::RemoteDataTrackDescriptor no_type;
+  no_type.sid = "no-type";
+  no_type.track_name = "/remote/no_type";
+  no_type.publisher_identity = "remote_robot";
+  forwarder.onDataTrackPublished(std::move(no_type));
+
+  TopicForwarder::RemoteDataTrackDescriptor bad_name;
+  bad_name.sid = "bad-name";
+  bad_name.track_name = "/remote/name";
+  bad_name.schema = livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::JsonSchema};
+  bad_name.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  forwarder.onDataTrackPublished(std::move(bad_name));
+
+  TopicForwarder::RemoteDataTrackDescriptor stopped_reader;
+  stopped_reader.sid = "stopped-reader";
+  stopped_reader.track_name = "/remote/stopped";
+  stopped_reader.publisher_identity = "remote_robot";
+  stopped_reader.schema =
+      livekit::DataTrackSchemaId{"std_msgs/msg/String", livekit::DataTrackSchemaEncoding::JsonSchema};
+  stopped_reader.frame_encoding = livekit::DataTrackFrameEncoding::Json;
+  stopped_reader.subscribe =
+      []() -> livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>, std::string> {
+    auto stream = std::make_shared<TopicForwarder::RemoteDataTrackStream>();
+    stream->read = [](livekit::DataTrackFrame&) { return false; };
+    stream->close = []() {};
+    stream->terminal_error = []() { return std::optional<std::string>{"reader stopped"}; };
+    return livekit::Result<std::shared_ptr<TopicForwarder::RemoteDataTrackStream>, std::string>::success(
+        std::move(stream));
+  };
+  forwarder.onDataTrackPublished(std::move(stopped_reader));
+
+  const auto reader_stopped = [&]() {
+    std::lock_guard<std::mutex> lock(forwarder.inbound_data_track_states_mutex_);
+    const auto state = forwarder.inbound_data_track_states_.find("stopped-reader");
+    // Three synchronous track rejections, then the terminal error from this reader.
+    return state != forwarder.inbound_data_track_states_.end() &&
+           forwarder.diagnostic_state_.inbound_failures.load(std::memory_order_relaxed) == 4U &&
+           !state->second->reader_thread_alive.load(std::memory_order_relaxed);
+  };
+  ASSERT_TRUE(spinUntil(reader_stopped));
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(status, "inbound.data_tracks"), "1");
+  // One track rejected for each of: no ROS type, topic patterns, and name resolution,
+  // plus the stream that ended with a terminal error.
+  EXPECT_EQ(valueFor(status, "inbound.failures"), "4");
+  // The stopped reader thread raises the summary to ERROR but is not published as a field.
+  EXPECT_FALSE(valueFor(status, "inbound.reader_threads_alive").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_no_type").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_not_allowed").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.tracks_rejected_name_resolution_failed").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.publish_failures").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.json_decode_failures").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.empty_payload_drops").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.terminal_errors").has_value());
+  EXPECT_FALSE(valueFor(status, "inbound.last_terminal_error").has_value());
 }
 
 } // namespace ros_portal

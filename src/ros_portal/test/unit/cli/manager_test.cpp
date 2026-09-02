@@ -920,17 +920,31 @@ TEST(ManagerDiagnosticsTest, ReportsOkWhenAllCommandPairsRegistered) {
   EXPECT_EQ(diagnosticValueFor(status, kServiceCallRpcMethod), "ok");
   EXPECT_EQ(diagnosticValueFor(status, kTopicListRpcMethod), "ok");
 
-  // Cache-pressure and remote-failure fields start empty on a fresh manager.
-  EXPECT_EQ(diagnosticValueFor(status, "topic_pub_cache"), "0/" + std::to_string(kMaxCachedTopicPublishers));
-  EXPECT_EQ(diagnosticValueFor(status, "service_call_cache"), "0/" + std::to_string(kMaxCachedServiceClients));
+  // Cache-pressure and RPC outcome fields start empty on a fresh manager.
   EXPECT_EQ(diagnosticValueFor(status, "topic_pub_cache_full_rejections"), "0");
   EXPECT_EQ(diagnosticValueFor(status, "service_call_cache_full_rejections"), "0");
-  EXPECT_EQ(diagnosticValueFor(status, "remote_participant_not_found"), "0");
-  EXPECT_EQ(diagnosticValueFor(status, "remote_transport_failures"), "0");
-  EXPECT_EQ(diagnosticValueFor(status, "remote_malformed_responses"), "0");
+  // Cache size and capacity are logged at each rejection, not published as fields.
+  EXPECT_FALSE(diagnosticValueFor(status, "topic_pub_cache_size").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "topic_pub_cache_capacity").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "service_call_cache_size").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "service_call_cache_capacity").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "topic_pub_cache").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "service_call_cache").has_value());
+  EXPECT_EQ(diagnosticValueFor(status, "rpc_failures"), "0");
+  // Request volume and the per-cause/per-method breakdowns are logged, not published.
+  EXPECT_FALSE(diagnosticValueFor(status, "remote_calls_total").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "remote_participant_not_found").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "remote_transport_failures").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "remote_malformed_responses").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, std::string(kTopicListRpcMethod) + ".rpc_invocations").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, std::string(kTopicListRpcMethod) + ".rpc_failures").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "inbound_rpc_requests").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "inbound_rpc_failures").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "topic_pub_rejected_not_allowed").has_value());
+  EXPECT_FALSE(diagnosticValueFor(status, "service_call_timeouts").has_value());
 }
 
-TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
+TEST(ManagerDiagnosticsTest, RemoteFailuresCountIntoRpcFailures) {
   auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_remote_test");
   const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
@@ -956,14 +970,44 @@ TEST(ManagerDiagnosticsTest, RemoteFailureBreakdownCountsFailures) {
   rpc_client.response_json = "{not valid json";
   manager.callRemoteTopicList(request);
 
+  // successful RPC: provides the denominator for the three failures above.
+  rpc_client.response_json = R"({"success":true,"err_msg":"","output":"/remote_topic\n"})";
+  manager.callRemoteTopicList(request);
+
   diagnostic_updater::DiagnosticStatusWrapper status;
   manager.populateStatus(status);
 
   // Command pairs are all fine, so the breakdown does not change the level.
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-  EXPECT_EQ(diagnosticValueFor(status, "remote_participant_not_found"), "1");
-  EXPECT_EQ(diagnosticValueFor(status, "remote_transport_failures"), "1");
-  EXPECT_EQ(diagnosticValueFor(status, "remote_malformed_responses"), "1");
+  // Three of the four calls failed, once each: absent participant, transport, malformed
+  // JSON. Each is counted once and logged with its RPC method and cause.
+  EXPECT_EQ(diagnosticValueFor(status, "rpc_failures"), "3");
+}
+
+TEST(ManagerDiagnosticsTest, CountsInboundOutcomesAndLocalFailures) {
+  auto node = std::make_shared<rclcpp::Node>("cli_manager_diag_inbound_test");
+  const auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  const auto diagnostics_updater = std::make_shared<diagnostic_updater::Updater>(node);
+  diagnostics_updater->setHardwareID("ros_portal");
+  const auto diagnostics_fns = test::makeDiagnosticsFns(diagnostics_updater);
+  FakeRpcClient rpc_client;
+  Manager manager(
+      *node, callback_group, rpc_client.makeLiveKitMethods(), [](const std::string&) { return false; },
+      diagnostics_fns);
+
+  manager.handleTopicListRpc("{}");
+  manager.handleTopicListRpc("not-json");
+  manager.handleTopicPubRpc(R"({"topic":"/forbidden","msg_type":"std_msgs/msg/String","payload":"{data: blocked}"})");
+  manager.handleServiceCallRpc(
+      R"({"service":"/missing","msg_type":"std_srvs/srv/SetBool","payload":"{data: true}","timeout_sec":1})");
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  manager.populateStatus(status);
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  // Three of the four inbound requests failed: malformed payload, a publish rejected by
+  // the local allow policy, and a service call that timed out.
+  EXPECT_EQ(diagnosticValueFor(status, "rpc_failures"), "3");
 }
 
 TEST(ManagerDiagnosticsTest, ReportsErrorWhenRpcRegistrationFails) {

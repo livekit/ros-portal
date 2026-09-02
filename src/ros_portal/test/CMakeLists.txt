@@ -20,6 +20,7 @@ endif()
 find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
 find_package(ament_lint_auto REQUIRED)
+find_package(launch_testing_ament_cmake REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
@@ -31,6 +32,15 @@ ament_add_pytest_test(
 ament_add_pytest_test(
   ros_portal_local_launch_test
   launch/test_ros_portal_local_launch.py
+)
+ament_add_pytest_test(
+  ros_portal_composable_launch_test
+  launch/test_ros_portal_composable_launch.py
+)
+add_launch_test(
+  launch/test_ros_portal_component.py
+  TARGET ros_portal_component_runtime_test
+  TIMEOUT 30
 )
 
 # ---------------------------------------------------------------------------

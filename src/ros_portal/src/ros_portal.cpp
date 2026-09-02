@@ -688,11 +688,12 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 
       auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
       writer->try_push = [operations_enabled = room_operations_enabled_, track = std::move(track)](
-                             const std::uint8_t* data, std::size_t size) {
+                             const std::uint8_t* data, std::size_t size,
+                             std::optional<std::uint64_t> user_timestamp) {
         if (!operations_enabled->load()) {
           return livekit::Result<void, std::string>::success();
         }
-        const auto push_result = track->tryPush(data, size);
+        const auto push_result = track->tryPush(data, size, user_timestamp);
         if (!push_result) {
           const auto& error = push_result.error();
           return livekit::Result<void, std::string>::failure(

@@ -110,6 +110,15 @@ find_package(ros2_medkit_cmake REQUIRED)
 include(ROS2MedkitCompat)
 medkit_find_yaml_cpp()
 
+option(ROS_PORTAL_ENABLE_TRACING
+  "Build low-overhead LTTng tracepoints on supported Linux systems" OFF)
+if(ROS_PORTAL_ENABLE_TRACING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(LTTNG_UST QUIET IMPORTED_TARGET lttng-ust)
+  endif()
+endif()
+
 if(TARGET LiveKit::livekit)
   set(LIVEKIT_CORE_TARGET LiveKit::livekit)
 elseif(TARGET livekit)
@@ -272,6 +281,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/schema/renderer.cpp
   src/service_forwarder.cpp
   src/topic_forwarder.cpp
+  src/tracing/tracepoints.cpp
   src/utils/base64.cpp
   src/utils/config_mapping.cpp
   src/utils/image_conversion.cpp
@@ -293,6 +303,20 @@ target_link_libraries(ros_portal_lib
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros_portal_lib)
+if(TARGET PkgConfig::LTTNG_UST)
+  target_compile_definitions(ros_portal_lib PRIVATE
+    ROS_PORTAL_HAS_LTTNG=1
+  )
+  target_include_directories(ros_portal_lib PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  )
+  target_link_libraries(ros_portal_lib
+    PkgConfig::LTTNG_UST
+  )
+  message(STATUS "ros_portal tracing: LTTng enabled")
+else()
+  message(STATUS "ros_portal tracing: disabled (LTTng unavailable or unsupported platform)")
+endif()
 
 # ---------------------------------------------------------------------------
 # Main ROS Portal node

@@ -80,7 +80,12 @@ public:
     ///
     /// @param payload Non-null serialized payload bytes.
     /// @param payload_size Number of bytes at @p payload.
-    std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size)> try_push;
+    /// @param user_timestamp Optional application-defined metadata propagated
+    /// unchanged with the LiveKit frame. Used as a trace correlation ID only
+    /// while bridge tracepoints are enabled.
+    std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size,
+                                                     std::optional<std::uint64_t> user_timestamp)>
+        try_push;
   };
 
   /// @brief Outbound LiveKit video-track sink.

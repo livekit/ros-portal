@@ -37,11 +37,17 @@
 #include "ros_portal/utils/image_conversion.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
+#include "tracing/tracepoints.hpp"
 
 namespace ros_portal {
 
 namespace {
 constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
+
+std::uint8_t traceEncoding(const livekit::DataTrackFrameEncoding& encoding) {
+  const auto well_known = encoding.isCustom() ? livekit::DataTrackFrameEncoding::Other : encoding.wellKnown();
+  return static_cast<std::uint8_t>(well_known);
+}
 } // namespace
 
 TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackDescriptor(
@@ -233,6 +239,11 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
     }
 
     auto& rcl_msg = msg->get_rcl_serialized_message();
+    std::optional<tracing::CorrelationContext> trace_context;
+    if (tracing::correlationEventsEnabled()) {
+      trace_context = tracing::makeCorrelationContext(message_info);
+      tracing::outboundReceived(topic_name, *trace_context, msg.get(), rcl_msg.buffer_length);
+    }
 
     std::shared_ptr<DataTrackWriter> writer;
     OutboundEncoding encoding = OutboundEncoding::Ros2Msg;
@@ -270,6 +281,12 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
       encoding = state.encoding;
     }
 
+    std::optional<std::uint64_t> user_timestamp;
+    if (trace_context) {
+      user_timestamp = trace_context->id;
+    }
+    const auto correlation_id = user_timestamp.value_or(0U);
+
     livekit::Result<void, std::string> push_result = livekit::Result<void, std::string>::success();
     if (encoding == OutboundEncoding::JsonSchema) {
       std::string error;
@@ -279,9 +296,12 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
                              topic_name.c_str(), error.c_str());
         return;
       }
-      push_result = writer->try_push(reinterpret_cast<const std::uint8_t*>(json->data()), json->size());
+      tracing::livekitPush(topic_name, correlation_id, json->size(), static_cast<std::uint8_t>(encoding));
+      push_result =
+          writer->try_push(reinterpret_cast<const std::uint8_t*>(json->data()), json->size(), user_timestamp);
     } else {
-      push_result = writer->try_push(rcl_msg.buffer, rcl_msg.buffer_length);
+      tracing::livekitPush(topic_name, correlation_id, rcl_msg.buffer_length, static_cast<std::uint8_t>(encoding));
+      push_result = writer->try_push(rcl_msg.buffer, rcl_msg.buffer_length, user_timestamp);
     }
 
     if (!push_result) {
@@ -818,6 +838,9 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
       continue;
     }
 
+    const auto correlation_id = frame.user_timestamp.value_or(0U);
+    tracing::livekitReceived(state->track_name, state->publisher_identity, correlation_id, frame.payload.size(),
+                             traceEncoding(state->frame_encoding));
     std::optional<rclcpp::SerializedMessage> serialized_msg;
     if (state->frame_encoding == livekit::DataTrackFrameEncoding::Json) {
       std::string error;
@@ -843,6 +866,7 @@ void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrack
     }
 
     try {
+      tracing::rosPublish(state->ros_topic_name, correlation_id, &*serialized_msg, serialized_msg->size());
       state->publisher->publish(*serialized_msg);
     } catch (const std::exception& e) {
       RCLCPP_WARN(logger_,

@@ -314,7 +314,7 @@ TEST_F(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho
   livekit_methods.publish_data_track = [push_count](const std::string&, const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-    writer->try_push = [push_count](const std::uint8_t*, std::size_t) {
+    writer->try_push = [push_count](const std::uint8_t*, std::size_t, std::optional<std::uint64_t>) {
       push_count->fetch_add(1);
       return livekit::Result<void, std::string>::success();
     };
@@ -452,7 +452,7 @@ TopicForwarder::LiveKitMethods makeCountingLiveKitMethods(std::shared_ptr<std::a
   livekit_methods.publish_data_track = [push_count](const std::string&, const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-    writer->try_push = [push_count](const std::uint8_t*, std::size_t) {
+    writer->try_push = [push_count](const std::uint8_t*, std::size_t, std::optional<std::uint64_t>) {
       push_count->fetch_add(1);
       return livekit::Result<void, std::string>::success();
     };
@@ -478,7 +478,8 @@ TopicForwarder::LiveKitMethods makeFlakyLiveKitMethods(std::shared_ptr<std::atom
                                                                         const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-    writer->try_push = [push_count, remaining_failures](const std::uint8_t*, std::size_t) {
+    writer->try_push = [push_count, remaining_failures](const std::uint8_t*, std::size_t,
+                                                        std::optional<std::uint64_t>) {
       if (remaining_failures->fetch_sub(1) > 0) {
         return livekit::Result<void, std::string>::failure("backpressure");
       }
@@ -509,7 +510,8 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
   livekit_methods.publish_data_track = [push_count, last_payload](const std::string&, const livekit::DataTrackSchemaId&)
       -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
     auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
-    writer->try_push = [push_count, last_payload](const std::uint8_t* payload, std::size_t payload_size) {
+    writer->try_push = [push_count, last_payload](const std::uint8_t* payload, std::size_t payload_size,
+                                                  std::optional<std::uint64_t>) {
       if (payload_size == 0U) {
         last_payload->clear();
       } else {

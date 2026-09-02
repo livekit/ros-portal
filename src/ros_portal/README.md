@@ -25,3 +25,9 @@ ROS Portal-specific service interfaces live in the sibling
 See the repository [README](../../README.md) for user and developer guides, and
 the [data-track schema design](../../docs/design/schema.md) for the schema wire
 contract and validation flow.
+
+## Measuring latency
+
+On Linux, the normal generic forwarding path exposes low-overhead LTTng
+tracepoints. No ROS Portal configuration flag, reserved topic, message mutation, or
+latency-specific publisher/subscriber is required. see [latency.md](../../docs/latency.md) for more information.

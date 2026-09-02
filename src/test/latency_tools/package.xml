@@ -16,47 +16,29 @@
   limitations under the License.
 -->
 <package format="3">
-  <name>ros_portal</name>
+  <name>latency_tools</name>
   <version>0.1.0</version>
-  <description>ROS2 node that bridges the ROS2 topic graph to the LiveKit ecosystem</description>
+  <description>Trace capture, analysis, and visualization tools for ros_portal latency</description>
   <maintainer email="sderosa@livekit.io">sderosa</maintainer>
   <license>Apache-2.0</license>
 
-  <buildtool_depend>ament_cmake_auto</buildtool_depend>
-  <buildtool_depend>ros2_medkit_cmake</buildtool_depend>
-  <buildtool_depend>pkg-config</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>ament_index_cpp</depend>
-  <depend>diagnostic_msgs</depend>
-  <depend>diagnostic_updater</depend>
-  <depend>geometry_msgs</depend>
-  <depend>liblttng-ust-dev</depend>
-  <depend>nlohmann-json-dev</depend>
-  <depend>rclcpp</depend>
-  <depend>ros2_medkit_serialization</depend>
-  <depend>rosbag2_cpp</depend>
-  <depend>rosbag2_storage</depend>
-  <depend>ros_portal_config</depend>
-  <depend>ros_portal_msgs</depend>
-  <depend>rosidl_typesupport_cpp</depend>
-  <depend>rosidl_typesupport_introspection_cpp</depend>
-  <depend>sensor_msgs</depend>
-  <depend>std_msgs</depend>
-  <depend>yaml_cpp_vendor</depend>
-
-  <build_depend>libssl-dev</build_depend>
-
-  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>lttng-tools</exec_depend>
+  <exec_depend>python3-lttng</exec_depend>
+  <exec_depend>python3-matplotlib</exec_depend>
+  <exec_depend>ros_portal</exec_depend>
+  <exec_depend>ros2topic</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>tracetools_launch</exec_depend>
+  <exec_depend>tracetools_read</exec_depend>
+  <exec_depend>tracetools_trace</exec_depend>
 
-  <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
-  <test_depend>nav_msgs</test_depend>
-  <test_depend>std_srvs</test_depend>
-  <test_depend>test_msgs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

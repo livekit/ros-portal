@@ -144,8 +144,8 @@ TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigure
 }
 
 TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured) {
-  ScopedEnvironmentVariable scoped_url{"LIVEKIT_URL"};
-  ScopedEnvironmentVariable scoped_token{"LIVEKIT_TOKEN"};
+  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   unsetenv("LIVEKIT_URL");
   unsetenv("LIVEKIT_TOKEN");
   TemporaryDiagnosticsConfig config(R"(  topics:

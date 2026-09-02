@@ -43,14 +43,12 @@ std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, con
   return frame;
 }
 
-std::string resolveEnvironmentCredential(const std::string& env_var_name, std::string& source) {
-  const char* env_val = std::getenv(env_var_name.c_str());
-  if (env_val && env_val[0] != '\0') {
-    source = "environment variable " + env_var_name;
-    return std::string(env_val);
+std::optional<std::string> environmentVariable(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') {
+    return std::nullopt;
   }
-  source = "none";
-  return {};
+  return std::string{value};
 }
 
 std::optional<std::string> normalizeTrackTopicName(const std::string& track_name) {

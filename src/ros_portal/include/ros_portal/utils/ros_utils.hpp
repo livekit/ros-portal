@@ -36,7 +36,13 @@ namespace ros_portal::utils {
 std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
                                                       std::size_t rgba_size);
 
-std::string resolveEnvironmentCredential(const std::string& env_var_name, std::string& source);
+/// @brief Read a non-empty environment variable.
+///
+/// Returns std::nullopt when the variable is unset or set to an empty string.
+///
+/// @param name Environment variable name.
+/// @return Environment variable value, or std::nullopt when absent.
+std::optional<std::string> environmentVariable(const char* name);
 
 /// @brief Normalize a LiveKit track name into an absolute ROS topic path.
 ///

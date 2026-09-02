@@ -24,33 +24,12 @@
 #include <string>
 
 #include "ros_portal/ros_portal.hpp"
+#include "test_common.hpp"
 
 namespace ros_portal {
 namespace {
 
-class ScopedEnvVar {
-public:
-  explicit ScopedEnvVar(const char* name) : name_(name) {
-    const char* value = std::getenv(name);
-    if (value) {
-      had_value_ = true;
-      original_value_ = value;
-    }
-  }
-
-  ~ScopedEnvVar() {
-    if (had_value_) {
-      setenv(name_.c_str(), original_value_.c_str(), 1);
-    } else {
-      unsetenv(name_.c_str());
-    }
-  }
-
-private:
-  std::string name_;
-  bool had_value_{false};
-  std::string original_value_;
-};
+using ros_portal::test::ScopedEnvVar;
 
 class TemporaryConfigFile {
 public:
@@ -80,6 +59,8 @@ protected:
   void hideLiveKitCredentials() {
     unsetenv("LIVEKIT_URL");
     unsetenv("LIVEKIT_TOKEN");
+    unsetenv("LIVEKIT_TOKEN_ENDPOINT");
+    unsetenv("LIVEKIT_TOKEN_SERVER_ID");
   }
 };
 
@@ -95,6 +76,8 @@ constexpr const char* kGoodConfig =
 TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_token_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
   hideLiveKitCredentials();
   const TemporaryConfigFile config{kGoodConfig};
 
@@ -112,6 +95,9 @@ TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
 TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_token_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
+  hideLiveKitCredentials();
   ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
   ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-until-connection-timer-runs", 1), 0);
   const TemporaryConfigFile config{kGoodConfig};
@@ -130,6 +116,9 @@ TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
 TEST_F(RosPortalConfigPathTest, InitializeUsesBuiltinDefaultWhenConfigPathEmpty) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_token_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
+  hideLiveKitCredentials();
   ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
   ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-until-connection-timer-runs", 1), 0);
 
@@ -147,6 +136,8 @@ TEST_F(RosPortalConfigPathTest, InitializeUsesBuiltinDefaultWhenConfigPathEmpty)
 TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_token_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
   hideLiveKitCredentials();
   const auto missing_path = std::filesystem::temp_directory_path() / "ros_portal_config_path_test_missing.yaml";
   std::error_code error;

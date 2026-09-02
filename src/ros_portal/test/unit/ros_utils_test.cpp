@@ -29,33 +29,14 @@
 #include <vector>
 
 #include "ros_portal_config/config/config_parser.hpp"
+#include "test_common.hpp"
 
 namespace ros_portal::utils {
 namespace {
 
 constexpr const char* kTestEnvVar = "ROS_PORTAL_TEST_CREDENTIAL";
 
-struct ScopedEnvVar {
-  explicit ScopedEnvVar(const char* name) : name(name) {
-    const char* value = std::getenv(name);
-    if (value) {
-      had_value = true;
-      original_value = value;
-    }
-  }
-
-  ~ScopedEnvVar() {
-    if (had_value) {
-      setenv(name.c_str(), original_value.c_str(), 1);
-    } else {
-      unsetenv(name.c_str());
-    }
-  }
-
-  std::string name;
-  bool had_value{false};
-  std::string original_value;
-};
+using ros_portal::test::ScopedEnvVar;
 
 TEST(RosUtilsTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer) {
   const std::vector<std::uint8_t> rgba = {10, 20, 30, 40, 50, 60, 70, 80};
@@ -85,37 +66,32 @@ TEST(RosUtilsTest, MakeRgbaVideoFrameReturnsEmptyForNullBuffer) {
   EXPECT_FALSE(makeRgbaVideoFrame(1, 1, nullptr, 4).has_value());
 }
 
-TEST(RosUtilsTest, ResolveEnvironmentCredentialReadsNonEmptyValue) {
+TEST(RosUtilsTest, EnvironmentVariableReadsNonEmptyValue) {
   ScopedEnvVar scoped_env{kTestEnvVar};
   setenv(kTestEnvVar, "secret-token", 1);
-  std::string source;
 
-  const auto value = resolveEnvironmentCredential(kTestEnvVar, source);
+  const auto value = environmentVariable(kTestEnvVar);
 
-  EXPECT_EQ(value, "secret-token");
-  EXPECT_EQ(source, std::string("environment variable ") + kTestEnvVar);
+  ASSERT_TRUE(value.has_value());
+  EXPECT_EQ(*value, "secret-token");
 }
 
-TEST(RosUtilsTest, ResolveEnvironmentCredentialTreatsMissingValueAsNone) {
+TEST(RosUtilsTest, EnvironmentVariableTreatsMissingValueAsNone) {
   ScopedEnvVar scoped_env{kTestEnvVar};
   unsetenv(kTestEnvVar);
-  std::string source = "unchanged";
 
-  const auto value = resolveEnvironmentCredential(kTestEnvVar, source);
+  const auto value = environmentVariable(kTestEnvVar);
 
-  EXPECT_TRUE(value.empty());
-  EXPECT_EQ(source, "none");
+  EXPECT_FALSE(value.has_value());
 }
 
-TEST(RosUtilsTest, ResolveEnvironmentCredentialTreatsEmptyValueAsNone) {
+TEST(RosUtilsTest, EnvironmentVariableTreatsEmptyValueAsNone) {
   ScopedEnvVar scoped_env{kTestEnvVar};
   setenv(kTestEnvVar, "", 1);
-  std::string source = "unchanged";
 
-  const auto value = resolveEnvironmentCredential(kTestEnvVar, source);
+  const auto value = environmentVariable(kTestEnvVar);
 
-  EXPECT_TRUE(value.empty());
-  EXPECT_EQ(source, "none");
+  EXPECT_FALSE(value.has_value());
 }
 
 TEST(RosUtilsTest, DefaultConfigForwardsAllTopicsBidirectionally) {

@@ -46,6 +46,7 @@
 #include "ros_portal/graph/graph_manager.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
 #include "ros_portal/service_forwarder.hpp"
+#include "ros_portal/token_loader.hpp"
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
@@ -123,25 +124,9 @@ bool RosPortal::initialize() {
   RCLCPP_INFO(this->get_logger(), "%zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
 
-  RCLCPP_INFO(this->get_logger(), "Attempting to resolve LiveKit credentials");
-
-  // ----- Resolve LiveKit credentials from environment variables only -----
-  std::string url_source, token_source;
-  const std::string livekit_url = utils::resolveEnvironmentCredential("LIVEKIT_URL", url_source);
-  const std::string livekit_token = utils::resolveEnvironmentCredential("LIVEKIT_TOKEN", token_source);
-
-  RCLCPP_INFO(this->get_logger(), "LiveKit URL resolved from %s", url_source.c_str());
-  RCLCPP_INFO(this->get_logger(), "LiveKit token resolved from %s", token_source.c_str());
-
-  if (livekit_url.empty() || livekit_token.empty()) {
-    RCLCPP_WARN(this->get_logger(),
-                "LiveKit credentials not fully provided — ROS Portal will not connect.\n"
-                "  livekit_url   : %s\n"
-                "  livekit_token : %s\n"
-                "Set them via environment variables LIVEKIT_URL / LIVEKIT_TOKEN.",
-                livekit_url.empty() ? "(missing)" : url_source.c_str(),
-                livekit_token.empty() ? "(missing)" : token_source.c_str());
-
+  const TokenLoader token_loader;
+  // Fail fast if environment isn't configured correctly
+  if (!token_loader.valid()) {
     return false;
   }
 
@@ -170,8 +155,18 @@ bool RosPortal::initialize() {
   RCLCPP_DEBUG(this->get_logger(), "LiveKit client info other_sdks: %s", other_sdks.c_str());
 
   ConnectionManager::Methods connection_methods;
-  connection_methods.try_connect = [this, livekit_url, livekit_token, room_options]() {
-    return room_ && room_->connect(livekit_url, livekit_token, room_options);
+  connection_methods.try_connect = [this, token_loader, room_options]() {
+    if (!room_) {
+      return false;
+    }
+
+    // Note: Tokens are only loaded/fetched during initial room connect.
+    // Connection manager handles SDK reconnect to existing room
+    const auto credentials = token_loader.load();
+    if (!credentials) {
+      return false;
+    }
+    return room_->connect(credentials->server_url, credentials->participant_token, room_options);
   };
   connection_manager_ = std::make_unique<ConnectionManager>(
       std::move(connection_methods), this->get_logger().get_child("connection"), makeDiagnosticsFns());
@@ -226,12 +221,11 @@ bool RosPortal::initialize() {
   connection_timer_ = this->create_wall_timer(
       ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
 
-  // Intentionally mark as initialized here so pollConnection() can run immediately below
+  // Mark initialized before the first poll so pollConnection() is not skipped.
+  // Connect immediately to avoid a 1s timer delay, then log initialized.
   initialized_.store(true, std::memory_order_relaxed);
-  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
-
-  // Call once to immediately connect, avoiding 1 second delay before the first connection attempt in the timer
   pollConnection();
+  RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
   return true;
 }
 
@@ -407,8 +401,6 @@ bool RosPortal::prepareRoomSession() {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     diagnostic_state_.local_identity = local_participant->identity();
   }
-  RCLCPP_INFO(this->get_logger(), "Connected to LiveKit room '%s' with identity '%s'", room_->roomInfo().name.c_str(),
-              local_participant->identity().c_str());
   room_session_prepared_ = true;
   return true;
 }

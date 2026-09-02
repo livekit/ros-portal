@@ -271,6 +271,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/schema/manager.cpp
   src/schema/renderer.cpp
   src/service_forwarder.cpp
+  src/token_loader.cpp
   src/topic_forwarder.cpp
   src/utils/base64.cpp
   src/utils/config_mapping.cpp

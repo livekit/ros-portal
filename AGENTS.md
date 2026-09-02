@@ -29,6 +29,11 @@ prerequisites are missing. Project-specific commands are documented in
 
 ## Testing And Verification
 
+- Prefer running ROS build and test commands inside the devcontainer when the
+  host shell lacks ROS tools. Use the devcontainer CLI directly, for example:
+  `devcontainer exec --workspace-folder . bash -lc 'source "/opt/ros/${ROS_DISTRO}/setup.bash" && source install/setup.bash && colcon test --packages-select ros_portal --ctest-args -R ros_portal_unit_tests'`.
+  If the container is not running, start it with
+  `devcontainer up --workspace-folder .`.
 - Treat behavior changes as test-impacting changes. If functionality changes,
  add or update tests in the nearest existing test target (unit first, then
  integration/end-to-end as needed).

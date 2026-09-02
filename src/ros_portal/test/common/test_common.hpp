@@ -47,6 +47,17 @@ inline void restoreEnv(const char* name, const std::optional<std::string>& value
   }
 }
 
+class ScopedEnvVar {
+public:
+  explicit ScopedEnvVar(const char* name) : name_(name), original_value_(utils::environmentVariable(name)) {}
+
+  ~ScopedEnvVar() { restoreEnv(name_.c_str(), original_value_); }
+
+private:
+  std::string name_;
+  std::optional<std::string> original_value_;
+};
+
 template <typename Predicate>
 inline bool waitFor(Predicate&& predicate, std::chrono::milliseconds timeout,
                     std::chrono::milliseconds poll_interval = 50ms) {

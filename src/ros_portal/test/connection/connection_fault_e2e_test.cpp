@@ -19,7 +19,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <exception>
 #include <memory>
@@ -28,6 +27,7 @@
 #include <string>
 #include <utility>
 
+#include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal_e2e_fixture.hpp"
 #include "tcp_fault_proxy.hpp"
 
@@ -38,10 +38,7 @@ using namespace std::chrono_literals;
 
 constexpr char kEnableEnvironmentVariable[] = "ROS_PORTAL_RUN_CONNECTION_FAULT_TESTS";
 
-bool connectionFaultTestsEnabled() {
-  const auto* value = std::getenv(kEnableEnvironmentVariable);
-  return value != nullptr && std::string(value) == "1";
-}
+bool connectionFaultTestsEnabled() { return utils::environmentVariable(kEnableEnvironmentVariable) == "1"; }
 
 struct WebSocketEndpoint {
   std::string host;

@@ -231,8 +231,8 @@ which matters for bandwidth on constrained links.
 ### ROS 2 topic statistics
 
 Set `enable_ros_topic_stats: true` on an outbound or bidirectional topic to
-publish statistics for its ROS subscription on `/statistics`:
-
+publish statistics for its ROS subscription on `<topic>/statistics` (for example,
+`/imu/statistics`):
 ```yaml
 topics:
   - topic: "/imu"

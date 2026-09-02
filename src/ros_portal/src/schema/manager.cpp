@@ -96,6 +96,7 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
   if (encoding == OutboundEncoding::JsonSchema) {
     const auto json_schema = render_json_schema_(topic_type);
     if (!json_schema) {
+      diagnostic_state_.render_failures.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_ERROR(logger_, "Unable to generate required JSON Schema for type '%s'", topic_type.c_str());
       return std::nullopt;
     }
@@ -105,6 +106,7 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
   } else {
     const auto schema = render_schema_(topic_type);
     if (!schema) {
+      diagnostic_state_.render_failures.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_ERROR(logger_, "Unable to render required ROS schema for type '%s'", topic_type.c_str());
       return std::nullopt;
     }
@@ -121,6 +123,7 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
     // default (ros2msg) path stays permissive and advertises whatever CDR
     // schema encoding rosbag2 renders, since the wire bytes are identical.
     if (encoding == OutboundEncoding::Ros2Idl && *rendered_encoding != livekit::DataTrackSchemaEncoding::Ros2Idl) {
+      diagnostic_state_.encoding_mismatch_skips.fetch_add(1, std::memory_order_relaxed);
       RCLCPP_ERROR(logger_,
                    "Requested outbound encoding 'ros2idl' for type '%s' but the local definition renders as '%s'; "
                    "skipping topic",
@@ -184,6 +187,7 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
   defined_schemas_cv_.notify_all();
 
   if (!defined) {
+    diagnostic_state_.define_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Failed to define required schema for type '%s': %s", topic_type.c_str(), error.c_str());
     return std::nullopt;
   }
@@ -194,7 +198,8 @@ std::optional<livekit::DataTrackSchemaId> SchemaManager::ensureSchemaDefined(con
 bool SchemaManager::validateInboundSchema(const InboundSchemaContext& context) const {
   std::optional<SchemaHash> remote_hash;
   std::optional<SchemaHash> local_hash;
-  const auto reject = [&](const std::string& reason) {
+  const auto reject = [&](std::atomic<std::uint64_t>& counter, const std::string& reason) {
+    counter.fetch_add(1, std::memory_order_relaxed);
     const std::string remote_hash_text = remote_hash ? schemaHashToHex(*remote_hash) : "unavailable";
     const std::string local_hash_text = local_hash ? schemaHashToHex(*local_hash) : "unavailable";
     RCLCPP_ERROR(logger_,
@@ -206,28 +211,29 @@ bool SchemaManager::validateInboundSchema(const InboundSchemaContext& context) c
   };
 
   if (!context.frame_encoding.has_value()) {
-    return reject("track does not advertise a frame encoding");
+    return reject(diagnostic_state_.inbound_rejected_no_encoding, "track does not advertise a frame encoding");
   }
   if (*context.frame_encoding != livekit::DataTrackFrameEncoding::Cdr &&
       *context.frame_encoding != livekit::DataTrackFrameEncoding::Json) {
-    return reject("track frame encoding is not CDR or JSON");
+    return reject(diagnostic_state_.inbound_rejected_no_encoding, "track frame encoding is not CDR or JSON");
   }
   if (!context.schema.has_value()) {
-    return reject("track does not advertise a schema");
+    return reject(diagnostic_state_.inbound_rejected_no_encoding, "track does not advertise a schema");
   }
 
   const auto& schema_id = *context.schema;
   if (schema_id.name != context.topic_type) {
-    return reject("track schema name '" + schema_id.name + "' does not match local ROS type '" + context.topic_type +
-                  "'");
+    return reject(
+        diagnostic_state_.inbound_rejected_name_mismatch,
+        "track schema name '" + schema_id.name + "' does not match local ROS type '" + context.topic_type + "'");
   }
 
   if (schema_id.encoding == livekit::DataTrackSchemaEncoding::JsonSchema) {
     if (*context.frame_encoding != livekit::DataTrackFrameEncoding::Json) {
-      return reject("JsonSchema tracks require JSON frame encoding");
+      return reject(diagnostic_state_.inbound_rejected_no_encoding, "JsonSchema tracks require JSON frame encoding");
     }
     if (!render_schema_(context.topic_type)) {
-      return reject("local ROS schema could not be rendered");
+      return reject(diagnostic_state_.inbound_rejected_definition_differs, "local ROS schema could not be rendered");
     }
     RCLCPP_INFO(logger_, "Accepting LiveKit data track '%s' [%s] from '%s' via JsonSchema.", context.track_name.c_str(),
                 context.topic_type.c_str(), context.participant_identity.c_str());
@@ -236,26 +242,29 @@ bool SchemaManager::validateInboundSchema(const InboundSchemaContext& context) c
 
   if (schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Msg &&
       schema_id.encoding != livekit::DataTrackSchemaEncoding::Ros2Idl) {
-    return reject("track schema encoding is not ros2msg or ros2idl");
+    return reject(diagnostic_state_.inbound_rejected_no_encoding, "track schema encoding is not ros2msg or ros2idl");
   }
 
   std::optional<std::string> remote_schema;
   try {
     remote_schema = livekit_methods_.get_schema(schema_id, context.participant_identity);
   } catch (const std::exception& error) {
-    return reject("remote schema retrieval failed: " + std::string(error.what()));
+    return reject(diagnostic_state_.inbound_rejected_remote_unavailable,
+                  "remote schema retrieval failed: " + std::string(error.what()));
   } catch (...) {
-    return reject("remote schema retrieval failed with an unknown error");
+    return reject(diagnostic_state_.inbound_rejected_remote_unavailable,
+                  "remote schema retrieval failed with an unknown error");
   }
   if (!remote_schema.has_value()) {
-    return reject("remote schema retrieval failed: schema is unavailable");
+    return reject(diagnostic_state_.inbound_rejected_remote_unavailable,
+                  "remote schema retrieval failed: schema is unavailable");
   }
   const auto& remote_schema_text = *remote_schema;
   remote_hash = hashSchemaText(remote_schema_text);
 
   const auto local_schema = render_schema_(context.topic_type);
   if (!local_schema) {
-    return reject("local ROS schema could not be rendered");
+    return reject(diagnostic_state_.inbound_rejected_definition_differs, "local ROS schema could not be rendered");
   }
   local_hash = hashSchemaText(local_schema->text);
 
@@ -263,13 +272,33 @@ bool SchemaManager::validateInboundSchema(const InboundSchemaContext& context) c
       (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Msg && local_schema->encoding == "ros2msg") ||
       (schema_id.encoding == livekit::DataTrackSchemaEncoding::Ros2Idl && local_schema->encoding == "ros2idl");
   if (!encoding_matches) {
-    return reject("remote and local schema encodings differ");
+    return reject(diagnostic_state_.inbound_rejected_definition_differs, "remote and local schema encodings differ");
   }
   if (remote_hash != local_hash || remote_schema_text != local_schema->text) {
-    return reject("remote and local schema definitions differ");
+    return reject(diagnostic_state_.inbound_rejected_definition_differs, "remote and local schema definitions differ");
   }
 
   return true;
+}
+
+SchemaManager::DiagnosticsSnapshot SchemaManager::diagnosticsSnapshot() const {
+  DiagnosticsSnapshot snapshot;
+  {
+    const std::lock_guard<std::mutex> lock(defined_schemas_mutex_);
+    snapshot.definitions_active = defined_schemas_.size();
+  }
+  snapshot.define_failures = diagnostic_state_.define_failures.load(std::memory_order_relaxed);
+  snapshot.render_failures = diagnostic_state_.render_failures.load(std::memory_order_relaxed);
+  snapshot.encoding_mismatch_skips = diagnostic_state_.encoding_mismatch_skips.load(std::memory_order_relaxed);
+  snapshot.inbound_rejected_no_encoding =
+      diagnostic_state_.inbound_rejected_no_encoding.load(std::memory_order_relaxed);
+  snapshot.inbound_rejected_name_mismatch =
+      diagnostic_state_.inbound_rejected_name_mismatch.load(std::memory_order_relaxed);
+  snapshot.inbound_rejected_remote_unavailable =
+      diagnostic_state_.inbound_rejected_remote_unavailable.load(std::memory_order_relaxed);
+  snapshot.inbound_rejected_definition_differs =
+      diagnostic_state_.inbound_rejected_definition_differs.load(std::memory_order_relaxed);
+  return snapshot;
 }
 
 } // namespace ros_portal

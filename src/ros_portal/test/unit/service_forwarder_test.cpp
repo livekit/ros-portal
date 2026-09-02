@@ -20,6 +20,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_status_wrapper.hpp>
+#include <functional>
 #include <future>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -27,16 +30,52 @@
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/set_bool.hpp>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
 #include "ros_portal/cli/constants.hpp"
 #include "ros_portal/cli/json_converters.hpp"
+#include "ros_portal/diagnostics/diagnostics_fns.hpp"
 
 namespace ros_portal {
 namespace {
 
 using namespace std::chrono_literals;
+
+std::optional<std::string> valueFor(const diagnostic_updater::DiagnosticStatusWrapper& status, const std::string& key) {
+  for (const auto& value : status.values) {
+    if (value.key == key) {
+      return value.value;
+    }
+  }
+  return std::nullopt;
+}
+
+struct CapturingDiagnostics {
+  std::string task_name;
+  diagnostics::DiagnosticsManagerFns::TaskCallback callback;
+
+  diagnostics::DiagnosticsManagerFns methods() {
+    diagnostics::DiagnosticsManagerFns result;
+    result.add = [this](const std::string& name, diagnostics::DiagnosticsManagerFns::TaskCallback task_callback) {
+      task_name = name;
+      callback = std::move(task_callback);
+    };
+    result.remove = [this](const std::string& name) {
+      if (name == task_name) {
+        callback = {};
+      }
+    };
+    return result;
+  }
+
+  void populate(diagnostic_updater::DiagnosticStatusWrapper& result) {
+    if (callback) {
+      callback(result);
+    }
+  }
+};
 
 bool waitForService(rclcpp::Node& node, const std::string& service_name, std::chrono::milliseconds timeout = 2s) {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -72,6 +111,7 @@ private:
 struct FakeLiveKit {
   bool room_available{true};
   bool has_participant{true};
+  bool throw_in_has_participant{false};
   int rpc_calls{0};
   std::string last_participant;
   std::string last_method;
@@ -83,7 +123,12 @@ struct FakeLiveKit {
   ServiceForwarder::LiveKitMethods methods() {
     ServiceForwarder::LiveKitMethods methods;
     methods.is_room_available = [this]() { return room_available; };
-    methods.has_participant = [this](const std::string&) { return has_participant; };
+    methods.has_participant = [this](const std::string&) {
+      if (throw_in_has_participant) {
+        throw std::runtime_error("participant lookup failed");
+      }
+      return has_participant;
+    };
     methods.perform_rpc = [this](const std::string& participant, const std::string& method, const std::string& payload,
                                  std::uint8_t) -> std::optional<std::string> {
       ++rpc_calls;
@@ -127,8 +172,9 @@ TEST_F(ServiceForwarderTest, ForwardsSetBoolRequestAndPopulatesResponse) {
   auto client_node = std::make_shared<rclcpp::Node>("service_forwarder_client_node");
   auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   FakeLiveKit livekit;
+  CapturingDiagnostics diagnostics;
 
-  ServiceForwarder forwarder({setBoolRoute()}, *server_node, callback_group, livekit.methods());
+  ServiceForwarder forwarder({setBoolRoute()}, *server_node, callback_group, livekit.methods(), diagnostics.methods());
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(server_node);
@@ -149,6 +195,19 @@ TEST_F(ServiceForwarderTest, ForwardsSetBoolRequestAndPopulatesResponse) {
   EXPECT_EQ(payload.at("service"), "/service_forwarder/set_bool");
   EXPECT_EQ(payload.at("msg_type"), "std_srvs/srv/SetBool");
   EXPECT_NE(payload.at("payload").get<std::string>().find("data: true"), std::string::npos);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  diagnostics.populate(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(valueFor(status, "routes_configured"), "1");
+  EXPECT_EQ(valueFor(status, "services_created"), "1");
+  EXPECT_EQ(valueFor(status, "requests_succeeded"), "1");
+  EXPECT_EQ(valueFor(status, "request_failures"), "0");
+  EXPECT_EQ(valueFor(status, "response_failures"), "0");
+  // Request volume is derivable from the outcome counters and is no longer published.
+  EXPECT_FALSE(valueFor(status, "requests_forwarded").has_value());
+  EXPECT_FALSE(valueFor(status, "requests_failed").has_value());
+  EXPECT_EQ(valueFor(status, "route_failures"), "0");
 }
 
 TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
@@ -157,9 +216,10 @@ TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
   auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   FakeLiveKit livekit;
   livekit.has_participant = false;
+  CapturingDiagnostics diagnostics;
 
   ServiceForwarder forwarder({setBoolRoute("/service_forwarder/missing_participant")}, *server_node, callback_group,
-                             livekit.methods());
+                             livekit.methods(), diagnostics.methods());
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(server_node);
@@ -173,6 +233,16 @@ TEST_F(ServiceForwarderTest, MissingParticipantReturnsDefaultResponse) {
   EXPECT_FALSE(response->success);
   EXPECT_EQ(response->message, "");
   EXPECT_EQ(livekit.rpc_calls, 0);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  diagnostics.populate(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  // A missing participant fails on the request path.
+  EXPECT_EQ(valueFor(status, "request_failures"), "1");
+  EXPECT_EQ(valueFor(status, "response_failures"), "0");
+  EXPECT_EQ(valueFor(status, "last_failure_reason"), "participant_not_found");
+  EXPECT_FALSE(valueFor(status, "last_failure_service").has_value());
+  EXPECT_FALSE(valueFor(status, "failures.participant_not_found").has_value());
 }
 
 TEST_F(ServiceForwarderTest, RoomUnavailableReturnsExplicitFailureWhenRepresentable) {
@@ -181,9 +251,10 @@ TEST_F(ServiceForwarderTest, RoomUnavailableReturnsExplicitFailureWhenRepresenta
   auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   FakeLiveKit livekit;
   livekit.room_available = false;
+  CapturingDiagnostics diagnostics;
 
   ServiceForwarder forwarder({setBoolRoute("/service_forwarder/room_unavailable")}, *server_node, callback_group,
-                             livekit.methods());
+                             livekit.methods(), diagnostics.methods());
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(server_node);
@@ -205,9 +276,10 @@ TEST_F(ServiceForwarderTest, MalformedRpcResponseReturnsDefaultResponse) {
   auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   FakeLiveKit livekit;
   livekit.rpc_response = "not-json";
+  CapturingDiagnostics diagnostics;
 
   ServiceForwarder forwarder({setBoolRoute("/service_forwarder/malformed")}, *server_node, callback_group,
-                             livekit.methods());
+                             livekit.methods(), diagnostics.methods());
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(server_node);
@@ -221,6 +293,71 @@ TEST_F(ServiceForwarderTest, MalformedRpcResponseReturnsDefaultResponse) {
   EXPECT_FALSE(response->success);
   EXPECT_EQ(response->message, "");
   EXPECT_EQ(livekit.rpc_calls, 1);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  diagnostics.populate(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  // Malformed remote JSON fails on the response path.
+  EXPECT_EQ(valueFor(status, "response_failures"), "1");
+  EXPECT_EQ(valueFor(status, "request_failures"), "0");
+  EXPECT_EQ(valueFor(status, "last_failure_reason"), "malformed_response");
+  EXPECT_FALSE(valueFor(status, "failures.malformed_response").has_value());
+}
+
+TEST_F(ServiceForwarderTest, DiagnosticsReportSkippedRoutes) {
+  auto node = std::make_shared<rclcpp::Node>("service_forwarder_skipped_routes_node");
+  auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeLiveKit livekit;
+  CapturingDiagnostics diagnostics;
+
+  ServiceForwarder forwarder(
+      {
+          setBoolRoute(),
+          {"", "std_srvs/srv/SetBool", "robot-b"},
+          {"/service_forwarder/missing_type", "missing_msgs/srv/Missing", "robot-b"},
+      },
+      *node, callback_group, livekit.methods(), diagnostics.methods());
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  diagnostics.populate(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(valueFor(status, "routes_configured"), "3");
+  EXPECT_EQ(valueFor(status, "services_created"), "1");
+  // One route skipped for empty configuration, one for missing type support.
+  EXPECT_EQ(valueFor(status, "route_failures"), "2");
+  EXPECT_FALSE(valueFor(status, "routes_skipped_invalid_config").has_value());
+  EXPECT_FALSE(valueFor(status, "routes_skipped_no_type_support").has_value());
+}
+
+TEST_F(ServiceForwarderTest, DiagnosticsReportHandlerExceptions) {
+  auto server_node = std::make_shared<rclcpp::Node>("service_forwarder_exception_server_node");
+  auto client_node = std::make_shared<rclcpp::Node>("service_forwarder_exception_client_node");
+  auto callback_group = server_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  FakeLiveKit livekit;
+  livekit.throw_in_has_participant = true;
+  CapturingDiagnostics diagnostics;
+
+  ServiceForwarder forwarder({setBoolRoute("/service_forwarder/exception")}, *server_node, callback_group,
+                             livekit.methods(), diagnostics.methods());
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(server_node);
+  executor.add_node(client_node);
+  ScopedExecutorSpin spin_guard(executor);
+
+  ASSERT_TRUE(waitForService(*client_node, "/service_forwarder/exception"));
+  const auto response = callSetBool(*client_node, "/service_forwarder/exception", true);
+  ASSERT_NE(response, nullptr);
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  diagnostics.populate(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(valueFor(status, "handler_exceptions"), "1");
+  // A handler exception is counted only as a handler exception, not on either path.
+  EXPECT_EQ(valueFor(status, "request_failures"), "0");
+  EXPECT_EQ(valueFor(status, "response_failures"), "0");
+  EXPECT_EQ(valueFor(status, "last_failure_reason"), "handler_exception");
+  EXPECT_FALSE(valueFor(status, "last_failure_service").has_value());
 }
 
 } // namespace

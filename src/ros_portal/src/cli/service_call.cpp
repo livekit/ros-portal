@@ -186,7 +186,7 @@ ServiceCallSrv::Response ServiceCall::call(const ServiceCallOptions& options) {
     std::this_thread::sleep_for(kPollPeriod);
   }
 
-  return makeCliResponse<ServiceCallSrv::Response>(false, "Service call timed out.");
+  return makeCliResponse<ServiceCallSrv::Response>(false, kServiceCallTimeoutError);
 }
 
 std::optional<ServiceCall::ClientPtr> ServiceCall::getClient(const std::string& service, const std::string& msg_type,
@@ -199,6 +199,8 @@ std::optional<ServiceCall::ClientPtr> ServiceCall::getClient(const std::string& 
   }
   if (clients_.size() >= kMaxCachedServiceClients) {
     ++cache_full_rejections_;
+    RCLCPP_ERROR(logger_, "Rejecting service call to '%s': service client cache is full (%zu/%zu)", service.c_str(),
+                 clients_.size(), kMaxCachedServiceClients);
     error = "service client cache limit reached";
     return std::nullopt;
   }

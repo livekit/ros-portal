@@ -103,6 +103,7 @@ bool RosPortal::initialize() {
   room_components_started_ = false;
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
+  latched_topic_forwarder_.reset();
   build_info_diagnostics_.reset();
   build_info_diagnostics_ = std::make_unique<diagnostics::BuildInfoDiagnostics>(makeDiagnosticsFns());
 
@@ -110,6 +111,15 @@ bool RosPortal::initialize() {
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   topics_ = config->topics;
+  const auto latched_options = utils::latchedTopicForwarderOptions(topics_);
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    if (!latched_options.outbound_topics.empty() || !latched_options.inbound_topics.empty()) {
+      diagnostic_state_.latched_topic_forwarder_active.emplace(false);
+    } else {
+      diagnostic_state_.latched_topic_forwarder_active.reset();
+    }
+  }
 
   RCLCPP_INFO(this->get_logger(), "%zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
@@ -348,7 +358,12 @@ void RosPortal::stopRoomComponents() {
   cli_manager_.reset();
   diagnostic_state_.cli_manager_active.store(false, std::memory_order_relaxed);
   latched_topic_forwarder_.reset();
-  diagnostic_state_.latched_topic_forwarder_active.store(false, std::memory_order_relaxed);
+  {
+    const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+    if (diagnostic_state_.latched_topic_forwarder_active.has_value()) {
+      diagnostic_state_.latched_topic_forwarder_active->store(false, std::memory_order_relaxed);
+    }
+  }
   topic_forwarder_.reset();
   diagnostic_state_.topic_forwarder_active.store(false, std::memory_order_relaxed);
   room_components_started_ = false;
@@ -455,10 +470,14 @@ void RosPortal::initializeDiagnostics() {
 void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
   std::string config_path;
   std::string local_identity;
+  bool latched_topic_forwarder_inactive = false;
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     config_path = diagnostic_state_.config_path;
     local_identity = diagnostic_state_.local_identity;
+    latched_topic_forwarder_inactive =
+        diagnostic_state_.latched_topic_forwarder_active.has_value() &&
+        !diagnostic_state_.latched_topic_forwarder_active->load(std::memory_order_relaxed);
   }
 
   std::string components_inactive;
@@ -474,7 +493,7 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   if (!diagnostic_state_.topic_forwarder_active.load(std::memory_order_relaxed)) {
     append_component("topic_forwarder");
   }
-  if (!diagnostic_state_.latched_topic_forwarder_active.load(std::memory_order_relaxed)) {
+  if (latched_topic_forwarder_inactive) {
     append_component("latched_topic_forwarder");
   }
   if (!diagnostic_state_.service_forwarder_active.load(std::memory_order_relaxed)) {
@@ -494,8 +513,6 @@ void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& stat
   status.add("config_path", config_path);
   status.add("graph_discovery_active", graph_discovery_active ? "true" : "false");
   status.add("local_identity", local_identity);
-  status.add("rpc_register_failures", diagnostic_state_.rpc_register_failures.load(std::memory_order_relaxed));
-  status.add("rpc_perform_failures", diagnostic_state_.rpc_perform_failures.load(std::memory_order_relaxed));
 
   if (!initialized) {
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "ROS Portal is not initialized");
@@ -815,8 +832,9 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
           return rpcPerform(id, method, payload, timeout_sec);
         },
     };
-    service_forwarder_ = std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this,
-                                                            reentrant_callback_group_, livekit_methods);
+    service_forwarder_ =
+        std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this, reentrant_callback_group_,
+                                           livekit_methods, makeDiagnosticsFns());
     diagnostic_state_.service_forwarder_active.store(service_forwarder_ != nullptr, std::memory_order_relaxed);
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
@@ -831,8 +849,12 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
 
 bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics) {
   auto options = utils::latchedTopicForwarderOptions(topics);
-  if (options.outbound_topics.empty() && options.inbound_topics.empty()) {
-    diagnostic_state_.latched_topic_forwarder_active.store(false, std::memory_order_relaxed);
+  const bool latched_topics_configured = !options.outbound_topics.empty() || !options.inbound_topics.empty();
+  if (!latched_topics_configured) {
+    {
+      const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+      diagnostic_state_.latched_topic_forwarder_active.reset();
+    }
     RCLCPP_INFO(this->get_logger(), "No latched topics configured; skipping latched topic forwarder");
     return true;
   }
@@ -863,10 +885,17 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
 
     latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(std::move(options),
                                                                        this->weak_from_this(), // after constructor
-                                                                       std::move(methods));
-    diagnostic_state_.latched_topic_forwarder_active.store(latched_topic_forwarder_ != nullptr,
-                                                           std::memory_order_relaxed);
+                                                                       std::move(methods), makeDiagnosticsFns());
     latched_topic_forwarder_->start();
+    {
+      const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
+      if (diagnostic_state_.latched_topic_forwarder_active.has_value()) {
+        diagnostic_state_.latched_topic_forwarder_active->store(latched_topic_forwarder_ != nullptr,
+                                                                std::memory_order_relaxed);
+      } else {
+        diagnostic_state_.latched_topic_forwarder_active.emplace(latched_topic_forwarder_ != nullptr);
+      }
+    }
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize latched topic forwarder: %s", error.what());
     return false;
@@ -893,12 +922,10 @@ bool RosPortal::hasParticipant(const std::string& participant_id) const {
 std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_id, const std::string& method,
                                                  const std::string& payload, std::uint8_t timeout_sec) {
   if (!roomOperationsEnabled()) {
-    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     return std::nullopt;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
-    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(),
                  "LiveKit RPC '%s' to participant '%s' failed: local participant "
                  "is unavailable",
@@ -909,7 +936,6 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
   try {
     return local_participant->performRpc(participant_id, method, payload, static_cast<double>(timeout_sec));
   } catch (const livekit::RpcError& error) {
-    diagnostic_state_.rpc_perform_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC '%s' to participant '%s' failed: code=%u message=%s", method.c_str(),
                  participant_id.c_str(), error.code(), error.message().c_str());
     return std::nullopt;
@@ -918,12 +944,10 @@ std::optional<std::string> RosPortal::rpcPerform(const std::string& participant_
 
 bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler) {
   if (!roomOperationsEnabled()) {
-    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
   const auto local_participant = room_ ? room_->localParticipant().lock() : nullptr;
   if (!local_participant) {
-    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_WARN(this->get_logger(),
                 "Cannot register RPC method '%s': LiveKit local participant is "
                 "unavailable",
@@ -941,7 +965,6 @@ bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler)
                                            return handler(data.payload);
                                          });
   } catch (const livekit::RpcError& error) {
-    diagnostic_state_.rpc_register_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(this->get_logger(), "LiveKit RPC method '%s' registration failed: code=%u message=%s", method.c_str(),
                  error.code(), error.message().c_str());
     return false;

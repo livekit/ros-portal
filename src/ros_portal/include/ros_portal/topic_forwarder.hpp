@@ -106,7 +106,7 @@ public:
     /// @brief Regex patterns that force best-effort subscription QoS.
     std::vector<std::regex> best_effort_qos_topic_patterns;
     /// @brief Regex patterns for outbound subscriptions that publish ROS 2
-    /// topic statistics on `/statistics`.
+    /// topic statistics on `<topic>/statistics` (a child topic per measured topic).
     std::vector<std::regex> ros_topic_stats_topic_patterns;
     /// @brief Minimum subscription history depth when no publishers exist.
     size_t min_qos_depth{kDefaultMinQosDepth};

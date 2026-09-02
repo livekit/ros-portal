@@ -329,7 +329,7 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   const char* encoding_label = encoding == OutboundEncoding::JsonSchema ? "JSON (requested jsonschema)"
                                : encoding == OutboundEncoding::Ros2Idl  ? "CDR (requested ros2idl)"
                                                                         : "CDR (requested ros2msg)";
-  RCLCPP_INFO(logger_, "Subscribed to data topic '%s' [%s] (%s)", topic_name.c_str(), topic_type.c_str(),
+  RCLCPP_INFO(logger_, "Subscribed to ROS topic '%s' [%s] (%s)", topic_name.c_str(), topic_type.c_str(),
               encoding_label);
 }
 
@@ -350,7 +350,7 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
 
   const auto writer_result = livekit_methods_.publish_data_track(topic_name, schema_result.value());
   if (!writer_result) {
-    RCLCPP_ERROR(logger_, "Failed to publish data track for '%s': %s", topic_name.c_str(),
+    RCLCPP_ERROR(logger_, "Failed to publish LiveKit data track for '%s': %s", topic_name.c_str(),
                  writer_result.error().c_str());
     return false;
   }
@@ -362,7 +362,7 @@ bool TopicForwarder::ensureWriterLocked(const std::string& topic_name, const std
     return false;
   }
 
-  RCLCPP_INFO(logger_, "Created data track '%s'", topic_name.c_str());
+  RCLCPP_INFO(logger_, "Created LiveKit data track '%s'", topic_name.c_str());
   return true;
 }
 
@@ -395,7 +395,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
       const auto sink_result =
           livekit_methods_.publish_video_track(topic_name, static_cast<int>(msg->width), static_cast<int>(msg->height));
       if (!sink_result) {
-        RCLCPP_ERROR(logger_, "Failed to create video track for '%s': %s", topic_name.c_str(),
+        RCLCPP_ERROR(logger_, "Failed to create LiveKit video track for '%s': %s", topic_name.c_str(),
                      sink_result.error().c_str());
         return;
       }
@@ -407,7 +407,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
         return;
       }
 
-      RCLCPP_INFO(logger_, "Created video track '%s' (%ux%u, %s)", topic_name.c_str(), msg->width, msg->height,
+      RCLCPP_INFO(logger_, "Created LiveKit video track '%s' (%ux%u, %s)", topic_name.c_str(), msg->width, msg->height,
                   msg->encoding.c_str());
     }
 
@@ -470,8 +470,8 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     image_topic_states_.erase(topic_name);
-    RCLCPP_ERROR(logger_, "Failed to create image subscription for '%s' [%s]: %s", topic_name.c_str(), kImageMsgType,
-                 e.what());
+    RCLCPP_ERROR(logger_, "Failed to create ROS image subscription for '%s' [%s]: %s", topic_name.c_str(),
+                 kImageMsgType, e.what());
     return;
   } catch (...) {
     image_topic_states_.erase(topic_name);
@@ -480,7 +480,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     return;
   }
 
-  RCLCPP_INFO(logger_, "Subscribed to image topic '%s' [%s]", topic_name.c_str(), kImageMsgType);
+  RCLCPP_INFO(logger_, "Subscribed to ROS image topic '%s' [%s]", topic_name.c_str(), kImageMsgType);
 }
 
 void TopicForwarder::onDataTrackPublished(std::shared_ptr<livekit::RemoteDataTrack> track) {

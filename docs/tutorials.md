@@ -84,7 +84,7 @@ ros_portal:
 route. The route exposes turtle_sim's `/turtle1/teleport_absolute` service
 locally for use in [step 3b](#3-spawn-a-turtle-service-call):
 
-__NOTE:__ `enable_ros_statistics: true` is optionally used for `cmd_vel` topcics.
+__NOTE:__ `enable_ros_topic_stats: true` is optionally used for `cmd_vel` topics.
 
 ```yaml
 ros_portal:

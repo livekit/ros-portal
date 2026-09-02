@@ -38,6 +38,7 @@ namespace ros_portal {
 namespace {
 
 constexpr char kLatchedTopicForwarderDiagnosticTaskName[] = "latched_topic_forwarder";
+constexpr char kRosTopicStatisticsTopic[] = "/statistics";
 
 /// @brief LiveKit RPC payload hard limit (15 KiB, UTF-8). A request larger than
 /// this cannot be sent, so an oversize latched message is dropped.
@@ -194,6 +195,9 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
   try {
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
+    if (topic_name != kRosTopicStatisticsTopic && options_.ros_topic_stats_topics.count(topic_name) > 0U) {
+      sub_options.topic_stats_options.state = rclcpp::TopicStatisticsState::Enable;
+    }
     auto subscription =
         node->create_generic_subscription(topic_name, topic_type, latchedQoS(), std::move(callback), sub_options);
     subscriptions_[topic_name] = std::static_pointer_cast<void>(subscription);

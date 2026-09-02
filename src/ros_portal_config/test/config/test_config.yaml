@@ -17,6 +17,7 @@ $schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_porta
 ros_portal:
   version: "0.0.1"
   ros_threads: 4
+  enable_all_ros_topic_stats: false
 
   services:
     # Services only support "direction: out". Each route creates a local ROS
@@ -42,6 +43,7 @@ ros_portal:
     - topic: "/lidar/points"
       direction: "out"
       max_rate_hz: 10
+      enable_ros_topic_stats: true
 
     - topic: "/odom"
       direction: "bidirectional"

@@ -40,6 +40,7 @@ ament_auto_find_build_dependencies(REQUIRED
   rosidl_typesupport_cpp
   rosidl_typesupport_introspection_cpp
   sensor_msgs
+  statistics_msgs
   std_msgs
   yaml_cpp_vendor)
 

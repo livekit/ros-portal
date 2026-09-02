@@ -22,6 +22,11 @@
           "$ref": "#/$defs/nonNegativeInteger",
           "default": 0
         },
+        "enable_all_ros_topic_stats": {
+          "description": "Enable ROS 2 topic statistics for every outbound topic subscription. When true, this overrides each topic's enable_ros_topic_stasts value.",
+          "type": "boolean",
+          "default": false
+        },
         "services": {
           "type": "array",
           "items": {
@@ -123,6 +128,11 @@
         },
         "video_options": {
           "$ref": "#/$defs/videoOptions"
+        },
+        "enable_ros_topic_stats": {
+          "description": "Outbound topics only. Enable ROS 2 topic statistics for subscriptions matching this topic pattern. Ignored when enable_all_ros_topic_stats is true.",
+          "type": "boolean",
+          "default": false
         }
       }
     }

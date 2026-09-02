@@ -268,6 +268,8 @@ private:
   //! @brief Number of threads for the MultiThreadedExecutor (0 = use system
   //! default)
   int ros_threads_{0};
+  //! @brief Whether ROS topic statistics are enabled for every outbound topic.
+  bool enable_all_ros_topic_stats_{false};
   //! @brief Tracks whether ROS Portal initialization has completed.
   std::atomic_bool initialized_;
   //! @brief Serializes explicit shutdown with the destructor fallback.

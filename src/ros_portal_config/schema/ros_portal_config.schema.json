@@ -23,7 +23,7 @@
           "default": 0
         },
         "enable_all_ros_topic_stats": {
-          "description": "Enable ROS 2 topic statistics for every outbound topic subscription. When true, this overrides each topic's enable_ros_topic_stasts value.",
+          "description": "Enable ROS 2 topic statistics for every outbound topic subscription. When true, this overrides each topic's enable_ros_topic_stats value.",
           "type": "boolean",
           "default": false
         },

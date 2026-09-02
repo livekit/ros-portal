@@ -459,6 +459,45 @@ TEST(SchemaManagerTest, RetriesAfterDefinitionFailure) {
   EXPECT_EQ(define_count, 2);
 }
 
+TEST(SchemaManagerTest, DiagnosticsTrackOutboundSchemaFailuresAndActiveDefinitions) {
+  auto methods = makeLiveKitMethods();
+  methods.define_schema = [](const livekit::DataTrackSchemaId& schema_id, const std::string&) {
+    if (schema_id.name == "example_msgs/msg/Rejected") {
+      return false;
+    }
+    if (schema_id.name == "example_msgs/msg/Throws") {
+      throw std::runtime_error("define failed");
+    }
+    if (schema_id.name == "example_msgs/msg/UnknownThrow") {
+      throw 42;
+    }
+    return true;
+  };
+  SchemaManager manager(
+      std::move(methods),
+      [](const std::string& topic_type) -> std::optional<RosMessageSchema> {
+        if (topic_type == "example_msgs/msg/RenderFailure") {
+          return std::nullopt;
+        }
+        return RosMessageSchema{"ros2msg", "schema"};
+      },
+      [](const std::string&) { return std::optional<std::string>{}; });
+
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/RenderFailure"));
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/JsonRenderFailure", OutboundEncoding::JsonSchema));
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/EncodingMismatch", OutboundEncoding::Ros2Idl));
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/Rejected"));
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/Throws"));
+  EXPECT_FALSE(manager.ensureSchemaDefined("example_msgs/msg/UnknownThrow"));
+  EXPECT_TRUE(manager.ensureSchemaDefined("example_msgs/msg/Defined"));
+
+  const auto diagnostics = manager.diagnosticsSnapshot();
+  EXPECT_EQ(diagnostics.definitions_active, 1U);
+  EXPECT_EQ(diagnostics.define_failures, 3U);
+  EXPECT_EQ(diagnostics.render_failures, 2U);
+  EXPECT_EQ(diagnostics.encoding_mismatch_skips, 1U);
+}
+
 TEST(SchemaManagerTest, RejectsChangedTextForAnExistingSchemaId) {
   auto methods = makeLiveKitMethods();
   int define_count = 0;
@@ -592,6 +631,48 @@ TEST(SchemaManagerTest, RejectsRetrievalRenderEncodingAndTextFailures) {
   SchemaManager text_mismatch_manager(
       std::move(methods), [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "local"}}; });
   EXPECT_FALSE(text_mismatch_manager.validateInboundSchema(context));
+}
+
+TEST(SchemaManagerTest, DiagnosticsSplitInboundSchemaRejectionsByReason) {
+  auto methods = makeLiveKitMethods();
+  methods.get_schema = [](const livekit::DataTrackSchemaId&,
+                          const std::string& participant_identity) -> std::optional<std::string> {
+    if (participant_identity == "missing") {
+      return std::nullopt;
+    }
+    return "remote";
+  };
+  const SchemaManager manager(std::move(methods),
+                              [](const std::string&) { return std::optional<RosMessageSchema>{{"ros2msg", "local"}}; });
+
+  auto context = makeInboundSchemaContext();
+  context.frame_encoding = std::nullopt;
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context = makeInboundSchemaContext();
+  context.schema = std::nullopt;
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context = makeInboundSchemaContext();
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Example", livekit::DataTrackSchemaEncoding::Protobuf};
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context = makeInboundSchemaContext();
+  context.schema = livekit::DataTrackSchemaId{"example_msgs/msg/Other", livekit::DataTrackSchemaEncoding::Ros2Msg};
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context = makeInboundSchemaContext();
+  context.participant_identity = "missing";
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  context = makeInboundSchemaContext();
+  EXPECT_FALSE(manager.validateInboundSchema(context));
+
+  const auto diagnostics = manager.diagnosticsSnapshot();
+  EXPECT_EQ(diagnostics.inbound_rejected_no_encoding, 3U);
+  EXPECT_EQ(diagnostics.inbound_rejected_name_mismatch, 1U);
+  EXPECT_EQ(diagnostics.inbound_rejected_remote_unavailable, 1U);
+  EXPECT_EQ(diagnostics.inbound_rejected_definition_differs, 1U);
 }
 
 } // namespace ros_portal

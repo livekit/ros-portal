@@ -101,8 +101,17 @@ Manager::Manager(NodeInterfaces node_interfaces, const rclcpp::CallbackGroup::Sh
     };
   }
 
-  topic_publisher_ = std::make_unique<TopicPub>(node_interfaces_.node_topics, node_interfaces_.node_graph,
-                                                topic_publish_allowed_, node_interfaces_.topic_snapshot);
+  topic_publisher_ = std::make_unique<TopicPub>(
+      node_interfaces_.node_topics, node_interfaces_.node_graph,
+      [this](const std::string& topic_name) {
+        const bool allowed = topic_publish_allowed_(topic_name);
+        if (!allowed) {
+          RCLCPP_ERROR(logger_, "Rejecting publish to '%s': not permitted by the local topic allow policy",
+                       topic_name.c_str());
+        }
+        return allowed;
+      },
+      node_interfaces_.topic_snapshot, logger_);
   service_caller_ = std::make_unique<ServiceCall>(node_interfaces_.node_base, node_interfaces_.node_graph, logger_);
 
   // Service and RPC creation are best-effort: on failure we log and continue so
@@ -236,21 +245,17 @@ void Manager::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status
 
   // Cache pressure: the bounded generic-publisher and service-client caches
   // reject (they do not evict) new entries once full, so a nonzero rejection
-  // count means requests were dropped for lack of a cache slot.
+  // count means requests were dropped for lack of a cache slot. Cache size and
+  // capacity are logged at each rejection rather than published as fields.
   const CacheStats topic_pub_cache = topic_publisher_ ? topic_publisher_->cacheStats() : CacheStats{};
   const CacheStats service_call_cache = service_caller_ ? service_caller_->cacheStats() : CacheStats{};
-  status.add("topic_pub_cache", std::to_string(topic_pub_cache.size) + "/" + std::to_string(topic_pub_cache.capacity));
-  status.add("topic_pub_cache_full_rejections", std::to_string(topic_pub_cache.cache_full_rejections));
-  status.add("service_call_cache",
-             std::to_string(service_call_cache.size) + "/" + std::to_string(service_call_cache.capacity));
-  status.add("service_call_cache_full_rejections", std::to_string(service_call_cache.cache_full_rejections));
+  status.add("topic_pub_cache_full_rejections", topic_pub_cache.cache_full_rejections);
+  status.add("service_call_cache_full_rejections", service_call_cache.cache_full_rejections);
 
-  // Remote-call failure breakdown (cumulative). Informational: these reflect
-  // per-request outcomes (e.g. a caller passing a bad participant id), not
-  // manager health, so they do not by themselves change the diagnostic level.
-  status.add("remote_participant_not_found", std::to_string(remote_participant_not_found_.load()));
-  status.add("remote_transport_failures", std::to_string(remote_transport_failures_.load()));
-  status.add("remote_malformed_responses", std::to_string(remote_malformed_responses_.load()));
+  // One coarse failure counter across every CLI RPC path, outbound and inbound.
+  // Each increment is logged with its RPC method and specific cause, and is
+  // informational: it does not by itself change manager health.
+  status.add("rpc_failures", diagnostic_state_.rpc_failures.load(std::memory_order_relaxed));
 
   const bool cache_pressure = topic_pub_cache.cache_full_rejections > 0 || service_call_cache.cache_full_rejections > 0;
 
@@ -294,7 +299,6 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
                                     const std::string& request_payload, std::uint8_t timeout_sec) const {
   const auto rpc_response = livekit_methods_.perform_rpc(participant_id, rpc_method, request_payload, timeout_sec);
   if (!rpc_response) {
-    ++remote_transport_failures_;
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' to participant '%s' failed", rpc_method, participant_id.c_str());
     return makeCliResponse<ResponseT>(false, std::string("remote ") + rpc_method + " RPC failed");
   }
@@ -302,7 +306,6 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
   std::string parse_error;
   auto response = cliResponseFromJson<ResponseT>(*rpc_response, parse_error);
   if (!response) {
-    ++remote_malformed_responses_;
     RCLCPP_ERROR(logger_, "LiveKit RPC '%s' from participant '%s' returned malformed JSON: %s", rpc_method,
                  participant_id.c_str(), parse_error.c_str());
     return makeCliResponse<ResponseT>(false, std::string("remote ") + rpc_method + " returned malformed JSON");
@@ -312,7 +315,8 @@ ResponseT Manager::performRemoteRpc(const std::string& participant_id, const cha
 
 TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request& request) const {
   if (request.participant_id.empty()) {
-    return makeCliResponse<TopicListSrv::Response>(false, "participant_id must be non-empty");
+    return recordRemoteResult(kTopicListRpcMethod,
+                              makeCliResponse<TopicListSrv::Response>(false, "participant_id must be non-empty"));
   }
 
   if (!livekit_methods_.is_room_available()) {
@@ -320,19 +324,22 @@ TopicListSrv::Response Manager::callRemoteTopicList(const TopicListSrv::Request&
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    ++remote_participant_not_found_;
-    return makeCliResponse<TopicListSrv::Response>(
-        false, "LiveKit participant '" + request.participant_id + "' was not found");
+    return recordRemoteResult(kTopicListRpcMethod,
+                              makeCliResponse<TopicListSrv::Response>(
+                                  false, "LiveKit participant '" + request.participant_id + "' was not found"));
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = topicListRequestToJson(request, timeout_sec);
-  return performRemoteRpc<TopicListSrv::Response>(request.participant_id, kTopicListRpcMethod, payload, timeout_sec);
+  return recordRemoteResult(
+      kTopicListRpcMethod,
+      performRemoteRpc<TopicListSrv::Response>(request.participant_id, kTopicListRpcMethod, payload, timeout_sec));
 }
 
 TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& request) const {
   if (request.participant_id.empty()) {
-    return makeCliResponse<TopicPubSrv::Response>(false, "participant_id must be non-empty");
+    return recordRemoteResult(kTopicPubRpcMethod,
+                              makeCliResponse<TopicPubSrv::Response>(false, "participant_id must be non-empty"));
   }
 
   if (!livekit_methods_.is_room_available()) {
@@ -340,9 +347,9 @@ TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& re
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    ++remote_participant_not_found_;
-    return makeCliResponse<TopicPubSrv::Response>(false,
-                                                  "LiveKit participant '" + request.participant_id + "' was not found");
+    return recordRemoteResult(kTopicPubRpcMethod,
+                              makeCliResponse<TopicPubSrv::Response>(
+                                  false, "LiveKit participant '" + request.participant_id + "' was not found"));
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
@@ -350,15 +357,17 @@ TopicPubSrv::Response Manager::callRemoteTopicPub(const TopicPubSrv::Request& re
 
   const auto options = topicPubOptionsFromJson(payload);
   if (!options) {
-    return makeCliResponse<TopicPubSrv::Response>(false, options.error());
+    return recordRemoteResult(kTopicPubRpcMethod, makeCliResponse<TopicPubSrv::Response>(false, options.error()));
   }
 
-  return performRemoteRpc<TopicPubSrv::Response>(request.participant_id, kTopicPubRpcMethod, payload, timeout_sec);
+  return recordRemoteResult(kTopicPubRpcMethod, performRemoteRpc<TopicPubSrv::Response>(
+                                                    request.participant_id, kTopicPubRpcMethod, payload, timeout_sec));
 }
 
 ServiceListSrv::Response Manager::callRemoteServiceList(const ServiceListSrv::Request& request) const {
   if (request.participant_id.empty()) {
-    return makeCliResponse<ServiceListSrv::Response>(false, "participant_id must be non-empty");
+    return recordRemoteResult(kServiceListRpcMethod,
+                              makeCliResponse<ServiceListSrv::Response>(false, "participant_id must be non-empty"));
   }
 
   if (!livekit_methods_.is_room_available()) {
@@ -366,32 +375,37 @@ ServiceListSrv::Response Manager::callRemoteServiceList(const ServiceListSrv::Re
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    ++remote_participant_not_found_;
-    return makeCliResponse<ServiceListSrv::Response>(
-        false, "LiveKit participant '" + request.participant_id + "' was not found");
+    return recordRemoteResult(kServiceListRpcMethod,
+                              makeCliResponse<ServiceListSrv::Response>(
+                                  false, "LiveKit participant '" + request.participant_id + "' was not found"));
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = serviceListRequestToJson(request, timeout_sec);
-  return performRemoteRpc<ServiceListSrv::Response>(request.participant_id, kServiceListRpcMethod, payload,
-                                                    timeout_sec);
+  return recordRemoteResult(
+      kServiceListRpcMethod,
+      performRemoteRpc<ServiceListSrv::Response>(request.participant_id, kServiceListRpcMethod, payload, timeout_sec));
 }
 
 ServiceCallSrv::Response Manager::callRemoteServiceCall(const ServiceCallSrv::Request& request) const {
   if (request.participant_id.empty()) {
-    return makeCliResponse<ServiceCallSrv::Response>(false, "participant_id must be non-empty");
+    return recordRemoteResult(kServiceCallRpcMethod,
+                              makeCliResponse<ServiceCallSrv::Response>(false, "participant_id must be non-empty"));
   }
 
   if (request.service.empty()) {
-    return makeCliResponse<ServiceCallSrv::Response>(false, "service must be non-empty");
+    return recordRemoteResult(kServiceCallRpcMethod,
+                              makeCliResponse<ServiceCallSrv::Response>(false, "service must be non-empty"));
   }
 
   if (request.msg_type.empty()) {
-    return makeCliResponse<ServiceCallSrv::Response>(false, "msg_type must be non-empty");
+    return recordRemoteResult(kServiceCallRpcMethod,
+                              makeCliResponse<ServiceCallSrv::Response>(false, "msg_type must be non-empty"));
   }
 
   if (request.payload.empty()) {
-    return makeCliResponse<ServiceCallSrv::Response>(false, "payload must be non-empty");
+    return recordRemoteResult(kServiceCallRpcMethod,
+                              makeCliResponse<ServiceCallSrv::Response>(false, "payload must be non-empty"));
   }
 
   if (!livekit_methods_.is_room_available()) {
@@ -399,26 +413,30 @@ ServiceCallSrv::Response Manager::callRemoteServiceCall(const ServiceCallSrv::Re
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    ++remote_participant_not_found_;
-    return makeCliResponse<ServiceCallSrv::Response>(
-        false, "LiveKit participant '" + request.participant_id + "' was not found");
+    return recordRemoteResult(kServiceCallRpcMethod,
+                              makeCliResponse<ServiceCallSrv::Response>(
+                                  false, "LiveKit participant '" + request.participant_id + "' was not found"));
   }
 
   const auto service_timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto rpc_timeout_sec = serviceCallRpcTimeout(service_timeout_sec);
   const auto payload = serviceCallRequestToJson(request, service_timeout_sec);
 
-  return performRemoteRpc<ServiceCallSrv::Response>(request.participant_id, kServiceCallRpcMethod, payload,
-                                                    rpc_timeout_sec);
+  return recordRemoteResult(kServiceCallRpcMethod,
+                            performRemoteRpc<ServiceCallSrv::Response>(request.participant_id, kServiceCallRpcMethod,
+                                                                       payload, rpc_timeout_sec));
 }
 
 InterfaceShowSrv::Response Manager::callRemoteInterfaceShow(const InterfaceShowSrv::Request& request) const {
   if (request.participant_id.empty()) {
-    return makeCliResponse<InterfaceShowSrv::Response>(false, "participant_id must be non-empty");
+    return recordRemoteResult(kInterfaceShowRpcMethod,
+                              makeCliResponse<InterfaceShowSrv::Response>(false, "participant_id must be non-empty"));
   }
 
   if (request.all_comments && request.no_comments) {
-    return makeCliResponse<InterfaceShowSrv::Response>(false, "all_comments and no_comments are mutually exclusive");
+    return recordRemoteResult(
+        kInterfaceShowRpcMethod,
+        makeCliResponse<InterfaceShowSrv::Response>(false, "all_comments and no_comments are mutually exclusive"));
   }
 
   if (!livekit_methods_.is_room_available()) {
@@ -426,22 +444,22 @@ InterfaceShowSrv::Response Manager::callRemoteInterfaceShow(const InterfaceShowS
   }
 
   if (!livekit_methods_.has_participant(request.participant_id)) {
-    ++remote_participant_not_found_;
-    return makeCliResponse<InterfaceShowSrv::Response>(
-        false, "LiveKit participant '" + request.participant_id + "' was not found");
+    return recordRemoteResult(kInterfaceShowRpcMethod,
+                              makeCliResponse<InterfaceShowSrv::Response>(
+                                  false, "LiveKit participant '" + request.participant_id + "' was not found"));
   }
 
   const auto timeout_sec = effectiveTimeout(request.timeout_sec);
   const auto payload = interfaceShowRequestToJson(request, timeout_sec);
-  return performRemoteRpc<InterfaceShowSrv::Response>(request.participant_id, kInterfaceShowRpcMethod, payload,
-                                                      timeout_sec);
+  return recordRemoteResult(kInterfaceShowRpcMethod,
+                            performRemoteRpc<InterfaceShowSrv::Response>(
+                                request.participant_id, kInterfaceShowRpcMethod, payload, timeout_sec));
 }
 
 std::string Manager::handleTopicListRpc(const std::string& payload) const {
   const auto options = topicListOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicListRpcMethod, options.error().c_str());
-    return cliResponseToJson(false, options.error(), "");
+    return makeInboundRpcResponse(kTopicListRpcMethod, false, options.error(), "");
   }
 
   try {
@@ -452,34 +470,30 @@ std::string Manager::handleTopicListRpc(const std::string& payload) const {
         std::make_shared<const TopicNamesAndTypes>(node_interfaces_.node_graph->get_topic_names_and_types());
     const auto output =
         formatTopicList(collectTopicInfo(*topics, *node_interfaces_.node_graph, options.value()), options.value());
-    return cliResponseToJson(true, "", output);
+    return makeInboundRpcResponse(kTopicListRpcMethod, true, "", output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicListRpcMethod, error.what());
-    return cliResponseToJson(false, error.what(), "");
+    return makeInboundRpcResponse(kTopicListRpcMethod, false, error.what(), "");
   }
 }
 
 std::string Manager::handleTopicPubRpc(const std::string& payload) const {
   const auto options = topicPubOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicPubRpcMethod, options.error().c_str());
-    return cliResponseToJson(false, options.error(), "");
+    return makeInboundRpcResponse(kTopicPubRpcMethod, false, options.error(), "");
   }
 
   try {
     const auto response = topic_publisher_->publish(options.value());
-    return cliResponseToJson(response.success, response.err_msg, response.output);
+    return makeInboundRpcResponse(kTopicPubRpcMethod, response.success, response.err_msg, response.output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kTopicPubRpcMethod, error.what());
-    return cliResponseToJson(false, error.what(), "");
+    return makeInboundRpcResponse(kTopicPubRpcMethod, false, error.what(), "");
   }
 }
 
 std::string Manager::handleServiceListRpc(const std::string& payload) const {
   const auto options = serviceListOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceListRpcMethod, options.error().c_str());
-    return cliResponseToJson(false, options.error(), "");
+    return makeInboundRpcResponse(kServiceListRpcMethod, false, options.error(), "");
   }
 
   try {
@@ -488,10 +502,9 @@ std::string Manager::handleServiceListRpc(const std::string& payload) const {
     const auto services =
         std::make_shared<const ServiceNamesAndTypes>(node_interfaces_.node_graph->get_service_names_and_types());
     const auto output = formatServiceList(collectServiceInfo(*services, options.value()), options.value());
-    return cliResponseToJson(true, "", output);
+    return makeInboundRpcResponse(kServiceListRpcMethod, true, "", output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceListRpcMethod, error.what());
-    return cliResponseToJson(false, error.what(), "");
+    return makeInboundRpcResponse(kServiceListRpcMethod, false, error.what(), "");
   }
 }
 
@@ -499,19 +512,20 @@ std::string Manager::handleServiceCallRpc(const std::string& payload) const {
   std::string options_error;
   const auto options = serviceCallOptionsFromJson(payload, options_error);
   if (!options) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kServiceCallRpcMethod, options_error.c_str());
-    return cliResponseToJson(false, options_error, "");
+    return makeInboundRpcResponse(kServiceCallRpcMethod, false, options_error, "");
   }
 
   const auto response = service_caller_->call(*options);
-  return cliResponseToJson(response.success, response.err_msg, response.output);
+  if (!response.success && response.err_msg == kServiceCallTimeoutError) {
+    RCLCPP_ERROR(logger_, "Local ROS service call for '%s' timed out", options->service.c_str());
+  }
+  return makeInboundRpcResponse(kServiceCallRpcMethod, response.success, response.err_msg, response.output);
 }
 
 std::string Manager::handleInterfaceShowRpc(const std::string& payload) const {
   const auto options = interfaceShowOptionsFromJson(payload);
   if (!options) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kInterfaceShowRpcMethod, options.error().c_str());
-    return cliResponseToJson(false, options.error(), "");
+    return makeInboundRpcResponse(kInterfaceShowRpcMethod, false, options.error(), "");
   }
 
   try {
@@ -527,14 +541,21 @@ std::string Manager::handleInterfaceShowRpc(const std::string& payload) const {
       } else {
         error_message = "Could not find interface '" + options.value().type + "'";
       }
-      RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kInterfaceShowRpcMethod, error_message.c_str());
-      return cliResponseToJson(false, error_message, "");
+      return makeInboundRpcResponse(kInterfaceShowRpcMethod, false, error_message, "");
     }
-    return cliResponseToJson(true, "", *output);
+    return makeInboundRpcResponse(kInterfaceShowRpcMethod, true, "", *output);
   } catch (const std::exception& error) {
-    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", kInterfaceShowRpcMethod, error.what());
-    return cliResponseToJson(false, error.what(), "");
+    return makeInboundRpcResponse(kInterfaceShowRpcMethod, false, error.what(), "");
   }
+}
+
+std::string Manager::makeInboundRpcResponse(const char* rpc_method, bool success, const std::string& err_msg,
+                                            const std::string& output) const {
+  if (!success) {
+    diagnostic_state_.rpc_failures.fetch_add(1, std::memory_order_relaxed);
+    RCLCPP_ERROR(logger_, "Failed to handle LiveKit RPC '%s': %s", rpc_method, err_msg.c_str());
+  }
+  return cliResponseToJson(success, err_msg, output);
 }
 
 bool Manager::isHiddenTopic(const std::string& topic_name) { return hasHiddenNameToken(topic_name); }

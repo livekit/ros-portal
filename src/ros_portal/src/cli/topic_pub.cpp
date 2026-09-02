@@ -30,11 +30,13 @@ namespace ros_portal::cli {
 
 TopicPub::TopicPub(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics,
                    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph,
-                   TopicPublishAllowed topic_publish_allowed, TopicGraphSnapshotFn topic_snapshot)
+                   TopicPublishAllowed topic_publish_allowed, TopicGraphSnapshotFn topic_snapshot,
+                   rclcpp::Logger logger)
     : topics_(std::move(topics)),
       graph_(std::move(graph)),
       topic_snapshot_(std::move(topic_snapshot)),
-      topic_publish_allowed_(std::move(topic_publish_allowed)) {
+      topic_publish_allowed_(std::move(topic_publish_allowed)),
+      logger_(std::move(logger)) {
   if (!topics_ || !graph_) {
     throw std::invalid_argument("TopicPub requires node topics and graph interfaces");
   }
@@ -80,6 +82,8 @@ TopicPubSrv::Response TopicPub::publish(const TopicPubOptions& options) {
       was_cached = true;
     } else if (publishers_.size() >= kMaxCachedTopicPublishers) {
       ++cache_full_rejections_;
+      RCLCPP_ERROR(logger_, "Rejecting publish to '%s': generic publisher cache is full (%zu/%zu)",
+                   resolved_topic.c_str(), publishers_.size(), kMaxCachedTopicPublishers);
       return makeCliResponse<TopicPubSrv::Response>(false, "topic publisher cache limit reached");
     }
   }

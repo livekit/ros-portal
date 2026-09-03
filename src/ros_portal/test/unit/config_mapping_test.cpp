@@ -48,7 +48,8 @@ TEST(ConfigMappingTest, TopicForwarderOptionsCompilesPatternsAndWiresQos) {
   rate_capped.max_rate_hz = 10.0;
   topics.push_back(rate_capped);
 
-  const auto options = topicForwarderOptions(topics, /*min_qos_depth=*/2, /*max_qos_depth=*/8,
+  const auto options = topicForwarderOptions(topics, /*enable_all_ros_topic_stats=*/false,
+                                             /*min_qos_depth=*/2, /*max_qos_depth=*/8,
                                              /*best_effort_qos_topics=*/{"/camera/.*"}, testLogger());
 
   // Outgoing = out + bidirectional; incoming = in + bidirectional.
@@ -86,7 +87,7 @@ TEST(ConfigMappingTest, TopicForwarderOptionsMapsOutboundEncodings) {
   inbound.encoding = bc::Encoding::Jsonschema;
   topics.push_back(inbound);
 
-  const auto options = topicForwarderOptions(topics, 1, 10, {}, testLogger());
+  const auto options = topicForwarderOptions(topics, false, 1, 10, {}, testLogger());
 
   ASSERT_EQ(options.outbound_encodings.count("/odom"), 1U);
   EXPECT_EQ(options.outbound_encodings.at("/odom"), OutboundEncoding::Ros2Msg);
@@ -101,7 +102,8 @@ TEST(ConfigMappingTest, TopicForwarderOptionsRoutesPreserveId) {
   bc::TopicConfig topic = makeTopic("/remote/state", bc::Direction::In);
   topic.preserve_id = true;
 
-  const auto options = topicForwarderOptions({topic}, /*min_qos_depth=*/1, /*max_qos_depth=*/10,
+  const auto options = topicForwarderOptions({topic}, /*enable_all_ros_topic_stats=*/false,
+                                             /*min_qos_depth=*/1, /*max_qos_depth=*/10,
                                              /*best_effort_qos_topics=*/{}, testLogger());
 
   EXPECT_TRUE(matchesAnyPattern("/remote/state", options.preserve_id_topic_patterns));
@@ -113,8 +115,8 @@ TEST(ConfigMappingTest, LatchedTopicsAreSplitOffFromDataTrackPatterns) {
 
   const auto topics = std::vector<bc::TopicConfig>{latched, makeTopic("/tf", bc::Direction::Out)};
 
-  const auto topic_options = topicForwarderOptions(topics, 1, 10, {}, testLogger());
-  const auto latched_options = latchedTopicForwarderOptions(topics);
+  const auto topic_options = topicForwarderOptions(topics, false, 1, 10, {}, testLogger());
+  const auto latched_options = latchedTopicForwarderOptions(topics, false);
 
   // Latched topic is handled over RPC, not on the DataTrack path.
   EXPECT_FALSE(matchesAnyPattern("/tf_static", topic_options.outgoing_topic_patterns));
@@ -127,10 +129,50 @@ TEST(ConfigMappingTest, LatchedInboundTopicsAreNormalized) {
   bc::TopicConfig latched = makeTopic("tf_static", bc::Direction::In); // no leading slash
   latched.latched = true;
 
-  const auto latched_options = latchedTopicForwarderOptions({latched});
+  const auto latched_options = latchedTopicForwarderOptions({latched}, false);
 
   EXPECT_EQ(latched_options.inbound_topics.count("/tf_static"), 1U);
   EXPECT_TRUE(latched_options.outbound_topics.empty());
+}
+
+TEST(ConfigMappingTest, MapsPerTopicRosTopicStatisticsPatterns) {
+  auto enabled = makeTopic("/enabled/.*", bc::Direction::Out);
+  enabled.enable_ros_topic_stats = true;
+  const auto disabled = makeTopic("/disabled/.*", bc::Direction::Out);
+  auto inbound = makeTopic("/inbound/.*", bc::Direction::In);
+  inbound.enable_ros_topic_stats = true;
+
+  const auto options = topicForwarderOptions({enabled, disabled, inbound}, false, 1, 10, {}, testLogger());
+
+  EXPECT_TRUE(matchesAnyPattern("/enabled/data", options.ros_topic_stats_topic_patterns));
+  EXPECT_FALSE(matchesAnyPattern("/disabled/data", options.ros_topic_stats_topic_patterns));
+  EXPECT_FALSE(matchesAnyPattern("/inbound/data", options.ros_topic_stats_topic_patterns));
+}
+
+TEST(ConfigMappingTest, GlobalRosTopicStatisticsOverridesPerTopicValues) {
+  const auto enabled_by_global = makeTopic("/global/.*", bc::Direction::Out);
+  const auto inbound = makeTopic("/inbound/.*", bc::Direction::In);
+
+  const auto options = topicForwarderOptions({enabled_by_global, inbound}, true, 1, 10, {}, testLogger());
+
+  EXPECT_TRUE(matchesAnyPattern("/global/data", options.ros_topic_stats_topic_patterns));
+  EXPECT_FALSE(matchesAnyPattern("/inbound/data", options.ros_topic_stats_topic_patterns));
+}
+
+TEST(ConfigMappingTest, MapsRosTopicStatisticsForLatchedTopics) {
+  auto enabled = makeTopic("/latched_enabled", bc::Direction::Out);
+  enabled.latched = true;
+  enabled.enable_ros_topic_stats = true;
+  auto enabled_by_global = makeTopic("/latched_global", bc::Direction::Out);
+  enabled_by_global.latched = true;
+
+  const auto per_topic_options = latchedTopicForwarderOptions({enabled, enabled_by_global}, false);
+  EXPECT_EQ(per_topic_options.ros_topic_stats_topics.count("/latched_enabled"), 1U);
+  EXPECT_EQ(per_topic_options.ros_topic_stats_topics.count("/latched_global"), 0U);
+
+  const auto global_options = latchedTopicForwarderOptions({enabled, enabled_by_global}, true);
+  EXPECT_EQ(global_options.ros_topic_stats_topics.count("/latched_enabled"), 1U);
+  EXPECT_EQ(global_options.ros_topic_stats_topics.count("/latched_global"), 1U);
 }
 
 TEST(ConfigMappingTest, OutgoingServiceRoutesKeepsOnlyOutDirection) {

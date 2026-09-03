@@ -161,4 +161,30 @@ std::unordered_set<std::string> latchedOutboundTopics(const std::vector<ros_port
 /// @param topics The configured topics.
 /// @return Set of normalized ROS topic names accepted as inbound latched state.
 std::unordered_set<std::string> latchedInboundTopics(const std::vector<ros_portal_config::TopicConfig>& topics);
+
+/// @brief ROS topic carrying statistics measured for @p topic_name.
+///
+/// rclcpp defaults every subscription to the single global '/statistics'
+/// stream, interleaving measurements for every monitored topic. ROS Portal
+/// instead gives each measured topic its own child stream, so a consumer can
+/// subscribe to the statistics for exactly the topic it cares about.
+///
+/// Examples:
+/// - "/turtle1/pose" -> "/turtle1/pose/statistics"
+/// - "/odom" -> "/odom/statistics"
+///
+/// @param topic_name Absolute ROS topic being measured.
+/// @return Statistics topic for @p topic_name.
+std::string rosTopicStatisticsTopic(const std::string& topic_name);
+
+/// @brief Return whether @p topic_name is itself a statistics stream.
+///
+/// Statistics topics are ordinary ROS topics, so a broad outbound pattern such
+/// as `.*` matches them too. Measuring them would publish statistics about the
+/// statistics, one level deeper on every discovery pass, so callers use this to
+/// exclude them.
+///
+/// @param topic_name Absolute ROS topic name.
+/// @return True when @p topic_name names a statistics stream.
+bool isRosTopicStatisticsTopic(const std::string& topic_name);
 } // namespace ros_portal::utils

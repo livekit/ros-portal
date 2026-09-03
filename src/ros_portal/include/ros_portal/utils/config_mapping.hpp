@@ -34,13 +34,16 @@ namespace ros_portal::utils {
 /// @ref ros_portal_config.
 /// @param topics Configured topics (latched topics are excluded from the
 /// DataTrack patterns internally).
+/// @param enable_all_ros_topic_stats Enable statistics on every outbound
+/// subscription, overriding per-topic values.
 /// @param min_qos_depth Minimum subscription history depth (from ROS params).
 /// @param max_qos_depth Maximum subscription history depth (from ROS params).
 /// @param best_effort_qos_topics Raw best-effort QoS topic patterns (from ROS
 /// params) compiled here.
 /// @param logger Logger used to report invalid regex patterns.
 TopicForwarder::Options topicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics,
-                                              std::size_t min_qos_depth, std::size_t max_qos_depth,
+                                              const bool enable_all_ros_topic_stats, const std::size_t min_qos_depth,
+                                              const std::size_t max_qos_depth,
                                               const std::vector<std::string>& best_effort_qos_topics,
                                               const rclcpp::Logger& logger);
 
@@ -55,6 +58,9 @@ std::vector<ServiceForwarder::ServiceRoute> outgoingServiceRoutes(
 /// Collects the outbound (literal) and inbound (normalized) latched topic sets;
 /// tunables are left at their @ref LatchedTopicForwarder::Options defaults.
 /// @param topics Configured topics; only entries flagged `latched` contribute.
-LatchedTopicForwarder::Options latchedTopicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics);
+/// @param enable_all_ros_topic_stats Enable statistics on every outbound
+/// subscription, overriding per-topic values.
+LatchedTopicForwarder::Options latchedTopicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics,
+                                                            const bool enable_all_ros_topic_stats);
 
 } // namespace ros_portal::utils

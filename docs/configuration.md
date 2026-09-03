@@ -182,6 +182,7 @@ All config lives under `ros_portal`.
 | `$schema` | string | no | - | Link to JSON schema. Use `https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json` and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
 | `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
+| `enable_all_ros_topic_stats` | boolean | no | `false` | Enable ROS 2 topic statistics for every outbound topic subscription. Overrides per-topic values when true. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |
 
@@ -213,6 +214,7 @@ used to limit which streams cross ROS Portal for bandwidth reasons.
 | `preserve_id` | boolean | no | `false` | Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
 | `max_rate_hz` | number | no | - | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
 | `latched` | boolean | no | `false` | Treat the topic as latched (see below). Literal topic names only. |
+| `enable_ros_topic_stats` | boolean | no | `false` | Outbound topics only. Enable ROS 2 topic statistics for subscriptions matching this topic pattern. |
 | `encoding` | string | no | `ros2msg` | Outbound topics only. `ros2msg`, `ros2idl`, or `jsonschema` — selects how data is encoded on the DataTrack (see below). Literal topic names only. |
 | `video_options` | map | no | - | Optional video publish settings. |
 
@@ -225,6 +227,36 @@ Unlike services, topic direction is load-bearing: it controls which topics are
 forwarded and in which direction. Forwarding only the required streams (and only
 in the required direction) keeps unnecessary traffic off the LiveKit connection,
 which matters for bandwidth on constrained links.
+
+### ROS 2 topic statistics
+
+Set `enable_ros_topic_stats: true` on an outbound or bidirectional topic to
+publish statistics for its ROS subscription on `<topic>/statistics` (for example,
+`/imu/statistics`):
+```yaml
+topics:
+  - topic: "/imu"
+    direction: "out"
+    enable_ros_topic_stats: true
+```
+
+To enable statistics for every configured outbound subscription, set the
+top-level override:
+
+```yaml
+ros_portal:
+  version: "0.0.1"
+  enable_all_ros_topic_stats: true
+  topics:
+    - topic: ".*"
+      direction: "out"
+```
+
+The global setting overrides each topic's `enable_ros_topic_stats` value.
+Inbound-only topics have ROS publishers rather than subscriptions, so these
+settings do not apply to them. ROS Portal never enables statistics on a topic
+whose name ends in `/statistics`, which prevents recursive statistics when a
+broad topic pattern such as `.*` is configured.
 
 ### Preserving the publisher identity
 

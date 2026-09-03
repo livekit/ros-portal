@@ -84,6 +84,8 @@ ros_portal:
 route. The route exposes turtle_sim's `/turtle1/teleport_absolute` service
 locally for use in [step 3b](#3-spawn-a-turtle-service-call):
 
+__NOTE:__ `enable_ros_topic_stats: true` is optionally used for `cmd_vel` topics.
+
 ```yaml
 ros_portal:
   version: "0.0.1"
@@ -93,6 +95,7 @@ ros_portal:
     # Velocity commands (ROS -> LiveKit).
     - topic: "/turtle.*/cmd_vel"
       direction: "out"
+      enable_ros_topic_stats: true
 
     # Pose telemetry (LiveKit -> ROS).
     - topic: "/turtle.*/pose"

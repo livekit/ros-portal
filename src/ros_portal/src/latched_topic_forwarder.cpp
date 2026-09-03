@@ -32,6 +32,8 @@
 
 #include "ros_portal/cli/json_converters.hpp"
 #include "ros_portal/utils/base64.hpp"
+#include "ros_portal/utils/generic_subscription.hpp"
+#include "ros_portal/utils/ros_utils.hpp"
 
 namespace ros_portal {
 
@@ -178,13 +180,13 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
     return;
   }
 
-  auto callback =
-      [this, topic_name, topic_type](
-          std::shared_ptr<rclcpp::SerializedMessage> msg) { // NOLINT(performance-unnecessary-value-param): ROS Jazzy
-                                                            // does not accept the suggested const-reference callback.
-        const auto& rcl_msg = msg->get_rcl_serialized_message();
-        storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
-      };
+  auto callback = [this, topic_name, topic_type](
+                      std::shared_ptr<rclcpp::SerializedMessage> msg,
+                      const rclcpp::MessageInfo&) { // NOLINT(performance-unnecessary-value-param): ROS Jazzy
+                                                    // does not accept the suggested const-reference callback.
+    const auto& rcl_msg = msg->get_rcl_serialized_message();
+    storeOutboundMessage(topic_name, topic_type, rcl_msg.buffer, rcl_msg.buffer_length);
+  };
 
   const std::lock_guard<std::mutex> lock(subscriptions_mutex_);
   if (subscriptions_.count(topic_name) > 0) {
@@ -194,8 +196,14 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
   try {
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
+    if (!utils::isRosTopicStatisticsTopic(topic_name) && options_.ros_topic_stats_topics.count(topic_name) > 0U) {
+      sub_options.topic_stats_options.state = rclcpp::TopicStatisticsState::Enable;
+      sub_options.topic_stats_options.publish_topic = utils::rosTopicStatisticsTopic(topic_name);
+      RCLCPP_INFO(logger_, "Enabled ROS 2 topic statistics for latched topic '%s' on '%s'", topic_name.c_str(),
+                  sub_options.topic_stats_options.publish_topic.c_str());
+    }
     auto subscription =
-        node->create_generic_subscription(topic_name, topic_type, latchedQoS(), std::move(callback), sub_options);
+        utils::createGenericSubscription(node, topic_name, topic_type, latchedQoS(), std::move(callback), sub_options);
     subscriptions_[topic_name] = std::static_pointer_cast<void>(subscription);
   } catch (const std::exception& e) {
     RCLCPP_ERROR(logger_, "Failed to create latched subscription for '%s' [%s]: %s", topic_name.c_str(),

@@ -21,6 +21,7 @@ find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
 find_package(ament_lint_auto REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(statistics_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
 
@@ -84,7 +85,7 @@ if(TARGET ros_portal_integration_tests)
   target_include_directories(ros_portal_integration_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
   )
-  medkit_target_dependencies(ros_portal_integration_tests std_srvs)
+  medkit_target_dependencies(ros_portal_integration_tests statistics_msgs std_srvs)
   target_link_libraries(ros_portal_integration_tests
     ros_portal_lib
   )

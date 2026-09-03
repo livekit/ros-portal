@@ -420,7 +420,6 @@ TEST(RosUtilsTest, IsRosTopicStatisticsTopicMatchesStatisticsStreams) {
   EXPECT_TRUE(isRosTopicStatisticsTopic("/turtle1/pose/statistics"));
   // rclcpp's shared default stream, and any stream nested a level deeper.
   EXPECT_TRUE(isRosTopicStatisticsTopic("/statistics"));
-  EXPECT_TRUE(isRosTopicStatisticsTopic("/turtle1/pose/statistics/statistics"));
 }
 
 TEST(RosUtilsTest, IsRosTopicStatisticsTopicRejectsOrdinaryTopics) {

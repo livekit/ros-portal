@@ -83,7 +83,7 @@ private:
 #endif
 
 /// @brief Wrap @p callback so every sample also feeds a ROS 2 topic statistics
-/// collector, and start the collector's /statistics publisher and timer.
+/// collector, and start the collector's /<topic_name>/statistics publisher and timer.
 ///
 /// rclcpp builds the collector, publisher and publish timer inside
 /// create_subscription() and hands them to the typed Subscription<T>.

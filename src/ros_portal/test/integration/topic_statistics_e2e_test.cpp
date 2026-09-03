@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "diagnostics_test_utils.hpp"
+#include "ros_portal/latched_topic_forwarder.hpp"
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
@@ -64,6 +65,17 @@ TopicForwarder::LiveKitMethods makeUnavailableLiveKitMethods() {
   };
   methods.schema.define_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return false; };
   methods.schema.get_schema = [](const livekit::DataTrackSchemaId&, const std::string&) { return std::nullopt; };
+  return methods;
+}
+
+LatchedTopicForwarder::LiveKitMethods makeUnavailableLatchedLiveKitMethods() {
+  LatchedTopicForwarder::LiveKitMethods methods;
+  methods.is_room_available = []() { return false; };
+  methods.register_rpc_method = [](const std::string&, RpcHandler) { return true; };
+  methods.unregister_rpc_method = [](const std::string&) { return true; };
+  methods.perform_rpc = [](const std::string&, const std::string&, const std::string&,
+                           std::uint8_t) -> std::optional<std::string> { return std::nullopt; };
+  methods.list_remote_identities = []() { return std::vector<std::string>{}; };
   return methods;
 }
 
@@ -233,6 +245,28 @@ ros_portal:
   EXPECT_TRUE(publishUntilStatistics(enabled_publisher, "/stats/enabled/statistics"));
   EXPECT_EQ(statisticsCount("/stats/disabled/statistics"), 0U)
       << "the topic without enable_ros_topic_stats must not publish measurements";
+}
+
+TEST_F(TopicStatisticsE2E, LatchedTopicProducesPerTopicStatistics) {
+  LatchedTopicForwarder::Options options;
+  options.outbound_topics.insert("/stats/latched");
+  options.ros_topic_stats_topics.insert("/stats/latched");
+  options.push_interval = std::chrono::hours(1);
+  LatchedTopicForwarder forwarder(std::move(options), forwarder_node_, makeUnavailableLatchedLiveKitMethods(),
+                                  diagnostics_fns_);
+
+  auto publisher = publisher_node_->create_publisher<std_msgs::msg::String>(
+      "/stats/latched", rclcpp::QoS(10).reliable().transient_local());
+  observeStatistics("/stats/latched/statistics");
+  forwarder.reconcileTopics({{"/stats/latched", {"std_msgs/msg/String"}}});
+
+  ASSERT_TRUE(spinUntil([&]() {
+    return publisher->get_subscription_count() == 1U &&
+           observer_node_->count_publishers("/stats/latched/statistics") == 1U;
+  }));
+  EXPECT_EQ(observer_node_->count_publishers(kGlobalStatisticsTopic), 0U)
+      << "latched measurements must not fall back to rclcpp's shared /statistics stream";
+  EXPECT_TRUE(publishUntilStatistics(publisher, "/stats/latched/statistics"));
 }
 
 TEST_F(TopicStatisticsE2E, StatisticsStreamsAreNotThemselvesMeasured) {

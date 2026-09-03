@@ -254,8 +254,8 @@ ros_portal:
 
 The global setting overrides each topic's `enable_ros_topic_stats` value.
 Inbound-only topics have ROS publishers rather than subscriptions, so these
-settings do not apply to them. ROS Portal never enables statistics on the
-`/statistics` subscription itself, which prevents recursive statistics when a
+settings do not apply to them. ROS Portal never enables statistics on a topic
+whose name ends in `/statistics`, which prevents recursive statistics when a
 broad topic pattern such as `.*` is configured.
 
 ### Preserving the publisher identity

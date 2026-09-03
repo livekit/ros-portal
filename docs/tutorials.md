@@ -95,7 +95,7 @@ ros_portal:
     # Velocity commands (ROS -> LiveKit).
     - topic: "/turtle.*/cmd_vel"
       direction: "out"
-      enable_ros_statistics: true
+      enable_ros_topic_stats: true
 
     # Pose telemetry (LiveKit -> ROS).
     - topic: "/turtle.*/pose"

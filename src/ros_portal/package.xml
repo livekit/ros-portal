@@ -31,6 +31,7 @@
   <depend>geometry_msgs</depend>
   <depend>nlohmann-json-dev</depend>
   <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
   <depend>ros2_medkit_serialization</depend>
   <depend>rosbag2_cpp</depend>
   <depend>rosbag2_storage</depend>
@@ -52,7 +53,9 @@
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>nav_msgs</test_depend>
+  <test_depend>rclpy</test_depend>
   <test_depend>std_srvs</test_depend>
   <test_depend>test_msgs</test_depend>
 

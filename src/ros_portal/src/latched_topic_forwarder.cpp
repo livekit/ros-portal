@@ -181,7 +181,7 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
   }
 
   auto callback = [this, topic_name, topic_type](
-                      std::shared_ptr<rclcpp::SerializedMessage> msg,
+                      const std::shared_ptr<rclcpp::SerializedMessage>& msg,
                       const rclcpp::MessageInfo&) { // NOLINT(performance-unnecessary-value-param): ROS Jazzy
                                                     // does not accept the suggested const-reference callback.
     const auto& rcl_msg = msg->get_rcl_serialized_message();

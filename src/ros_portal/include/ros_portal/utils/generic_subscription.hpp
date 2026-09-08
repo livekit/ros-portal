@@ -105,7 +105,7 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
       node->get_name(), node->create_publisher<statistics_msgs::msg::MetricsMessage>(
                             options.topic_stats_options.publish_topic, options.topic_stats_options.qos));
 
-  std::weak_ptr<rclcpp::topic_statistics::SubscriptionTopicStatistics> weak_statistics(statistics);
+  const std::weak_ptr<rclcpp::topic_statistics::SubscriptionTopicStatistics> weak_statistics(statistics);
   statistics->set_publisher_timer(node->create_wall_timer(
       std::chrono::duration_cast<std::chrono::nanoseconds>(options.topic_stats_options.publish_period),
       [weak_statistics]() {

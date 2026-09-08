@@ -24,7 +24,9 @@
 #include <optional>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
+#ifndef ROS_DISTRO_HUMBLE
 #include <statistics_msgs/msg/metrics_message.hpp>
+#endif
 #include <std_msgs/msg/string.hpp>
 #include <string>
 #include <thread>
@@ -39,6 +41,7 @@
 #include "ros_portal_config/config/config_parser.hpp"
 #include "test_common.hpp"
 
+#ifndef ROS_DISTRO_HUMBLE
 namespace ros_portal::test {
 namespace {
 
@@ -296,3 +299,4 @@ ros_portal:
 
 } // namespace
 } // namespace ros_portal::test
+#endif

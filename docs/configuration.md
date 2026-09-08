@@ -256,7 +256,9 @@ The global setting overrides each topic's `enable_ros_topic_stats` value.
 Inbound-only topics have ROS publishers rather than subscriptions, so these
 settings do not apply to them. ROS Portal never enables statistics on a topic
 whose name ends in `/statistics`, which prevents recursive statistics when a
-broad topic pattern such as `.*` is configured.
+broad topic pattern such as `.*` is configured. This feature requires ROS 2
+Jazzy or later; Humble does not support topic statistics for generic serialized
+subscriptions.
 
 ### Preserving the publisher identity
 

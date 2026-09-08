@@ -26,8 +26,10 @@
 #include <rclcpp/serialized_message.hpp>
 #include <rclcpp/subscription_options.hpp>
 #include <rclcpp/time.hpp>
+#ifndef ROS_DISTRO_HUMBLE
 #include <rclcpp/topic_statistics/subscription_topic_statistics.hpp>
 #include <statistics_msgs/msg/metrics_message.hpp>
+#endif
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -82,6 +84,7 @@ private:
 };
 #endif
 
+#ifndef ROS_DISTRO_HUMBLE
 /// @brief Wrap @p callback so every sample also feeds a ROS 2 topic statistics
 /// collector, and start the collector's /<topic_name>/statistics publisher and timer.
 ///
@@ -126,6 +129,7 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
     statistics->handle_message(message_info.get_rmw_message_info(), rclcpp::Time(received.time_since_epoch().count()));
   };
 }
+#endif
 
 /// @brief Subscribe to a serialized ROS topic with a callback that receives
 /// rclcpp::MessageInfo, on every supported ROS distribution.
@@ -134,18 +138,21 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
 /// @param topic_type ROS message type of @p topic_name.
 /// @param qos Subscription QoS.
 /// @param callback Invoked for every sample with its message info.
-/// @param options Subscription options. `topic_stats_options` is applied here
-/// via @ref attachTopicStatistics rather than by rclcpp, which honors it only
-/// for typed subscriptions.
+/// @param options Subscription options. On Jazzy and later, `topic_stats_options`
+/// is applied here via @ref attachTopicStatistics rather than by rclcpp, which
+/// honors it only for typed subscriptions. Humble does not support topic
+/// statistics for generic serialized subscriptions.
 /// @return The created subscription.
 /// @throws std::runtime_error when the type support for @p topic_type cannot be
 /// loaded, matching rclcpp::Node::create_generic_subscription.
 inline std::shared_ptr<rclcpp::GenericSubscription> createGenericSubscription(
     const rclcpp::Node::SharedPtr& node, const std::string& topic_name, const std::string& topic_type,
     const rclcpp::QoS& qos, SerializedCallbackWithInfo callback, const rclcpp::SubscriptionOptions& options) {
+#ifndef ROS_DISTRO_HUMBLE
   if (options.topic_stats_options.state == rclcpp::TopicStatisticsState::Enable) {
     callback = attachTopicStatistics(node, options, std::move(callback));
   }
+#endif
 #ifdef ROS_DISTRO_HUMBLE
   auto subscription = std::make_shared<GenericSubscriptionWithInfo>(
       node->get_node_base_interface().get(), rclcpp::get_typesupport_library(topic_type, "rosidl_typesupport_cpp"),

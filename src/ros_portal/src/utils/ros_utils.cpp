@@ -24,6 +24,11 @@
 
 namespace ros_portal::utils {
 
+namespace {
+/// @brief Child topic appended to a measured topic to carry its statistics.
+constexpr char kRosTopicStatisticsSuffix[] = "/statistics";
+} // namespace
+
 std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
                                                       std::size_t rgba_size) {
   if (width <= 0 || height <= 0) {
@@ -227,5 +232,13 @@ std::unordered_set<std::string> latchedInboundTopics(const std::vector<ros_porta
   }
 
   return result;
+}
+
+std::string rosTopicStatisticsTopic(const std::string& topic_name) { return topic_name + kRosTopicStatisticsSuffix; }
+
+bool isRosTopicStatisticsTopic(const std::string& topic_name) {
+  const std::string suffix(kRosTopicStatisticsSuffix);
+  return topic_name.size() >= suffix.size() &&
+         topic_name.compare(topic_name.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 } // namespace ros_portal::utils

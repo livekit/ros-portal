@@ -410,5 +410,24 @@ TEST(RosUtilsTest, LatchedInboundTopicsNormalizesInboundLatchedOnly) {
 
   EXPECT_EQ(latchedInboundTopics(config.topics), (std::unordered_set<std::string>{"/tf_static", "/params"}));
 }
+
+TEST(RosUtilsTest, RosTopicStatisticsTopicNestsUnderMeasuredTopic) {
+  EXPECT_EQ(rosTopicStatisticsTopic("/turtle1/pose"), "/turtle1/pose/statistics");
+  EXPECT_EQ(rosTopicStatisticsTopic("/odom"), "/odom/statistics");
+}
+
+TEST(RosUtilsTest, IsRosTopicStatisticsTopicMatchesStatisticsStreams) {
+  EXPECT_TRUE(isRosTopicStatisticsTopic("/turtle1/pose/statistics"));
+  // rclcpp's shared default stream, and any stream nested a level deeper.
+  EXPECT_TRUE(isRosTopicStatisticsTopic("/statistics"));
+}
+
+TEST(RosUtilsTest, IsRosTopicStatisticsTopicRejectsOrdinaryTopics) {
+  EXPECT_FALSE(isRosTopicStatisticsTopic("/turtle1/pose"));
+  EXPECT_FALSE(isRosTopicStatisticsTopic(""));
+  // The suffix must be a whole trailing path segment, not a substring.
+  EXPECT_FALSE(isRosTopicStatisticsTopic("/statistics/pose"));
+  EXPECT_FALSE(isRosTopicStatisticsTopic("/pose_statistics"));
+}
 } // namespace
 } // namespace ros_portal::utils

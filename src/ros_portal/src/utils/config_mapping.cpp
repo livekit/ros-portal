@@ -62,10 +62,27 @@ std::unordered_map<std::string, OutboundEncoding> outboundEncodings(
   return encodings;
 }
 
+/// @brief Collect configured DataTrack topic patterns that enable ROS topic
+/// statistics. The global option selects every outbound DataTrack pattern.
+std::vector<std::string> rosTopicStatsPatterns(const std::vector<ros_portal_config::TopicConfig>& topics,
+                                               const bool enable_all_ros_topic_stats) {
+  std::vector<std::string> patterns;
+  patterns.reserve(topics.size());
+  for (const auto& topic_config : topics) {
+    const bool outbound = topic_config.direction == ros_portal_config::Direction::Out ||
+                          topic_config.direction == ros_portal_config::Direction::Bidirectional;
+    if (outbound && !topic_config.latched && (enable_all_ros_topic_stats || topic_config.enable_ros_topic_stats)) {
+      patterns.push_back(topic_config.topic);
+    }
+  }
+  return patterns;
+}
+
 } // namespace
 
 TopicForwarder::Options topicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics,
-                                              std::size_t min_qos_depth, std::size_t max_qos_depth,
+                                              const bool enable_all_ros_topic_stats, const std::size_t min_qos_depth,
+                                              const std::size_t max_qos_depth,
                                               const std::vector<std::string>& best_effort_qos_topics,
                                               const rclcpp::Logger& logger) {
   TopicForwarder::Options options;
@@ -73,6 +90,8 @@ TopicForwarder::Options topicForwarderOptions(const std::vector<ros_portal_confi
   options.incoming_topic_patterns = compileAndLog(incomingTopicPatterns(topics), logger);
   options.preserve_id_topic_patterns = compileAndLog(preserveIdTopicPatterns(topics), logger);
   options.best_effort_qos_topic_patterns = compileAndLog(best_effort_qos_topics, logger);
+  options.ros_topic_stats_topic_patterns =
+      compileAndLog(rosTopicStatsPatterns(topics, enable_all_ros_topic_stats), logger);
   options.min_qos_depth = min_qos_depth;
   options.max_qos_depth = max_qos_depth;
   options.outbound_rate_limits = outboundRateLimits(topics);
@@ -97,10 +116,18 @@ std::vector<ServiceForwarder::ServiceRoute> outgoingServiceRoutes(
   return routes;
 }
 
-LatchedTopicForwarder::Options latchedTopicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics) {
+LatchedTopicForwarder::Options latchedTopicForwarderOptions(const std::vector<ros_portal_config::TopicConfig>& topics,
+                                                            const bool enable_all_ros_topic_stats) {
   LatchedTopicForwarder::Options options;
   options.outbound_topics = latchedOutboundTopics(topics);
   options.inbound_topics = latchedInboundTopics(topics);
+  for (const auto& topic_config : topics) {
+    const bool outbound = topic_config.direction == ros_portal_config::Direction::Out ||
+                          topic_config.direction == ros_portal_config::Direction::Bidirectional;
+    if (outbound && topic_config.latched && (enable_all_ros_topic_stats || topic_config.enable_ros_topic_stats)) {
+      options.ros_topic_stats_topics.insert(topic_config.topic);
+    }
+  }
   return options;
 }
 

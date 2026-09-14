@@ -45,6 +45,7 @@ ros_portal:
 
   EXPECT_EQ(config.version, "0.0.1");
   EXPECT_EQ(config.ros_threads, 0);
+  EXPECT_FALSE(config.enable_all_ros_topic_stats);
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());
 }
@@ -66,6 +67,7 @@ TEST(ConfigParserTest, ParsesFullConfig) {
 ros_portal:
   version: "0.0.1"
   ros_threads: 4
+  enable_all_ros_topic_stats: true
   services:
     - service: "/go_to_pose"
       direction: "out"
@@ -79,6 +81,7 @@ ros_portal:
     - topic: "/camera/image_raw"
       direction: "out"
       max_rate_hz: 15
+      enable_ros_topic_stats: true
       video_options:
         bitrate_kbps: 3500
         codec: "h264"
@@ -91,6 +94,7 @@ ros_portal:
 )");
 
   EXPECT_EQ(config.ros_threads, 4);
+  EXPECT_TRUE(config.enable_all_ros_topic_stats);
 
   ASSERT_EQ(config.services.size(), 2u);
   EXPECT_EQ(config.services[0].service, "/go_to_pose");
@@ -111,11 +115,13 @@ ros_portal:
   EXPECT_FALSE(config.topics[0].preserve_id);
   ASSERT_TRUE(config.topics[0].max_rate_hz.has_value());
   EXPECT_DOUBLE_EQ(*config.topics[0].max_rate_hz, 15.0);
+  EXPECT_TRUE(config.topics[0].enable_ros_topic_stats);
   EXPECT_EQ(config.topics[0].encoding, Encoding::Ros2msg); // default
   EXPECT_EQ(config.topics[1].direction, Direction::Bidirectional);
   EXPECT_FALSE(config.topics[1].preserve_id);
   EXPECT_FALSE(config.topics[1].max_rate_hz.has_value());
   EXPECT_EQ(config.topics[1].encoding, Encoding::Jsonschema);
+  EXPECT_FALSE(config.topics[1].enable_ros_topic_stats);
   EXPECT_EQ(config.topics[2].direction, Direction::In);
   EXPECT_TRUE(config.topics[2].preserve_id);
   EXPECT_EQ(config.topics[2].encoding, Encoding::Ros2msg); // default
@@ -381,6 +387,7 @@ TEST(ConfigParserTest, ParsesFile) {
 
   EXPECT_EQ(config.version, "0.0.1");
   EXPECT_EQ(config.ros_threads, 4);
+  EXPECT_FALSE(config.enable_all_ros_topic_stats);
   ASSERT_EQ(config.services.size(), 2u);
   ASSERT_EQ(config.topics.size(), 6u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");
@@ -389,6 +396,7 @@ TEST(ConfigParserTest, ParsesFile) {
   EXPECT_EQ(config.topics[1].topic, "/lidar/points");
   ASSERT_TRUE(config.topics[1].max_rate_hz.has_value());
   EXPECT_DOUBLE_EQ(*config.topics[1].max_rate_hz, 10.0);
+  EXPECT_TRUE(config.topics[1].enable_ros_topic_stats);
   EXPECT_EQ(config.topics[5].topic, "/teleop_cmd");
   EXPECT_TRUE(config.topics[5].preserve_id);
 }

@@ -111,7 +111,8 @@ bool RosPortal::initialize() {
   min_qos_depth_ = static_cast<size_t>(this->get_parameter("min_qos_depth").as_int());
   max_qos_depth_ = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
   topics_ = config->topics;
-  const auto latched_options = utils::latchedTopicForwarderOptions(topics_);
+  enable_all_ros_topic_stats_ = config->enable_all_ros_topic_stats;
+  const auto latched_options = utils::latchedTopicForwarderOptions(topics_, enable_all_ros_topic_stats_);
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     if (!latched_options.outbound_topics.empty() || !latched_options.inbound_topics.empty()) {
@@ -652,8 +653,8 @@ void RosPortal::onParticipantsUpdated(livekit::Room& room, const livekit::Partic
 bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics) {
   try {
     const auto best_effort_qos_topics = this->get_parameter("best_effort_qos_topics").as_string_array();
-    auto forwarder_options = utils::topicForwarderOptions(topics, min_qos_depth_, max_qos_depth_,
-                                                          best_effort_qos_topics, this->get_logger());
+    auto forwarder_options = utils::topicForwarderOptions(topics, enable_all_ros_topic_stats_, min_qos_depth_,
+                                                          max_qos_depth_, best_effort_qos_topics, this->get_logger());
     forwarder_options.topic_snapshot = [manager = graph_manager_.get()]() { return manager->topics(); };
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
@@ -848,7 +849,7 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
 }
 
 bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics) {
-  auto options = utils::latchedTopicForwarderOptions(topics);
+  auto options = utils::latchedTopicForwarderOptions(topics, enable_all_ros_topic_stats_);
   const bool latched_topics_configured = !options.outbound_topics.empty() || !options.inbound_topics.empty();
   if (!latched_topics_configured) {
     {

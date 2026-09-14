@@ -32,4 +32,5 @@ ros_portal:
     # Pose telemetry out to the controller (ROS -> LiveKit).
     - topic: "/turtle.*/pose"
       direction: "out"
+      enable_ros_topic_stats: true
   

@@ -43,6 +43,14 @@ namespace ros_portal {
 namespace {
 constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
 
+/// @brief Return whether topic statistics should be enabled for a subscription.
+/// Never collect statistics about a statistics stream itself, which would
+/// recursively generate more statistics messages for broad patterns such as
+/// `.*`.
+bool shouldEnableRosTopicStats(const std::string& topic_name, const std::vector<std::regex>& patterns) {
+  return !utils::isRosTopicStatisticsTopic(topic_name) && utils::matchesAnyPattern(topic_name, patterns);
+}
+
 class ReaderAliveGuard {
 public:
   explicit ReaderAliveGuard(std::atomic_bool& alive) : alive_(alive) { alive_.store(true, std::memory_order_relaxed); }
@@ -325,6 +333,12 @@ void TopicForwarder::createDataSubscriber(const std::string& topic_name, const s
   try {
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
+    if (shouldEnableRosTopicStats(topic_name, options_.ros_topic_stats_topic_patterns)) {
+      sub_options.topic_stats_options.state = rclcpp::TopicStatisticsState::Enable;
+      sub_options.topic_stats_options.publish_topic = utils::rosTopicStatisticsTopic(topic_name);
+      RCLCPP_INFO(logger_, "Enabled ROS 2 topic statistics for data topic '%s' on '%s'", topic_name.c_str(),
+                  sub_options.topic_stats_options.publish_topic.c_str());
+    }
     auto subscription =
         utils::createGenericSubscription(node, topic_name, topic_type, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
@@ -481,6 +495,12 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
   try {
     rclcpp::SubscriptionOptions sub_options;
     sub_options.callback_group = callback_group_;
+    if (shouldEnableRosTopicStats(topic_name, options_.ros_topic_stats_topic_patterns)) {
+      sub_options.topic_stats_options.state = rclcpp::TopicStatisticsState::Enable;
+      sub_options.topic_stats_options.publish_topic = utils::rosTopicStatisticsTopic(topic_name);
+      RCLCPP_INFO(logger_, "Enabled ROS 2 topic statistics for image topic '%s' on '%s'", topic_name.c_str(),
+                  sub_options.topic_stats_options.publish_topic.c_str());
+    }
     auto subscription =
         node->create_subscription<sensor_msgs::msg::Image>(topic_name, qos, std::move(callback), sub_options);
     subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};

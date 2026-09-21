@@ -84,3 +84,7 @@ clang-tidy.log
 
 # Mac
 .DS_Store
+
+
+# docs
+web/

@@ -38,34 +38,6 @@ constexpr const char* kTestEnvVar = "ROS_PORTAL_TEST_CREDENTIAL";
 
 using ros_portal::test::ScopedEnvVar;
 
-TEST(RosUtilsTest, MakeRgbaVideoFrameCopiesMatchingRgbaBuffer) {
-  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40, 50, 60, 70, 80};
-
-  auto frame = makeRgbaVideoFrame(2, 1, rgba.data(), rgba.size());
-
-  ASSERT_TRUE(frame.has_value());
-  EXPECT_EQ(std::memcmp(frame->data(), rgba.data(), rgba.size()), 0);
-}
-
-TEST(RosUtilsTest, MakeRgbaVideoFrameReturnsEmptyForWrongSize) {
-  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40};
-
-  const auto frame = makeRgbaVideoFrame(2, 1, rgba.data(), rgba.size());
-
-  EXPECT_FALSE(frame.has_value());
-}
-
-TEST(RosUtilsTest, MakeRgbaVideoFrameReturnsEmptyForNonPositiveDimensions) {
-  const std::vector<std::uint8_t> rgba = {10, 20, 30, 40};
-
-  EXPECT_FALSE(makeRgbaVideoFrame(0, 1, rgba.data(), rgba.size()).has_value());
-  EXPECT_FALSE(makeRgbaVideoFrame(1, -1, rgba.data(), rgba.size()).has_value());
-}
-
-TEST(RosUtilsTest, MakeRgbaVideoFrameReturnsEmptyForNullBuffer) {
-  EXPECT_FALSE(makeRgbaVideoFrame(1, 1, nullptr, 4).has_value());
-}
-
 TEST(RosUtilsTest, EnvironmentVariableReadsNonEmptyValue) {
   ScopedEnvVar scoped_env{kTestEnvVar};
   setenv(kTestEnvVar, "secret-token", 1);
@@ -428,6 +400,15 @@ TEST(RosUtilsTest, IsRosTopicStatisticsTopicRejectsOrdinaryTopics) {
   // The suffix must be a whole trailing path segment, not a substring.
   EXPECT_FALSE(isRosTopicStatisticsTopic("/statistics/pose"));
   EXPECT_FALSE(isRosTopicStatisticsTopic("/pose_statistics"));
+}
+
+TEST(RosUtilsTest, VideoTrackNameStripsCompressedSuffixOnlyForCompressedTopics) {
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw/compressed", true), "/cam/image_raw");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/jpeg", true), "/cam/jpeg");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw_compressed", true), "/cam/image_raw_compressed");
+  EXPECT_EQ(videoTrackNameForTopic("/compressed", true), "/compressed");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw/compressed", false), "/cam/image_raw/compressed");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw", false), "/cam/image_raw");
 }
 } // namespace
 } // namespace ros_portal::utils

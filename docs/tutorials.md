@@ -360,3 +360,193 @@ participant. **Config routes** are best for the topics and services that are par
 of your steady workflow: declare them once and they behave like local ROS
 resources. See [configuration.md](configuration.md) and
 [ros2_cli_calls.md](ros2_cli_calls.md) for the full reference.
+
+---
+
+## Video pass-through over LiveKit
+
+This tutorial sends recorded camera images from one ROS graph to another through
+a LiveKit room. The images leave as `sensor_msgs/CompressedImage` and arrive as
+`sensor_msgs/CompressedImage`. LiveKit carries them as a video track between the
+two graphs.
+
+You run two ROS graphs on one machine. Each launch file sets its own
+`ROS_DOMAIN_ID`, so the LiveKit room is the only path between them:
+
+- **video_publisher** (`ROS_DOMAIN_ID=42`) plays a bag and runs a ROS Portal node
+  that sends the camera topic as a video track.
+- **video_subscriber** (`ROS_DOMAIN_ID=100`) runs a ROS Portal node that
+  republishes the video track. It also runs `foxglove_bridge` to view the images.
+
+```mermaid
+flowchart LR
+    subgraph D42["Domain 42"]
+        direction TB
+        BAG["ros2 bag play"]
+        P1["ROS Portal · video_publisher"]
+        BAG -- "/insta/cam0/image_raw/compressed" --> P1
+    end
+
+    subgraph LK["LiveKit"]
+        ROOM["video_room<br/>track /insta/cam0/image_raw"]
+    end
+
+    subgraph D100["Domain 100"]
+        direction TB
+        P2["ROS Portal · video_subscriber"]
+        FOX["foxglove_bridge"]
+        P2 -- "/insta/cam0/image_raw/compressed" --> FOX
+    end
+
+    P1 --> ROOM --> P2
+```
+
+### Prerequisites
+
+- A bag with a JPEG `sensor_msgs/CompressedImage` topic named
+  `/insta/cam0/image_raw/compressed`. This tutorial uses
+  `data/r01_bag` in the workspace. The `data/` directory is not tracked by git.
+- `ros_portal_tutorials` built with its dependencies:
+  `colcon build --packages-up-to ros_portal_tutorials`.
+- A running LiveKit server. See [Running](running.md#running-livekit-server).
+  Start it with `--enable_participant_data_blob`.
+- Optional: the Foxglove app or <https://app.foxglove.dev> to view the images.
+
+> **Reminder:** In every new shell, source your workspace with
+> `source install/setup.bash`. In the devcontainer, use `sros`.
+
+### 1. What the configs contain
+
+**`video_publisher.yaml`** sends the bag's camera topic out:
+
+```yaml
+topics:
+  - topic: "/insta/cam0/image_raw/compressed"
+    direction: "out"
+```
+
+ROS Portal decodes each JPEG and publishes the frames as one LiveKit video
+track. A `CompressedImage` topic named `<base>/compressed` becomes the track
+`<base>`, so the track is `/insta/cam0/image_raw`.
+
+**`video_subscriber.yaml`** receives that track:
+
+```yaml
+topics:
+  - topic: "/insta/cam0/image_raw"
+    direction: "in"
+```
+
+Video tracks match by exact name, so this entry is not a regex. ROS Portal
+republishes the track on `/insta/cam0/image_raw/compressed`. The topic name on
+the receiver is therefore the same as on the sender. The header keeps the bag's
+`stamp` and `frame_id` (see
+[Inbound video](configuration.md#inbound-video)).
+
+### 2. Start the publisher side
+
+**Terminal A**:
+
+```bash
+ros2 launch ros_portal_tutorials video_publisher.launch.py \
+  bag_path:=/livekit_ws/data/r01_bag
+```
+
+The launch file mints a token with `lk`, starts ROS Portal, and plays the bag in
+a loop. The log shows the new video track:
+
+```text
+Created LiveKit video track '/insta/cam0/image_raw' from '/insta/cam0/image_raw/compressed' (1472x1440, jpeg)
+```
+
+Useful arguments:
+
+| Argument | Default | Description |
+| --- | --- | --- |
+| `bag_path` | none (required) | Bag directory to play. |
+| `rate` | `1.0` | Bag playback rate. |
+| `loop` | `true` | Restart the bag at its end. |
+| `room_name` | `video_room` | LiveKit room. Use the same value on both sides. |
+| `domain_id` | `42` | `ROS_DOMAIN_ID` of this side. |
+
+### 3. Start the subscriber side
+
+**Terminal B**:
+
+```bash
+ros2 launch ros_portal_tutorials video_subscriber.launch.py
+```
+
+The log shows the received track. ROS Portal pauses the track while no ROS node
+subscribes to the image topic:
+
+```text
+Subscribed to LiveKit video track '/insta/cam0/image_raw' from 'video_publisher'; publishing ROS topic '/insta/cam0/image_raw/compressed' [sensor_msgs/msg/CompressedImage]
+Paused LiveKit video track '/insta/cam0/image_raw' from 'video_publisher'; '/insta/cam0/image_raw/compressed' has no ROS subscribers
+```
+
+To start without Foxglove, add `foxglove:=false`.
+
+### 4. Check the received images
+
+**Terminal C**, on the subscriber domain:
+
+```bash
+export ROS_DOMAIN_ID=100
+ros2 topic hz /insta/cam0/image_raw/compressed
+```
+
+The rate is about 30 Hz, the rate of the bag. The first subscriber resumes the
+paused track, and the subscriber log shows `Resumed LiveKit video track`.
+
+Look at one message header:
+
+```bash
+ros2 topic echo --once --no-arr /insta/cam0/image_raw/compressed
+```
+
+```text
+header:
+  stamp:
+    sec: 1769886367
+    nanosec: 433493000
+  frame_id: cam0
+format: jpeg
+```
+
+The stamp is the time from the bag, not the current time, and `frame_id` is
+`cam0`. A SLAM node can align these images with other data from the same bag.
+
+### 5. View the images in Foxglove
+
+The subscriber launch file starts `foxglove_bridge` on port 8765.
+
+1. Open Foxglove and select **Open connection**.
+2. Connect to `ws://localhost:8765`.
+3. Add an **Image** panel and select `/insta/cam0/image_raw/compressed`.
+
+The Image panel subscribes to the topic, so it also resumes the track.
+
+On macOS, the devcontainer runs with `--network=host`. Docker Desktop shares
+those ports with the Mac only when host networking is on. If the connection
+fails, use one of these options:
+
+- In Docker Desktop, open **Settings > Resources > Network**. Select
+  **Enable host networking**, then restart Docker Desktop and the devcontainer.
+- Record the received topic, then open the file in Foxglove on the Mac.
+  The `data/` directory is shared with the Mac.
+
+  ```bash
+  export ROS_DOMAIN_ID=100
+  ros2 bag record -s mcap -o /livekit_ws/data/received /insta/cam0/image_raw/compressed
+  ```
+
+### Recap
+
+| Step | ROS Portal mechanism |
+| --- | --- |
+| `CompressedImage` to LiveKit | config topic route `out`. JPEG is decoded and sent as a video track. |
+| LiveKit to `CompressedImage` | config topic route `in`, exact track name. Frames are encoded as JPEG again. |
+| Same topic name on both sides | `<base>/compressed` becomes track `<base>`, and returns as `<base>/compressed`. |
+| Stamps and frame_id kept | frame metadata on the video track |
+| No wasted work | the receiver pauses the track while no ROS node subscribes |

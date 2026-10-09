@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     iputils-ping \
     jq \
+    libturbojpeg0-dev \
     nano \
     net-tools \
     ninja-build \

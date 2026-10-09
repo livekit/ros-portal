@@ -31,6 +31,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <stdexcept>
 #include <string>
@@ -42,6 +44,7 @@
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
+#include "ros_portal/utils/video_frame_metadata.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
 // ROS node it is given, so these unit tests cover only the node-independent
@@ -870,6 +873,355 @@ TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) 
   EXPECT_FALSE(valueFor(status, "inbound.empty_payload_drops").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.terminal_errors").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.last_terminal_error").has_value());
+}
+
+namespace {
+
+constexpr char kVideoTrackName[] = "/camera/image_raw";
+constexpr char kCompressedTopic[] = "/camera/image_raw/compressed";
+
+// One frame emitted by the scripted video stream.
+struct ScriptedVideoFrame {
+  std::optional<std::uint64_t> user_timestamp_us;
+  std::optional<std::string> frame_id;
+  livekit::VideoBufferType type{livekit::VideoBufferType::I420};
+};
+
+using VideoSubscribeFn = std::function<livekit::Result<std::shared_ptr<InboundVideoTrack::Stream>, std::string>()>;
+
+// A live-track stand-in: emits @p frame every 10 ms until closed. Repeating the
+// frame keeps the tests independent of when DDS matches the test subscriber.
+VideoSubscribeFn makeScriptedVideoSubscribe(ScriptedVideoFrame frame, std::shared_ptr<std::atomic_bool> closed,
+                                            std::shared_ptr<std::atomic<int>> subscribe_count = nullptr) {
+  return [frame = std::move(frame), closed = std::move(closed), subscribe_count = std::move(subscribe_count)]() {
+    if (subscribe_count) {
+      subscribe_count->fetch_add(1);
+    }
+    auto stream = std::make_shared<InboundVideoTrack::Stream>();
+    stream->read = [frame, closed](livekit::VideoFrameEvent& event) {
+      if (closed->load()) {
+        return false;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      event.frame = livekit::VideoFrame::create(16, 16, frame.type);
+      event.metadata.reset();
+      if (frame.user_timestamp_us || frame.frame_id) {
+        livekit::VideoFrameMetadata metadata;
+        metadata.user_timestamp_us = frame.user_timestamp_us;
+        if (frame.frame_id) {
+          metadata.user_data = utils::encodeFrameIdUserData(*frame.frame_id);
+        }
+        event.metadata = std::move(metadata);
+      }
+      return !closed->load();
+    };
+    stream->close = [closed]() { closed->store(true); };
+    return livekit::Result<std::shared_ptr<InboundVideoTrack::Stream>, std::string>::success(std::move(stream));
+  };
+}
+
+TopicForwarder::Options makeVideoOptions(const bool preserve_id = false) {
+  auto options = makeOptions();
+  options.incoming_video_topics = {{kVideoTrackName, TopicForwarder::IncomingVideoTopic{preserve_id}}};
+  return options;
+}
+
+// Collects CompressedImage samples delivered to a test subscription.
+struct CompressedImageInbox {
+  std::mutex mutex;
+  std::vector<sensor_msgs::msg::CompressedImage> messages;
+  rmw_gid_t publisher_gid{};
+
+  std::size_t size() {
+    const std::lock_guard<std::mutex> lock(mutex);
+    return messages.size();
+  }
+};
+
+rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr subscribeInbox(
+    const std::shared_ptr<rclcpp::Node>& node, const std::string& topic, CompressedImageInbox& inbox) {
+  return node->create_subscription<sensor_msgs::msg::CompressedImage>(
+      topic, 10,
+      [&inbox](const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg, const rclcpp::MessageInfo& info) {
+        const std::lock_guard<std::mutex> lock(inbox.mutex);
+        inbox.messages.push_back(*msg);
+        inbox.publisher_gid = info.get_rmw_message_info().publisher_gid;
+      });
+}
+
+} // namespace
+
+TEST_F(TopicForwarderTest, InboundVideoPublishesJpegOnCompressedTopic) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  CompressedImageInbox inbox;
+  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  ASSERT_TRUE(spinUntil([&]() { return inbox.size() >= 1U; }));
+  {
+    const std::lock_guard<std::mutex> lock(inbox.mutex);
+    const auto& msg = inbox.messages.front();
+    EXPECT_EQ(msg.format, "jpeg");
+    ASSERT_GE(msg.data.size(), 2U);
+    EXPECT_EQ(msg.data[0], 0xFF);
+    EXPECT_EQ(msg.data[1], 0xD8);
+  }
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(valueFor(status, "inbound.video_tracks"), "1");
+}
+
+TEST_F(TopicForwarderTest, InboundVideoPreserveIdPrefixesTopic) {
+  TopicForwarder forwarder(makeVideoOptions(true), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge-robot";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  EXPECT_TRUE(waitForPublishers("/edge_robot/camera/image_raw/compressed", 1U));
+  EXPECT_EQ(node_->get_publishers_info_by_topic(kCompressedTopic).size(), 0U);
+}
+
+TEST_F(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch) {
+  auto options = makeOptions();
+  // A regex entry is kept literally for video tracks, so it never matches.
+  options.incoming_video_topics = {{"/camera/.*", TopicForwarder::IncomingVideoTopic{}}};
+  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  auto subscribe_count = std::make_shared<std::atomic<int>>(0);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed, subscribe_count);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  EXPECT_EQ(subscribe_count->load(), 0);
+  {
+    const std::lock_guard<std::mutex> lock(forwarder.inbound_video_tracks_mutex_);
+    EXPECT_TRUE(forwarder.inbound_video_tracks_.empty());
+  }
+  // A video track that nobody configured is not a failure.
+  EXPECT_EQ(forwarder.diagnostic_state_.inbound_failures.load(), 0U);
+}
+
+TEST_F(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  CompressedImageInbox inbox;
+  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+
+  ScriptedVideoFrame frame;
+  frame.user_timestamp_us = 1'700'000'123'456U;
+  frame.frame_id = "camera_optical_frame";
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe(frame, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  ASSERT_TRUE(spinUntil([&]() { return inbox.size() >= 1U; }));
+  {
+    const std::lock_guard<std::mutex> lock(inbox.mutex);
+    const auto& header = inbox.messages.front().header;
+    EXPECT_EQ(header.stamp.sec, 1'700'000);
+    EXPECT_EQ(header.stamp.nanosec, 123'456'000U);
+    EXPECT_EQ(header.frame_id, "camera_optical_frame");
+  }
+  EXPECT_EQ(forwarder.diagnostic_state_.inbound_video.stamp_fallbacks.load(), 0U);
+}
+
+TEST_F(TopicForwarderTest, InboundVideoFallsBackToLocalStampAndTrackFrameId) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  CompressedImageInbox inbox;
+  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  const auto before = node_->get_clock()->now();
+
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "browser";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  ASSERT_TRUE(spinUntil([&]() { return inbox.size() >= 1U; }));
+  {
+    const std::lock_guard<std::mutex> lock(inbox.mutex);
+    const auto& header = inbox.messages.front().header;
+    EXPECT_GE(rclcpp::Time(header.stamp, before.get_clock_type()), before);
+    EXPECT_EQ(header.frame_id, "camera/image_raw");
+  }
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  const auto fallbacks = valueFor(status, "inbound.video_stamp_fallbacks");
+  ASSERT_TRUE(fallbacks.has_value());
+  EXPECT_GE(std::stoull(*fallbacks), 1U);
+}
+
+TEST_F(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+  ASSERT_TRUE(waitForPublishers(kCompressedTopic, 1U));
+
+  forwarder.onVideoTrackUnsubscribed("video-sid");
+
+  EXPECT_TRUE(closed->load());
+  {
+    const std::lock_guard<std::mutex> lock(forwarder.inbound_video_tracks_mutex_);
+    EXPECT_TRUE(forwarder.inbound_video_tracks_.empty());
+  }
+  EXPECT_TRUE(waitForPublishers(kCompressedTopic, 0U));
+  // Unsubscribing an unknown SID is a no-op.
+  forwarder.onVideoTrackUnsubscribed("video-sid");
+}
+
+TEST_F(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  CompressedImageInbox inbox;
+  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+  ASSERT_TRUE(spinUntil([&]() { return inbox.size() >= 1U; }));
+
+  rmw_message_info_t from_track{};
+  {
+    const std::lock_guard<std::mutex> lock(inbox.mutex);
+    from_track.publisher_gid = inbox.publisher_gid;
+  }
+  EXPECT_TRUE(forwarder.isInboundPublication(rclcpp::MessageInfo(from_track)));
+
+  auto local_publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kCompressedTopic, 10);
+  rmw_message_info_t from_local{};
+  from_local.publisher_gid = local_publisher->get_gid();
+  EXPECT_FALSE(forwarder.isInboundPublication(rclcpp::MessageInfo(from_local)));
+}
+
+TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  ScriptedVideoFrame frame;
+  frame.type = livekit::VideoBufferType::RGBA;
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe(frame, closed);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  ASSERT_TRUE(spinUntil([&]() { return forwarder.diagnostic_state_.inbound_video.failures.load() >= 1U; }));
+
+  diagnostic_updater::DiagnosticStatusWrapper status;
+  forwarder.populateStatus(status);
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  const auto failures = valueFor(status, "inbound.failures");
+  ASSERT_TRUE(failures.has_value());
+  EXPECT_GE(std::stoull(*failures), 1U);
+}
+
+namespace {
+
+// Records what the outbound video sink receives for each captured frame.
+struct VideoSinkRecord {
+  std::mutex mutex;
+  int captures{0};
+  std::int64_t timestamp_us{0};
+  std::optional<std::string> frame_id;
+};
+
+TopicForwarder::LiveKitMethods makeVideoRecordingLiveKitMethods(std::shared_ptr<VideoSinkRecord> record) {
+  auto livekit_methods = makeLiveKitMethods();
+  livekit_methods.publish_video_track =
+      [record](const std::string&, int width,
+               int height) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
+    auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
+    sink->width = width;
+    sink->height = height;
+    sink->capture_frame = [record](const livekit::VideoFrame&, const TopicForwarder::VideoFrameStamp& stamp) {
+      const std::lock_guard<std::mutex> lock(record->mutex);
+      ++record->captures;
+      record->timestamp_us = stamp.timestamp_us;
+      record->frame_id = stamp.frame_id ? std::optional<std::string>(*stamp.frame_id) : std::nullopt;
+    };
+    return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::success(std::move(sink));
+  };
+  return livekit_methods;
+}
+
+sensor_msgs::msg::Image makeRgbImage(const std::string& frame_id) {
+  sensor_msgs::msg::Image image;
+  image.header.stamp.sec = 12;
+  image.header.stamp.nanosec = 345'678'000U;
+  image.header.frame_id = frame_id;
+  image.width = 2;
+  image.height = 2;
+  image.encoding = "rgb8";
+  image.step = 6;
+  image.data.assign(12U, 128U);
+  return image;
+}
+
+} // namespace
+
+TEST_F(TopicForwarderTest, OutboundVideoSendsImageStampAndFrameId) {
+  auto record = std::make_shared<VideoSinkRecord>();
+  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+
+  rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
+  pub_qos.reliable();
+  auto publisher = node_->create_publisher<sensor_msgs::msg::Image>("/allowed/image", pub_qos);
+  ASSERT_TRUE(waitForPublishers("/allowed/image", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  publisher->publish(makeRgbImage("camera_optical_frame"));
+  ASSERT_TRUE(spinUntil([&]() {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    return record->captures == 1;
+  }));
+  {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    EXPECT_EQ(record->timestamp_us, 12'345'678);
+    EXPECT_EQ(record->frame_id, "camera_optical_frame");
+  }
+
+  // A frame_id too long for the metadata is left out, not truncated.
+  publisher->publish(makeRgbImage(std::string(utils::kMaxFrameIdUserDataLength + 1U, 'a')));
+  ASSERT_TRUE(spinUntil([&]() {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    return record->captures == 2;
+  }));
+  const std::lock_guard<std::mutex> lock(record->mutex);
+  EXPECT_FALSE(record->frame_id.has_value());
 }
 
 } // namespace ros_portal

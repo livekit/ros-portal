@@ -27,6 +27,7 @@
 #include <livekit/remote_participant.h>
 #include <livekit/room.h>
 #include <livekit/rpc_error.h>
+#include <livekit/track.h>
 #include <livekit/video_source.h>
 
 #include <chrono>
@@ -50,6 +51,7 @@
 #include "ros_portal/topic_forwarder.hpp"
 #include "ros_portal/utils/config_mapping.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
+#include "ros_portal/utils/video_frame_metadata.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal {
@@ -593,6 +595,46 @@ void RosPortal::onDataTrackUnpublished(livekit::Room&, const livekit::DataTrackU
   }
 }
 
+void RosPortal::onTrackSubscribed(livekit::Room&, const livekit::TrackSubscribedEvent& event) {
+  if (shutting_down_.load(std::memory_order_relaxed)) {
+    return;
+  }
+  if (!event.track || event.track->kind() != livekit::TrackKind::KIND_VIDEO) {
+    return;
+  }
+  if (!event.participant) {
+    RCLCPP_ERROR(this->get_logger(), "Ignoring video track '%s' subscribed without a participant",
+                 event.track->name().c_str());
+    return;
+  }
+
+  // Same barrier as onDataTrackPublished(): connect can deliver tracks before
+  // the connection manager enables room operations.
+  if (!connection_manager_ || !connection_manager_->waitForOperations()) {
+    RCLCPP_DEBUG(this->get_logger(), "Dropping LiveKit video track '%s' because the room session became unavailable",
+                 event.track->name().c_str());
+    return;
+  }
+  if (shutting_down_.load(std::memory_order_relaxed)) {
+    return;
+  }
+
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  if (topic_forwarder_) {
+    topic_forwarder_->onVideoTrackSubscribed(event.track, event.participant->identity());
+  }
+}
+
+void RosPortal::onTrackUnsubscribed(livekit::Room&, const livekit::TrackUnsubscribedEvent& event) {
+  if (!event.track || event.track->kind() != livekit::TrackKind::KIND_VIDEO) {
+    return;
+  }
+  const std::lock_guard<std::mutex> lock(room_components_mutex_);
+  if (topic_forwarder_) {
+    topic_forwarder_->onVideoTrackUnsubscribed(event.track->sid());
+  }
+}
+
 void RosPortal::onParticipantConnected(livekit::Room& room, const livekit::ParticipantConnectedEvent& event) {
   if (connection_manager_) {
     connection_manager_->onParticipantConnected(room, event);
@@ -753,22 +795,48 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 
       try {
         auto source = std::make_shared<livekit::VideoSource>(width, height);
-        auto track = participant->publishVideoTrack(topic_name, source, livekit::TrackSource::SOURCE_CAMERA);
+        auto track = livekit::LocalVideoTrack::createLocalVideoTrack(topic_name, source);
         if (!track) {
           return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure(
-              "publishVideoTrack returned null track");
+              "createLocalVideoTrack returned null track");
         }
+        // Receivers restore the ROS header from this metadata, so inbound
+        // CompressedImage stamps stay on the sender's clock (see
+        // docs/configuration.md "Inbound video").
+        livekit::TrackPublishOptions publish_options;
+        publish_options.source = livekit::TrackSource::SOURCE_CAMERA;
+        publish_options.frame_metadata_features = livekit::FrameMetadataFeatures{};
+        publish_options.frame_metadata_features->user_timestamp = true;
+        publish_options.frame_metadata_features->user_data = true;
+        participant->publishTrack(track, publish_options);
+
         auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
         sink->width = width;
         sink->height = height;
-        sink->capture_frame = [operations_enabled = room_operations_enabled_, source = std::move(source),
-                               track = std::move(track)](const livekit::VideoFrame& frame, std::int64_t timestamp_us) {
-          if (!operations_enabled->load()) {
-            return;
-          }
-          (void)track;
-          source->captureFrame(frame, timestamp_us);
-        };
+        // The forwarder calls capture_frame under its outbound lock, so the
+        // reused capture options and cached frame_id need no extra locking.
+        livekit::VideoCaptureOptions capture_options;
+        capture_options.metadata.emplace();
+        sink->capture_frame =
+            [operations_enabled = room_operations_enabled_, source = std::move(source), track = std::move(track),
+             capture_options = std::move(capture_options), last_frame_id = std::optional<std::string>{}](
+                const livekit::VideoFrame& frame, const TopicForwarder::VideoFrameStamp& stamp) mutable {
+              if (!operations_enabled->load()) {
+                return;
+              }
+              (void)track;
+              auto& metadata = *capture_options.metadata;
+              capture_options.timestamp_us = stamp.timestamp_us;
+              metadata.user_timestamp_us =
+                  stamp.timestamp_us >= 0 ? std::optional<std::uint64_t>(static_cast<std::uint64_t>(stamp.timestamp_us))
+                                          : std::nullopt;
+              // Encode the frame_id only when it changes, so steady frames do not allocate.
+              if (stamp.frame_id != last_frame_id) {
+                last_frame_id = stamp.frame_id ? std::optional<std::string>(*stamp.frame_id) : std::nullopt;
+                metadata.user_data = stamp.frame_id ? utils::encodeFrameIdUserData(*stamp.frame_id) : std::nullopt;
+              }
+              source->captureFrame(frame, capture_options);
+            };
         return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::success(std::move(sink));
       } catch (const std::exception& error) {
         return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::failure(error.what());

@@ -107,6 +107,8 @@ endif()
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(TURBOJPEG REQUIRED IMPORTED_TARGET libturbojpeg)
 find_package(ros2_medkit_cmake REQUIRED)
 include(ROS2MedkitCompat)
 medkit_find_yaml_cpp()
@@ -267,6 +269,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/connection/connection_manager.cpp
   src/diagnostics/build_info.cpp
   src/graph/graph_manager.cpp
+  src/inbound_video_track.cpp
   src/latched_topic_forwarder.cpp
   src/ros_portal.cpp
   src/schema/manager.cpp
@@ -277,8 +280,10 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/utils/base64.cpp
   src/utils/config_mapping.cpp
   src/utils/image_conversion.cpp
+  src/utils/jpeg_encoder.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
+  src/utils/video_frame_metadata.cpp
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}
@@ -292,6 +297,7 @@ target_link_libraries(ros_portal_lib
   "${LIVEKIT_CORE_TARGET}"
   nlohmann_json::nlohmann_json
   OpenSSL::Crypto
+  PkgConfig::TURBOJPEG
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros_portal_lib)

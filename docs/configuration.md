@@ -22,6 +22,7 @@ a YAML configuration file for runtime parameters.
     - [Capping the outbound forward rate](#capping-the-outbound-forward-rate)
     - [Latched topics (`latched: true`)](#latched-topics-latched-true)
     - [Data track encoding (`encoding`)](#data-track-encoding-encoding)
+    - [Inbound video](#inbound-video)
   - [Video Options](#video-options)
 
 ## Prerequisites
@@ -209,9 +210,9 @@ used to limit which streams cross ROS Portal for bandwidth reasons.
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
-| `topic` | string | yes | - | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz`, `latched`, and `encoding`. |
+| `topic` | string | yes | - | ROS topic pattern. Must be non-empty. Treated as an ECMAScript regex for the [DataTrack](https://docs.livekit.io/transport/data/data-tracks/) path; matched as a literal name for `max_rate_hz`, `latched`, `encoding`, and inbound video tracks. |
 | `direction` | string | yes | - | `in`, `out`, or `bidirectional`. |
-| `preserve_id` | boolean | no | `false` | Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. |
+| `preserve_id` | boolean | no | `false` | Inbound topics only. Prefix the republished ROS topic with the publishing participant's identity. Applies to data tracks and video tracks. |
 | `max_rate_hz` | number | no | - | Outbound topics only. Cap (in Hz) on the rate samples are forwarded to LiveKit; samples arriving within one period of the last forwarded one are dropped (like `topic_tools throttle messages`). Literal topic names only. |
 | `latched` | boolean | no | `false` | Treat the topic as latched (see below). Literal topic names only. |
 | `enable_ros_topic_stats` | boolean | no | `false` | Outbound topics only. Enable ROS 2 topic statistics for subscriptions matching this topic pattern. |
@@ -422,6 +423,66 @@ Notes:
   for pure inbound (`in`) topics.
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
+
+#### Inbound video
+
+ROS Portal republishes a remote LiveKit video track as a
+`sensor_msgs/CompressedImage` topic with JPEG data. A video track is forwarded
+when its name exactly matches the `topic` of an `in` or `bidirectional` entry.
+Video tracks never match by regex. For example, the entry `/camera/.*`
+forwards matching data tracks but no video tracks.
+
+A sending ROS Portal publishes each `sensor_msgs/Image` topic as a video track
+with the same name. On the receiving host, add an entry with that name:
+
+```yaml
+topics:
+  # On the SLAM host: receive the edge camera as JPEG.
+  - topic: "/camera/image_raw"
+    direction: "in"
+```
+
+```text
+LiveKit video track: /camera/image_raw   (from participant "edge-robot")
+ROS topic:           /camera/image_raw/compressed
+ROS type:            sensor_msgs/msg/CompressedImage (format "jpeg")
+```
+
+With `preserve_id: true`, the topic is `/edge_robot/camera/image_raw/compressed`.
+
+The topic name follows the image_transport convention, `<base>/compressed`.
+ROS Portal uses this name for these reasons:
+
+- image_transport subscribers, `rqt_image_view`, and the image_transport
+  `republish` node find a compressed stream from its base name. A SLAM front
+  end that uses image_transport needs no remap.
+- The payload is not a raw `sensor_msgs/Image`. A separate name prevents a type
+  clash with a local `Image` topic that uses the base name.
+- To get raw images, decode the topic with the image_transport `republish`
+  node. ROS Portal does not need to change for this.
+
+ROS Portal keeps the sender's `header.stamp` and `header.frame_id`. The sending
+ROS Portal attaches both to each video frame as LiveKit frame metadata. The
+receiving ROS Portal copies them into the `CompressedImage` header.
+
+If a frame has no metadata, ROS Portal uses fallback values. This happens when
+the sender is not ROS Portal, for example a browser. The stamp then comes from
+the receiver's ROS clock when the frame arrives. The frame_id is the track name
+without the leading `/`. The `inbound.video_stamp_fallbacks` diagnostic counts
+these frames (see [diagnostics.md](diagnostics.md#topic_forwarder)).
+
+Notes:
+
+- LiveKit delivers decoded frames only. The receiving ROS Portal encodes each
+  frame again as JPEG at quality 90. This costs CPU on the receiving host and
+  adds JPEG loss to the video codec loss.
+- If JPEG encoding is slower than the frame rate, ROS Portal drops the oldest
+  buffered frame. Frames do not queue without limit.
+- The publisher uses reliable QoS with depth 10. If the output topic matches the
+  `best_effort_qos_topics` ROS parameter, the publisher uses the sensor data QoS
+  profile (best effort, depth 5).
+- The sender omits a frame_id longer than 255 bytes. The receiver then uses the
+  fallback frame_id.
 
 ### Video Options
 

@@ -182,7 +182,7 @@ Reports outbound and inbound track inventory and cumulative forwarding failures,
 and raises an error when an outbound LiveKit writer is still pending or an
 inbound reader thread has stopped.
 
-**Source:** Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack readers, and forwarding outcomes
+**Source:** Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack and video track readers, and forwarding outcomes
 
 ### Status Levels
 
@@ -190,14 +190,16 @@ inbound reader thread has stopped.
 |---|---|---|
 | `OK` | `Topic forwarding healthy` | All currently tracked forwarding paths are available and no failures have been observed. |
 | `WARN` | `Topic forwarding failures or drops detected` | At least one cumulative forwarding failure, rejection, or drop counter is nonzero. |
-| `ERROR` | `One or more forwarding paths are unavailable` | An outbound data track is pending its writer, or an active inbound track's reader thread has stopped. |
+| `ERROR` | `One or more forwarding paths are unavailable` | An outbound data track is pending its writer, or an active inbound data or video track's reader thread has stopped. |
 
 ### Key/Value Fields
 
 | Key | Value |
 |---|---|
 | `inbound.data_tracks` | Number of inbound LiveKit data tracks being republished. |
-| `inbound.failures` | Cumulative inbound failures, aggregating tracks rejected because no ROS type could be resolved, because they matched no topic pattern, or because a ROS topic name could not be produced, plus failures publishing inbound frames on ROS, invalid inbound JSON frames, empty inbound CDR payloads, streams that ended with a terminal error, and inbound schema validation rejections. |
+| `inbound.failures` | Cumulative inbound failures, aggregating tracks rejected because no ROS type could be resolved, because they matched no topic pattern, or because a ROS topic name could not be produced, plus failures publishing inbound frames on ROS, invalid inbound JSON frames, empty inbound CDR payloads, streams that ended with a terminal error, and inbound schema validation rejections. Also counts inbound video tracks whose ROS publisher, frame stream, or reader thread could not be created, and video frames that failed JPEG encoding or ROS publication. |
+| `inbound.video_stamp_fallbacks` | Cumulative inbound video frames stamped with the receiver's ROS clock because the sender attached no `user_timestamp_us` frame metadata. A nonzero value means that `header.stamp` on those frames is not on the sender's clock. Senders that are not ROS Portal, such as browsers, cause this. |
+| `inbound.video_tracks` | Number of inbound LiveKit video tracks being republished as `sensor_msgs/CompressedImage`. |
 | `outbound.data_tracks` | Number of discovered outbound data topics. |
 | `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. |
 | `outbound.subscriptions` | Number of active outbound ROS subscriptions. |

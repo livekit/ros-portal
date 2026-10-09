@@ -109,6 +109,34 @@ TEST(ConfigMappingTest, TopicForwarderOptionsRoutesPreserveId) {
   EXPECT_TRUE(matchesAnyPattern("/remote/state", options.preserve_id_topic_patterns));
 }
 
+TEST(ConfigMappingTest, IncomingVideoTopicsUseExactInboundNames) {
+  std::vector<bc::TopicConfig> topics;
+  topics.push_back(makeTopic("/front_cam/image_raw", bc::Direction::In));
+  topics.push_back(makeTopic("rear_cam/image_raw", bc::Direction::Bidirectional));
+  topics.push_back(makeTopic("/camera/.*", bc::Direction::In));
+  topics.push_back(makeTopic("/outbound_cam", bc::Direction::Out));
+  bc::TopicConfig preserved = makeTopic("/arm_cam", bc::Direction::In);
+  preserved.preserve_id = true;
+  topics.push_back(preserved);
+  bc::TopicConfig latched = makeTopic("/map", bc::Direction::In);
+  latched.latched = true;
+  topics.push_back(latched);
+
+  const auto options = topicForwarderOptions(topics, false, 1, 10, {}, testLogger());
+  const auto& video_topics = options.incoming_video_topics;
+
+  // Inbound and bidirectional entries, normalized but never expanded as regex.
+  EXPECT_EQ(video_topics.size(), 4U);
+  EXPECT_EQ(video_topics.count("/front_cam/image_raw"), 1U);
+  EXPECT_EQ(video_topics.count("/rear_cam/image_raw"), 1U);
+  EXPECT_EQ(video_topics.count("/camera/.*"), 1U);
+  ASSERT_EQ(video_topics.count("/arm_cam"), 1U);
+  EXPECT_TRUE(video_topics.at("/arm_cam").preserve_id);
+  EXPECT_FALSE(video_topics.at("/front_cam/image_raw").preserve_id);
+  EXPECT_EQ(video_topics.count("/outbound_cam"), 0U);
+  EXPECT_EQ(video_topics.count("/map"), 0U);
+}
+
 TEST(ConfigMappingTest, LatchedTopicsAreSplitOffFromDataTrackPatterns) {
   bc::TopicConfig latched = makeTopic("/tf_static", bc::Direction::Out);
   latched.latched = true;

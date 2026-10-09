@@ -18,6 +18,8 @@
 
 #include <livekit/data_track_stream.h>
 #include <livekit/remote_data_track.h>
+#include <livekit/track.h>
+#include <livekit/video_stream.h>
 
 #include <algorithm>
 #include <cstring>
@@ -26,6 +28,7 @@
 #include <exception>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <stdexcept>
 #include <string>
@@ -35,13 +38,20 @@
 #include "ros_portal/introspection/introspection_utils.hpp"
 #include "ros_portal/utils/generic_subscription.hpp"
 #include "ros_portal/utils/image_conversion.hpp"
+#include "ros_portal/utils/reader_alive_guard.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
+#include "ros_portal/utils/video_frame_metadata.hpp"
 
 namespace ros_portal {
 
 namespace {
 constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
+/// @brief image_transport suffix for the compressed transport of a base image topic.
+constexpr char kCompressedImageTopicSuffix[] = "/compressed";
+/// @brief Decoded frames buffered per inbound video track. When encoding falls
+/// behind, the stream drops the oldest frame instead of growing the queue.
+constexpr std::size_t kInboundVideoStreamCapacity = 2U;
 
 /// @brief Return whether topic statistics should be enabled for a subscription.
 /// Never collect statistics about a statistics stream itself, which would
@@ -50,18 +60,6 @@ constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
 bool shouldEnableRosTopicStats(const std::string& topic_name, const std::vector<std::regex>& patterns) {
   return !utils::isRosTopicStatisticsTopic(topic_name) && utils::matchesAnyPattern(topic_name, patterns);
 }
-
-class ReaderAliveGuard {
-public:
-  explicit ReaderAliveGuard(std::atomic_bool& alive) : alive_(alive) { alive_.store(true, std::memory_order_relaxed); }
-  ~ReaderAliveGuard() { alive_.store(false, std::memory_order_relaxed); }
-
-  ReaderAliveGuard(const ReaderAliveGuard&) = delete;
-  ReaderAliveGuard& operator=(const ReaderAliveGuard&) = delete;
-
-private:
-  std::atomic_bool& alive_;
-};
 } // namespace
 
 TopicForwarder::RemoteDataTrackDescriptor TopicForwarder::createRemoteDataTrackDescriptor(
@@ -135,6 +133,7 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
 TopicForwarder::~TopicForwarder() {
   diagnostics_.remove(kTopicForwarderDiagnosticTaskName);
   stopAllInboundDataTracks();
+  stopAllInboundVideoTracks();
   const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
   subscriptions_.clear();
   data_topic_states_.clear();
@@ -450,8 +449,17 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     }
 
     const auto& stamp = msg->header.stamp;
-    const std::int64_t timestamp_us =
+    VideoFrameStamp frame_stamp;
+    frame_stamp.timestamp_us =
         static_cast<std::int64_t>(stamp.sec) * 1'000'000 + static_cast<std::int64_t>(stamp.nanosec) / 1'000;
+    if (msg->header.frame_id.size() <= utils::kMaxFrameIdUserDataLength) {
+      frame_stamp.frame_id = msg->header.frame_id;
+    } else {
+      RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
+                           "Not sending frame_id for '%s' because it is longer than %zu bytes; receivers will use a "
+                           "fallback frame_id",
+                           topic_name.c_str(), utils::kMaxFrameIdUserDataLength);
+    }
 
     if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
       auto frame = utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height),
@@ -464,7 +472,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
         return;
       }
 
-      state.sink->capture_frame(*frame, timestamp_us);
+      state.sink->capture_frame(*frame, frame_stamp);
     } else {
       if (!utils::convertToRgba(*msg, state.rgba_buf)) {
         RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Unsupported image encoding '%s' on topic '%s'",
@@ -481,7 +489,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
         return;
       }
 
-      state.sink->capture_frame(*frame, timestamp_us);
+      state.sink->capture_frame(*frame, frame_stamp);
     }
   };
 
@@ -712,17 +720,182 @@ void TopicForwarder::onDataTrackUnpublished(const std::string& sid) {
               state->publisher_identity.c_str(), state->ros_topic_name.c_str());
 }
 
+TopicForwarder::RemoteVideoTrackDescriptor TopicForwarder::createRemoteVideoTrackDescriptor(
+    std::shared_ptr<livekit::Track> track, const std::string& publisher_identity) {
+  RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = track->sid();
+  descriptor.track_name = track->name();
+  descriptor.publisher_identity = publisher_identity;
+  descriptor.subscribe =
+      [track = std::move(track)]() -> livekit::Result<std::shared_ptr<InboundVideoTrack::Stream>, std::string> {
+    using SubscribeResult = livekit::Result<std::shared_ptr<InboundVideoTrack::Stream>, std::string>;
+    std::shared_ptr<livekit::VideoStream> video_stream;
+    try {
+      // I420 is the decoder's native layout, so the stream does not convert
+      // and the JPEG encoder reads the planes directly.
+      video_stream = livekit::VideoStream::fromTrack(
+          track, livekit::VideoStream::Options{kInboundVideoStreamCapacity, livekit::VideoBufferType::I420});
+    } catch (const std::exception& e) {
+      return SubscribeResult::failure(e.what());
+    }
+    if (!video_stream) {
+      return SubscribeResult::failure("VideoStream::fromTrack returned null");
+    }
+    auto stream = std::make_shared<InboundVideoTrack::Stream>();
+    stream->read = [video_stream](livekit::VideoFrameEvent& event) { return video_stream->read(event); };
+    stream->close = [video_stream]() { video_stream->close(); };
+    return SubscribeResult::success(std::move(stream));
+  };
+  return descriptor;
+}
+
+void TopicForwarder::onVideoTrackSubscribed(const std::shared_ptr<livekit::Track>& track,
+                                            const std::string& publisher_identity) {
+  if (!track) {
+    RCLCPP_WARN(logger_, "Ignoring null LiveKit video track");
+    return;
+  }
+  onVideoTrackSubscribed(createRemoteVideoTrackDescriptor(track, publisher_identity));
+}
+
+std::optional<std::string> TopicForwarder::resolveInboundVideoTopic(const RemoteVideoTrackDescriptor& descriptor) {
+  const auto normalized_track_name = utils::normalizeTrackTopicName(descriptor.track_name);
+  if (!normalized_track_name.has_value()) {
+    return std::nullopt;
+  }
+  const auto topic_it = options_.incoming_video_topics.find(*normalized_track_name);
+  if (topic_it == options_.incoming_video_topics.end()) {
+    RCLCPP_INFO(logger_,
+                "Ignoring LiveKit video track '%s' from '%s' because no inbound topic entry has this exact name",
+                descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return std::nullopt;
+  }
+
+  const auto base_topic_name = topic_it->second.preserve_id
+                                   ? utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name)
+                                   : utils::liveKitToRosTopicName(descriptor.track_name);
+  if (!base_topic_name) {
+    diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
+    RCLCPP_WARN(logger_, "Ignoring LiveKit video track '%s' from '%s' because ROS topic name resolution failed",
+                descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return std::nullopt;
+  }
+  return *base_topic_name + kCompressedImageTopicSuffix;
+}
+
+void TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& descriptor) {
+  if (descriptor.sid.empty() || !descriptor.subscribe) {
+    RCLCPP_WARN(logger_, "Ignoring LiveKit video track '%s' with an empty SID or no subscribe hook",
+                descriptor.track_name.c_str());
+    return;
+  }
+
+  const auto ros_topic_name = resolveInboundVideoTopic(descriptor);
+  if (!ros_topic_name) {
+    return;
+  }
+
+  // Pin the node before any lock, for the same reason as onDataTrackPublished().
+  const auto node = node_.lock();
+  if (!node) {
+    RCLCPP_WARN(logger_, "Cannot republish LiveKit video track '%s' from '%s'; ROS node has been destroyed",
+                descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
+    return;
+  }
+
+  const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
+  if (inbound_video_tracks_.count(descriptor.sid) > 0) {
+    return;
+  }
+
+  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr publisher;
+  try {
+    const auto qos = utils::matchesAnyPattern(*ros_topic_name, options_.best_effort_qos_topic_patterns)
+                         ? rclcpp::QoS(rclcpp::SensorDataQoS())
+                         : rclcpp::QoS(10);
+    publisher = node->create_publisher<sensor_msgs::msg::CompressedImage>(*ros_topic_name, qos);
+  } catch (const std::exception& e) {
+    diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
+    RCLCPP_ERROR(logger_, "Failed to create ROS publisher '%s' for LiveKit video track '%s' from '%s': %s",
+                 ros_topic_name->c_str(), descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(),
+                 e.what());
+    return;
+  }
+
+  const auto subscribe_result = descriptor.subscribe();
+  if (!subscribe_result || !subscribe_result.value() || !subscribe_result.value()->read ||
+      !subscribe_result.value()->close) {
+    diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
+    RCLCPP_ERROR(logger_, "Failed to open a frame stream for LiveKit video track '%s' from '%s': %s",
+                 descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(),
+                 subscribe_result ? "stream handle is invalid" : subscribe_result.error().c_str());
+    return;
+  }
+
+  InboundVideoTrack::Options track_options;
+  track_options.sid = descriptor.sid;
+  track_options.track_name = descriptor.track_name;
+  track_options.publisher_identity = descriptor.publisher_identity;
+  track_options.ros_topic_name = *ros_topic_name;
+  // ROS frame_ids conventionally have no leading slash.
+  const auto& track_name = descriptor.track_name;
+  track_options.fallback_frame_id = track_name.front() == '/' ? track_name.substr(1) : track_name;
+  auto& track = inbound_video_tracks_[descriptor.sid];
+  track = std::make_unique<InboundVideoTrack>(std::move(track_options), subscribe_result.value(), std::move(publisher),
+                                              clock_, logger_, livekit_methods_.is_room_available,
+                                              diagnostic_state_.inbound_video);
+  // Register before start so echo suppression covers the first published frame.
+  if (!track->start()) {
+    diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
+    inbound_video_tracks_.erase(descriptor.sid);
+    return;
+  }
+
+  RCLCPP_INFO(logger_, "Subscribed to LiveKit video track '%s' from '%s'; publishing ROS topic '%s' [%s]",
+              descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(), ros_topic_name->c_str(),
+              "sensor_msgs/msg/CompressedImage");
+}
+
+void TopicForwarder::onVideoTrackUnsubscribed(const std::string& sid) {
+  std::unique_ptr<InboundVideoTrack> track;
+  {
+    const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
+    const auto it = inbound_video_tracks_.find(sid);
+    if (it == inbound_video_tracks_.end()) {
+      return;
+    }
+    track = std::move(it->second);
+    inbound_video_tracks_.erase(it);
+  }
+
+  // Join outside the lock: the reader may be inside publish(), and outbound
+  // callbacks take the lock in isInboundPublication().
+  track->stop();
+  RCLCPP_INFO(logger_, "Stopped LiveKit-to-ROS video track '%s' from '%s' on ROS topic '%s'",
+              track->options().track_name.c_str(), track->options().publisher_identity.c_str(),
+              track->options().ros_topic_name.c_str());
+}
+
 bool TopicForwarder::isIncomingTopicAllowed(const std::string& topic_name) const {
   return utils::matchesAnyPattern(topic_name, options_.incoming_topic_patterns);
 }
 
 bool TopicForwarder::isInboundPublication(const rclcpp::MessageInfo& message_info) {
   const auto& publisher_gid = message_info.get_rmw_message_info().publisher_gid;
-  const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
-  return std::any_of(inbound_data_track_states_.begin(), inbound_data_track_states_.end(), [&](const auto& entry) {
-    const auto& state = entry.second;
-    return state && state->publisher && *state->publisher == publisher_gid;
-  });
+  {
+    const std::lock_guard<std::mutex> lock(inbound_data_track_states_mutex_);
+    const bool from_data_track =
+        std::any_of(inbound_data_track_states_.begin(), inbound_data_track_states_.end(), [&](const auto& entry) {
+          const auto& state = entry.second;
+          return state && state->publisher && *state->publisher == publisher_gid;
+        });
+    if (from_data_track) {
+      return true;
+    }
+  }
+  const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
+  return std::any_of(inbound_video_tracks_.begin(), inbound_video_tracks_.end(),
+                     [&](const auto& entry) { return entry.second && entry.second->ownsPublisher(publisher_gid); });
 }
 
 std::optional<std::string> TopicForwarder::resolveInboundRosTopicType(
@@ -851,7 +1024,7 @@ rclcpp::QoS TopicForwarder::determineQoS(const std::string& topic_name) const {
 }
 
 void TopicForwarder::readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state) {
-  const ReaderAliveGuard reader_alive(state->reader_thread_alive);
+  const utils::ReaderAliveGuard reader_alive(state->reader_thread_alive);
   livekit::DataTrackFrame frame;
   while (!state->stop.load() && state->stream && state->stream->read && state->stream->read(frame)) {
     if (!livekit_methods_.is_room_available()) {
@@ -922,6 +1095,21 @@ void TopicForwarder::stopAllInboundDataTracks() {
   }
 }
 
+void TopicForwarder::stopAllInboundVideoTracks() {
+  std::vector<std::string> inbound_sids;
+  {
+    const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
+    inbound_sids.reserve(inbound_video_tracks_.size());
+    for (const auto& [sid, _] : inbound_video_tracks_) {
+      inbound_sids.push_back(sid);
+    }
+  }
+
+  for (const auto& sid : inbound_sids) {
+    onVideoTrackUnsubscribed(sid);
+  }
+}
+
 void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
   // Schema failures are reported through the outbound and inbound failure counters rather
   // than as their own fields. Each one is logged in detail by the schema manager.
@@ -934,8 +1122,11 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
 
   const auto outbound_failures =
       diagnostic_state_.outbound_failures.load(std::memory_order_relaxed) + schema_outbound_failures;
-  const auto inbound_failures =
-      diagnostic_state_.inbound_failures.load(std::memory_order_relaxed) + schema_inbound_rejections;
+  const auto inbound_failures = diagnostic_state_.inbound_failures.load(std::memory_order_relaxed) +
+                                diagnostic_state_.inbound_video.failures.load(std::memory_order_relaxed) +
+                                schema_inbound_rejections;
+  const auto inbound_video_stamp_fallbacks =
+      diagnostic_state_.inbound_video.stamp_fallbacks.load(std::memory_order_relaxed);
 
   std::size_t outbound_data_tracks = 0U;
   std::size_t outbound_video_tracks = 0U;
@@ -961,10 +1152,21 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
         [](const auto& entry) { return entry.second->reader_thread_alive.load(std::memory_order_relaxed); }));
   }
 
+  std::size_t inbound_video_tracks = 0U;
+  std::size_t inbound_video_readers_alive = 0U;
+  {
+    const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
+    inbound_video_tracks = inbound_video_tracks_.size();
+    inbound_video_readers_alive =
+        static_cast<std::size_t>(std::count_if(inbound_video_tracks_.begin(), inbound_video_tracks_.end(),
+                                               [](const auto& entry) { return entry.second->isReaderAlive(); }));
+  }
+
   // Pending writers and stopped reader threads are not published as fields; they only
   // raise the summary to ERROR, which names the unavailable forwarding path.
-  const bool forwarding_unavailable =
-      outbound_data_tracks_pending_writer > 0U || inbound_reader_threads_alive < inbound_data_tracks;
+  const bool forwarding_unavailable = outbound_data_tracks_pending_writer > 0U ||
+                                      inbound_reader_threads_alive < inbound_data_tracks ||
+                                      inbound_video_readers_alive < inbound_video_tracks;
   const bool failures_detected = outbound_failures > 0U || inbound_failures > 0U;
 
   if (forwarding_unavailable) {
@@ -980,6 +1182,8 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
   status.add("outbound.subscriptions", outbound_subscriptions);
   status.add("outbound.failures", outbound_failures);
   status.add("inbound.data_tracks", inbound_data_tracks);
+  status.add("inbound.video_tracks", inbound_video_tracks);
+  status.add("inbound.video_stamp_fallbacks", inbound_video_stamp_fallbacks);
   status.add("inbound.failures", inbound_failures);
 }
 

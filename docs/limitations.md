@@ -9,6 +9,10 @@
 - Encoding conversion is done per-pixel on the CPU inside the subscription
   callback. High-resolution or high-framerate streams may need a more efficient
   path.
+- Inbound video tracks are republished only as JPEG `sensor_msgs/CompressedImage`
+  at a fixed quality of 90. The LiveKit SDK gives decoded frames only, so the
+  receiver decodes and then encodes each frame again on the CPU.
+- Inbound video tracks match configured topics by exact name, not by regex.
 
 ## Audio Tracks
 

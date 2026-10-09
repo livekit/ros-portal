@@ -202,9 +202,9 @@ inbound reader thread has stopped.
 | `inbound.video_tracks` | Number of inbound LiveKit video tracks being republished as `sensor_msgs/CompressedImage`. |
 | `inbound.video_tracks_paused` | Number of inbound video tracks paused because their ROS topic has no subscribers. A paused track receives no frames until a subscriber appears. |
 | `outbound.data_tracks` | Number of discovered outbound data topics. |
-| `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. |
+| `outbound.failures` | Cumulative outbound failures, aggregating LiveKit data-frame push failures, ROS-to-JSON conversion failures, ROS subscription creation failures, and outbound schema define, render, and encoding-mismatch failures. Also counts `CompressedImage` frames that are not JPEG or fail to decode, and outbound video topics skipped because another topic already uses their track name. |
 | `outbound.subscriptions` | Number of active outbound ROS subscriptions. |
-| `outbound.video_tracks` | Number of discovered outbound image topics. |
+| `outbound.video_tracks` | Number of discovered outbound image topics, `sensor_msgs/Image` and `sensor_msgs/CompressedImage`. |
 
 `outbound.failures` and `inbound.failures` are deliberately coarse. Every
 increment is logged individually with its specific cause, including the track,

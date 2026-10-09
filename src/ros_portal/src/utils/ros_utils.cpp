@@ -21,6 +21,7 @@
 #include <cstring>
 #include <exception>
 #include <rclcpp/rclcpp.hpp>
+#include <string_view>
 
 namespace ros_portal::utils {
 
@@ -221,5 +222,16 @@ bool isRosTopicStatisticsTopic(const std::string& topic_name) {
   const std::string suffix(kRosTopicStatisticsSuffix);
   return topic_name.size() >= suffix.size() &&
          topic_name.compare(topic_name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string videoTrackNameForTopic(const std::string& topic_name, const bool compressed) {
+  constexpr std::string_view kCompressedSuffix = "/compressed";
+  // Keep at least one character before the suffix so "/compressed" stays as is.
+  if (compressed && topic_name.size() > kCompressedSuffix.size() &&
+      topic_name.compare(topic_name.size() - kCompressedSuffix.size(), kCompressedSuffix.size(), kCompressedSuffix) ==
+          0) {
+    return topic_name.substr(0, topic_name.size() - kCompressedSuffix.size());
+  }
+  return topic_name;
 }
 } // namespace ros_portal::utils

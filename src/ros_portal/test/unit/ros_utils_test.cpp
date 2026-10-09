@@ -401,5 +401,14 @@ TEST(RosUtilsTest, IsRosTopicStatisticsTopicRejectsOrdinaryTopics) {
   EXPECT_FALSE(isRosTopicStatisticsTopic("/statistics/pose"));
   EXPECT_FALSE(isRosTopicStatisticsTopic("/pose_statistics"));
 }
+
+TEST(RosUtilsTest, VideoTrackNameStripsCompressedSuffixOnlyForCompressedTopics) {
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw/compressed", true), "/cam/image_raw");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/jpeg", true), "/cam/jpeg");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw_compressed", true), "/cam/image_raw_compressed");
+  EXPECT_EQ(videoTrackNameForTopic("/compressed", true), "/compressed");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw/compressed", false), "/cam/image_raw/compressed");
+  EXPECT_EQ(videoTrackNameForTopic("/cam/image_raw", false), "/cam/image_raw");
+}
 } // namespace
 } // namespace ros_portal::utils

@@ -87,3 +87,6 @@ clang-tidy.log
 
 # docs repo
 web/
+
+# bags/images/etc
+data/

@@ -6,6 +6,9 @@
   recreated.
 - Only `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8` encodings are handled.
   Other encodings are dropped with a throttled warning.
+- Outbound `sensor_msgs/CompressedImage` topics support JPEG only. Each frame
+  is decoded on the CPU before LiveKit encodes it as video. A 1472x1440 frame
+  takes about 6.5 ms to decode on an aarch64 devcontainer.
 - Packed `rgba8`, `bgra8`, and `rgb8` images go to LiveKit without a pixel
   copy. `bgr8`, `mono8`, and images with row padding need one CPU pass inside
   the subscription callback. The LiveKit SDK then converts each frame to I420.

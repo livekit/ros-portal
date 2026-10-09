@@ -280,6 +280,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/utils/base64.cpp
   src/utils/config_mapping.cpp
   src/utils/image_conversion.cpp
+  src/utils/jpeg_decoder.cpp
   src/utils/jpeg_encoder.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp

@@ -1,4 +1,3 @@
-#
 # Copyright 2026 LiveKit
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,22 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Video pass-through tutorial, publisher side. See docs/tutorials.md.
+#
+# Sends the JPEG camera topic from the bag as a LiveKit video track. A
+# CompressedImage topic named <base>/compressed becomes the track <base>, so the
+# track here is /insta/cam0/image_raw.
 
-cmake_minimum_required(VERSION 3.8)
-project(ros_portal_tutorials)
+$schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
+ros_portal:
+  version: "0.0.1"
+  ros_threads: 4
 
-find_package(ament_cmake_auto REQUIRED)
-
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
-endif()
-
-install(FILES README.md
-  DESTINATION share/${PROJECT_NAME})
-
-ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config launch)
+  topics:
+    - topic: "/insta/cam0/image_raw/compressed"
+      direction: "out"

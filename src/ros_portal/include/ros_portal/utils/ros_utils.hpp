@@ -182,4 +182,21 @@ std::string rosTopicStatisticsTopic(const std::string& topic_name);
 /// @param topic_name Absolute ROS topic name.
 /// @return True when @p topic_name names a statistics stream.
 bool isRosTopicStatisticsTopic(const std::string& topic_name);
+
+/// @brief Return the LiveKit video track name for an outbound image topic.
+///
+/// A compressed topic follows the image_transport convention
+/// `<base>/compressed`, so its track is named `<base>`. The receiving ROS
+/// Portal republishes the track on `<base>/compressed`, which is the source
+/// topic name again. Raw image topics keep their name.
+///
+/// Examples:
+/// - ("/cam/image_raw/compressed", true) -> "/cam/image_raw"
+/// - ("/cam/jpeg", true) -> "/cam/jpeg"
+/// - ("/cam/image_raw", false) -> "/cam/image_raw"
+///
+/// @param topic_name Absolute ROS topic name.
+/// @param compressed True for a `sensor_msgs/CompressedImage` topic.
+/// @return Video track name for @p topic_name.
+std::string videoTrackNameForTopic(const std::string& topic_name, bool compressed);
 } // namespace ros_portal::utils

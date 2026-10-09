@@ -22,6 +22,7 @@ a YAML configuration file for runtime parameters.
     - [Capping the outbound forward rate](#capping-the-outbound-forward-rate)
     - [Latched topics (`latched: true`)](#latched-topics-latched-true)
     - [Data track encoding (`encoding`)](#data-track-encoding-encoding)
+    - [Outbound video](#outbound-video)
     - [Inbound video](#inbound-video)
   - [Video Options](#video-options)
 
@@ -423,6 +424,36 @@ Notes:
   for pure inbound (`in`) topics.
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
+
+#### Outbound video
+
+ROS Portal sends an outbound topic of type `sensor_msgs/Image` or
+`sensor_msgs/CompressedImage` as a LiveKit video track. Other types use a data
+track.
+
+- `sensor_msgs/Image` supports `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8`.
+  The track has the same name as the topic.
+- `sensor_msgs/CompressedImage` supports JPEG only. The `format` field must
+  contain `jpeg` or `jpg`, for example `jpeg` or `bgr8; jpeg compressed bgr8`.
+  ROS Portal decodes each frame before LiveKit encodes it as video.
+- A `CompressedImage` topic named `<base>/compressed` publishes the track
+  `<base>`. The receiving ROS Portal republishes the track on
+  `<base>/compressed`, so the topic name is the same on both sides.
+- If two outbound topics map to the same track name, ROS Portal forwards only
+  the first one. For example, `/cam/image_raw` and `/cam/image_raw/compressed`
+  both map to `/cam/image_raw`. The second topic is logged as an error and
+  counted in `outbound.failures`.
+
+```yaml
+topics:
+  # Sends the LiveKit video track /insta/cam0/image_raw.
+  - topic: "/insta/cam0/image_raw/compressed"
+    direction: "out"
+```
+
+The track size comes from the first frame. The
+[video pass-through tutorial](tutorials.md#video-pass-through-over-livekit)
+uses this route with a recorded bag.
 
 #### Inbound video
 

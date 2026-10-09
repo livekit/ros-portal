@@ -39,15 +39,21 @@
 #include <rclcpp/subscription_base.hpp>
 #include <rclcpp/time.hpp>
 #include <regex>
+#include <std_msgs/msg/header.hpp>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/graph/graph_types.hpp"
+#include "ros_portal/inbound_video_track.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/image_conversion.hpp"
+#include "ros_portal/utils/jpeg_decoder.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -55,12 +61,16 @@
 
 namespace livekit {
 class RemoteDataTrack;
+class RemoteTrackPublication;
+class Track;
 } // namespace livekit
 
 namespace ros_portal {
 
 /// @brief ROS type string for sensor image topics forwarded as video tracks.
 inline constexpr const char* kImageMsgType = "sensor_msgs/msg/Image";
+/// @brief ROS type string for JPEG image topics decoded and forwarded as video tracks.
+inline constexpr const char* kCompressedImageMsgType = "sensor_msgs/msg/CompressedImage";
 
 /// @brief Default minimum subscription history depth when no publishers exist.
 inline constexpr std::size_t kDefaultMinQosDepth = 1U;
@@ -83,14 +93,31 @@ public:
     std::function<livekit::Result<void, std::string>(const std::uint8_t* payload, std::size_t payload_size)> try_push;
   };
 
+  /// @brief ROS header fields sent with one outbound video frame.
+  struct VideoFrameStamp {
+    /// @brief ROS `header.stamp` in microseconds. Non-negative values are also
+    /// sent as frame metadata `user_timestamp_us`.
+    std::int64_t timestamp_us{0};
+    /// @brief ROS `header.frame_id`, sent as frame metadata user data. Unset
+    /// when the frame_id is too long to send.
+    std::optional<std::string_view> frame_id;
+  };
+
   /// @brief Outbound LiveKit video-track sink.
   struct VideoTrackSink {
     /// @brief Track/source width fixed at publication time.
     int width{0};
     /// @brief Track/source height fixed at publication time.
     int height{0};
-    /// @brief Capture one video frame with the ROS message timestamp.
-    std::function<void(const livekit::VideoFrame&, std::int64_t)> capture_frame;
+    /// @brief Capture one video frame with the ROS header stamp and frame_id.
+    std::function<void(const livekit::VideoFrame&, const VideoFrameStamp&)> capture_frame;
+  };
+
+  /// @brief Configuration for one inbound video topic, matched by exact name.
+  struct IncomingVideoTopic {
+    /// @brief Prefix the republished ROS topic with the sender identity
+    /// (config `preserve_id: true`).
+    bool preserve_id{false};
   };
 
   /// @brief Topic forwarding options derived from ROS Portal configuration.
@@ -99,6 +126,10 @@ public:
     std::vector<std::regex> outgoing_topic_patterns;
     /// @brief Regex patterns for LiveKit data tracks republished on ROS.
     std::vector<std::regex> incoming_topic_patterns;
+    /// @brief LiveKit video tracks republished on ROS as
+    /// `sensor_msgs/CompressedImage`, keyed by normalized track name. Video
+    /// tracks match by exact name only, never by regex.
+    std::unordered_map<std::string, IncomingVideoTopic> incoming_video_topics;
     /// @brief Regex patterns for inbound tracks whose republished ROS topic
     /// name is prefixed with the publishing participant's sanitized identity
     /// (config `preserve_id: true`).
@@ -189,6 +220,23 @@ public:
   /// @brief Check whether a normalized ROS topic is allowed inbound.
   bool isIncomingTopicAllowed(const std::string& topic_name) const;
 
+  /// @brief Handle a remote LiveKit video track becoming subscribed.
+  ///
+  /// When the track name exactly matches a configured inbound topic, frames
+  /// are republished as JPEG `sensor_msgs/CompressedImage` on
+  /// `<topic>/compressed`, following the image_transport naming convention.
+  /// @param track Subscribed remote video track.
+  /// @param publisher_identity LiveKit identity of the remote publisher.
+  /// @param publication Publication of @p track, used to pause it while the
+  /// ROS topic has no subscribers. May be null, which disables pausing.
+  /// @return True when the track is republished on ROS. False means nothing
+  /// consumes the track, so the caller can unsubscribe to stop its decoding.
+  bool onVideoTrackSubscribed(const std::shared_ptr<livekit::Track>& track, const std::string& publisher_identity,
+                              const std::shared_ptr<livekit::RemoteTrackPublication>& publication);
+
+  /// @brief Stop republishing a remote LiveKit video track by SID.
+  void onVideoTrackUnsubscribed(const std::string& sid);
+
 private:
 #ifdef BUILD_TESTING
   FRIEND_TEST(TopicForwarderTest, QoSDefaultsToMinDepthBestEffortVolatile);
@@ -201,6 +249,18 @@ private:
   FRIEND_TEST(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoPublishesJpegOnCompressedTopic);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoPreserveIdPrefixesTopic);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoFallsBackToLocalStampAndTrackFrameId);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoCountsEncodeFailures);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoSkipsEncodingWithoutSubscribers);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoPausesWithoutSubscribersAndResumes);
+  FRIEND_TEST(TopicForwarderTest, OutboundCompressedImageSkipsNonJpegFormats);
+  FRIEND_TEST(TopicForwarderTest, OutboundVideoTrackNameClashIsSkippedAndCounted);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
@@ -226,6 +286,9 @@ private:
   void createDataSubscriber(const std::string& topic_name, const std::string& topic_type);
   /// @brief Subscribe to a ROS image topic and forward frames to LiveKit.
   void createImageSubscriber(const std::string& topic_name);
+  /// @brief Subscribe to a JPEG `sensor_msgs/CompressedImage` topic, decode
+  /// each frame, and forward it to a LiveKit video track.
+  void createCompressedImageSubscriber(const std::string& topic_name);
   /// @brief Return whether a ROS sample originated from an inbound LiveKit
   /// publisher owned by this forwarder.
   bool isInboundPublication(const rclcpp::MessageInfo& message_info);
@@ -262,13 +325,67 @@ private:
   /// @brief Handle an inbound LiveKit data track descriptor.
   void onDataTrackPublished(RemoteDataTrackDescriptor descriptor);
 
+  /// @brief Metadata and subscribe hook for an inbound LiveKit video track.
+  struct RemoteVideoTrackDescriptor {
+    /// @brief LiveKit track SID used to correlate subscribe/unsubscribe events.
+    std::string sid;
+    /// @brief LiveKit track name, typically the source ROS image topic.
+    std::string track_name;
+    /// @brief LiveKit participant identity of the remote publisher.
+    std::string publisher_identity;
+    /// @brief Open a decoded I420 frame stream for the track.
+    std::function<livekit::Result<std::shared_ptr<InboundVideoTrack::Stream>, std::string>()> subscribe;
+    /// @brief Enable or disable delivery of the track. Unset disables pausing.
+    std::function<bool(bool)> set_enabled;
+  };
+
+  /// @brief Build a descriptor from a subscribed remote LiveKit video track.
+  static RemoteVideoTrackDescriptor createRemoteVideoTrackDescriptor(
+      std::shared_ptr<livekit::Track> track, const std::string& publisher_identity,
+      std::shared_ptr<livekit::RemoteTrackPublication> publication);
+
+  /// @brief Pause or resume each inbound video track to match ROS demand.
+  void updateInboundVideoDemand();
+
+  /// @brief Handle an inbound LiveKit video track descriptor.
+  /// @return True when the track is republished on ROS.
+  bool onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& descriptor);
+
+  /// @brief Resolve the ROS topic for an inbound video track.
+  /// @return `<base>/compressed`, or std::nullopt when the track has no exact
+  /// inbound topic match or its name cannot become a ROS topic.
+  std::optional<std::string> resolveInboundVideoTopic(const RemoteVideoTrackDescriptor& descriptor);
+
   /// @brief Per-topic state for outbound ROS image forwarding.
   struct ImageTopicState {
+    /// @brief Serializes frames of this topic. Held while converting and
+    /// capturing, so other outbound topics are not blocked by image work.
+    std::mutex mutex;
+    /// @brief LiveKit video track name for this topic.
+    std::string track_name;
     /// @brief LiveKit video sink lazily created on the first frame.
     std::shared_ptr<VideoTrackSink> sink;
-    /// @brief Reusable RGBA buffer for non-rgba8 encodings.
-    std::vector<std::uint8_t> rgba_buf;
+    /// @brief Builds LiveKit frames with the fewest pixel copies (raw images).
+    utils::ImageFrameBuilder frame_builder;
+    /// @brief Decodes JPEG frames. Set only for compressed image topics.
+    std::unique_ptr<utils::JpegDecoder> jpeg_decoder;
   };
+
+  /// @brief Create the per-topic state and ROS subscription for an outbound
+  /// video topic. Skips topics whose track name another topic already uses.
+  template <typename MessageT, typename CallbackT>
+  void subscribeVideoTopic(const std::string& topic_name, const char* topic_type, bool compressed,
+                           CallbackT&& callback);
+  /// @brief Return the state of an outbound video topic, or null once reaped.
+  std::shared_ptr<ImageTopicState> findImageTopicState(const std::string& topic_name);
+  /// @brief Create the LiveKit video sink on the first frame and reject frames
+  /// whose size differs from it. Must be called with @p state's mutex held.
+  /// @return True when @p state has a sink that accepts @p width x @p height.
+  bool ensureVideoSinkLocked(ImageTopicState& state, const std::string& topic_name, int width, int height,
+                             const std::string& source_format);
+  /// @brief Build the stamp and frame_id metadata for one outbound frame.
+  /// @param header ROS header that must outlive the returned value.
+  VideoFrameStamp makeVideoFrameStamp(const std_msgs::msg::Header& header, const std::string& topic_name);
 
   /// @brief Per-topic state for outbound serialized ROS forwarding.
   struct DataTopicState {
@@ -337,6 +454,9 @@ private:
     /// dropped, and streams that ended with a terminal error. Every occurrence is
     /// logged with its specific cause.
     std::atomic<std::uint64_t> inbound_failures{0};
+    /// @brief Inbound video frame counters shared by all inbound video tracks.
+    /// Frame failures are added to the `inbound.failures` diagnostic field.
+    InboundVideoTrack::Counters inbound_video;
   };
 
   /// @brief Ensure the outbound LiveKit data-track writer for @p state exists,
@@ -352,6 +472,8 @@ private:
   void readInboundDataTrack(const std::shared_ptr<InboundDataTrackState>& state);
   /// @brief Stop and join all active inbound LiveKit data track readers.
   void stopAllInboundDataTracks();
+  /// @brief Stop and join all active inbound LiveKit video track readers.
+  void stopAllInboundVideoTracks();
   /// @brief Populate the topic-forwarder diagnostic status.
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
@@ -377,8 +499,14 @@ private:
   mutable std::mutex outbound_topics_mutex_;
   /// @brief Outbound ROS subscriptions keyed by topic name.
   std::unordered_map<std::string, OutboundSubscription> subscriptions_;
-  /// @brief Outbound image-topic state keyed by ROS topic name.
-  std::unordered_map<std::string, ImageTopicState> image_topic_states_;
+  /// @brief Outbound image-topic state keyed by ROS topic name. Shared so a
+  /// running callback keeps its state alive while the entry is reaped.
+  std::unordered_map<std::string, std::shared_ptr<ImageTopicState>> image_topic_states_;
+  /// @brief ROS topic that owns each outbound video track name.
+  std::unordered_map<std::string, std::string> video_track_owners_;
+  /// @brief Outbound video topics skipped for a track-name clash, so the
+  /// clash is logged and counted once.
+  std::unordered_set<std::string> clashing_video_topics_;
   /// @brief Outbound data-topic state keyed by ROS topic name.
   std::unordered_map<std::string, DataTopicState> data_topic_states_;
   /// @brief Protects inbound data track state during setup and teardown.
@@ -387,6 +515,16 @@ private:
   std::unordered_map<std::string, std::shared_ptr<InboundDataTrackState>> inbound_data_track_states_;
   /// @brief ROS topic names reserved by inbound LiveKit data tracks.
   std::unordered_set<std::string> inbound_ros_topic_names_;
+  /// @brief Protects @ref inbound_video_tracks_. Never held while joining a
+  /// reader thread.
+  mutable std::mutex inbound_video_tracks_mutex_;
+  /// @brief Active inbound LiveKit video tracks keyed by track SID. Shared so
+  /// the demand timer can use a track outside the lock.
+  std::unordered_map<std::string, std::shared_ptr<InboundVideoTrack>> inbound_video_tracks_;
+  /// @brief Periodic pause/resume check. The graph manager skips snapshots
+  /// whose topic list did not change, so it does not report new subscribers
+  /// on an existing topic.
+  rclcpp::TimerBase::SharedPtr video_demand_timer_;
   /// @brief Mutable state owned exclusively for diagnostics reporting.
   DiagnosticState diagnostic_state_;
 };

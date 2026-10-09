@@ -21,6 +21,7 @@
 #include <cstring>
 #include <exception>
 #include <rclcpp/rclcpp.hpp>
+#include <string_view>
 
 namespace ros_portal::utils {
 
@@ -28,25 +29,6 @@ namespace {
 /// @brief Child topic appended to a measured topic to carry its statistics.
 constexpr char kRosTopicStatisticsSuffix[] = "/statistics";
 } // namespace
-
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
-                                                      std::size_t rgba_size) {
-  if (width <= 0 || height <= 0) {
-    return std::nullopt;
-  }
-
-  const std::size_t expected_size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
-  if (rgba_size != expected_size) {
-    return std::nullopt;
-  }
-  if (rgba == nullptr) {
-    return std::nullopt;
-  }
-
-  auto frame = livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
-  std::memcpy(frame.data(), rgba, rgba_size);
-  return frame;
-}
 
 std::optional<std::string> environmentVariable(const char* name) {
   const char* value = std::getenv(name);
@@ -240,5 +222,16 @@ bool isRosTopicStatisticsTopic(const std::string& topic_name) {
   const std::string suffix(kRosTopicStatisticsSuffix);
   return topic_name.size() >= suffix.size() &&
          topic_name.compare(topic_name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string videoTrackNameForTopic(const std::string& topic_name, const bool compressed) {
+  constexpr std::string_view kCompressedSuffix = "/compressed";
+  // Keep at least one character before the suffix so "/compressed" stays as is.
+  if (compressed && topic_name.size() > kCompressedSuffix.size() &&
+      topic_name.compare(topic_name.size() - kCompressedSuffix.size(), kCompressedSuffix.size(), kCompressedSuffix) ==
+          0) {
+    return topic_name.substr(0, topic_name.size() - kCompressedSuffix.size());
+  }
+  return topic_name;
 }
 } // namespace ros_portal::utils

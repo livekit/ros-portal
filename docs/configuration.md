@@ -478,6 +478,16 @@ Notes:
   adds JPEG loss to the video codec loss.
 - If JPEG encoding is slower than the frame rate, ROS Portal drops the oldest
   buffered frame. Frames do not queue without limit.
+- While the output topic has no ROS subscribers, ROS Portal does not encode
+  frames. After at most 0.5 s, it also pauses the LiveKit track, so the server
+  stops sending it. When a subscriber appears, ROS Portal resumes the track
+  within 0.5 s. The server then asks the sender for a key frame, so the first
+  image arrives about one network round trip later. A `rosbag2` recorder
+  counts as a subscriber.
+- ROS Portal unsubscribes from every remote audio track and from every video
+  track that does not match an inbound topic. The LiveKit SDK decodes each
+  subscribed track even when nothing reads it, so this saves bandwidth and
+  CPU.
 - The publisher uses reliable QoS with depth 10. If the output topic matches the
   `best_effort_qos_topics` ROS parameter, the publisher uses the sensor data QoS
   profile (best effort, depth 5).

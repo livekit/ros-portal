@@ -18,6 +18,7 @@
 
 #include <livekit/data_track_stream.h>
 #include <livekit/remote_data_track.h>
+#include <livekit/remote_track_publication.h>
 #include <livekit/track.h>
 #include <livekit/video_stream.h>
 
@@ -52,6 +53,9 @@ constexpr char kCompressedImageTopicSuffix[] = "/compressed";
 /// @brief Decoded frames buffered per inbound video track. When encoding falls
 /// behind, the stream drops the oldest frame instead of growing the queue.
 constexpr std::size_t kInboundVideoStreamCapacity = 2U;
+/// @brief How often inbound video tracks are paused or resumed to match ROS
+/// subscribers. Bounds the extra delay before a new subscriber gets frames.
+constexpr std::chrono::milliseconds kInboundVideoDemandInterval{500};
 
 /// @brief Return whether topic statistics should be enabled for a subscription.
 /// Never collect statistics about a statistics stream itself, which would
@@ -128,10 +132,17 @@ TopicForwarder::TopicForwarder(Options options, rclcpp::Node::WeakPtr node, Live
   callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   diagnostics_.add(kTopicForwarderDiagnosticTaskName,
                    [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+  if (!options_.incoming_video_topics.empty()) {
+    video_demand_timer_ = locked_node->create_wall_timer(
+        kInboundVideoDemandInterval, [this]() { updateInboundVideoDemand(); }, callback_group_);
+  }
 }
 
 TopicForwarder::~TopicForwarder() {
   diagnostics_.remove(kTopicForwarderDiagnosticTaskName);
+  if (video_demand_timer_) {
+    video_demand_timer_->cancel();
+  }
   stopAllInboundDataTracks();
   stopAllInboundVideoTracks();
   const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
@@ -403,24 +414,26 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     return;
   }
 
-  auto callback = [this, topic_name](const sensor_msgs::msg::Image::ConstSharedPtr& msg,
+  // Taking ownership of the message lets packed rgba8/bgra8/rgb8 pixels move
+  // into the LiveKit frame without a copy.
+  auto callback = [this, topic_name](std::unique_ptr<sensor_msgs::msg::Image> msg,
                                      const rclcpp::MessageInfo& message_info) {
     if (isInboundPublication(message_info) || !livekit_methods_.is_room_available()) {
       return;
     }
 
-    const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
-    const auto state_it = image_topic_states_.find(topic_name);
-    if (state_it == image_topic_states_.end()) {
-      return;
-    }
-    auto& state = state_it->second;
-
-    if (!state.sink) {
-      if (!livekit_methods_.is_room_available()) {
+    std::shared_ptr<ImageTopicState> state;
+    {
+      const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
+      const auto state_it = image_topic_states_.find(topic_name);
+      if (state_it == image_topic_states_.end()) {
         return;
       }
+      state = state_it->second;
+    }
+    const std::lock_guard<std::mutex> state_lock(state->mutex);
 
+    if (!state->sink) {
       const auto sink_result =
           livekit_methods_.publish_video_track(topic_name, static_cast<int>(msg->width), static_cast<int>(msg->height));
       if (!sink_result) {
@@ -429,10 +442,10 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
         return;
       }
 
-      state.sink = sink_result.value();
-      if (!state.sink || !state.sink->capture_frame) {
+      state->sink = sink_result.value();
+      if (!state->sink || !state->sink->capture_frame) {
         RCLCPP_ERROR(logger_, "publish_video_track('%s') returned an invalid sink", topic_name.c_str());
-        state.sink.reset();
+        state->sink.reset();
         return;
       }
 
@@ -440,11 +453,11 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
                   msg->encoding.c_str());
     }
 
-    if (state.sink->width != static_cast<int>(msg->width) || state.sink->height != static_cast<int>(msg->height)) {
+    if (state->sink->width != static_cast<int>(msg->width) || state->sink->height != static_cast<int>(msg->height)) {
       RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
                            "Skipping frame for '%s' because image size changed from %dx%d to "
                            "%ux%u after the track was published",
-                           topic_name.c_str(), state.sink->width, state.sink->height, msg->width, msg->height);
+                           topic_name.c_str(), state->sink->width, state->sink->height, msg->width, msg->height);
       return;
     }
 
@@ -461,36 +474,16 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
                            topic_name.c_str(), utils::kMaxFrameIdUserDataLength);
     }
 
-    if (msg->encoding == "rgba8" && msg->step == msg->width * 4) {
-      auto frame = utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height),
-                                             msg->data.data(), msg->data.size());
-      if (!frame) {
-        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
-                             "Skipping RGBA image on topic '%s' because buffer size %zu does "
-                             "not match %ux%u geometry",
-                             topic_name.c_str(), msg->data.size(), msg->width, msg->height);
-        return;
-      }
-
-      state.sink->capture_frame(*frame, frame_stamp);
-    } else {
-      if (!utils::convertToRgba(*msg, state.rgba_buf)) {
-        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000, "Unsupported image encoding '%s' on topic '%s'",
-                             msg->encoding.c_str(), topic_name.c_str());
-        return;
-      }
-      auto frame = utils::makeRgbaVideoFrame(static_cast<int>(msg->width), static_cast<int>(msg->height),
-                                             state.rgba_buf.data(), state.rgba_buf.size());
-      if (!frame) {
-        RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
-                             "Skipping converted image on topic '%s' because RGBA buffer size "
-                             "%zu does not match %ux%u geometry",
-                             topic_name.c_str(), state.rgba_buf.size(), msg->width, msg->height);
-        return;
-      }
-
-      state.sink->capture_frame(*frame, frame_stamp);
+    const auto* frame = state->frame_builder.build(*msg);
+    if (frame == nullptr) {
+      RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
+                           "Skipping image on topic '%s': encoding '%s' is unsupported or the %zu-byte buffer does "
+                           "not match %ux%u with step %u",
+                           topic_name.c_str(), msg->encoding.c_str(), msg->data.size(), msg->width, msg->height,
+                           msg->step);
+      return;
     }
+    state->sink->capture_frame(*frame, frame_stamp);
   };
 
   const std::lock_guard<std::mutex> lock(outbound_topics_mutex_);
@@ -498,7 +491,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     return;
   }
 
-  image_topic_states_[topic_name] = ImageTopicState{};
+  image_topic_states_[topic_name] = std::make_shared<ImageTopicState>();
 
   try {
     rclcpp::SubscriptionOptions sub_options;
@@ -721,8 +714,20 @@ void TopicForwarder::onDataTrackUnpublished(const std::string& sid) {
 }
 
 TopicForwarder::RemoteVideoTrackDescriptor TopicForwarder::createRemoteVideoTrackDescriptor(
-    std::shared_ptr<livekit::Track> track, const std::string& publisher_identity) {
+    std::shared_ptr<livekit::Track> track, const std::string& publisher_identity,
+    std::shared_ptr<livekit::RemoteTrackPublication> publication) {
   RemoteVideoTrackDescriptor descriptor;
+  if (publication) {
+    // A disabled track stays subscribed, but the server stops forwarding it, so
+    // this side neither receives nor decodes it.
+    descriptor.set_enabled = [publication = std::move(publication)](const bool enabled) {
+      try {
+        return publication->setEnabled(enabled);
+      } catch (const std::exception&) {
+        return false;
+      }
+    };
+  }
   descriptor.sid = track->sid();
   descriptor.track_name = track->name();
   descriptor.publisher_identity = publisher_identity;
@@ -749,13 +754,29 @@ TopicForwarder::RemoteVideoTrackDescriptor TopicForwarder::createRemoteVideoTrac
   return descriptor;
 }
 
-void TopicForwarder::onVideoTrackSubscribed(const std::shared_ptr<livekit::Track>& track,
-                                            const std::string& publisher_identity) {
+bool TopicForwarder::onVideoTrackSubscribed(const std::shared_ptr<livekit::Track>& track,
+                                            const std::string& publisher_identity,
+                                            const std::shared_ptr<livekit::RemoteTrackPublication>& publication) {
   if (!track) {
     RCLCPP_WARN(logger_, "Ignoring null LiveKit video track");
-    return;
+    return false;
   }
-  onVideoTrackSubscribed(createRemoteVideoTrackDescriptor(track, publisher_identity));
+  return onVideoTrackSubscribed(createRemoteVideoTrackDescriptor(track, publisher_identity, publication));
+}
+
+void TopicForwarder::updateInboundVideoDemand() {
+  std::vector<std::shared_ptr<InboundVideoTrack>> tracks;
+  {
+    const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
+    tracks.reserve(inbound_video_tracks_.size());
+    for (const auto& [sid, track] : inbound_video_tracks_) {
+      tracks.push_back(track);
+    }
+  }
+  // Pausing is a blocking SDK request, so it runs outside the lock.
+  for (const auto& track : tracks) {
+    track->updateDemand();
+  }
 }
 
 std::optional<std::string> TopicForwarder::resolveInboundVideoTopic(const RemoteVideoTrackDescriptor& descriptor) {
@@ -783,16 +804,16 @@ std::optional<std::string> TopicForwarder::resolveInboundVideoTopic(const Remote
   return *base_topic_name + kCompressedImageTopicSuffix;
 }
 
-void TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& descriptor) {
+bool TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& descriptor) {
   if (descriptor.sid.empty() || !descriptor.subscribe) {
     RCLCPP_WARN(logger_, "Ignoring LiveKit video track '%s' with an empty SID or no subscribe hook",
                 descriptor.track_name.c_str());
-    return;
+    return false;
   }
 
   const auto ros_topic_name = resolveInboundVideoTopic(descriptor);
   if (!ros_topic_name) {
-    return;
+    return false;
   }
 
   // Pin the node before any lock, for the same reason as onDataTrackPublished().
@@ -800,12 +821,12 @@ void TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& de
   if (!node) {
     RCLCPP_WARN(logger_, "Cannot republish LiveKit video track '%s' from '%s'; ROS node has been destroyed",
                 descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
-    return;
+    return false;
   }
 
   const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
   if (inbound_video_tracks_.count(descriptor.sid) > 0) {
-    return;
+    return true;
   }
 
   rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr publisher;
@@ -819,7 +840,7 @@ void TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& de
     RCLCPP_ERROR(logger_, "Failed to create ROS publisher '%s' for LiveKit video track '%s' from '%s': %s",
                  ros_topic_name->c_str(), descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(),
                  e.what());
-    return;
+    return false;
   }
 
   const auto subscribe_result = descriptor.subscribe();
@@ -829,7 +850,7 @@ void TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& de
     RCLCPP_ERROR(logger_, "Failed to open a frame stream for LiveKit video track '%s' from '%s': %s",
                  descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(),
                  subscribe_result ? "stream handle is invalid" : subscribe_result.error().c_str());
-    return;
+    return false;
   }
 
   InboundVideoTrack::Options track_options;
@@ -841,23 +862,25 @@ void TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& de
   const auto& track_name = descriptor.track_name;
   track_options.fallback_frame_id = track_name.front() == '/' ? track_name.substr(1) : track_name;
   auto& track = inbound_video_tracks_[descriptor.sid];
-  track = std::make_unique<InboundVideoTrack>(std::move(track_options), subscribe_result.value(), std::move(publisher),
+  track_options.set_enabled = descriptor.set_enabled;
+  track = std::make_shared<InboundVideoTrack>(std::move(track_options), subscribe_result.value(), std::move(publisher),
                                               clock_, logger_, livekit_methods_.is_room_available,
                                               diagnostic_state_.inbound_video);
   // Register before start so echo suppression covers the first published frame.
   if (!track->start()) {
     diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
     inbound_video_tracks_.erase(descriptor.sid);
-    return;
+    return false;
   }
 
   RCLCPP_INFO(logger_, "Subscribed to LiveKit video track '%s' from '%s'; publishing ROS topic '%s' [%s]",
               descriptor.track_name.c_str(), descriptor.publisher_identity.c_str(), ros_topic_name->c_str(),
               "sensor_msgs/msg/CompressedImage");
+  return true;
 }
 
 void TopicForwarder::onVideoTrackUnsubscribed(const std::string& sid) {
-  std::unique_ptr<InboundVideoTrack> track;
+  std::shared_ptr<InboundVideoTrack> track;
   {
     const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
     const auto it = inbound_video_tracks_.find(sid);
@@ -1154,12 +1177,14 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
 
   std::size_t inbound_video_tracks = 0U;
   std::size_t inbound_video_readers_alive = 0U;
+  std::size_t inbound_video_tracks_paused = 0U;
   {
     const std::lock_guard<std::mutex> lock(inbound_video_tracks_mutex_);
     inbound_video_tracks = inbound_video_tracks_.size();
-    inbound_video_readers_alive =
-        static_cast<std::size_t>(std::count_if(inbound_video_tracks_.begin(), inbound_video_tracks_.end(),
-                                               [](const auto& entry) { return entry.second->isReaderAlive(); }));
+    for (const auto& [sid, track] : inbound_video_tracks_) {
+      inbound_video_readers_alive += track->isReaderAlive() ? 1U : 0U;
+      inbound_video_tracks_paused += track->isPaused() ? 1U : 0U;
+    }
   }
 
   // Pending writers and stopped reader threads are not published as fields; they only
@@ -1183,6 +1208,7 @@ void TopicForwarder::populateStatus(diagnostic_updater::DiagnosticStatusWrapper&
   status.add("outbound.failures", outbound_failures);
   status.add("inbound.data_tracks", inbound_data_tracks);
   status.add("inbound.video_tracks", inbound_video_tracks);
+  status.add("inbound.video_tracks_paused", inbound_video_tracks_paused);
   status.add("inbound.video_stamp_fallbacks", inbound_video_stamp_fallbacks);
   status.add("inbound.failures", inbound_failures);
 }

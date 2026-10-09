@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <rclcpp/clock.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/publisher.hpp>
@@ -43,8 +44,14 @@ namespace ros_portal {
 /// frame metadata when present. Otherwise the stamp comes from the local ROS
 /// clock and the frame_id from @ref Options::fallback_frame_id.
 ///
+/// While the ROS topic has no subscribers, frames are not encoded, and
+/// @ref updateDemand can pause the LiveKit track so the server stops sending
+/// it. Resuming makes the server request a key frame from the sender, so the
+/// first decodable frame arrives within about one round trip.
+///
 /// Threading: construct, @ref start, @ref stop and destroy from one owner
-/// thread. @ref ownsPublisher and @ref isReaderAlive are safe from any thread.
+/// thread. @ref updateDemand, @ref ownsPublisher, @ref isReaderAlive and
+/// @ref isPaused are safe from any thread.
 class InboundVideoTrack {
 public:
   /// @brief Decoded frames from a remote LiveKit video track.
@@ -67,6 +74,9 @@ public:
     std::string ros_topic_name;
     /// @brief `header.frame_id` used when a frame carries no frame_id metadata.
     std::string fallback_frame_id;
+    /// @brief Enable or disable delivery of the LiveKit track. Returns false on
+    /// failure. When unset, the track is never paused.
+    std::function<bool(bool)> set_enabled;
   };
 
   /// @brief Cumulative counters owned by the caller and shared across tracks.
@@ -107,6 +117,13 @@ public:
   /// @brief Close the stream and join the reader thread. Safe to call twice.
   void stop();
 
+  /// @brief Pause the LiveKit track while the ROS topic has no subscribers,
+  /// and resume it when one appears.
+  void updateDemand();
+
+  /// @brief Return whether the LiveKit track is paused for lack of subscribers.
+  bool isPaused() const { return paused_.load(std::memory_order_relaxed); }
+
   /// @brief Return whether @p gid identifies this track's ROS publisher.
   bool ownsPublisher(const rmw_gid_t& gid) const;
 
@@ -140,6 +157,9 @@ private:
   std::thread thread_;
   std::atomic_bool stop_requested_{false};
   std::atomic_bool reader_alive_{false};
+  /// @brief Serializes pause and resume requests.
+  std::mutex demand_mutex_;
+  std::atomic_bool paused_{false};
 };
 
 } // namespace ros_portal

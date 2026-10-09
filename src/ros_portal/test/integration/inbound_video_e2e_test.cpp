@@ -144,5 +144,39 @@ TEST_F(RosPortalTestE2E, RepublishesRemoteVideoTrackAsCompressedImageWithSenderH
   EXPECT_EQ(received->header.stamp.nanosec, 123'456'000U);
 }
 
+// The portal pauses a track whose ROS topic has no subscribers. A subscriber
+// that appears later must still receive frames, which needs the sender to
+// produce a fresh key frame after the track resumes.
+TEST_F(RosPortalTestE2E, ResumesPausedVideoTrackWhenRosSubscriberAppears) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  initializeInboundOnlyRuntime(kVideoTrackName);
+
+  VideoPublisher publisher;
+  ASSERT_TRUE(publisher.connect(liveKitUrl(), tokenA())) << "Independent LiveKit video publisher failed to connect";
+  publisher.start();
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kCompressedTopic) > 0U; }, kGraphTimeout))
+      << "ROS Portal did not create a publisher on " << kCompressedTopic;
+  // Let several demand checks pass so the track is paused before subscribing.
+  std::this_thread::sleep_for(2s);
+
+  std::mutex mutex;
+  std::optional<sensor_msgs::msg::CompressedImage> received;
+  auto subscription = robotBNode()->create_subscription<sensor_msgs::msg::CompressedImage>(
+      kCompressedTopic, 10, [&](const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg) {
+        const std::lock_guard<std::mutex> lock(mutex);
+        received = *msg;
+      });
+
+  ASSERT_TRUE(waitFor(
+      [&]() {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return received.has_value();
+      },
+      kMessageTimeout))
+      << "No CompressedImage arrived on " << kCompressedTopic << " after the subscriber appeared";
+  const std::lock_guard<std::mutex> lock(mutex);
+  EXPECT_EQ(received->header.frame_id, kSenderFrameId);
+}
+
 } // namespace
 } // namespace ros_portal::test

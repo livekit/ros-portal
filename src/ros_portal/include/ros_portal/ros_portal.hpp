@@ -171,6 +171,10 @@ private:
   /// @brief Stop republishing a remote LiveKit video track when it is unsubscribed.
   void onTrackUnsubscribed(livekit::Room& room, const livekit::TrackUnsubscribedEvent& event) override;
 
+  /// @brief Unsubscribe from a media track that ROS Portal does not republish,
+  /// so the SDK stops receiving and decoding it.
+  void unsubscribeUnusedTrack(const livekit::TrackSubscribedEvent& event);
+
   // The LiveKit room exposes a single delegate, so ROS Portal owns it and
   // forwards lifecycle events to the connection manager and diagnostics.
 

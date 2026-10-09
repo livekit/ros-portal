@@ -25,6 +25,7 @@
 #include <livekit/local_video_track.h>
 #include <livekit/remote_data_track.h>
 #include <livekit/remote_participant.h>
+#include <livekit/remote_track_publication.h>
 #include <livekit/room.h>
 #include <livekit/rpc_error.h>
 #include <livekit/track.h>
@@ -596,10 +597,15 @@ void RosPortal::onDataTrackUnpublished(livekit::Room&, const livekit::DataTrackU
 }
 
 void RosPortal::onTrackSubscribed(livekit::Room&, const livekit::TrackSubscribedEvent& event) {
-  if (shutting_down_.load(std::memory_order_relaxed)) {
+  if (shutting_down_.load(std::memory_order_relaxed) || !event.track) {
     return;
   }
-  if (!event.track || event.track->kind() != livekit::TrackKind::KIND_VIDEO) {
+  // The room auto-subscribes to every media track, and the SDK decodes each
+  // subscribed track even when nothing reads it. Unsubscribe from what ROS
+  // Portal does not republish: all audio, and unconfigured video. This runs on
+  // the room event thread, so it also covers tracks present at join time.
+  if (event.track->kind() != livekit::TrackKind::KIND_VIDEO) {
+    unsubscribeUnusedTrack(event);
     return;
   }
   if (!event.participant) {
@@ -619,9 +625,29 @@ void RosPortal::onTrackSubscribed(livekit::Room&, const livekit::TrackSubscribed
     return;
   }
 
-  const std::lock_guard<std::mutex> lock(room_components_mutex_);
-  if (topic_forwarder_) {
-    topic_forwarder_->onVideoTrackSubscribed(event.track, event.participant->identity());
+  bool republished = false;
+  {
+    const std::lock_guard<std::mutex> lock(room_components_mutex_);
+    if (topic_forwarder_) {
+      republished =
+          topic_forwarder_->onVideoTrackSubscribed(event.track, event.participant->identity(), event.publication);
+    }
+  }
+  if (!republished) {
+    unsubscribeUnusedTrack(event);
+  }
+}
+
+void RosPortal::unsubscribeUnusedTrack(const livekit::TrackSubscribedEvent& event) {
+  if (!event.publication) {
+    return;
+  }
+  try {
+    event.publication->setSubscribed(false);
+    RCLCPP_DEBUG(this->get_logger(), "Unsubscribed from unused LiveKit track '%s'", event.track->name().c_str());
+  } catch (const std::exception& error) {
+    RCLCPP_WARN(this->get_logger(), "Failed to unsubscribe from unused LiveKit track '%s': %s",
+                event.track->name().c_str(), error.what());
   }
 }
 
@@ -813,7 +839,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
         auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
         sink->width = width;
         sink->height = height;
-        // The forwarder calls capture_frame under its outbound lock, so the
+        // The forwarder calls capture_frame under the topic's lock, so the
         // reused capture options and cached frame_id need no extra locking.
         livekit::VideoCaptureOptions capture_options;
         capture_options.metadata.emplace();

@@ -86,6 +86,26 @@ void InboundVideoTrack::stop() {
   }
 }
 
+void InboundVideoTrack::updateDemand() {
+  if (!options_.set_enabled || !publisher_) {
+    return;
+  }
+  const bool wanted = publisher_->get_subscription_count() > 0U;
+  const std::lock_guard<std::mutex> lock(demand_mutex_);
+  if (wanted != paused_.load(std::memory_order_relaxed)) {
+    return;
+  }
+  if (!options_.set_enabled(wanted)) {
+    RCLCPP_WARN(logger_, "Failed to %s LiveKit video track '%s' from '%s'", wanted ? "resume" : "pause",
+                options_.track_name.c_str(), options_.publisher_identity.c_str());
+    return;
+  }
+  paused_.store(!wanted, std::memory_order_relaxed);
+  RCLCPP_INFO(logger_, "%s LiveKit video track '%s' from '%s'; '%s' has %s", wanted ? "Resumed" : "Paused",
+              options_.track_name.c_str(), options_.publisher_identity.c_str(), options_.ros_topic_name.c_str(),
+              wanted ? "a ROS subscriber" : "no ROS subscribers");
+}
+
 bool InboundVideoTrack::ownsPublisher(const rmw_gid_t& gid) const { return publisher_ && *publisher_ == gid; }
 
 void InboundVideoTrack::readLoop() {
@@ -93,6 +113,11 @@ void InboundVideoTrack::readLoop() {
   livekit::VideoFrameEvent event;
   while (!stop_requested_.load() && stream_ && stream_->read && stream_->read(event)) {
     if (is_room_available_ && !is_room_available_()) {
+      continue;
+    }
+    // JPEG encoding is the dominant per-frame cost, so skip it while no ROS
+    // subscriber (including rosbag) would receive the result.
+    if (publisher_->get_subscription_count() == 0U) {
       continue;
     }
     publishFrame(event);

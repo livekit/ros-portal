@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <livekit/video_frame.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -32,9 +30,6 @@
 #include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal::utils {
-
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
-                                                      std::size_t rgba_size);
 
 /// @brief Read a non-empty environment variable.
 ///

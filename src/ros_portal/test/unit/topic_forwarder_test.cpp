@@ -892,15 +892,20 @@ using VideoSubscribeFn = std::function<livekit::Result<std::shared_ptr<InboundVi
 // A live-track stand-in: emits @p frame every 10 ms until closed. Repeating the
 // frame keeps the tests independent of when DDS matches the test subscriber.
 VideoSubscribeFn makeScriptedVideoSubscribe(ScriptedVideoFrame frame, std::shared_ptr<std::atomic_bool> closed,
-                                            std::shared_ptr<std::atomic<int>> subscribe_count = nullptr) {
-  return [frame = std::move(frame), closed = std::move(closed), subscribe_count = std::move(subscribe_count)]() {
+                                            std::shared_ptr<std::atomic<int>> subscribe_count = nullptr,
+                                            std::shared_ptr<std::atomic<int>> read_count = nullptr) {
+  return [frame = std::move(frame), closed = std::move(closed), subscribe_count = std::move(subscribe_count),
+          read_count = std::move(read_count)]() {
     if (subscribe_count) {
       subscribe_count->fetch_add(1);
     }
     auto stream = std::make_shared<InboundVideoTrack::Stream>();
-    stream->read = [frame, closed](livekit::VideoFrameEvent& event) {
+    stream->read = [frame, closed, read_count](livekit::VideoFrameEvent& event) {
       if (closed->load()) {
         return false;
+      }
+      if (read_count) {
+        read_count->fetch_add(1);
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       event.frame = livekit::VideoFrame::create(16, 16, frame.type);
@@ -1127,6 +1132,9 @@ TEST_F(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication) {
 
 TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {
   TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  // Frames are only encoded while the topic has a subscriber.
+  CompressedImageInbox inbox;
+  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
 
   ScriptedVideoFrame frame;
   frame.type = livekit::VideoBufferType::RGBA;
@@ -1146,6 +1154,69 @@ TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {
   const auto failures = valueFor(status, "inbound.failures");
   ASSERT_TRUE(failures.has_value());
   EXPECT_GE(std::stoull(*failures), 1U);
+}
+
+TEST_F(TopicForwarderTest, InboundVideoPausesWithoutSubscribersAndResumes) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  auto calls_mutex = std::make_shared<std::mutex>();
+  auto enable_calls = std::make_shared<std::vector<bool>>();
+  const auto calls = [&]() {
+    const std::lock_guard<std::mutex> lock(*calls_mutex);
+    return *enable_calls;
+  };
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
+  descriptor.set_enabled = [calls_mutex, enable_calls](const bool enabled) {
+    const std::lock_guard<std::mutex> lock(*calls_mutex);
+    enable_calls->push_back(enabled);
+    return true;
+  };
+  ASSERT_TRUE(forwarder.onVideoTrackSubscribed(descriptor));
+
+  // No ROS subscriber: the track pauses once, and a repeated check is a no-op.
+  forwarder.updateInboundVideoDemand();
+  forwarder.updateInboundVideoDemand();
+  EXPECT_EQ(calls(), (std::vector<bool>{false}));
+  diagnostic_updater::DiagnosticStatusWrapper paused_status;
+  forwarder.populateStatus(paused_status);
+  EXPECT_EQ(valueFor(paused_status, "inbound.video_tracks_paused"), "1");
+
+  // A subscriber appears: the track resumes.
+  CompressedImageInbox inbox;
+  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  ASSERT_TRUE(spinUntil([&]() {
+    forwarder.updateInboundVideoDemand();
+    return calls().size() == 2U;
+  }));
+  EXPECT_EQ(calls(), (std::vector<bool>{false, true}));
+  diagnostic_updater::DiagnosticStatusWrapper resumed_status;
+  forwarder.populateStatus(resumed_status);
+  EXPECT_EQ(valueFor(resumed_status, "inbound.video_tracks_paused"), "0");
+}
+
+TEST_F(TopicForwarderTest, InboundVideoSkipsEncodingWithoutSubscribers) {
+  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  // Every frame would fail to encode, so any encode attempt shows as a failure.
+  ScriptedVideoFrame frame;
+  frame.type = livekit::VideoBufferType::RGBA;
+  auto closed = std::make_shared<std::atomic_bool>(false);
+  auto read_count = std::make_shared<std::atomic<int>>(0);
+  TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+  descriptor.sid = "video-sid";
+  descriptor.track_name = kVideoTrackName;
+  descriptor.publisher_identity = "edge";
+  descriptor.subscribe = makeScriptedVideoSubscribe(frame, closed, nullptr, read_count);
+  forwarder.onVideoTrackSubscribed(std::move(descriptor));
+
+  ASSERT_TRUE(spinUntil([&]() { return read_count->load() >= 5; }));
+  EXPECT_EQ(forwarder.diagnostic_state_.inbound_video.failures.load(), 0U);
+  EXPECT_EQ(forwarder.diagnostic_state_.inbound_video.stamp_fallbacks.load(), 0U);
 }
 
 namespace {

@@ -18,7 +18,6 @@ $schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_porta
 
 ros_portal:
   version: "0.0.1"
-  ros_threads: 4
 
   topics:
     - topic: "/turtle.*/cmd_vel"

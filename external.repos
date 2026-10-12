@@ -2,7 +2,7 @@ repositories:
   client-sdk-cpp:
     type: git
     url: https://github.com/livekit/client-sdk-cpp.git
-    version: 336d14e17d9432acce89e4c0d57078bbfbb23026  # v1.10.0
+    version: sderosa/capture-no-device-source
   cpp-tools:
     type: git
     url: https://github.com/livekit/cpp-tools.git

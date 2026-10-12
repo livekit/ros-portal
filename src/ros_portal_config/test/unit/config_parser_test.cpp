@@ -48,6 +48,7 @@ ros_portal:
   EXPECT_FALSE(config.enable_all_ros_topic_stats);
   EXPECT_TRUE(config.services.empty());
   EXPECT_TRUE(config.topics.empty());
+  EXPECT_TRUE(config.video_sources.empty());
 }
 
 TEST(ConfigParserTest, IgnoresOptionalSchemaKey) {
@@ -82,15 +83,32 @@ ros_portal:
       direction: "out"
       max_rate_hz: 15
       enable_ros_topic_stats: true
-      video_options:
-        bitrate_kbps: 3500
-        codec: "h264"
     - topic: "/odom"
       direction: "bidirectional"
       encoding: "jsonschema"
     - topic: "/teleop_cmd"
       direction: "in"
       preserve_id: true
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: "videotestsrc ! x264enc name=lk_encoder ! appsink name=lk_appsink"
+        codec: "h264"
+        resolution:
+          width: 1920
+          height: 1080
+        rate_control:
+          element: "lk_encoder"
+          property: "bitrate"
+          unit: "kbps"
+      publish_options:
+        max_bitrate_bps: 3500000
+        max_framerate: 30
+    - track_name: "pattern_camera"
+      simulcast: true
+      source:
+        type: "pattern"
 )");
 
   EXPECT_EQ(config.ros_threads, 4);
@@ -107,11 +125,6 @@ ros_portal:
   ASSERT_EQ(config.topics.size(), 3u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");
   EXPECT_EQ(config.topics[0].direction, Direction::Out);
-  ASSERT_TRUE(config.topics[0].video_options.has_value());
-  ASSERT_TRUE(config.topics[0].video_options->bitrate_kbps.has_value());
-  EXPECT_EQ(*config.topics[0].video_options->bitrate_kbps, 3500);
-  ASSERT_TRUE(config.topics[0].video_options->codec.has_value());
-  EXPECT_EQ(*config.topics[0].video_options->codec, "h264");
   EXPECT_FALSE(config.topics[0].preserve_id);
   ASSERT_TRUE(config.topics[0].max_rate_hz.has_value());
   EXPECT_DOUBLE_EQ(*config.topics[0].max_rate_hz, 15.0);
@@ -125,6 +138,71 @@ ros_portal:
   EXPECT_EQ(config.topics[2].direction, Direction::In);
   EXPECT_TRUE(config.topics[2].preserve_id);
   EXPECT_EQ(config.topics[2].encoding, Encoding::Ros2msg); // default
+
+  ASSERT_EQ(config.video_sources.size(), 2u);
+  EXPECT_EQ(config.video_sources[0].track_name, "front_camera");
+  EXPECT_FALSE(config.video_sources[0].simulcast); // default
+  EXPECT_EQ(config.video_sources[0].source.type, CaptureSourceType::Gstreamer);
+  ASSERT_TRUE(config.video_sources[0].source.pipeline.has_value());
+  EXPECT_EQ(*config.video_sources[0].source.pipeline,
+            "videotestsrc ! x264enc name=lk_encoder ! appsink name=lk_appsink");
+  ASSERT_TRUE(config.video_sources[0].source.codec.has_value());
+  EXPECT_EQ(*config.video_sources[0].source.codec, VideoCodec::H264);
+  ASSERT_TRUE(config.video_sources[0].source.resolution.has_value());
+  EXPECT_EQ(config.video_sources[0].source.resolution->width, 1920);
+  EXPECT_EQ(config.video_sources[0].source.resolution->height, 1080);
+  ASSERT_TRUE(config.video_sources[0].source.rate_control.has_value());
+  EXPECT_EQ(config.video_sources[0].source.rate_control->element, "lk_encoder");
+  EXPECT_EQ(config.video_sources[0].source.rate_control->property, "bitrate");
+  EXPECT_EQ(config.video_sources[0].source.rate_control->unit, GstreamerBitrateUnit::Kbps);
+  ASSERT_TRUE(config.video_sources[0].publish_options.has_value());
+  ASSERT_TRUE(config.video_sources[0].publish_options->max_bitrate_bps.has_value());
+  EXPECT_EQ(*config.video_sources[0].publish_options->max_bitrate_bps, 3500000);
+  ASSERT_TRUE(config.video_sources[0].publish_options->max_framerate.has_value());
+  EXPECT_EQ(*config.video_sources[0].publish_options->max_framerate, 30);
+  EXPECT_EQ(config.video_sources[1].track_name, "pattern_camera");
+  EXPECT_TRUE(config.video_sources[1].simulcast);
+  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Pattern);
+  EXPECT_FALSE(config.video_sources[1].source.pipeline.has_value());
+  EXPECT_FALSE(config.video_sources[1].source.pattern.has_value());
+}
+
+TEST(ConfigParserTest, ParsesPatternSourceCharacteristics) {
+  const auto config = parse(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "pattern_camera"
+      source:
+        type: "pattern"
+        pattern:
+          resolution:
+            width: 1280
+            height: 720
+          framerate_fps: 15
+)");
+
+  ASSERT_TRUE(config.video_sources[0].source.pattern.has_value());
+  const auto& pattern = *config.video_sources[0].source.pattern;
+  ASSERT_TRUE(pattern.resolution.has_value());
+  EXPECT_EQ(pattern.resolution->width, 1280);
+  EXPECT_EQ(pattern.resolution->height, 720);
+  ASSERT_TRUE(pattern.framerate_fps.has_value());
+  EXPECT_EQ(*pattern.framerate_fps, 15);
+}
+
+TEST(ConfigParserTest, RejectsNonBooleanSimulcast) {
+  expectInvalid(
+      R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "camera"
+      simulcast: "yes please"
+      source:
+        type: "pattern"
+)",
+      "boolean");
 }
 
 TEST(ConfigParserTest, ParsesRos2IdlEncoding) {
@@ -228,11 +306,10 @@ TEST(ConfigParserTest, RejectsWrongMapType) {
       R"(
 ros_portal:
   version: "0.0.1"
-  topics:
-    - topic: "/camera/image_raw"
-      direction: "out"
-      video_options:
-        - bitrate_kbps
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        - type
 )",
       "expected map");
 }
@@ -338,7 +415,7 @@ ros_portal:
       "expected nonempty string");
 }
 
-TEST(ConfigParserTest, RejectsInvalidVideoBitrate) {
+TEST(ConfigParserTest, RejectsRemovedTopicVideoOptions) {
   expectInvalid(
       R"(
 ros_portal:
@@ -347,23 +424,53 @@ ros_portal:
     - topic: "/camera/image_raw"
       direction: "out"
       video_options:
-        bitrate_kbps: -1
+        bitrate_kbps: 3500
 )",
-      "expected positive integer");
+      "unknown field 'video_options'");
 }
 
-TEST(ConfigParserTest, RejectsEmptyCodec) {
+TEST(ConfigParserTest, RejectsRemovedDeviceSourceType) {
   expectInvalid(
       R"(
 ros_portal:
   version: "0.0.1"
-  topics:
-    - topic: "/camera/image_raw"
-      direction: "out"
-      video_options:
-        codec: ""
+  video_sources:
+    - track_name: "usb_camera"
+      source:
+        type: "device"
 )",
-      "expected nonempty string");
+      "expected 'gstreamer' or 'pattern'");
+}
+
+TEST(ConfigParserTest, RejectsInvalidVideoSourceCodec) {
+  expectInvalid(
+      R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: "videotestsrc ! x264enc"
+        codec: "mpeg2"
+)",
+      "expected 'h264', 'h265', 'vp8', 'vp9', or 'av1'");
+}
+
+TEST(ConfigParserTest, RejectsInvalidVideoSourcePublishBitrate) {
+  expectInvalid(
+      R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "front_camera"
+      source:
+        type: "gstreamer"
+        pipeline: "videotestsrc ! x264enc"
+      publish_options:
+        max_bitrate_bps: 0
+)",
+      "expected positive integer");
 }
 
 TEST(ConfigParserTest, RejectsAudioOptions) {
@@ -390,6 +497,7 @@ TEST(ConfigParserTest, ParsesFile) {
   EXPECT_FALSE(config.enable_all_ros_topic_stats);
   ASSERT_EQ(config.services.size(), 2u);
   ASSERT_EQ(config.topics.size(), 6u);
+  ASSERT_EQ(config.video_sources.size(), 2u);
   EXPECT_EQ(config.topics[0].topic, "/camera/image_raw");
   EXPECT_FALSE(config.topics[0].preserve_id);
   EXPECT_FALSE(config.topics[0].max_rate_hz.has_value());
@@ -399,6 +507,12 @@ TEST(ConfigParserTest, ParsesFile) {
   EXPECT_TRUE(config.topics[1].enable_ros_topic_stats);
   EXPECT_EQ(config.topics[5].topic, "/teleop_cmd");
   EXPECT_TRUE(config.topics[5].preserve_id);
+  EXPECT_EQ(config.video_sources[0].track_name, "front_camera");
+  EXPECT_FALSE(config.video_sources[0].simulcast);
+  EXPECT_TRUE(config.video_sources[1].simulcast);
+  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Pattern);
+  ASSERT_TRUE(config.video_sources[1].source.pattern.has_value());
+  EXPECT_EQ(config.video_sources[1].source.pattern->resolution->width, 640);
 }
 
 TEST(ConfigParserTest, ParsesEmptySequences) {

@@ -23,6 +23,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ros_portal::utils {
 
@@ -102,9 +103,13 @@ const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image& ima
 
   if (const auto layout = nativeLayout(image.encoding)) {
     if (image.step == row_bytes) {
+      // Swap instead of move: on Lyrical, `data` is a rosidl::Buffer, and
+      // moving it into a std::vector copies. Both types swap with a vector.
+      std::vector<std::uint8_t> pixels;
+      image.data.swap(pixels);
       // Shrinking never reallocates, so this keeps the zero-copy hand-off.
-      image.data.resize(row_bytes * image.height);
-      moved_ = livekit::VideoFrame(width, height, *layout, std::move(image.data));
+      pixels.resize(row_bytes * image.height);
+      moved_ = livekit::VideoFrame(width, height, *layout, std::move(pixels));
       return &moved_;
     }
     auto& frame = reuse(width, height, *layout, fresh);

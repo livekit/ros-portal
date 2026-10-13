@@ -62,6 +62,27 @@ std::unordered_map<std::string, OutboundEncoding> outboundEncodings(
   return encodings;
 }
 
+/// @brief Collect inbound/bidirectional non-latched topics that may receive
+/// LiveKit video tracks, keyed by normalized literal topic name. Video tracks
+/// match by exact name, so regex metacharacters in `topic` are not expanded.
+std::unordered_map<std::string, TopicForwarder::IncomingVideoTopic> incomingVideoTopics(
+    const std::vector<ros_portal_config::TopicConfig>& topics) {
+  std::unordered_map<std::string, TopicForwarder::IncomingVideoTopic> video_topics;
+  for (const auto& topic_config : topics) {
+    const bool inbound = topic_config.direction == ros_portal_config::Direction::In ||
+                         topic_config.direction == ros_portal_config::Direction::Bidirectional;
+    if (!inbound || topic_config.latched) {
+      continue;
+    }
+    const auto normalized_topic_name = normalizeTrackTopicName(topic_config.topic);
+    if (!normalized_topic_name.has_value()) {
+      continue;
+    }
+    video_topics.emplace(*normalized_topic_name, TopicForwarder::IncomingVideoTopic{topic_config.preserve_id});
+  }
+  return video_topics;
+}
+
 /// @brief Collect configured DataTrack topic patterns that enable ROS topic
 /// statistics. The global option selects every outbound DataTrack pattern.
 std::vector<std::string> rosTopicStatsPatterns(const std::vector<ros_portal_config::TopicConfig>& topics,
@@ -88,6 +109,7 @@ TopicForwarder::Options topicForwarderOptions(const std::vector<ros_portal_confi
   TopicForwarder::Options options;
   options.outgoing_topic_patterns = compileAndLog(outgoingTopicPatterns(topics), logger);
   options.incoming_topic_patterns = compileAndLog(incomingTopicPatterns(topics), logger);
+  options.incoming_video_topics = incomingVideoTopics(topics);
   options.preserve_id_topic_patterns = compileAndLog(preserveIdTopicPatterns(topics), logger);
   options.best_effort_qos_topic_patterns = compileAndLog(best_effort_qos_topics, logger);
   options.ros_topic_stats_topic_patterns =

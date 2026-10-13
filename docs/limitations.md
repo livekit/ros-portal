@@ -6,9 +6,9 @@
   recreated.
 - Only `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8` encodings are handled.
   Other encodings are dropped with a throttled warning.
-- Encoding conversion is done per-pixel on the CPU inside the subscription
-  callback. High-resolution or high-framerate streams may need a more efficient
-  path.
+- Packed `rgba8`, `bgra8`, and `rgb8` images go to LiveKit without a pixel
+  copy. `bgr8`, `mono8`, and images with row padding need one CPU pass inside
+  the subscription callback. The LiveKit SDK then converts each frame to I420.
 
 ## Audio Tracks
 

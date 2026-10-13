@@ -222,4 +222,10 @@ bool isRosTopicStatisticsTopic(const std::string& topic_name) {
   return topic_name.size() >= suffix.size() &&
          topic_name.compare(topic_name.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
+
+bool isRmwBufferTopic(const std::string& topic_name) {
+  constexpr char kBufferSegmentPrefix[] = "_buf_";
+  const auto segment_start = topic_name.rfind('/') + 1U;
+  return topic_name.compare(segment_start, sizeof(kBufferSegmentPrefix) - 1U, kBufferSegmentPrefix) == 0;
+}
 } // namespace ros_portal::utils

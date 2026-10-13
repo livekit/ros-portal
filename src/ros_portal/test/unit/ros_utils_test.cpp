@@ -401,5 +401,15 @@ TEST(RosUtilsTest, IsRosTopicStatisticsTopicRejectsOrdinaryTopics) {
   EXPECT_FALSE(isRosTopicStatisticsTopic("/statistics/pose"));
   EXPECT_FALSE(isRosTopicStatisticsTopic("/pose_statistics"));
 }
+
+TEST(RosUtilsTest, IsRmwBufferTopicMatchesBufferBackendSegment) {
+  EXPECT_TRUE(isRmwBufferTopic("/camera/image_raw/_buf_cpu"));
+  EXPECT_TRUE(isRmwBufferTopic("/_buf_cuda"));
+  EXPECT_FALSE(isRmwBufferTopic("/camera/image_raw"));
+  EXPECT_FALSE(isRmwBufferTopic("/camera/_buf_cpu/image_raw"));
+  EXPECT_FALSE(isRmwBufferTopic("/camera/image_buf_cpu"));
+  EXPECT_FALSE(isRmwBufferTopic("/fibonacci/_action/feedback"));
+  EXPECT_FALSE(isRmwBufferTopic(""));
+}
 } // namespace
 } // namespace ros_portal::utils

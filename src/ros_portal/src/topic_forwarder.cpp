@@ -170,7 +170,8 @@ void TopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_names_and_t
       }
     }
 
-    if (!utils::matchesAnyPattern(topic_name, options_.outgoing_topic_patterns)) {
+    if (!utils::matchesAnyPattern(topic_name, options_.outgoing_topic_patterns) ||
+        utils::isRmwBufferTopic(topic_name)) {
       continue;
     }
 

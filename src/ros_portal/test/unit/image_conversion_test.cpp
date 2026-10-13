@@ -61,7 +61,8 @@ TEST(ImageFrameBuilderTest, MapsPackedFourChannelEncodingsToNativeLayouts) {
   const auto* bgra_frame = builder.build(bgra);
   ASSERT_NE(bgra_frame, nullptr);
   EXPECT_EQ(bgra_frame->type(), livekit::VideoBufferType::BGRA);
-  EXPECT_EQ(std::vector<std::uint8_t>(bgra_frame->data(), bgra_frame->data() + 4), (std::vector<std::uint8_t>{1, 2, 3, 4}));
+  EXPECT_EQ(std::vector<std::uint8_t>(bgra_frame->data(), bgra_frame->data() + 4),
+            (std::vector<std::uint8_t>{1, 2, 3, 4}));
 }
 
 TEST(ImageFrameBuilderTest, DropsTrailingBytesOnZeroCopyPath) {
@@ -108,7 +109,8 @@ TEST(ImageFrameBuilderTest, ConvertsMono8ToI420WithNeutralChroma) {
   ASSERT_NE(frame, nullptr);
   EXPECT_EQ(frame->type(), livekit::VideoBufferType::I420);
   ASSERT_EQ(frame->dataSize(), 9U + 8U);
-  EXPECT_EQ(std::vector<std::uint8_t>(frame->data(), frame->data() + 9), (std::vector<std::uint8_t>{1, 2, 3, 4, 5, 6, 7, 8, 9}));
+  EXPECT_EQ(std::vector<std::uint8_t>(frame->data(), frame->data() + 9),
+            (std::vector<std::uint8_t>{1, 2, 3, 4, 5, 6, 7, 8, 9}));
   EXPECT_EQ(std::vector<std::uint8_t>(frame->data() + 9, frame->data() + 17), std::vector<std::uint8_t>(8U, 128U));
 }
 

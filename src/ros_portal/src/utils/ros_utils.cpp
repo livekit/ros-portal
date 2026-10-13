@@ -29,25 +29,6 @@ namespace {
 constexpr char kRosTopicStatisticsSuffix[] = "/statistics";
 } // namespace
 
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
-                                                      std::size_t rgba_size) {
-  if (width <= 0 || height <= 0) {
-    return std::nullopt;
-  }
-
-  const std::size_t expected_size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
-  if (rgba_size != expected_size) {
-    return std::nullopt;
-  }
-  if (rgba == nullptr) {
-    return std::nullopt;
-  }
-
-  auto frame = livekit::VideoFrame::create(width, height, livekit::VideoBufferType::RGBA);
-  std::memcpy(frame.data(), rgba, rgba_size);
-  return frame;
-}
-
 std::optional<std::string> environmentVariable(const char* name) {
   const char* value = std::getenv(name);
   if (value == nullptr || value[0] == '\0') {
@@ -240,5 +221,11 @@ bool isRosTopicStatisticsTopic(const std::string& topic_name) {
   const std::string suffix(kRosTopicStatisticsSuffix);
   return topic_name.size() >= suffix.size() &&
          topic_name.compare(topic_name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool isRmwBufferTopic(const std::string& topic_name) {
+  constexpr char kBufferSegmentPrefix[] = "_buf_";
+  const auto segment_start = topic_name.rfind('/') + 1U;
+  return topic_name.compare(segment_start, sizeof(kBufferSegmentPrefix) - 1U, kBufferSegmentPrefix) == 0;
 }
 } // namespace ros_portal::utils

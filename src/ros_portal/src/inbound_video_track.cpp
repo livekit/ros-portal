@@ -16,6 +16,7 @@
 
 #include "ros_portal/inbound_video_track.hpp"
 
+#include <algorithm>
 #include <builtin_interfaces/msg/time.hpp>
 #include <exception>
 #include <limits>
@@ -106,7 +107,14 @@ void InboundVideoTrack::updateDemand() {
               wanted ? "a ROS subscriber" : "no ROS subscribers");
 }
 
-bool InboundVideoTrack::ownsPublisher(const rmw_gid_t& gid) const { return publisher_ && *publisher_ == gid; }
+bool InboundVideoTrack::ownsPublisher(const rmw_gid_t& gid) const {
+  if (publisher_ && *publisher_ == gid) {
+    return true;
+  }
+  return std::any_of(
+      options_.buffer_writer_gids.begin(), options_.buffer_writer_gids.end(),
+      [&gid](const auto& writer_gid) { return std::equal(writer_gid.begin(), writer_gid.end(), gid.data); });
+}
 
 void InboundVideoTrack::readLoop() {
   const utils::ReaderAliveGuard reader_alive(reader_alive_);

@@ -23,6 +23,7 @@
 #include <livekit/video_stream.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -56,6 +57,24 @@ constexpr std::size_t kInboundVideoStreamCapacity = 2U;
 /// @brief How often inbound video tracks are paused or resumed to match ROS
 /// subscribers. Bounds the extra delay before a new subscriber gets frames.
 constexpr std::chrono::milliseconds kInboundVideoDemandInterval{500};
+/// @brief Hidden topic suffix of the writer that rmw_fastrtps on Lyrical adds
+/// for each typed publisher of a message with buffer fields.
+constexpr char kRmwCpuBufferTopicSuffix[] = "/_buf_cpu";
+
+/// @brief Return the endpoint GIDs in @p after that are not in @p before.
+std::vector<std::array<std::uint8_t, RMW_GID_STORAGE_SIZE>> newEndpointGids(
+    const std::vector<rclcpp::TopicEndpointInfo>& before, const std::vector<rclcpp::TopicEndpointInfo>& after) {
+  std::vector<std::array<std::uint8_t, RMW_GID_STORAGE_SIZE>> gids;
+  for (const auto& endpoint : after) {
+    const auto& gid = endpoint.endpoint_gid();
+    const bool existed = std::any_of(before.begin(), before.end(),
+                                     [&gid](const auto& previous) { return previous.endpoint_gid() == gid; });
+    if (!existed) {
+      gids.push_back(gid);
+    }
+  }
+  return gids;
+}
 
 /// @brief Return whether topic statistics should be enabled for a subscription.
 /// Never collect statistics about a statistics stream itself, which would
@@ -888,11 +907,17 @@ bool TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& de
   }
 
   rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr publisher;
+  std::vector<std::array<std::uint8_t, RMW_GID_STORAGE_SIZE>> buffer_writer_gids;
   try {
     const auto qos = utils::matchesAnyPattern(*ros_topic_name, options_.best_effort_qos_topic_patterns)
                          ? rclcpp::QoS(rclcpp::SensorDataQoS())
                          : rclcpp::QoS(10);
+    // The buffer writer reports no node name, so the writers that appear with
+    // the new publisher identify it for echo suppression.
+    const auto buffer_topic_name = *ros_topic_name + kRmwCpuBufferTopicSuffix;
+    const auto buffer_writers_before = node->get_publishers_info_by_topic(buffer_topic_name);
     publisher = node->create_publisher<sensor_msgs::msg::CompressedImage>(*ros_topic_name, qos);
+    buffer_writer_gids = newEndpointGids(buffer_writers_before, node->get_publishers_info_by_topic(buffer_topic_name));
   } catch (const std::exception& e) {
     diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Failed to create ROS publisher '%s' for LiveKit video track '%s' from '%s': %s",
@@ -921,6 +946,7 @@ bool TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& de
   track_options.fallback_frame_id = track_name.front() == '/' ? track_name.substr(1) : track_name;
   auto& track = inbound_video_tracks_[descriptor.sid];
   track_options.set_enabled = descriptor.set_enabled;
+  track_options.buffer_writer_gids = std::move(buffer_writer_gids);
   track = std::make_shared<InboundVideoTrack>(std::move(track_options), subscribe_result.value(), std::move(publisher),
                                               clock_, logger_, livekit_methods_.is_room_available,
                                               diagnostic_state_.inbound_video);

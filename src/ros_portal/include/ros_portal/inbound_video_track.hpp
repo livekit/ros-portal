@@ -19,6 +19,7 @@
 #include <livekit/video_stream.h>
 #include <rmw/types.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -30,6 +31,7 @@
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "ros_portal/types.hpp"
 #include "ros_portal/utils/jpeg_encoder.hpp"
@@ -77,6 +79,10 @@ public:
     /// @brief Enable or disable delivery of the LiveKit track. Returns false on
     /// failure. When unset, the track is never paused.
     std::function<bool(bool)> set_enabled;
+    /// @brief GIDs of extra DDS writers that send this track's samples. On
+    /// Lyrical, subscribers receive a typed publisher's samples from its hidden
+    /// `<topic>/_buf_cpu` writer, which has its own GID. Empty on other distros.
+    std::vector<std::array<std::uint8_t, RMW_GID_STORAGE_SIZE>> buffer_writer_gids;
   };
 
   /// @brief Cumulative counters owned by the caller and shared across tracks.
@@ -124,7 +130,8 @@ public:
   /// @brief Return whether the LiveKit track is paused for lack of subscribers.
   bool isPaused() const { return paused_.load(std::memory_order_relaxed); }
 
-  /// @brief Return whether @p gid identifies this track's ROS publisher.
+  /// @brief Return whether @p gid identifies this track's ROS publisher or one
+  /// of its @ref Options::buffer_writer_gids.
   bool ownsPublisher(const rmw_gid_t& gid) const;
 
   /// @brief Return whether the reader thread is running.

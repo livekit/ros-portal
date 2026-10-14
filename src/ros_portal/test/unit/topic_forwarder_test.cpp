@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -1129,6 +1130,28 @@ TEST_F(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication) {
   rmw_message_info_t from_local{};
   from_local.publisher_gid = local_publisher->get_gid();
   EXPECT_FALSE(forwarder.isInboundPublication(rclcpp::MessageInfo(from_local)));
+}
+
+TEST_F(TopicForwarderTest, InboundVideoTrackOwnsItsBufferWriterGids) {
+  auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kCompressedTopic, 10);
+  // A stand-in for the hidden "_buf_cpu" writer GID that Lyrical adds.
+  std::array<std::uint8_t, RMW_GID_STORAGE_SIZE> buffer_writer_gid{};
+  buffer_writer_gid.fill(0xAB);
+  InboundVideoTrack::Options options;
+  options.ros_topic_name = kCompressedTopic;
+  options.buffer_writer_gids = {buffer_writer_gid};
+  InboundVideoTrack::Counters counters;
+  const InboundVideoTrack track(
+      std::move(options), std::make_shared<InboundVideoTrack::Stream>(), publisher, node_->get_clock(),
+      node_->get_logger(), []() { return true; }, counters);
+
+  EXPECT_TRUE(track.ownsPublisher(publisher->get_gid()));
+  // Received GIDs always carry the rmw implementation identifier.
+  rmw_gid_t from_buffer_writer = publisher->get_gid();
+  std::copy(buffer_writer_gid.begin(), buffer_writer_gid.end(), from_buffer_writer.data);
+  EXPECT_TRUE(track.ownsPublisher(from_buffer_writer));
+  auto other_publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kCompressedTopic, 10);
+  EXPECT_FALSE(track.ownsPublisher(other_publisher->get_gid()));
 }
 
 TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {

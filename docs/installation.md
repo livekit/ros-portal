@@ -85,11 +85,10 @@ sets, so `apt install` pulls in everything the encoded video sources need.
 
 It deliberately does not depend on `gstreamer1.0-x`, which would pull X11 client
 libraries onto a headless robot. That package provides the Pango plugin, so
-pipelines using `clockoverlay`, `textoverlay`, or `timeoverlay` — including the
-`ros_portal_tutorials` configuration — fail to start with:
+pipelines using `clockoverlay`, `textoverlay`, or `timeoverlay` fail to start with:
 
 ```log
-[ERROR] [ros_portal]: Video source 'pattern_camera' failed to start: invalid
+[ERROR] [ros_portal]: Video source 'front_camera' failed to start: invalid
 request: GStreamer pipeline error: failed to create pipeline: no element
 "clockoverlay"
 ```

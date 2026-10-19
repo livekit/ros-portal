@@ -59,7 +59,7 @@
       "enum": ["ros2msg", "ros2idl", "jsonschema"]
     },
     "captureSourceType": {
-      "enum": ["gstreamer", "pattern"]
+      "enum": ["gstreamer", "pattern", "clock"]
     },
     "videoPattern": {
       "enum": ["gradient", "logo"]
@@ -111,6 +111,20 @@
         }
       }
     },
+    "clockSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resolution": {
+          "description": "Output resolution of the built-in clock source. Defaults to 640x480 when omitted.",
+          "$ref": "#/$defs/captureResolution"
+        },
+        "framerate_fps": {
+          "description": "Output frame rate of the built-in clock source. Defaults to 30 when omitted.",
+          "$ref": "#/$defs/positiveInteger"
+        }
+      }
+    },
     "patternSourceConfig": {
       "type": "object",
       "additionalProperties": false,
@@ -138,7 +152,7 @@
           "$ref": "#/$defs/captureSourceType"
         },
         "pipeline": {
-          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'pattern'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
+          "description": "GStreamer launch description. Required when type is 'gstreamer'; invalid for 'pattern' and 'clock'. Must contain an appsink named 'lk_appsink' or leave exactly one encoded video source pad unlinked.",
           "$ref": "#/$defs/nonemptyString"
         },
         "codec": {
@@ -150,11 +164,15 @@
           "$ref": "#/$defs/captureResolution"
         },
         "rate_control": {
-          "description": "Optional binding that forwards WebRTC bitrate targets to a writable GStreamer encoder property. GStreamer sources only; pattern sources are pixel sources encoded by WebRTC, which applies its own rate control.",
+          "description": "Optional binding that forwards WebRTC bitrate targets to a writable GStreamer encoder property. GStreamer sources only; pattern and clock sources are pixel sources encoded by WebRTC, which applies its own rate control.",
           "$ref": "#/$defs/gstreamerRateControl"
         },
+        "clock": {
+          "description": "Output characteristics of the built-in wall clock source. Optional when type is 'clock'; invalid for 'gstreamer' and 'pattern'.",
+          "$ref": "#/$defs/clockSourceConfig"
+        },
         "pattern": {
-          "description": "Pattern and output characteristics of the built-in test source. Optional when type is 'pattern'; invalid for 'gstreamer'.",
+          "description": "Pattern and output characteristics of the built-in test source. Optional when type is 'pattern'; invalid for 'gstreamer' and 'clock'.",
           "$ref": "#/$defs/patternSourceConfig"
         }
       }

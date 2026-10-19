@@ -83,7 +83,7 @@ TEST(CaptureSourceFactoryTest, TranslatesGstreamerConfig) {
   ASSERT_TRUE(config.rate_control.has_value());
   EXPECT_EQ(config.rate_control->element, "lk_encoder");
   EXPECT_EQ(config.rate_control->property, "bitrate");
-  EXPECT_EQ(config.rate_control->unit, livekit::GstreamerBitrateUnit::Kbps);
+  EXPECT_EQ(config.rate_control->unit, livekit::capture::GstreamerBitrateUnit::Kbps);
 }
 
 TEST(CaptureSourceFactoryTest, GstreamerBitrateUnitDefaultsToBps) {
@@ -91,7 +91,7 @@ TEST(CaptureSourceFactoryTest, GstreamerBitrateUnitDefaultsToBps) {
   source.rate_control =
       ros_portal_config::GstreamerRateControl{"lk_encoder", "bitrate", ros_portal_config::GstreamerBitrateUnit::Bps};
 
-  EXPECT_EQ(toGstreamerConfig(source).rate_control->unit, livekit::GstreamerBitrateUnit::Bps);
+  EXPECT_EQ(toGstreamerConfig(source).rate_control->unit, livekit::capture::GstreamerBitrateUnit::Bps);
 }
 
 TEST(CaptureSourceFactoryTest, GstreamerRequiresPipeline) {
@@ -130,13 +130,13 @@ TEST(CaptureSourceFactoryTest, MapsEveryCodec) {
 TEST(CaptureSourceFactoryTest, PatternConfigDefaultsToNonZeroCharacteristics) {
   const auto config = toPatternConfig(makePatternSource());
 
-  EXPECT_EQ(config.resolution.width, kDefaultPatternWidth);
-  EXPECT_EQ(config.resolution.height, kDefaultPatternHeight);
-  EXPECT_EQ(config.framerate_fps, kDefaultPatternFramerateFps);
+  EXPECT_EQ(config.resolution.width, kDefaultPixelWidth);
+  EXPECT_EQ(config.resolution.height, kDefaultPixelHeight);
+  EXPECT_EQ(config.framerate_fps, kDefaultPixelFramerateFps);
   EXPECT_GT(config.resolution.width, 0);
   EXPECT_GT(config.resolution.height, 0);
   EXPECT_GT(config.framerate_fps, 0u);
-  EXPECT_EQ(config.pattern, livekit::Pattern::Gradient);
+  EXPECT_EQ(config.pattern, livekit::capture::Pattern::Gradient);
 }
 
 TEST(CaptureSourceFactoryTest, PatternConfigUsesConfiguredPattern) {
@@ -145,13 +145,13 @@ TEST(CaptureSourceFactoryTest, PatternConfigUsesConfiguredPattern) {
   pattern.pattern = ros_portal_config::VideoPattern::Logo;
   source.pattern = pattern;
 
-  EXPECT_EQ(toPatternConfig(source).pattern, livekit::Pattern::Logo);
+  EXPECT_EQ(toPatternConfig(source).pattern, livekit::capture::Pattern::Logo);
 }
 
 TEST(CaptureSourceFactoryTest, MapsEveryPattern) {
-  const std::vector<std::pair<ros_portal_config::VideoPattern, livekit::Pattern>> expected{
-      {ros_portal_config::VideoPattern::Gradient, livekit::Pattern::Gradient},
-      {ros_portal_config::VideoPattern::Logo, livekit::Pattern::Logo},
+  const std::vector<std::pair<ros_portal_config::VideoPattern, livekit::capture::Pattern>> expected{
+      {ros_portal_config::VideoPattern::Gradient, livekit::capture::Pattern::Gradient},
+      {ros_portal_config::VideoPattern::Logo, livekit::capture::Pattern::Logo},
   };
   for (const auto& [configured, sdk] : expected) {
     EXPECT_EQ(toLiveKitPattern(configured), sdk);
@@ -181,8 +181,8 @@ TEST(CaptureSourceFactoryTest, PatternConfigFillsOnlyOmittedCharacteristics) {
   const auto config = toPatternConfig(source);
 
   EXPECT_EQ(config.framerate_fps, 5u);
-  EXPECT_EQ(config.resolution.width, kDefaultPatternWidth);
-  EXPECT_EQ(config.resolution.height, kDefaultPatternHeight);
+  EXPECT_EQ(config.resolution.width, kDefaultPixelWidth);
+  EXPECT_EQ(config.resolution.height, kDefaultPixelHeight);
 }
 
 TEST(CaptureSourceFactoryTest, PatternRejectsGstreamerOptions) {
@@ -198,6 +198,70 @@ TEST(CaptureSourceFactoryTest, PatternRejectionNamesTheOffendingFields) {
   source.rate_control = ros_portal_config::GstreamerRateControl{"e", "p", ros_portal_config::GstreamerBitrateUnit::Bps};
 
   expectRejected([&] { return toPatternConfig(source); }, "codec, rate_control");
+}
+
+TEST(CaptureSourceFactoryTest, ClockConfigDefaultsToNonZeroCharacteristics) {
+  CaptureSourceConfig source;
+  source.type = CaptureSourceType::Clock;
+  const auto config = toClockConfig(source);
+
+  EXPECT_EQ(config.resolution.width, kDefaultPixelWidth);
+  EXPECT_EQ(config.resolution.height, kDefaultPixelHeight);
+  EXPECT_EQ(config.framerate_fps, kDefaultPixelFramerateFps);
+}
+
+TEST(CaptureSourceFactoryTest, ClockConfigUsesConfiguredCharacteristics) {
+  CaptureSourceConfig source;
+  source.type = CaptureSourceType::Clock;
+  source.clock = ros_portal_config::ClockSourceConfig{};
+  source.clock->resolution = ros_portal_config::CaptureResolution{1280, 720};
+  source.clock->framerate_fps = 15;
+  const auto config = toClockConfig(source);
+
+  EXPECT_EQ(config.resolution.width, 1280);
+  EXPECT_EQ(config.resolution.height, 720);
+  EXPECT_EQ(config.framerate_fps, 15u);
+}
+
+TEST(CaptureSourceFactoryTest, ClockConfigFillsOnlyOmittedCharacteristics) {
+  CaptureSourceConfig source;
+  source.type = CaptureSourceType::Clock;
+  source.clock = ros_portal_config::ClockSourceConfig{};
+  source.clock->framerate_fps = 5;
+  const auto config = toClockConfig(source);
+
+  EXPECT_EQ(config.resolution.width, kDefaultPixelWidth);
+  EXPECT_EQ(config.resolution.height, kDefaultPixelHeight);
+  EXPECT_EQ(config.framerate_fps, 5u);
+}
+
+TEST(CaptureSourceFactoryTest, ClockRejectsGstreamerOptions) {
+  CaptureSourceConfig source;
+  source.type = CaptureSourceType::Clock;
+  source.pipeline = "videotestsrc ! vp8enc";
+  source.codec = ros_portal_config::VideoCodec::Vp8;
+  source.resolution = ros_portal_config::CaptureResolution{640, 480};
+  source.rate_control = ros_portal_config::GstreamerRateControl{"e", "p", ros_portal_config::GstreamerBitrateUnit::Bps};
+
+  expectRejected([&] { return toClockConfig(source); }, "pipeline, codec, resolution, rate_control");
+}
+
+TEST(CaptureSourceFactoryTest, ClockRejectsPatternBlock) {
+  CaptureSourceConfig source;
+  source.type = CaptureSourceType::Clock;
+  source.pattern = ros_portal_config::PatternSourceConfig{};
+
+  expectRejected([&] { return toClockConfig(source); }, "'pattern' block");
+}
+
+TEST(CaptureSourceFactoryTest, OtherSourcesRejectClockBlock) {
+  auto gstreamer = makeGstreamerSource();
+  gstreamer.clock = ros_portal_config::ClockSourceConfig{};
+  expectRejected([&] { return toGstreamerConfig(gstreamer); }, "'clock' block");
+
+  auto pattern = makePatternSource();
+  pattern.clock = ros_portal_config::ClockSourceConfig{};
+  expectRejected([&] { return toPatternConfig(pattern); }, "'clock' block");
 }
 
 // ---------------------------------------------------------------------------

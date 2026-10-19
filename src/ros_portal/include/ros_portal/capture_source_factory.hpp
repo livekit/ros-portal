@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <livekit/capture_source.h>
+#include <livekit/capture/capture_source.h>
 // room_event_types.h carries TrackPublishOptions/VideoEncodingOptions but only
 // forward-declares TrackSource, whose enumerators live in track.h.
 #include <livekit/room_event_types.h>
@@ -41,32 +41,35 @@
 /// @c std::invalid_argument.
 namespace ros_portal::capture {
 
-/// Output characteristics used when a pattern source omits them.
+/// Output characteristics used when a pixel source omits them.
 ///
-/// The SDK requires both to be non-zero (see @c PatternVideoSourceConfig in
-/// livekit/capture_source.h), so an omitted @c pattern block cannot simply
-/// forward a default-constructed config.
-inline constexpr int kDefaultPatternWidth = 640;
-inline constexpr int kDefaultPatternHeight = 480;
-inline constexpr std::uint32_t kDefaultPatternFramerateFps = 30;
+/// The SDK's pattern and clock configs default to zero dimensions and frame
+/// rate. Fill omitted characteristics before handing them to the SDK.
+inline constexpr int kDefaultPixelWidth = 640;
+inline constexpr int kDefaultPixelHeight = 480;
+inline constexpr std::uint32_t kDefaultPixelFramerateFps = 30;
 
 /// @brief Map a configured codec onto its SDK enumerator.
 livekit::VideoCodec toLiveKitCodec(ros_portal_config::VideoCodec codec);
 
 /// @brief Map a configured test pattern onto its SDK enumerator.
-livekit::Pattern toLiveKitPattern(ros_portal_config::VideoPattern pattern);
+livekit::capture::Pattern toLiveKitPattern(ros_portal_config::VideoPattern pattern);
 
 /// @brief Translate a validated GStreamer capture source entry.
 /// @throws std::invalid_argument when the entry is not a valid GStreamer source.
-livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::CaptureSourceConfig& source);
+livekit::capture::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::CaptureSourceConfig& source);
 
 /// @brief Translate a validated pattern capture source entry.
 /// @throws std::invalid_argument when the entry is not a valid pattern source.
-livekit::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::CaptureSourceConfig& source);
+livekit::capture::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::CaptureSourceConfig& source);
+
+/// @brief Translate a validated clock capture source entry.
+/// @throws std::invalid_argument when the entry is not a valid clock source.
+livekit::capture::ClockVideoSourceConfig toClockConfig(const ros_portal_config::CaptureSourceConfig& source);
 
 /// @brief Dispatch on @c source.type and hand the translated config to the SDK.
 /// @throws std::invalid_argument when the entry is invalid for its type.
-std::future<std::shared_ptr<livekit::CaptureSource>> createCaptureSource(
+std::future<std::shared_ptr<livekit::capture::CaptureSource>> createCaptureSource(
     const ros_portal_config::CaptureSourceConfig& source);
 
 /// @brief Build camera track publish options from the configured overrides.

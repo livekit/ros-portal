@@ -67,8 +67,8 @@ The remaining overrides are independent feature choices:
   other than the default `ros` repository.
 
 Every distribution builds the pinned LiveKit SDK from source because capture
-(`livekit/capture_source.h`) only exists on the pre-release `client-sdk-cpp`
-branch pinned in `external.repos`, not in the `LIVEKIT_SDK_VERSION` release
+(`livekit/capture/capture_source.h`) only exists on the pre-release `client-sdk-cpp`
+commit pinned in `external.repos`, not in the `LIVEKIT_SDK_VERSION` release
 archive. CI installs the source-build toolchain in each image and asks ROS
 Portal CMake configuration to build the SDK checkout from `external.repos`.
 Once capture ships in a tagged SDK release, every distribution can go back to
@@ -128,17 +128,17 @@ versions used in CI automatically.
 
 ## LiveKit SDK
 
-The default build downloads the pinned LiveKit C++ SDK release during CMake
-configure. On Linux it selects the Ubuntu 22.04 archive
-(`livekit-sdk-ubuntu-22.04-*`) so the same prebuilt ABI works on Humble (Jammy)
-and newer ROS distros (Jazzy/Kilted on Noble, Lyrical on Resolute).
+The default build compiles the `client-sdk-cpp` commit pinned in `external.repos`
+with `LIVEKIT_CAPTURE=all`, enabling GStreamer, pattern, and clock sources.
+Capture APIs live in `livekit::capture` under `livekit/capture/`.
 
 The release version lives in `src/ros_portal/colcon.pkg` and as the default of
 the `LIVEKIT_SDK_VERSION` CMake cache variable in
 `src/ros_portal/CMakeLists.txt`; `external.repos` pins the source
-checkout to that release's commit. Bump all three together when upgrading. The
-SDK release check verifies that the two version strings match and that the
-source commit is the commit referenced by the published release tag.
+checkout. Until capture ships in a tagged release, that checkout is pinned to
+capture PR #276 rather than the release commit. The SDK release check still
+verifies that the two version strings match; release-to-source equality is
+explicitly disabled during this transition.
 
 Initialize the pinned SDK source checkout with the other external repositories:
 
@@ -149,7 +149,7 @@ vcs import --recursive src/externals < external.repos
 ```
 
 To compile the SDK from that checkout and build ROS Portal against the
-resulting package (optional; only needed when changing the SDK itself):
+resulting capture-enabled package:
 
 ```bash
 colcon build --packages-select ros_portal \
@@ -167,8 +167,8 @@ SDK job when building in a memory-constrained Docker Desktop VM.
 
 A source build is expensive, so both halves of its output are reusable:
 
-- `src/externals/client-sdk-cpp/client-sdk-rust/target` — Rust artifacts and the
-  vendored WebRTC the build scripts unpack. This is the bulk of both the time and
+- `src/externals/client-sdk-cpp/client-sdk-rust/target/cpp-<feature-hash>` — Rust
+  artifacts and the vendored WebRTC the build scripts unpack. This is the bulk of both the time and
   the ~3.4 GB on disk. It lives in the source tree, so it is shared by every
   colcon build base.
 - `<build-base>/ros_portal/_deps` — the SDK's own CMake tree and install
@@ -178,12 +178,44 @@ Deleting either forces that half to be rebuilt. With both warm, a full CMake
 reconfigure plus SDK build and install finishes in well under a minute; from
 scratch it is tens of minutes.
 
-### One-Off SDK Version Override
+### One-Off SDK Source Override
 
-To override the pin for one build, or to track upstream with `latest`:
+To test another capture-enabled source checkout, set `LIVEKIT_SDK_SOURCE_DIR`:
 
-    colcon build --packages-select ros_portal \
-      --cmake-args -DLIVEKIT_SDK_VERSION=latest
+```bash
+colcon build --packages-select ros_portal \
+  --cmake-args -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
+```
+
+`LIVEKIT_SDK_VERSION` controls the package version, not the Git revision of a
+source build. Standard release downloads currently lack the capture API and
+cannot build ROS Portal. Restore release-to-source pin verification when a
+capture-enabled release becomes the supported dependency.
+
+## Capture verification
+
+The integration suite needs a LiveKit server accepting the test tokens, plus
+GStreamer's `videotestsrc` and `vp8enc` plugins. Pattern and clock cases need a
+compatible GPU adapter; for a headless Linux container, install
+`mesa-vulkan-drivers` to provide software Vulkan. These tests use synthetic
+sources and require no camera hardware.
+
+With a local development server on port 7880, run in the devcontainer:
+
+```bash
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+source install/setup.bash
+export LIVEKIT_URL=ws://127.0.0.1:7880
+source scripts/set-test-tokens.sh
+colcon test --packages-select ros_portal_config
+colcon test --packages-select ros_portal --ctest-args -R ros_portal_unit_tests
+colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests
+colcon test-result --verbose
+```
+
+The token helper defaults to the server's development credentials (`devkey` /
+`secret`). For another server, set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and
+`LIVEKIT_API_SECRET` before sourcing it.
 
 ## Packaging Debian Artifacts
 

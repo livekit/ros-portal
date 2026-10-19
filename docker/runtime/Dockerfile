@@ -36,19 +36,10 @@ ENV ROS_DISTRO=${ROS_DISTRO}
 # package.xml, so installing the Debian package below pulls them in. Do not add
 # them here; that would mask a missing dependency declaration in the package.
 #
-# some deps dont seem to get properly installed via rosdep, so install them here just in case
-RUN set -eu; \
-    apt-get update; \
-    DEBIAN_FRONTEND=noninteractive \
-      apt-get install -y --no-install-recommends \
-        gstreamer1.0 \
-        gstreamer1.0-libav \
-        gstreamer1.0-plugins-bad \
-        gstreamer1.0-plugins-base \
-        gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-ugly \
-        gstreamer1.0-x \
-    && \
+# Pango overlay elements are optional for bare Debian installs, but supported
+# by the runtime image. The remaining plugins come from package.xml.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gstreamer1.0-x && \
     rm -rf /var/lib/apt/lists/*
 
 COPY ${DEB_FILE} /tmp/ros-portal.deb

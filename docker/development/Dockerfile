@@ -93,16 +93,15 @@ RUN apt-get update && apt-get install -y \
 # Capture is temporarily consumed from the pinned SDK source checkout on every
 # supported ROS distribution. Install its native, Rust, and GStreamer toolchain.
 # The same LIVEKIT_BUILD_SDK_FROM_SOURCE flag is the CMake option that selects
-# source vs prebuilt during configure.
+# source vs prebuilt during configure. Keep libva/libdrm headers for the SDK's
+# optional hardware video codecs on x86, independently of capture sources.
 RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
       apt-get update && \
       apt-get install -y \
         clang \
         libabsl-dev \
-        libasound2-dev \
         libclang-dev \
         libcurl4-openssl-dev \
-        libdecor-0-dev \
         libdrm-dev \
         libglib2.0-dev \
         libgstreamer-plugins-base1.0-dev \
@@ -111,9 +110,7 @@ RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
         libprotobuf-dev \
         libssl-dev \
         libunwind-dev \
-        libusb-1.0-0-dev \
         libva-dev \
-        libwayland-dev \
         lld \
         llvm-dev \
         protobuf-compiler \

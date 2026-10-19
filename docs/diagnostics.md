@@ -396,7 +396,7 @@ names are repeated.
 | Key | Value |
 |---|---|
 | `track_name` | Configured LiveKit track name. |
-| `source_type` | Configured source discriminator, currently `gstreamer` or `pattern`. |
+| `source_type` | Configured source discriminator, currently `gstreamer`, `pattern`, or `clock`. |
 | `state` | `starting`, `running`, `stopped`, `end_of_stream`, or `error`. |
 | `frames_captured` | Number of frames reported by the capture source; `0` before a terminal callback supplies a count. |
 | `error` | Capture error text. Empty unless `state=error`. |

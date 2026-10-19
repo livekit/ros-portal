@@ -96,11 +96,18 @@ RUN apt-get update && apt-get install -y \
 # source vs prebuilt during configure. Keep libva/libdrm headers for the SDK's
 # optional hardware video codecs on x86, independently of capture sources.
 RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
+      install -m 0755 -d /etc/apt/keyrings && \
+      curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+        -o /etc/apt/keyrings/llvm.asc && \
+      chmod a+r /etc/apt/keyrings/llvm.asc && \
+      . /etc/os-release && \
+      echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-21 main" \
+        > /etc/apt/sources.list.d/llvm-21.list && \
       apt-get update && \
       apt-get install -y \
-        clang \
+        clang-21 \
         libabsl-dev \
-        libclang-dev \
+        libclang-21-dev \
         libcurl4-openssl-dev \
         libdrm-dev \
         libglib2.0-dev \
@@ -112,7 +119,7 @@ RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
         libunwind-dev \
         libva-dev \
         lld \
-        llvm-dev \
+        llvm-21-dev \
         protobuf-compiler \
         gstreamer1.0-libav \
         gstreamer1.0-plugins-bad \

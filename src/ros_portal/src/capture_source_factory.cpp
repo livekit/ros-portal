@@ -67,8 +67,8 @@ void rejectGstreamerOnlyFields(const ros_portal_config::CaptureSourceConfig& sou
 /// narrowing is safe here.
 std::uint32_t toUnsigned(int value) { return static_cast<std::uint32_t>(value); }
 
-livekit::CaptureResolution toLiveKitResolution(const ros_portal_config::CaptureResolution& resolution) {
-  return livekit::CaptureResolution{resolution.width, resolution.height};
+livekit::capture::CaptureResolution toLiveKitResolution(const ros_portal_config::CaptureResolution& resolution) {
+  return livekit::capture::CaptureResolution{resolution.width, resolution.height};
 }
 
 } // namespace
@@ -89,17 +89,20 @@ livekit::VideoCodec toLiveKitCodec(ros_portal_config::VideoCodec codec) {
   return livekit::VideoCodec::H264;
 }
 
-livekit::Pattern toLiveKitPattern(ros_portal_config::VideoPattern pattern) {
+livekit::capture::Pattern toLiveKitPattern(ros_portal_config::VideoPattern pattern) {
   switch (pattern) {
     case ros_portal_config::VideoPattern::Gradient:
-      return livekit::Pattern::Gradient;
+      return livekit::capture::Pattern::Gradient;
     case ros_portal_config::VideoPattern::Logo:
-      return livekit::Pattern::Logo;
+      return livekit::capture::Pattern::Logo;
   }
-  return livekit::Pattern::Gradient;
+  return livekit::capture::Pattern::Gradient;
 }
 
-livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::CaptureSourceConfig& source) {
+livekit::capture::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::CaptureSourceConfig& source) {
+  if (source.clock) {
+    throw std::invalid_argument("gstreamer source does not accept a 'clock' block");
+  }
   if (source.pattern) {
     throw std::invalid_argument("gstreamer source does not accept a 'pattern' block");
   }
@@ -108,7 +111,7 @@ livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::C
     throw std::invalid_argument("gstreamer source requires a pipeline");
   }
 
-  livekit::GstreamerVideoSourceConfig config;
+  livekit::capture::GstreamerVideoSourceConfig config;
   config.pipeline = *source.pipeline;
   if (source.codec) {
     config.codec = toLiveKitCodec(*source.codec);
@@ -118,24 +121,28 @@ livekit::GstreamerVideoSourceConfig toGstreamerConfig(const ros_portal_config::C
   }
   if (source.rate_control) {
     const auto& rate_control = *source.rate_control;
-    config.rate_control = livekit::GstreamerRateControl{
+    config.rate_control = livekit::capture::GstreamerRateControl{
         rate_control.element,
         rate_control.property,
-        rate_control.unit == ros_portal_config::GstreamerBitrateUnit::Kbps ? livekit::GstreamerBitrateUnit::Kbps
-                                                                           : livekit::GstreamerBitrateUnit::Bps,
+        rate_control.unit == ros_portal_config::GstreamerBitrateUnit::Kbps
+            ? livekit::capture::GstreamerBitrateUnit::Kbps
+            : livekit::capture::GstreamerBitrateUnit::Bps,
     };
   }
   return config;
 }
 
-livekit::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::CaptureSourceConfig& source) {
+livekit::capture::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::CaptureSourceConfig& source) {
   rejectGstreamerOnlyFields(source, "pattern");
+  if (source.clock) {
+    throw std::invalid_argument("pattern source does not accept a 'clock' block");
+  }
 
   // The SDK rejects zero resolution or frame rate, so fill in defaults rather
   // than forwarding a default-constructed config.
-  livekit::PatternVideoSourceConfig config;
-  config.resolution = livekit::CaptureResolution{kDefaultPatternWidth, kDefaultPatternHeight};
-  config.framerate_fps = kDefaultPatternFramerateFps;
+  livekit::capture::PatternVideoSourceConfig config;
+  config.resolution = livekit::capture::CaptureResolution{kDefaultPixelWidth, kDefaultPixelHeight};
+  config.framerate_fps = kDefaultPixelFramerateFps;
 
   if (source.pattern) {
     if (source.pattern->pattern) {
@@ -151,15 +158,37 @@ livekit::PatternVideoSourceConfig toPatternConfig(const ros_portal_config::Captu
   return config;
 }
 
-std::future<std::shared_ptr<livekit::CaptureSource>> createCaptureSource(
+livekit::capture::ClockVideoSourceConfig toClockConfig(const ros_portal_config::CaptureSourceConfig& source) {
+  rejectGstreamerOnlyFields(source, "clock");
+  if (source.pattern) {
+    throw std::invalid_argument("clock source does not accept a 'pattern' block");
+  }
+
+  livekit::capture::ClockVideoSourceConfig config;
+  config.resolution = livekit::capture::CaptureResolution{kDefaultPixelWidth, kDefaultPixelHeight};
+  config.framerate_fps = kDefaultPixelFramerateFps;
+  if (source.clock) {
+    if (source.clock->resolution) {
+      config.resolution = toLiveKitResolution(*source.clock->resolution);
+    }
+    if (source.clock->framerate_fps) {
+      config.framerate_fps = toUnsigned(*source.clock->framerate_fps);
+    }
+  }
+  return config;
+}
+
+std::future<std::shared_ptr<livekit::capture::CaptureSource>> createCaptureSource(
     const ros_portal_config::CaptureSourceConfig& source) {
   switch (source.type) {
     case ros_portal_config::CaptureSourceType::Pattern:
-      return livekit::CaptureSource::create(toPatternConfig(source));
+      return livekit::capture::CaptureSource::create(toPatternConfig(source));
+    case ros_portal_config::CaptureSourceType::Clock:
+      return livekit::capture::CaptureSource::create(toClockConfig(source));
     case ros_portal_config::CaptureSourceType::Gstreamer:
-      break;
+      return livekit::capture::CaptureSource::create(toGstreamerConfig(source));
   }
-  return livekit::CaptureSource::create(toGstreamerConfig(source));
+  throw std::invalid_argument("unsupported capture source type");
 }
 
 livekit::TrackPublishOptions capturePublishOptions(

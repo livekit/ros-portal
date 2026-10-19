@@ -97,16 +97,22 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
 # Capture is temporarily consumed from the pinned SDK source checkout on every
 # supported ROS distribution. Install its native, Rust, and GStreamer toolchain.
 # The same LIVEKIT_BUILD_SDK_FROM_SOURCE flag is the CMake option that selects
-# source vs prebuilt during configure.
+# source vs prebuilt during configure. Keep libva/libdrm headers for the SDK's
+# optional hardware video codecs on x86, independently of capture sources.
 RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
+      install -m 0755 -d /etc/apt/keyrings && \
+      curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+        -o /etc/apt/keyrings/llvm.asc && \
+      chmod a+r /etc/apt/keyrings/llvm.asc && \
+      . /etc/os-release && \
+      echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-21 main" \
+        > /etc/apt/sources.list.d/llvm-21.list && \
       apt-get update && \
       apt-get install -y \
-        clang \
+        clang-21 \
         libabsl-dev \
-        libasound2-dev \
-        libclang-dev \
+        libclang-21-dev \
         libcurl4-openssl-dev \
-        libdecor-0-dev \
         libdrm-dev \
         libglib2.0-dev \
         libgstreamer-plugins-base1.0-dev \
@@ -115,11 +121,9 @@ RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
         libprotobuf-dev \
         libssl-dev \
         libunwind-dev \
-        libusb-1.0-0-dev \
         libva-dev \
-        libwayland-dev \
         lld \
-        llvm-dev \
+        llvm-21-dev \
         protobuf-compiler \
         gstreamer1.0-libav \
         gstreamer1.0-plugins-bad \

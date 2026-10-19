@@ -567,30 +567,33 @@ All capture-backed tracks are published with LiveKit track source `camera`.
 Capture-derived settings take precedence where required: encoded GStreamer
 ingest dictates its codec, disables simulcast, and selects the pre-encoded
 encoder backend. Because of that precedence, `simulcast` only takes effect for
-pixel sources (`pattern`); a `gstreamer` source publishes the single
+pixel sources (`pattern` and `clock`); a `gstreamer` source publishes the single
 pre-encoded layer it produces regardless of the setting.
 
 ### Source configuration
 
 | Field | Type | Required | Description |
 |---|---:|---:|---|
-| `type` | string | yes | `gstreamer` or `pattern`. |
+| `type` | string | yes | `gstreamer`, `pattern`, or `clock`. |
 | `pipeline` | string | GStreamer only | GStreamer launch description. Must contain `appsink name=lk_appsink` or leave exactly one encoded video source pad unlinked. |
 | `codec` | string | GStreamer only | `h264`, `h265`, `vp8`, `vp9`, or `av1`. Inferred from GStreamer caps when omitted. |
 | `resolution` | map | GStreamer only | Positive `width` and `height`. Discovered from negotiated caps when omitted; verified against the stream when supplied. |
 | `rate_control` | map | GStreamer only | Forward WebRTC bitrate targets to a GStreamer encoder property. |
 | `pattern` | map | no | Pattern-only rendering and output characteristics. Optional when `type` is `pattern`. |
+| `clock` | map | no | Clock-only output characteristics. Optional when `type` is `clock`. |
 
-Each type accepts only its own fields: a `pattern` source rejects the
-GStreamer-only fields above, and a `gstreamer` source rejects the `pattern`
-block. The schema tags the union by `type` but cannot express those
+Each type accepts only its own fields: pixel sources reject the GStreamer-only
+fields above; `pattern` and `clock` blocks are accepted only by their matching
+type. The schema tags the union by `type` but cannot express those
 rules, so they are enforced when the source is created and reported through
 `video_source/<track_name>/<index>`.
 
 When resolution is omitted, source creation waits up to five seconds for the
-first encoded sample. Supplying it avoids that discovery wait, but the first
-sample must still match. Codec or resolution changes after capture begins end
-the source with an error because the track cannot yet be republished in place.
+first encoded sample. Declaring both resolution and codec can skip discovery;
+the first sample must still match. Codec discovery may also need the first
+sample when pre-playback caps are inconclusive. Codec or resolution changes
+after capture begins end the source with an error because the track cannot yet
+be republished in place.
 
 `rate_control` has three required fields:
 
@@ -615,14 +618,11 @@ These correspond to the bitrate and frame-rate limits used by the Rust capture
 examples. They do not configure the GStreamer encoder itself; use the pipeline
 properties and optional `rate_control` binding for that.
 
-This bridge maps every capture setting currently exposed by the pinned C++ SDK:
-GStreamer pipeline, codec, resolution, encoder rate-control binding, native
-camera selection, and the capture-derived publish options. It also follows the
-Rust example's `max_bitrate` and `fps` publish limits as `max_bitrate_bps` and
-`max_framerate`. LiveKit credentials remain process environment settings, and
-source diagnostics are always enabled. Rust-only TCP/RTSP/shared-memory wire
-formats, frame metadata, simulcast, and encoder selection are not accepted until
-equivalent C++ capture APIs exist.
+ROS Portal supports the SDK's GStreamer, pattern, and clock sources. Encoded
+sources apply their required codec and encoder settings through the SDK's
+`publishOptions()` method. Pixel sources preserve the configured publish limits
+and simulcast setting. LiveKit credentials remain process environment settings,
+and source diagnostics are always enabled.
 
 ### Pattern source
 
@@ -656,9 +656,30 @@ video_sources:
         framerate_fps: 15
 ```
 
+### Clock source
+
+The GPU-rendered wall clock shows local time on the machine running ROS Portal,
+with millisecond precision. It defaults to 640x480 at 30 fps. An optional `clock`
+block accepts positive `resolution.width`, `resolution.height`, and
+`framerate_fps` values:
+
+```yaml
+video_sources:
+  - track_name: "clock"
+    source:
+      type: "clock"
+      clock:
+        resolution: { width: 1280, height: 720 }
+        framerate_fps: 30
+```
+
+Pattern and clock sources require a compatible GPU adapter, including a software
+Vulkan adapter for headless testing. GStreamer sources require the pipeline's
+runtime plugins instead.
+
 Capture requires the pinned C++ SDK source build. GStreamer is also required for
-`type: gstreamer`, but not for `pattern`. The SDK does not support native camera
-device capture. To read a camera, use a `gstreamer` source with `v4l2src`, as in
+`type: gstreamer`, but not for `pattern` or `clock`. The SDK does not support
+native camera device capture. To read a camera, use a `gstreamer` source with `v4l2src`, as in
 the example at the start of this section. The tagged `source.type` is
 backend-neutral, so RTSP and other ingest backends can be added later without a
 change to the `video_sources` collection shape.

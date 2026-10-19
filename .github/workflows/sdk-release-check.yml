@@ -11,10 +11,10 @@ permissions:
   contents: read
 
 env:
-  # external.repos deliberately pins a pre-release client-sdk-cpp branch
-  # (sderosa/capture-no-device-source) because capture has not shipped in a tagged SDK
-  # release yet, and every CI distro builds that checkout from source. A branch
-  # commit can never equal a release commit, so the release equality check is
+  # external.repos deliberately pins a pre-release client-sdk-cpp commit from
+  # sderosa/capture-no-device-source because capture has not shipped in a tagged
+  # SDK release yet, and every CI distro builds that checkout from source. The
+  # pin does not yet equal a release commit, so the release equality check is
   # off until capture lands in a release; flip this back to "true" then. The
   # CMake/colcon version agreement check below always runs.
   VERIFY_SDK_RELEASE_PIN: "false"

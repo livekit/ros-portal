@@ -16,7 +16,7 @@
 
 #include "ros_portal/ros_portal.hpp"
 
-#include <livekit/capture_source.h>
+#include <livekit/capture/capture_source.h>
 #include <livekit/data_track_options.h>
 #include <livekit/data_track_schema.h>
 #include <livekit/data_track_stream.h>
@@ -918,12 +918,12 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
                   ros_portal_config::toString(config.source.type), capture_source->width(), capture_source->height());
 
       capture_source->setOnFinishedCallback(
-          [finished_callback = std::move(finished_callback)](const livekit::CaptureResult& result) {
+          [finished_callback = std::move(finished_callback)](const livekit::capture::CaptureResult& result) {
             VideoSourceResult mapped;
             mapped.error = result.error;
             mapped.frames_captured = result.frames_captured;
-            mapped.exit = result.exit == livekit::CaptureExit::EndOfStream ? VideoSourceExit::EndOfStream
-                                                                           : VideoSourceExit::Stopped;
+            mapped.exit = result.exit == livekit::capture::CaptureExit::EndOfStream ? VideoSourceExit::EndOfStream
+                                                                                    : VideoSourceExit::Stopped;
             finished_callback(mapped);
           });
 

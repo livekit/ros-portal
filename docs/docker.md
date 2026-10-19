@@ -96,7 +96,7 @@ A pipeline that references an element from a plugin set that is not present
 fails at startup, not at build time:
 
 ```log
-[ERROR] [ros_portal]: Video source 'pattern_camera' failed to start: invalid
+[ERROR] [ros_portal]: Video source 'front_camera' failed to start: invalid
 request: GStreamer pipeline error: failed to create pipeline: no element
 "clockoverlay"
 ```

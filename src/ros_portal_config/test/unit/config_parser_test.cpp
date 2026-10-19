@@ -191,6 +191,66 @@ ros_portal:
   EXPECT_EQ(*pattern.framerate_fps, 15);
 }
 
+TEST(ConfigParserTest, ParsesClockSourceCharacteristics) {
+  const auto config = parse(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "clock"
+      source:
+        type: "clock"
+        clock:
+          resolution: { width: 1280, height: 720 }
+          framerate_fps: 15
+    - track_name: "default_clock"
+      source:
+        type: "clock"
+)");
+
+  ASSERT_EQ(config.video_sources.size(), 2u);
+  EXPECT_EQ(config.video_sources[0].source.type, CaptureSourceType::Clock);
+  ASSERT_TRUE(config.video_sources[0].source.clock.has_value());
+  const auto& clock = *config.video_sources[0].source.clock;
+  ASSERT_TRUE(clock.resolution.has_value());
+  EXPECT_EQ(clock.resolution->width, 1280);
+  EXPECT_EQ(clock.resolution->height, 720);
+  ASSERT_TRUE(clock.framerate_fps.has_value());
+  EXPECT_EQ(*clock.framerate_fps, 15);
+  EXPECT_EQ(config.video_sources[1].source.type, CaptureSourceType::Clock);
+  EXPECT_FALSE(config.video_sources[1].source.clock.has_value());
+}
+
+TEST(ConfigParserTest, RejectsInvalidClockCharacteristics) {
+  for (const auto* fields :
+       {"framerate_fps: 0", "resolution: { width: 0, height: 480 }", "resolution: { width: 640, height: -1 }"}) {
+    expectInvalid(std::string(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "clock"
+      source:
+        type: "clock"
+        clock:
+          )") + fields,
+                  "expected positive integer");
+  }
+}
+
+TEST(ConfigParserTest, RejectsRemovedSourceBlocks) {
+  for (const auto* field : {"device: { index: 0 }", "device: { id: /dev/video0 }", "demo: {}"}) {
+    expectInvalid(std::string(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "camera"
+      source:
+        type: "gstreamer"
+        pipeline: "v4l2src ! vp8enc"
+        )") + field,
+                  "unknown field");
+  }
+}
+
 TEST(ConfigParserTest, RejectsNonBooleanSimulcast) {
   expectInvalid(
       R"(
@@ -439,7 +499,7 @@ ros_portal:
       source:
         type: "device"
 )",
-      "expected 'gstreamer' or 'pattern'");
+      "expected 'gstreamer', 'pattern', or 'clock'");
 }
 
 TEST(ConfigParserTest, RejectsInvalidVideoSourceCodec) {

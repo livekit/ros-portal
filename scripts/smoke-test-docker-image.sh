@@ -69,8 +69,8 @@ docker run --rm "${image_ref}" bash -c '
   gst-inspect-1.0 clockoverlay >/dev/null
   gst-inspect-1.0 timeoverlay >/dev/null
   gst-launch-1.0 --quiet videotestsrc num-buffers=1 ! fakesink
-  # Exercise the tutorial pipeline shape end to end so a missing element in any
-  # of the plugin sets fails here rather than at runtime on a robot.
+  # Exercise an encoded pipeline with optional overlays so a missing element
+  # fails here rather than at runtime on a robot.
   gst-launch-1.0 --quiet videotestsrc num-buffers=1 \
     ! videoconvert \
     ! timeoverlay \

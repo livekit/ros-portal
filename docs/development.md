@@ -173,18 +173,19 @@ directory. Its source build defaults to two parallel jobs. Set
 the same limit is applied to both the CMake and Rust/Cargo build steps. Use one
 SDK job when building in a memory-constrained Docker Desktop VM.
 
-A source build is expensive, so both halves of its output are reusable:
+A source build is expensive. Preserve these caches between builds:
 
 - `src/externals/client-sdk-cpp/client-sdk-rust/target/cpp-<feature-hash>` — Rust
-  artifacts and the vendored WebRTC the build scripts unpack. This is the bulk of both the time and
-  the ~3.4 GB on disk. It lives in the source tree, so it is shared by every
-  colcon build base.
-- `<build-base>/ros_portal/_deps` — the SDK's own CMake tree and install
-  prefix, roughly 250 MB.
+  runtime and metadata libraries, plus vendored WebRTC artifacts. The SDK keeps
+  each capture feature selection in a separate directory.
+- `src/externals/client-sdk-cpp/client-sdk-rust/target/bindgens` and
+  `src/externals/client-sdk-cpp/client-sdk-rust/target/uniffi-bindgen-cpp` — the
+  C++ binding driver and pinned generator.
+- `<build-base>/ros_portal/_deps` — the SDK's CMake tree and install prefix.
 
-Deleting either forces that half to be rebuilt. With both warm, a full CMake
-reconfigure plus SDK build and install finishes in well under a minute; from
-scratch it is tens of minutes.
+Deleting these directories forces their artifacts to be rebuilt. A cold build
+compiles the C++ dependencies, Rust runtime and metadata libraries, and binding
+generator before building ROS Portal.
 
 ### One-Off SDK Source Override
 
@@ -202,13 +203,22 @@ capture-enabled release becomes the supported dependency.
 
 ## Capture verification
 
-The integration suite needs a LiveKit server accepting the test tokens, plus
-GStreamer's `videotestsrc` and `vp8enc` plugins. Pattern and clock cases need a
+The integration suite uses LiveKit v1.13.3 with
+`enable_participant_data_blob: true`, matching CI. It also needs GStreamer's
+`videotestsrc` and `vp8enc` plugins. Pattern and clock cases need a
 compatible GPU adapter; for a headless Linux container, install
 `mesa-vulkan-drivers` to provide software Vulkan. These tests use synthetic
 sources and require no camera hardware.
 
-With a local development server on port 7880, run in the devcontainer:
+Start the test server on the Docker host:
+
+```bash
+docker run --rm --network host livekit/livekit-server:v1.13.3 \
+  --dev --bind 0.0.0.0 --node-ip 127.0.0.1 \
+  --config-body 'enable_participant_data_blob: true'
+```
+
+With that server on port 7880, run in the devcontainer:
 
 ```bash
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
@@ -243,11 +253,13 @@ colcon build --packages-up-to ros_portal
 The `ros_portal` test translation units are the workspace's largest, and a
 default-parallelism build of them exhausts a 8 GB Docker Desktop VM, which the
 kernel reports as `c++: fatal error: Killed signal terminated program cc1plus`.
-Bound the compiler jobs on a memory-constrained host:
+Bound the compiler jobs on a memory-constrained host. Colcon passes explicit
+Make job flags unless `MAKEFLAGS` already sets them, so
+`CMAKE_BUILD_PARALLEL_LEVEL` alone does not bound this build:
 
 ```bash
-CMAKE_BUILD_PARALLEL_LEVEL=3 colcon build --packages-up-to ros_portal \
-  --parallel-workers 1
+MAKEFLAGS="-j2 -l2" CMAKE_BUILD_PARALLEL_LEVEL=2 \
+  colcon build --packages-up-to ros_portal --parallel-workers 1
 ```
 
 The runtime image is built from the resulting `.deb`; see

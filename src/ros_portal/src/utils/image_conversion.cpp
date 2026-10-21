@@ -88,11 +88,13 @@ void bgrToRgb(const sensor_msgs::msg::Image& image, std::uint8_t* dst) {
 const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image& image) {
   const std::uint32_t bytes_per_pixel = bytesPerPixel(image.encoding);
   constexpr auto kMaxDimension = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+  // Reject unsupported encodings, empty images, and dimensions that cannot fit LiveKit's int API.
   if (bytes_per_pixel == 0U || image.width == 0U || image.height == 0U || image.width > kMaxDimension ||
       image.height > kMaxDimension) {
     return nullptr;
   }
   const std::size_t row_bytes = static_cast<std::size_t>(image.width) * bytes_per_pixel;
+  // Reject strides smaller than a pixel row and buffers smaller than step * height.
   if (image.step < row_bytes || image.data.size() < static_cast<std::size_t>(image.step) * image.height) {
     return nullptr;
   }

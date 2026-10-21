@@ -109,7 +109,8 @@ const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image& ima
       // moving it into a std::vector copies. Both types swap with a vector.
       std::vector<std::uint8_t> pixels;
       image.data.swap(pixels);
-      // Shrinking never reallocates, so this keeps the zero-copy hand-off.
+      // Validation accepts oversized buffers, so discard bytes beyond the declared image.
+      // This is a no-op for correctly sized images; shrinking preserves the zero-copy hand-off.
       pixels.resize(row_bytes * image.height);
       moved_ = livekit::VideoFrame(width, height, *layout, std::move(pixels));
       return &moved_;

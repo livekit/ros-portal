@@ -48,6 +48,7 @@
 #include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/image_conversion.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -90,6 +91,8 @@ public:
     /// @brief Track/source height fixed at publication time.
     int height{0};
     /// @brief Capture one video frame with the ROS message timestamp.
+    /// @note Must consume the borrowed frame synchronously. Do not retain a
+    /// reference to the frame or its pixel buffer after returning.
     std::function<void(const livekit::VideoFrame&, std::int64_t)> capture_frame;
   };
 
@@ -264,11 +267,22 @@ private:
 
   /// @brief Per-topic state for outbound ROS image forwarding.
   struct ImageTopicState {
+    /// @brief Serializes frames of this topic. Held while converting and
+    /// capturing, so other outbound topics are not blocked by image work.
+    std::mutex mutex;
     /// @brief LiveKit video sink lazily created on the first frame.
     std::shared_ptr<VideoTrackSink> sink;
-    /// @brief Reusable RGBA buffer for non-rgba8 encodings.
-    std::vector<std::uint8_t> rgba_buf;
+    /// @brief Builds LiveKit frames with the fewest pixel copies.
+    utils::ImageFrameBuilder frame_builder;
   };
+
+  /// @brief Return the state of an outbound video topic, or null once reaped.
+  std::shared_ptr<ImageTopicState> findImageTopicState(const std::string& topic_name);
+  /// @brief Create the LiveKit video sink on the first frame and reject frames
+  /// whose size differs from it. Must be called with @p state's mutex held.
+  /// @return True when @p state has a sink that accepts @p width x @p height.
+  bool ensureVideoSinkLocked(ImageTopicState& state, const std::string& topic_name, int width, int height,
+                             const std::string& source_format);
 
   /// @brief Per-topic state for outbound serialized ROS forwarding.
   struct DataTopicState {
@@ -377,8 +391,9 @@ private:
   mutable std::mutex outbound_topics_mutex_;
   /// @brief Outbound ROS subscriptions keyed by topic name.
   std::unordered_map<std::string, OutboundSubscription> subscriptions_;
-  /// @brief Outbound image-topic state keyed by ROS topic name.
-  std::unordered_map<std::string, ImageTopicState> image_topic_states_;
+  /// @brief Outbound image-topic state keyed by ROS topic name. Shared so a
+  /// running callback keeps its state alive while the entry is reaped.
+  std::unordered_map<std::string, std::shared_ptr<ImageTopicState>> image_topic_states_;
   /// @brief Outbound data-topic state keyed by ROS topic name.
   std::unordered_map<std::string, DataTopicState> data_topic_states_;
   /// @brief Protects inbound data track state during setup and teardown.

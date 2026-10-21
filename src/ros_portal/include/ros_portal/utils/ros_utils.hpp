@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <livekit/video_frame.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -32,9 +30,6 @@
 #include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal::utils {
-
-std::optional<livekit::VideoFrame> makeRgbaVideoFrame(int width, int height, const std::uint8_t* rgba,
-                                                      std::size_t rgba_size);
 
 /// @brief Read a non-empty environment variable.
 ///
@@ -187,4 +182,15 @@ std::string rosTopicStatisticsTopic(const std::string& topic_name);
 /// @param topic_name Absolute ROS topic name.
 /// @return True when @p topic_name names a statistics stream.
 bool isRosTopicStatisticsTopic(const std::string& topic_name);
+
+/// @brief Return whether a topic is an rmw buffer transport topic.
+///
+/// On Lyrical, rmw_fastrtps creates the hidden topic `<topic>/_buf_<backend>`,
+/// for example `/camera/image_raw/_buf_cpu`, for each publisher of a message
+/// with buffer fields such as `uint8[]`. It carries the same samples as
+/// `<topic>`, so forwarding it too would duplicate the stream.
+///
+/// @param topic_name Absolute ROS topic name.
+/// @return True when the last segment of @p topic_name starts with `_buf_`.
+bool isRmwBufferTopic(const std::string& topic_name);
 } // namespace ros_portal::utils

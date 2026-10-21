@@ -84,3 +84,9 @@ clang-tidy.log
 
 # Mac
 .DS_Store
+
+# docs repo
+web/
+
+# bags/images/etc
+data/

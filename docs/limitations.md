@@ -6,9 +6,9 @@
   recreated.
 - Only `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8` encodings are handled.
   Other encodings are dropped with a throttled warning.
-- Encoding conversion is done per-pixel on the CPU inside the subscription
-  callback. High-resolution or high-framerate streams may need a more efficient
-  path.
+- Packed `rgba8`, `bgra8`, and `rgb8` images go to LiveKit without a pixel
+  copy. `bgr8`, `mono8`, and images with row padding need one CPU pass inside
+  the subscription callback. The LiveKit SDK then converts each frame to I420.
 
 ## Audio Tracks
 
@@ -30,6 +30,10 @@ types include `audio_common_msgs/msg/AudioData` and raw PCM topics.
   included. Distros ship non-identical `.msg` files, so the same type can hash
   differently across distributions and reject peer data tracks. Keep both ends
   of a session on the same distro.
+- On Lyrical, `rmw_fastrtps` adds a hidden `<topic>/_buf_<backend>` topic for
+  each publisher of a message with buffer fields, such as `sensor_msgs/Image`.
+  It carries the same samples as `<topic>`. If an outbound pattern matches one
+  of these topics, ROS Portal does not forward it.
 
 ## General
 

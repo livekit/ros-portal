@@ -84,7 +84,10 @@ RUN git lfs install --system
 # Install LiveKit CLI
 RUN curl -sSL --retry 3 --retry-delay 3 https://get.livekit.io/cli | bash
 
-RUN apt-get update && apt-get install -y \
+# Upgrade the packages in the pinned base image first. ROS debs do not pin
+# the versions of their ROS dependencies, so a newer package from apt can need
+# symbols that an older base-image package does not have.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     ros-${ROS_DISTRO}-example-interfaces \
     ros-${ROS_DISTRO}-test-msgs \
     ros-${ROS_DISTRO}-turtlesim \

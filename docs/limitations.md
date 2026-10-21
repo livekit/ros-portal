@@ -30,7 +30,7 @@ types include `audio_common_msgs/msg/AudioData` and raw PCM topics.
   included. Distros ship non-identical `.msg` files, so the same type can hash
   differently across distributions and reject peer data tracks. Keep both ends
   of a session on the same distro.
-- On Lyrical, rmw_fastrtps adds a hidden `<topic>/_buf_<backend>` topic for
+- On Lyrical, `rmw_fastrtps` adds a hidden `<topic>/_buf_<backend>` topic for
   each publisher of a message with buffer fields, such as `sensor_msgs/Image`.
   It carries the same samples as `<topic>`. If an outbound pattern matches one
   of these topics, ROS Portal does not forward it.

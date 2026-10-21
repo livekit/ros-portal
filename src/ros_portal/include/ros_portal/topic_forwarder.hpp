@@ -91,6 +91,8 @@ public:
     /// @brief Track/source height fixed at publication time.
     int height{0};
     /// @brief Capture one video frame with the ROS message timestamp.
+    /// @note Must consume the borrowed frame synchronously. Do not retain a
+    /// reference to the frame or its pixel buffer after returning.
     std::function<void(const livekit::VideoFrame&, std::int64_t)> capture_frame;
   };
 

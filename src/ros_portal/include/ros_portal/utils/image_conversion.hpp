@@ -39,9 +39,13 @@ class ImageFrameBuilder {
 public:
   /// @brief Build a frame for @p image.
   /// @param image Source image. On the zero-copy path its `data` is moved out.
-  /// @return The frame to capture, valid until the next call, or nullptr when
-  /// the encoding is unsupported, the image is empty, or `data` is smaller than
-  /// `step * height`.
+  /// @return A non-owning pointer to a frame stored in this builder, or nullptr
+  /// when the encoding is unsupported, the image is empty, or `data` is smaller
+  /// than `step * height`.
+  /// @note The builder owns both the frame and its pixel buffer. Consume the
+  /// frame synchronously before the next build() call or before moving or
+  /// destroying the builder. Serialize building and consumption together when
+  /// sharing an instance across threads.
   const livekit::VideoFrame* build(sensor_msgs::msg::Image& image);
 
 private:

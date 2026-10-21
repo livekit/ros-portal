@@ -471,6 +471,8 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
                            msg->step);
       return;
     }
+    // state keeps the builder alive; state_lock prevents buffer reuse until
+    // synchronous capture returns. LiveKit reads the pixels during this call.
     state->sink->capture_frame(*frame, timestamp_us);
   };
 

@@ -32,6 +32,16 @@ LABEL io.livekit.ros-distro="${ROS_DISTRO}"
 
 ENV ROS_DISTRO=${ROS_DISTRO}
 
+# The base, good, bad, ugly, and libav plugin sets are exec_depend entries in
+# package.xml, so installing the Debian package below pulls them in. Do not add
+# them here; that would mask a missing dependency declaration in the package.
+#
+# Pango overlay elements are optional for bare Debian installs, but supported
+# by the runtime image. The remaining plugins come from package.xml.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gstreamer1.0-x && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY ${DEB_FILE} /tmp/ros-portal.deb
 COPY docker/runtime/ros-portal-entrypoint.sh /usr/local/bin/ros-portal-entrypoint.sh
 

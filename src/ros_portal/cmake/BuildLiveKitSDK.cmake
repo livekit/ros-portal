@@ -62,6 +62,33 @@ function(livekit_build_sdk_from_source)
       "Run: vcs import --recursive src/externals < external.repos")
   endif()
 
+  set(_livekit_source_build_env "CARGO_BUILD_JOBS=${LIVEKIT_SOURCE_JOBS}")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # The Rust WebRTC bridge uses Chromium's libc++ and requires Clang 21+.
+    # Select it only for Cargo; ROS and the C++ SDK can retain their compiler.
+    find_program(LIVEKIT_SDK_RUST_CXX_COMPILER NAMES clang++-21 clang++-22 clang++
+      DOC "Clang 21+ compiler for the Linux Rust/WebRTC bridge")
+    if(NOT LIVEKIT_SDK_RUST_CXX_COMPILER)
+      message(FATAL_ERROR
+        "The LiveKit Rust/WebRTC bridge requires Clang 21+. Install clang-21 "
+        "or set LIVEKIT_SDK_RUST_CXX_COMPILER to a supported clang++.")
+    endif()
+    execute_process(
+      COMMAND "${LIVEKIT_SDK_RUST_CXX_COMPILER}" -dM -E -x c++ /dev/null
+      OUTPUT_VARIABLE _livekit_clang_defines
+      ERROR_VARIABLE _livekit_clang_error
+      RESULT_VARIABLE _livekit_clang_result)
+    string(REGEX MATCH "#define __clang_major__ ([0-9]+)"
+      _livekit_clang_match "${_livekit_clang_defines}")
+    if(NOT _livekit_clang_result EQUAL 0 OR NOT _livekit_clang_match
+        OR CMAKE_MATCH_1 LESS 21)
+      message(FATAL_ERROR
+        "LIVEKIT_SDK_RUST_CXX_COMPILER must be Clang 21+: "
+        "${LIVEKIT_SDK_RUST_CXX_COMPILER}. ${_livekit_clang_error}")
+    endif()
+    list(APPEND _livekit_source_build_env "CXX=${LIVEKIT_SDK_RUST_CXX_COMPILER}")
+  endif()
+
   message(STATUS
     "Building LiveKit SDK ${LIVEKIT_SOURCE_VERSION} from "
     "${LIVEKIT_SOURCE_SOURCE_DIR}")
@@ -74,12 +101,13 @@ function(livekit_build_sdk_from_source)
     -DCMAKE_INSTALL_PREFIX=${LIVEKIT_SOURCE_INSTALL_DIR}
     -DLIVEKIT_BUILD_EXAMPLES=OFF
     -DLIVEKIT_BUILD_TESTS=OFF
+    -DLIVEKIT_CAPTURE=all
     -DLIVEKIT_VERSION=${LIVEKIT_SOURCE_VERSION}
   )
   _livekit_run_source_build_step(
     "LiveKit SDK build"
     "${CMAKE_COMMAND}" -E env
-    "CARGO_BUILD_JOBS=${LIVEKIT_SOURCE_JOBS}"
+    ${_livekit_source_build_env}
     "${CMAKE_COMMAND}" --build "${LIVEKIT_SOURCE_BUILD_DIR}"
     --parallel "${LIVEKIT_SOURCE_JOBS}"
   )

@@ -55,3 +55,10 @@ ros_portal:
     # Allow all test topics for integration testing.
     - topic: "/test/.*"
       direction: "bidirectional"
+
+  # Independent capture sources publish directly as LiveKit video tracks.
+  # Uncomment this deterministic source for capture integration testing.
+  video_sources:
+    - track_name: "pattern_camera"
+      source:
+        type: "pattern"

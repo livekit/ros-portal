@@ -72,9 +72,9 @@ endif()
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
 #
-# Download the pinned Ubuntu 22.04 release asset from GitHub (default), or build
-# the pinned vcstool checkout with LIVEKIT_BUILD_SDK_FROM_SOURCE. The same
-# version pin is mirrored in this package's colcon.pkg.
+# Build the capture-enabled SDK from the pinned vcstool checkout by default.
+# Standard release archives do not include capture. LIVEKIT_SDK_VERSION, also
+# mirrored in colcon.pkg, is used for the source package version and downloads.
 #
 # Examples:
 #   colcon build --packages-select ros_portal
@@ -82,9 +82,9 @@ endif()
 #   colcon build --packages-select ros_portal \
 #     --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON
 #
-#   # Override the pin for a one-off build (or track upstream with "latest"):
+#   # Test a different capture-enabled SDK checkout:
 #   colcon build --packages-select ros_portal \
-#     --cmake-args -DLIVEKIT_SDK_VERSION=latest
+#     --cmake-args -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
 #
 # ---------------------------------------------------------------------------
 set(LIVEKIT_SDK_VERSION "1.10.0" CACHE STRING
@@ -94,6 +94,12 @@ livekit_configure_sdk(
   SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../externals/client-sdk-cpp"
   BUILD_ROOT "${CMAKE_BINARY_DIR}/_deps"
 )
+
+if(NOT EXISTS "${LIVEKIT_SDK_INSTALL_ROOT}/include/livekit/capture/capture_source.h")
+  message(FATAL_ERROR
+    "ROS Portal requires a capture-enabled LiveKit SDK. "
+    "Import external.repos and configure with -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON.")
+endif()
 
 find_package(LiveKit CONFIG REQUIRED)
 
@@ -263,6 +269,7 @@ livekit_set_runtime_rpath(ros2_cli_lib)
 # ROS Portal library
 # ---------------------------------------------------------------------------
 ament_auto_add_library(ros_portal_lib SHARED
+  src/capture_source_factory.cpp
   src/connection/connection_diagnostics.cpp
   src/connection/connection_manager.cpp
   src/diagnostics/build_info.cpp
@@ -279,6 +286,7 @@ ament_auto_add_library(ros_portal_lib SHARED
   src/utils/image_conversion.cpp
   src/utils/ros_utils.cpp
   src/utils/topic_matcher.cpp
+  src/video_source_manager.cpp
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}

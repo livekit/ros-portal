@@ -19,13 +19,13 @@
 #include <algorithm>
 #include <builtin_interfaces/msg/time.hpp>
 #include <exception>
-#include <limits>
 #include <optional>
 #include <rclcpp/logging.hpp>
 #include <string_view>
 #include <utility>
 
 #include "ros_portal/utils/reader_alive_guard.hpp"
+#include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/video_frame_metadata.hpp"
 
 namespace ros_portal {
@@ -33,21 +33,6 @@ namespace ros_portal {
 namespace {
 /// @brief `sensor_msgs/CompressedImage.format` for baseline JPEG payloads.
 constexpr char kJpegFormat[] = "jpeg";
-constexpr std::uint64_t kMicrosecondsPerSecond = 1'000'000U;
-constexpr std::uint32_t kNanosecondsPerMicrosecond = 1'000U;
-
-/// @brief Convert a sender `user_timestamp_us` to a ROS time.
-/// @return std::nullopt when the seconds do not fit `builtin_interfaces/Time`.
-std::optional<builtin_interfaces::msg::Time> toRosTime(const std::uint64_t timestamp_us) {
-  const std::uint64_t seconds = timestamp_us / kMicrosecondsPerSecond;
-  if (seconds > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())) {
-    return std::nullopt;
-  }
-  builtin_interfaces::msg::Time stamp;
-  stamp.sec = static_cast<std::int32_t>(seconds);
-  stamp.nanosec = static_cast<std::uint32_t>(timestamp_us % kMicrosecondsPerSecond) * kNanosecondsPerMicrosecond;
-  return stamp;
-}
 } // namespace
 
 InboundVideoTrack::InboundVideoTrack(Options options, std::shared_ptr<Stream> stream,
@@ -157,7 +142,7 @@ void InboundVideoTrack::fillHeader(const livekit::VideoFrameEvent& event) {
 
   std::optional<builtin_interfaces::msg::Time> sender_stamp;
   if (metadata && metadata->user_timestamp_us) {
-    sender_stamp = toRosTime(*metadata->user_timestamp_us);
+    sender_stamp = utils::toRosTime(*metadata->user_timestamp_us);
   }
   if (sender_stamp) {
     message_.header.stamp = *sender_stamp;

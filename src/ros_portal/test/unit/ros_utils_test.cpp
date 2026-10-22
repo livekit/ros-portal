@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <rclcpp/logger.hpp>
 #include <string>
 #include <unordered_set>
@@ -37,6 +38,46 @@ namespace {
 constexpr const char* kTestEnvVar = "ROS_PORTAL_TEST_CREDENTIAL";
 
 using ros_portal::test::ScopedEnvVar;
+
+TEST(RosUtilsTest, ToRosTimeConvertsZero) {
+  const auto stamp = toRosTime(0U);
+  ASSERT_TRUE(stamp.has_value());
+  EXPECT_EQ(stamp->sec, 0);
+  EXPECT_EQ(stamp->nanosec, 0U);
+}
+
+TEST(RosUtilsTest, ToRosTimeConvertsSubsecondAndSecondBoundaries) {
+  const auto subsecond = toRosTime(999'999U);
+  ASSERT_TRUE(subsecond.has_value());
+  EXPECT_EQ(subsecond->sec, 0);
+  EXPECT_EQ(subsecond->nanosec, 999'999'000U);
+
+  const auto whole_second = toRosTime(1'000'000U);
+  ASSERT_TRUE(whole_second.has_value());
+  EXPECT_EQ(whole_second->sec, 1);
+  EXPECT_EQ(whole_second->nanosec, 0U);
+
+  const auto fractional = toRosTime(1'234'567U);
+  ASSERT_TRUE(fractional.has_value());
+  EXPECT_EQ(fractional->sec, 1);
+  EXPECT_EQ(fractional->nanosec, 234'567'000U);
+}
+
+TEST(RosUtilsTest, ToRosTimeAcceptsLargestRepresentableTimestamp) {
+  constexpr auto kMaxSeconds = std::numeric_limits<std::int32_t>::max();
+  constexpr auto kMaxTimestampUs = static_cast<std::uint64_t>(kMaxSeconds) * 1'000'000U + 999'999U;
+  const auto stamp = toRosTime(kMaxTimestampUs);
+  ASSERT_TRUE(stamp.has_value());
+  EXPECT_EQ(stamp->sec, kMaxSeconds);
+  EXPECT_EQ(stamp->nanosec, 999'999'000U);
+}
+
+TEST(RosUtilsTest, ToRosTimeRejectsOverflow) {
+  constexpr auto kFirstInvalidTimestampUs =
+      (static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + 1U) * 1'000'000U;
+  EXPECT_FALSE(toRosTime(kFirstInvalidTimestampUs).has_value());
+  EXPECT_FALSE(toRosTime(std::numeric_limits<std::uint64_t>::max()).has_value());
+}
 
 TEST(RosUtilsTest, EnvironmentVariableReadsNonEmptyValue) {
   ScopedEnvVar scoped_env{kTestEnvVar};

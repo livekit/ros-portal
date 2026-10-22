@@ -182,7 +182,7 @@ Reports outbound and inbound track inventory and cumulative forwarding failures,
 and raises an error when an outbound LiveKit writer is still pending or an
 inbound reader thread has stopped.
 
-**Source:** Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack and video track readers, and forwarding outcomes
+**Source:** Outbound ROS subscriptions and LiveKit tracks, inbound DataTrack and VideoTrack readers, and forwarding outcomes
 
 ### Status Levels
 

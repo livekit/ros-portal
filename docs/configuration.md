@@ -460,7 +460,7 @@ with the same name. On the receiving host, add an entry with that name:
 
 ```yaml
 topics:
-  # On the SLAM host: receive the edge camera as JPEG.
+  # On the remote ROS portal node receive the edge camera as JPEG
   - topic: "/camera/image_raw"
     direction: "in"
 ```

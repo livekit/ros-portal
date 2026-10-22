@@ -49,8 +49,6 @@ namespace ros_portal {
 
 namespace {
 constexpr char kTopicForwarderDiagnosticTaskName[] = "topic_forwarder";
-/// @brief image_transport suffix for the compressed transport of a base image topic.
-constexpr char kCompressedImageTopicSuffix[] = "/compressed";
 /// @brief Decoded frames buffered per inbound video track. When encoding falls
 /// behind, the stream drops the oldest frame instead of growing the queue.
 constexpr std::size_t kInboundVideoStreamCapacity = 2U;
@@ -869,16 +867,16 @@ std::optional<std::string> TopicForwarder::resolveInboundVideoTopic(const Remote
     return std::nullopt;
   }
 
-  const auto base_topic_name = topic_it->second.preserve_id
-                                   ? utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name)
-                                   : utils::liveKitToRosTopicName(descriptor.track_name);
-  if (!base_topic_name) {
+  auto ros_topic_name = topic_it->second.preserve_id
+                            ? utils::liveKitToRosTopicName(descriptor.publisher_identity, descriptor.track_name)
+                            : utils::liveKitToRosTopicName(descriptor.track_name);
+  if (!ros_topic_name) {
     diagnostic_state_.inbound_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_WARN(logger_, "Ignoring LiveKit video track '%s' from '%s' because ROS topic name resolution failed",
                 descriptor.track_name.c_str(), descriptor.publisher_identity.c_str());
     return std::nullopt;
   }
-  return *base_topic_name + kCompressedImageTopicSuffix;
+  return ros_topic_name;
 }
 
 bool TopicForwarder::onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& descriptor) {

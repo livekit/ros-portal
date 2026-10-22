@@ -45,6 +45,7 @@
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/utils/jpeg_encoder.hpp"
+#include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
 #include "ros_portal/utils/video_frame_metadata.hpp"
 
@@ -880,7 +881,6 @@ TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) 
 namespace {
 
 constexpr char kVideoTrackName[] = "/camera/image_raw";
-constexpr char kCompressedTopic[] = "/camera/image_raw/compressed";
 
 // One frame emitted by the scripted video stream.
 struct ScriptedVideoFrame {
@@ -958,10 +958,10 @@ rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr subscribeInbo
 
 } // namespace
 
-TEST_F(TopicForwarderTest, InboundVideoPublishesJpegOnCompressedTopic) {
+TEST_F(TopicForwarderTest, InboundVideoPublishesJpegOnTrackTopic) {
   TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
   CompressedImageInbox inbox;
-  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
   auto closed = std::make_shared<std::atomic_bool>(false);
   TopicForwarder::RemoteVideoTrackDescriptor descriptor;
@@ -986,6 +986,26 @@ TEST_F(TopicForwarderTest, InboundVideoPublishesJpegOnCompressedTopic) {
   EXPECT_EQ(valueFor(status, "inbound.video_tracks"), "1");
 }
 
+TEST_F(TopicForwarderTest, InboundVideoNamingMatchesDataTracks) {
+  for (const auto* track_name : {"/camera/image_raw", "camera/image_raw", "/camera/image_raw/compressed",
+                                 "camera/image_raw/compressed", "/compressed"}) {
+    for (const bool preserve_id : {false, true}) {
+      SCOPED_TRACE(track_name);
+      SCOPED_TRACE(preserve_id);
+      auto options = makeOptions();
+      options.incoming_video_topics = {
+          {*utils::normalizeTrackTopicName(track_name), TopicForwarder::IncomingVideoTopic{preserve_id}}};
+      TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+      TopicForwarder::RemoteVideoTrackDescriptor descriptor;
+      descriptor.track_name = track_name;
+      descriptor.publisher_identity = "edge-robot";
+      const auto expected = preserve_id ? utils::liveKitToRosTopicName(descriptor.publisher_identity, track_name)
+                                        : utils::liveKitToRosTopicName(track_name);
+      EXPECT_EQ(forwarder.resolveInboundVideoTopic(descriptor), expected);
+    }
+  }
+}
+
 TEST_F(TopicForwarderTest, InboundVideoPreserveIdPrefixesTopic) {
   TopicForwarder forwarder(makeVideoOptions(true), node_, makeLiveKitMethods(), diagnostics_fns_);
 
@@ -997,8 +1017,8 @@ TEST_F(TopicForwarderTest, InboundVideoPreserveIdPrefixesTopic) {
   descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
   forwarder.onVideoTrackSubscribed(std::move(descriptor));
 
-  EXPECT_TRUE(waitForPublishers("/edge_robot/camera/image_raw/compressed", 1U));
-  EXPECT_EQ(node_->get_publishers_info_by_topic(kCompressedTopic).size(), 0U);
+  EXPECT_TRUE(waitForPublishers("/edge_robot/camera/image_raw", 1U));
+  EXPECT_EQ(node_->get_publishers_info_by_topic(kVideoTrackName).size(), 0U);
 }
 
 TEST_F(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch) {
@@ -1028,7 +1048,7 @@ TEST_F(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch) {
 TEST_F(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId) {
   TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
   CompressedImageInbox inbox;
-  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
   ScriptedVideoFrame frame;
   frame.user_timestamp_us = 1'700'000'123'456U;
@@ -1055,7 +1075,7 @@ TEST_F(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId) {
 TEST_F(TopicForwarderTest, InboundVideoFallsBackToLocalStampAndTrackFrameId) {
   TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
   CompressedImageInbox inbox;
-  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
   const auto before = node_->get_clock()->now();
 
   auto closed = std::make_shared<std::atomic_bool>(false);
@@ -1091,7 +1111,7 @@ TEST_F(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher) {
   descriptor.publisher_identity = "edge";
   descriptor.subscribe = makeScriptedVideoSubscribe({}, closed);
   forwarder.onVideoTrackSubscribed(std::move(descriptor));
-  ASSERT_TRUE(waitForPublishers(kCompressedTopic, 1U));
+  ASSERT_TRUE(waitForPublishers(kVideoTrackName, 1U));
 
   forwarder.onVideoTrackUnsubscribed("video-sid");
 
@@ -1100,7 +1120,7 @@ TEST_F(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher) {
     const std::lock_guard<std::mutex> lock(forwarder.inbound_video_tracks_mutex_);
     EXPECT_TRUE(forwarder.inbound_video_tracks_.empty());
   }
-  EXPECT_TRUE(waitForPublishers(kCompressedTopic, 0U));
+  EXPECT_TRUE(waitForPublishers(kVideoTrackName, 0U));
   // Unsubscribing an unknown SID is a no-op.
   forwarder.onVideoTrackUnsubscribed("video-sid");
 }
@@ -1108,7 +1128,7 @@ TEST_F(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher) {
 TEST_F(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication) {
   TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
   CompressedImageInbox inbox;
-  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
   auto closed = std::make_shared<std::atomic_bool>(false);
   TopicForwarder::RemoteVideoTrackDescriptor descriptor;
@@ -1126,19 +1146,19 @@ TEST_F(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication) {
   }
   EXPECT_TRUE(forwarder.isInboundPublication(rclcpp::MessageInfo(from_track)));
 
-  auto local_publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kCompressedTopic, 10);
+  auto local_publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kVideoTrackName, 10);
   rmw_message_info_t from_local{};
   from_local.publisher_gid = local_publisher->get_gid();
   EXPECT_FALSE(forwarder.isInboundPublication(rclcpp::MessageInfo(from_local)));
 }
 
 TEST_F(TopicForwarderTest, InboundVideoTrackOwnsItsBufferWriterGids) {
-  auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kCompressedTopic, 10);
+  auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kVideoTrackName, 10);
   // A stand-in for the hidden "_buf_cpu" writer GID that Lyrical adds.
   std::array<std::uint8_t, RMW_GID_STORAGE_SIZE> buffer_writer_gid{};
   buffer_writer_gid.fill(0xAB);
   InboundVideoTrack::Options options;
-  options.ros_topic_name = kCompressedTopic;
+  options.ros_topic_name = kVideoTrackName;
   options.buffer_writer_gids = {buffer_writer_gid};
   InboundVideoTrack::Counters counters;
   const InboundVideoTrack track(
@@ -1150,7 +1170,7 @@ TEST_F(TopicForwarderTest, InboundVideoTrackOwnsItsBufferWriterGids) {
   rmw_gid_t from_buffer_writer = publisher->get_gid();
   std::copy(buffer_writer_gid.begin(), buffer_writer_gid.end(), from_buffer_writer.data);
   EXPECT_TRUE(track.ownsPublisher(from_buffer_writer));
-  auto other_publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kCompressedTopic, 10);
+  auto other_publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>(kVideoTrackName, 10);
   EXPECT_FALSE(track.ownsPublisher(other_publisher->get_gid()));
 }
 
@@ -1158,7 +1178,7 @@ TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {
   TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
   // Frames are only encoded while the topic has a subscriber.
   CompressedImageInbox inbox;
-  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
   ScriptedVideoFrame frame;
   frame.type = livekit::VideoBufferType::RGBA;
@@ -1212,7 +1232,7 @@ TEST_F(TopicForwarderTest, InboundVideoPausesWithoutSubscribersAndResumes) {
 
   // A subscriber appears: the track resumes.
   CompressedImageInbox inbox;
-  auto subscription = subscribeInbox(node_, kCompressedTopic, inbox);
+  auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
   ASSERT_TRUE(spinUntil([&]() {
     forwarder.updateInboundVideoDemand();
     return calls().size() == 2U;

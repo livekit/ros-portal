@@ -41,7 +41,6 @@ namespace {
 using namespace std::chrono_literals;
 
 constexpr char kVideoTrackName[] = "/e2e_camera/image_raw";
-constexpr char kCompressedTopic[] = "/e2e_camera/image_raw/compressed";
 constexpr char kSenderFrameId[] = "e2e_camera_optical_frame";
 constexpr std::uint64_t kSenderTimestampUs = 1'700'000'123'456U;
 constexpr int kWidth = 64;
@@ -115,7 +114,7 @@ TEST_F(RosPortalTestE2E, RepublishesRemoteVideoTrackAsCompressedImageWithSenderH
   std::mutex mutex;
   std::optional<sensor_msgs::msg::CompressedImage> received;
   auto subscription = robotBNode()->create_subscription<sensor_msgs::msg::CompressedImage>(
-      kCompressedTopic, 10, [&](const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg) {
+      kVideoTrackName, 10, [&](const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg) {
         const std::lock_guard<std::mutex> lock(mutex);
         received = *msg;
       });
@@ -124,15 +123,15 @@ TEST_F(RosPortalTestE2E, RepublishesRemoteVideoTrackAsCompressedImageWithSenderH
   ASSERT_TRUE(publisher.connect(liveKitUrl(), tokenA())) << "Independent LiveKit video publisher failed to connect";
   publisher.start();
 
-  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kCompressedTopic) > 0U; }, kGraphTimeout))
-      << "ROS Portal did not create a publisher on " << kCompressedTopic;
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kVideoTrackName) > 0U; }, kGraphTimeout))
+      << "ROS Portal did not create a publisher on " << kVideoTrackName;
   ASSERT_TRUE(waitFor(
       [&]() {
         const std::lock_guard<std::mutex> lock(mutex);
         return received.has_value();
       },
       kMessageTimeout))
-      << "No CompressedImage arrived on " << kCompressedTopic;
+      << "No CompressedImage arrived on " << kVideoTrackName;
 
   const std::lock_guard<std::mutex> lock(mutex);
   EXPECT_EQ(received->format, "jpeg");
@@ -154,15 +153,15 @@ TEST_F(RosPortalTestE2E, ResumesPausedVideoTrackWhenRosSubscriberAppears) {
   VideoPublisher publisher;
   ASSERT_TRUE(publisher.connect(liveKitUrl(), tokenA())) << "Independent LiveKit video publisher failed to connect";
   publisher.start();
-  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kCompressedTopic) > 0U; }, kGraphTimeout))
-      << "ROS Portal did not create a publisher on " << kCompressedTopic;
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kVideoTrackName) > 0U; }, kGraphTimeout))
+      << "ROS Portal did not create a publisher on " << kVideoTrackName;
   // Let several demand checks pass so the track is paused before subscribing.
   std::this_thread::sleep_for(2s);
 
   std::mutex mutex;
   std::optional<sensor_msgs::msg::CompressedImage> received;
   auto subscription = robotBNode()->create_subscription<sensor_msgs::msg::CompressedImage>(
-      kCompressedTopic, 10, [&](const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg) {
+      kVideoTrackName, 10, [&](const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg) {
         const std::lock_guard<std::mutex> lock(mutex);
         received = *msg;
       });
@@ -173,7 +172,7 @@ TEST_F(RosPortalTestE2E, ResumesPausedVideoTrackWhenRosSubscriberAppears) {
         return received.has_value();
       },
       kMessageTimeout))
-      << "No CompressedImage arrived on " << kCompressedTopic << " after the subscriber appeared";
+      << "No CompressedImage arrived on " << kVideoTrackName << " after the subscriber appeared";
   const std::lock_guard<std::mutex> lock(mutex);
   EXPECT_EQ(received->header.frame_id, kSenderFrameId);
 }

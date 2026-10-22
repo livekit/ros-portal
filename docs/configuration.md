@@ -467,22 +467,19 @@ topics:
 
 ```text
 LiveKit video track: /camera/image_raw   (from participant "edge-robot")
-ROS topic:           /camera/image_raw/compressed
+ROS topic:           /camera/image_raw
 ROS type:            sensor_msgs/msg/CompressedImage (format "jpeg")
 ```
 
-With `preserve_id: true`, the topic is `/edge_robot/camera/image_raw/compressed`.
+With `preserve_id: true`, the topic is `/edge_robot/camera/image_raw`.
 
-The topic name follows the image_transport convention, `<base>/compressed`.
-ROS Portal uses this name for these reasons:
-
-- image_transport subscribers, `rqt_image_view`, and the image_transport
-  `republish` node find a compressed stream from its base name. A SLAM front
-  end that uses image_transport needs no remap.
-- The payload is not a raw `sensor_msgs/Image`. A separate name prevents a type
-  clash with a local `Image` topic that uses the base name.
-- To get raw images, decode the topic with the image_transport `republish`
-  node. ROS Portal does not need to change for this.
+Video tracks use the same topic naming as data tracks: the track name becomes
+an absolute ROS topic name, with an optional participant prefix. ROS Portal
+does not add or remove `/compressed`. A track named
+`/camera/image_raw/compressed` is published on that same ROS topic (or
+`/edge_robot/camera/image_raw/compressed` with `preserve_id: true`). Configure
+consumers for `sensor_msgs/CompressedImage`, even when the topic name has no
+`/compressed` suffix.
 
 ROS Portal keeps the sender's `header.stamp` and `header.frame_id`. The sending
 ROS Portal attaches both to each video frame as LiveKit frame metadata. The

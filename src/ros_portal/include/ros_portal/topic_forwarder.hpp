@@ -225,8 +225,8 @@ public:
   /// @brief Handle a remote LiveKit video track becoming subscribed.
   ///
   /// When the track name exactly matches a configured inbound topic, frames
-  /// are republished as JPEG `sensor_msgs/CompressedImage` on
-  /// `<topic>/compressed`, following the image_transport naming convention.
+  /// are republished as JPEG `sensor_msgs/CompressedImage` on the same topic
+  /// name, with the optional participant prefix used by data tracks.
   /// @param track Subscribed remote video track.
   /// @param publisher_identity LiveKit identity of the remote publisher.
   /// @param publication Publication of @p track, used to pause it while the
@@ -251,8 +251,9 @@ private:
   FRIEND_TEST(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders);
-  FRIEND_TEST(TopicForwarderTest, InboundVideoPublishesJpegOnCompressedTopic);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoPublishesJpegOnTrackTopic);
   FRIEND_TEST(TopicForwarderTest, InboundVideoPreserveIdPrefixesTopic);
+  FRIEND_TEST(TopicForwarderTest, InboundVideoNamingMatchesDataTracks);
   FRIEND_TEST(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch);
   FRIEND_TEST(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId);
   FRIEND_TEST(TopicForwarderTest, InboundVideoFallsBackToLocalStampAndTrackFrameId);
@@ -354,8 +355,9 @@ private:
   bool onVideoTrackSubscribed(const RemoteVideoTrackDescriptor& descriptor);
 
   /// @brief Resolve the ROS topic for an inbound video track.
-  /// @return `<base>/compressed`, or std::nullopt when the track has no exact
-  /// inbound topic match or its name cannot become a ROS topic.
+  /// @return Normalized topic name with the optional participant prefix, or
+  /// std::nullopt when the track has no exact inbound topic match or its name
+  /// cannot become a ROS topic.
   std::optional<std::string> resolveInboundVideoTopic(const RemoteVideoTrackDescriptor& descriptor);
 
   /// @brief Per-topic state for outbound ROS image forwarding.

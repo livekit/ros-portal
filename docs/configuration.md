@@ -435,9 +435,7 @@ track.
 - `sensor_msgs/CompressedImage` supports JPEG only. The `format` field must
   contain `jpeg` or `jpg` (case-insensitive).
   ROS Portal decodes each frame before LiveKit encodes it as video.
-- Video tracks keep the full ROS topic name, just like data tracks. For
-  example, `/cam/image_raw/compressed` publishes the track
-  `/cam/image_raw/compressed`. Raw and compressed topics have distinct tracks.
+- Video tracks follow the same naming convention as data tracks.
 
 ```yaml
 topics:

@@ -230,14 +230,4 @@ bool isRmwBufferTopic(const std::string& topic_name) {
   return topic_name.compare(segment_start, sizeof(kBufferSegmentPrefix) - 1U, kBufferSegmentPrefix) == 0;
 }
 
-std::string videoTrackNameForTopic(const std::string& topic_name, const bool compressed) {
-  constexpr std::string_view kCompressedSuffix = "/compressed";
-  // Keep at least one character before the suffix so "/compressed" stays as is.
-  if (compressed && topic_name.size() > kCompressedSuffix.size() &&
-      topic_name.compare(topic_name.size() - kCompressedSuffix.size(), kCompressedSuffix.size(), kCompressedSuffix) ==
-          0) {
-    return topic_name.substr(0, topic_name.size() - kCompressedSuffix.size());
-  }
-  return topic_name;
-}
 } // namespace ros_portal::utils

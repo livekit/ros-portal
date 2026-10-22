@@ -981,7 +981,7 @@ sensor_msgs::msg::CompressedImage makeJpegImage(const std::string& format) {
 
 } // namespace
 
-TEST_F(TopicForwarderTest, OutboundCompressedImageCreatesVideoTrackWithoutSuffix) {
+TEST_F(TopicForwarderTest, OutboundCompressedImagePreservesTopicName) {
   auto record = std::make_shared<VideoSinkRecord>();
   TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
 
@@ -996,7 +996,7 @@ TEST_F(TopicForwarderTest, OutboundCompressedImageCreatesVideoTrackWithoutSuffix
     return record->captures == 1;
   }));
   const std::lock_guard<std::mutex> lock(record->mutex);
-  EXPECT_EQ(record->track_names, (std::vector<std::string>{"/allowed/cam/image_raw"}));
+  EXPECT_EQ(record->track_names, (std::vector<std::string>{"/allowed/cam/image_raw/compressed"}));
   EXPECT_EQ(record->width, 16);
   EXPECT_EQ(record->height, 8);
   // 4:2:0 JPEG decodes straight to I420.
@@ -1021,19 +1021,19 @@ TEST_F(TopicForwarderTest, OutboundCompressedImageSkipsNonJpegFormats) {
   EXPECT_TRUE(record->track_names.empty());
 }
 
-TEST_F(TopicForwarderTest, OutboundVideoTrackNameClashIsSkippedAndCounted) {
+TEST_F(TopicForwarderTest, OutboundRawAndCompressedImagesHaveDistinctTrackNames) {
   TopicForwarder forwarder(makeOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
 
-  // Both topics map to the LiveKit video track "/allowed/cam".
   forwarder.createImageSubscriber("/allowed/cam");
   forwarder.createCompressedImageSubscriber("/allowed/cam/compressed");
-  // Graph reconciliation retries the skipped topic; the clash counts once.
   forwarder.createCompressedImageSubscriber("/allowed/cam/compressed");
 
   const std::lock_guard<std::mutex> lock(forwarder.outbound_topics_mutex_);
   EXPECT_EQ(forwarder.subscriptions_.count("/allowed/cam"), 1U);
-  EXPECT_EQ(forwarder.subscriptions_.count("/allowed/cam/compressed"), 0U);
-  EXPECT_EQ(forwarder.diagnostic_state_.outbound_failures.load(), 1U);
+  EXPECT_EQ(forwarder.subscriptions_.count("/allowed/cam/compressed"), 1U);
+  EXPECT_EQ(forwarder.image_topic_states_.at("/allowed/cam")->track_name, "/allowed/cam");
+  EXPECT_EQ(forwarder.image_topic_states_.at("/allowed/cam/compressed")->track_name, "/allowed/cam/compressed");
+  EXPECT_EQ(forwarder.diagnostic_state_.outbound_failures.load(), 0U);
 }
 
 } // namespace ros_portal

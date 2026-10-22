@@ -221,7 +221,7 @@ private:
   FRIEND_TEST(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures);
   FRIEND_TEST(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders);
   FRIEND_TEST(TopicForwarderTest, OutboundCompressedImageSkipsNonJpegFormats);
-  FRIEND_TEST(TopicForwarderTest, OutboundVideoTrackNameClashIsSkippedAndCounted);
+  FRIEND_TEST(TopicForwarderTest, OutboundRawAndCompressedImagesHaveDistinctTrackNames);
 #endif
 
   /// @brief Resolve the ROS type for an inbound LiveKit track.
@@ -302,7 +302,7 @@ private:
   };
 
   /// @brief Create the per-topic state and ROS subscription for an outbound
-  /// video topic. Skips topics whose track name another topic already uses.
+  /// video topic. The LiveKit track keeps the full ROS topic name.
   template <typename MessageT, typename CallbackT>
   void subscribeVideoTopic(const std::string& topic_name, const char* topic_type, bool compressed,
                            CallbackT&& callback);
@@ -427,11 +427,6 @@ private:
   /// @brief Outbound image-topic state keyed by ROS topic name. Shared so a
   /// running callback keeps its state alive while the entry is reaped.
   std::unordered_map<std::string, std::shared_ptr<ImageTopicState>> image_topic_states_;
-  /// @brief ROS topic that owns each outbound video track name.
-  std::unordered_map<std::string, std::string> video_track_owners_;
-  /// @brief Outbound video topics skipped for a track-name clash, so the
-  /// clash is logged and counted once.
-  std::unordered_set<std::string> clashing_video_topics_;
   /// @brief Outbound data-topic state keyed by ROS topic name.
   std::unordered_map<std::string, DataTopicState> data_topic_states_;
   /// @brief Protects inbound data track state during setup and teardown.

@@ -209,10 +209,7 @@ bool TopicForwarder::reapExpiredSubscriptions() {
 
     const auto topic_name = it->first;
     data_topic_states_.erase(topic_name);
-    if (const auto image_it = image_topic_states_.find(topic_name); image_it != image_topic_states_.end()) {
-      video_track_owners_.erase(image_it->second->track_name);
-      image_topic_states_.erase(image_it);
-    }
+    image_topic_states_.erase(topic_name);
     it = subscriptions_.erase(it);
     removed = true;
     RCLCPP_INFO(logger_, "Removed inactive subscription for '%s'", topic_name.c_str());
@@ -473,22 +470,11 @@ void TopicForwarder::subscribeVideoTopic(const std::string& topic_name, const ch
   }
 
   auto state = std::make_shared<ImageTopicState>();
-  state->track_name = utils::videoTrackNameForTopic(topic_name, compressed);
-  if (const auto owner = video_track_owners_.find(state->track_name);
-      owner != video_track_owners_.end() && owner->second != topic_name) {
-    // Graph reconciliation retries unsubscribed topics, so report a clash once.
-    if (clashing_video_topics_.insert(topic_name).second) {
-      diagnostic_state_.outbound_failures.fetch_add(1, std::memory_order_relaxed);
-      RCLCPP_ERROR(logger_, "Not forwarding '%s' as video: '%s' already publishes the LiveKit video track '%s'",
-                   topic_name.c_str(), owner->second.c_str(), state->track_name.c_str());
-    }
-    return;
-  }
+  state->track_name = topic_name;
   if (compressed) {
     state->jpeg_decoder = std::make_unique<utils::JpegDecoder>();
   }
   image_topic_states_[topic_name] = state;
-  video_track_owners_[state->track_name] = topic_name;
 
   try {
     rclcpp::SubscriptionOptions sub_options;
@@ -504,7 +490,6 @@ void TopicForwarder::subscribeVideoTopic(const std::string& topic_name, const ch
     subscriptions_[topic_name] = OutboundSubscription{std::move(subscription), std::nullopt};
   } catch (const std::exception& e) {
     image_topic_states_.erase(topic_name);
-    video_track_owners_.erase(state->track_name);
     diagnostic_state_.outbound_failures.fetch_add(1, std::memory_order_relaxed);
     RCLCPP_ERROR(logger_, "Failed to create ROS image subscription for '%s' [%s]: %s", topic_name.c_str(), topic_type,
                  e.what());

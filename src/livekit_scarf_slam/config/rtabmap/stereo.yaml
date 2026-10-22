@@ -1,0 +1,41 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# RTAB-Map parameters for stereo-only SLAM on the rectified SBS stream.
+# Both stereo_odometry and rtabmap read this file. RTAB-Map core parameters
+# (the names with a slash) are strings.
+
+/**:
+  ros__parameters:
+    frame_id: stereo_link
+    subscribe_stereo: true
+    subscribe_depth: false
+    subscribe_rgb: false
+    # Both rectified images carry the stamp of one SBS frame.
+    approx_sync: false
+    sync_queue_size: 10
+    wait_for_transform: 0.2
+
+    # Add a graph node at most 3 times per second. This matches the ScaRF-SLAM
+    # keyframe selection (sec_skip: 0.32). RTAB-Map adds no node while the
+    # rover stands still (RGBD/LinearUpdate and RGBD/AngularUpdate).
+    Rtabmap/DetectionRate: "3"
+    # Keep all nodes in working memory, so that MapData has the full graph.
+    Rtabmap/MemoryThr: "0"
+    Mem/IncrementalMemory: "true"
+
+    Odom/Strategy: "0"
+    Vis/MaxFeatures: "1000"
+    Vis/CorType: "0"
+    Reg/Force3DoF: "false"

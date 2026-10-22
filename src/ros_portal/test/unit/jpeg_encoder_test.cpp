@@ -146,4 +146,31 @@ TEST(JpegEncoderTest, ReusesOutputStorageForSameSizeFrames) {
   EXPECT_EQ(jpeg.data(), first_storage);
 }
 
+TEST(JpegEncoderTest, HandlesBufferGrowthAndRejectedFramesAcrossLifetimes) {
+  const auto small_frame = makeI420Frame(32, 32, 100, 128, 128);
+  const auto large_frame = makeI420Frame(128, 96, 100, 128, 128);
+  const auto invalid_frame = livekit::VideoFrame::create(8, 8, livekit::VideoBufferType::RGBA);
+
+  for (int iteration = 0; iteration < 8; ++iteration) {
+    SCOPED_TRACE(iteration);
+    JpegEncoder encoder;
+    std::vector<std::uint8_t> jpeg;
+
+    ASSERT_TRUE(encoder.encodeI420(small_frame, jpeg)) << encoder.lastError();
+    ASSERT_TRUE(encoder.encodeI420(large_frame, jpeg)) << encoder.lastError();
+    const auto large_header = readHeader(jpeg);
+    EXPECT_EQ(large_header.width, 128);
+    EXPECT_EQ(large_header.height, 96);
+
+    const auto previous_jpeg = jpeg;
+    EXPECT_FALSE(encoder.encodeI420(invalid_frame, jpeg));
+    EXPECT_EQ(jpeg, previous_jpeg);
+
+    ASSERT_TRUE(encoder.encodeI420(small_frame, jpeg)) << encoder.lastError();
+    const auto small_header = readHeader(jpeg);
+    EXPECT_EQ(small_header.width, 32);
+    EXPECT_EQ(small_header.height, 32);
+  }
+}
+
 } // namespace ros_portal::utils

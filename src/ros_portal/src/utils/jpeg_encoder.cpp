@@ -25,12 +25,11 @@
 
 namespace ros_portal::utils {
 
+void JpegEncoder::BufferDeleter::operator()(unsigned char* buffer) const noexcept { tjFree(buffer); }
+
 JpegEncoder::JpegEncoder(const int quality) : handle_(tjInitCompress()), quality_(std::clamp(quality, 1, 100)) {}
 
 JpegEncoder::~JpegEncoder() {
-  if (buffer_ != nullptr) {
-    tjFree(buffer_);
-  }
   if (handle_ != nullptr) {
     tjDestroy(handle_);
   }
@@ -69,21 +68,19 @@ bool JpegEncoder::encodeI420(const livekit::VideoFrame& frame, std::vector<std::
     return false;
   }
   if (buffer_capacity_ < required_capacity) {
-    if (buffer_ != nullptr) {
-      tjFree(buffer_);
-    }
-    buffer_ = tjAlloc(static_cast<int>(required_capacity));
-    buffer_capacity_ = buffer_ != nullptr ? required_capacity : 0U;
-    if (buffer_ == nullptr) {
+    std::unique_ptr<unsigned char[], BufferDeleter> new_buffer(tjAlloc(static_cast<int>(required_capacity)));
+    if (!new_buffer) {
       last_error_ = "failed to allocate the JPEG output buffer";
       return false;
     }
+    buffer_.swap(new_buffer);
+    buffer_capacity_ = required_capacity;
   }
 
   const std::uint8_t* luma = frame.data();
   const unsigned char* planes[3] = {luma, luma + luma_size, luma + luma_size + chroma_size};
   const int strides[3] = {width, chroma_width, chroma_width};
-  unsigned char* jpeg = buffer_;
+  unsigned char* jpeg = buffer_.get();
   unsigned long jpeg_size = buffer_capacity_;
   // NOREALLOC: the buffer already holds tjBufSize() bytes, the worst case for this frame size.
   if (tjCompressFromYUVPlanes(handle_, planes, width, strides, height, TJSAMP_420, &jpeg, &jpeg_size, quality_,

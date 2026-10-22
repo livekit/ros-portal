@@ -19,6 +19,7 @@
 #include <livekit/video_frame.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -62,10 +63,16 @@ public:
   const std::string& lastError() const noexcept { return last_error_; }
 
 private:
+  /// @brief Release a TurboJPEG-allocated output buffer.
+  struct BufferDeleter {
+    /// @brief Free @p buffer with TurboJPEG's allocator.
+    void operator()(unsigned char* buffer) const noexcept;
+  };
+
   /// @brief Opaque TurboJPEG compressor handle (`tjhandle`).
   void* handle_{nullptr};
   /// @brief TurboJPEG-allocated output buffer reused across frames.
-  unsigned char* buffer_{nullptr};
+  std::unique_ptr<unsigned char[], BufferDeleter> buffer_;
   /// @brief Capacity of @ref buffer_ in bytes.
   unsigned long buffer_capacity_{0U};
   /// @brief JPEG quality from 1 to 100.

@@ -22,6 +22,7 @@ a YAML configuration file for runtime parameters.
     - [Capping the outbound forward rate](#capping-the-outbound-forward-rate)
     - [Latched topics (`latched: true`)](#latched-topics-latched-true)
     - [Data track encoding (`encoding`)](#data-track-encoding-encoding)
+    - [Outbound video](#outbound-video)
   - [Video Options](#video-options)
 
 ## Prerequisites
@@ -422,6 +423,28 @@ Notes:
   for pure inbound (`in`) topics.
 - Like `max_rate_hz` and `latched`, `encoding` is matched by **literal topic
   name**, not regex.
+
+#### Outbound video
+
+ROS Portal sends an outbound topic of type `sensor_msgs/Image` or
+`sensor_msgs/CompressedImage` as a LiveKit video track. Other types use a data
+track.
+
+- `sensor_msgs/Image` supports `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8`.
+  The track has the same name as the topic.
+- `sensor_msgs/CompressedImage` supports JPEG only. The `format` field must
+  contain `jpeg` or `jpg` (case-insensitive).
+  ROS Portal decodes each frame before LiveKit encodes it as video.
+- Video tracks follow the same naming convention as data tracks.
+
+```yaml
+topics:
+  # Sends the LiveKit video track /insta/cam0/image_raw/compressed.
+  - topic: "/insta/cam0/image_raw/compressed"
+    direction: "out"
+```
+
+The track size comes from the first frame.
 
 ### Video Options
 

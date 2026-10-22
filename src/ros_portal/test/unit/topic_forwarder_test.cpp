@@ -31,6 +31,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <stdexcept>
 #include <string>
@@ -41,7 +43,9 @@
 #include "diagnostics_test_utils.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/schema/manager.hpp"
+#include "ros_portal/utils/jpeg_encoder.hpp"
 #include "ros_portal/utils/topic_matcher.hpp"
+#include "ros_portal/utils/video_frame_metadata.hpp"
 
 // TopicForwarder now creates its subscriptions and publishers directly on the
 // ROS node it is given, so these unit tests cover only the node-independent
@@ -870,6 +874,166 @@ TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) 
   EXPECT_FALSE(valueFor(status, "inbound.empty_payload_drops").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.terminal_errors").has_value());
   EXPECT_FALSE(valueFor(status, "inbound.last_terminal_error").has_value());
+}
+
+namespace {
+
+// Records what the outbound video sink receives for each captured frame.
+struct VideoSinkRecord {
+  std::mutex mutex;
+  int captures{0};
+  std::int64_t timestamp_us{0};
+  std::optional<std::string> frame_id;
+  std::vector<std::string> track_names;
+  int width{0};
+  int height{0};
+  livekit::VideoBufferType frame_type{livekit::VideoBufferType::RGBA};
+};
+
+TopicForwarder::LiveKitMethods makeVideoRecordingLiveKitMethods(std::shared_ptr<VideoSinkRecord> record) {
+  auto livekit_methods = makeLiveKitMethods();
+  livekit_methods.publish_video_track =
+      [record](const std::string& track_name, int width,
+               int height) -> livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string> {
+    {
+      const std::lock_guard<std::mutex> lock(record->mutex);
+      record->track_names.push_back(track_name);
+      record->width = width;
+      record->height = height;
+    }
+    auto sink = std::make_shared<TopicForwarder::VideoTrackSink>();
+    sink->width = width;
+    sink->height = height;
+    sink->capture_frame = [record](const livekit::VideoFrame& frame, const TopicForwarder::VideoFrameStamp& stamp) {
+      const std::lock_guard<std::mutex> lock(record->mutex);
+      ++record->captures;
+      record->frame_type = frame.type();
+      record->timestamp_us = stamp.timestamp_us;
+      record->frame_id = stamp.frame_id ? std::optional<std::string>(*stamp.frame_id) : std::nullopt;
+    };
+    return livekit::Result<std::shared_ptr<TopicForwarder::VideoTrackSink>, std::string>::success(std::move(sink));
+  };
+  return livekit_methods;
+}
+
+sensor_msgs::msg::Image makeRgbImage(const std::string& frame_id) {
+  sensor_msgs::msg::Image image;
+  image.header.stamp.sec = 12;
+  image.header.stamp.nanosec = 345'678'000U;
+  image.header.frame_id = frame_id;
+  image.width = 2;
+  image.height = 2;
+  image.encoding = "rgb8";
+  image.step = 6;
+  image.data.assign(12U, 128U);
+  return image;
+}
+
+} // namespace
+
+TEST_F(TopicForwarderTest, OutboundVideoSendsImageStampAndFrameId) {
+  auto record = std::make_shared<VideoSinkRecord>();
+  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+
+  rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
+  pub_qos.reliable();
+  auto publisher = node_->create_publisher<sensor_msgs::msg::Image>("/allowed/image", pub_qos);
+  ASSERT_TRUE(waitForPublishers("/allowed/image", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  publisher->publish(makeRgbImage("camera_optical_frame"));
+  ASSERT_TRUE(spinUntil([&]() {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    return record->captures == 1;
+  }));
+  {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    EXPECT_EQ(record->timestamp_us, 12'345'678);
+    EXPECT_EQ(record->frame_id, "camera_optical_frame");
+  }
+
+  // A frame_id too long for the metadata is left out, not truncated.
+  publisher->publish(makeRgbImage(std::string(utils::kMaxFrameIdUserDataLength + 1U, 'a')));
+  ASSERT_TRUE(spinUntil([&]() {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    return record->captures == 2;
+  }));
+  const std::lock_guard<std::mutex> lock(record->mutex);
+  EXPECT_FALSE(record->frame_id.has_value());
+}
+
+namespace {
+
+// A JPEG CompressedImage of a 16x8 gray frame, as image_transport publishes it.
+sensor_msgs::msg::CompressedImage makeJpegImage(const std::string& format) {
+  auto i420 = livekit::VideoFrame::create(16, 8, livekit::VideoBufferType::I420);
+  std::fill(i420.data(), i420.data() + i420.dataSize(), std::uint8_t{128});
+  utils::JpegEncoder encoder;
+  sensor_msgs::msg::CompressedImage image;
+  EXPECT_TRUE(encoder.encodeI420(i420, image.data));
+  image.header.stamp.sec = 1'769'886'345;
+  image.header.stamp.nanosec = 745'156'000U;
+  image.header.frame_id = "cam0";
+  image.format = format;
+  return image;
+}
+
+} // namespace
+
+TEST_F(TopicForwarderTest, OutboundCompressedImagePreservesTopicName) {
+  auto record = std::make_shared<VideoSinkRecord>();
+  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>("/allowed/cam/image_raw/compressed", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/cam/image_raw/compressed", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  publisher->publish(makeJpegImage("bgr8; jpeg compressed bgr8"));
+  ASSERT_TRUE(spinUntil([&]() {
+    const std::lock_guard<std::mutex> lock(record->mutex);
+    return record->captures == 1;
+  }));
+  const std::lock_guard<std::mutex> lock(record->mutex);
+  EXPECT_EQ(record->track_names, (std::vector<std::string>{"/allowed/cam/image_raw/compressed"}));
+  EXPECT_EQ(record->width, 16);
+  EXPECT_EQ(record->height, 8);
+  // 4:2:0 JPEG decodes straight to I420.
+  EXPECT_EQ(record->frame_type, livekit::VideoBufferType::I420);
+  EXPECT_EQ(record->timestamp_us, 1'769'886'345'745'156);
+  EXPECT_EQ(record->frame_id, "cam0");
+}
+
+TEST_F(TopicForwarderTest, OutboundCompressedImageSkipsNonJpegFormats) {
+  auto record = std::make_shared<VideoSinkRecord>();
+  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+
+  auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>("/allowed/cam/compressed", 10);
+  ASSERT_TRUE(waitForPublishers("/allowed/cam/compressed", 1U));
+  reconcileFromGraph(forwarder);
+  ASSERT_TRUE(spinUntil([&]() { return publisher->get_subscription_count() >= 1U; }));
+
+  publisher->publish(makeJpegImage("png"));
+  ASSERT_TRUE(spinUntil([&]() { return forwarder.diagnostic_state_.outbound_failures.load() >= 1U; }));
+  const std::lock_guard<std::mutex> lock(record->mutex);
+  EXPECT_EQ(record->captures, 0);
+  EXPECT_TRUE(record->track_names.empty());
+}
+
+TEST_F(TopicForwarderTest, OutboundRawAndCompressedImagesHaveDistinctTrackNames) {
+  TopicForwarder forwarder(makeOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+
+  forwarder.createImageSubscriber("/allowed/cam");
+  forwarder.createCompressedImageSubscriber("/allowed/cam/compressed");
+  forwarder.createCompressedImageSubscriber("/allowed/cam/compressed");
+
+  const std::lock_guard<std::mutex> lock(forwarder.outbound_topics_mutex_);
+  EXPECT_EQ(forwarder.subscriptions_.count("/allowed/cam"), 1U);
+  EXPECT_EQ(forwarder.subscriptions_.count("/allowed/cam/compressed"), 1U);
+  EXPECT_EQ(forwarder.image_topic_states_.at("/allowed/cam")->track_name, "/allowed/cam");
+  EXPECT_EQ(forwarder.image_topic_states_.at("/allowed/cam/compressed")->track_name, "/allowed/cam/compressed");
+  EXPECT_EQ(forwarder.diagnostic_state_.outbound_failures.load(), 0U);
 }
 
 } // namespace ros_portal

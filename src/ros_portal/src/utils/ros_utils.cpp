@@ -21,6 +21,7 @@
 #include <cstring>
 #include <exception>
 #include <rclcpp/rclcpp.hpp>
+#include <string_view>
 
 namespace ros_portal::utils {
 
@@ -228,4 +229,5 @@ bool isRmwBufferTopic(const std::string& topic_name) {
   const auto segment_start = topic_name.rfind('/') + 1U;
   return topic_name.compare(segment_start, sizeof(kBufferSegmentPrefix) - 1U, kBufferSegmentPrefix) == 0;
 }
+
 } // namespace ros_portal::utils

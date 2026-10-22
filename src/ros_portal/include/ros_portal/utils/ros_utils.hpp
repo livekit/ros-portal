@@ -193,4 +193,5 @@ bool isRosTopicStatisticsTopic(const std::string& topic_name);
 /// @param topic_name Absolute ROS topic name.
 /// @return True when the last segment of @p topic_name starts with `_buf_`.
 bool isRmwBufferTopic(const std::string& topic_name);
+
 } // namespace ros_portal::utils

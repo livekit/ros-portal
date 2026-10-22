@@ -411,5 +411,6 @@ TEST(RosUtilsTest, IsRmwBufferTopicMatchesBufferBackendSegment) {
   EXPECT_FALSE(isRmwBufferTopic("/fibonacci/_action/feedback"));
   EXPECT_FALSE(isRmwBufferTopic(""));
 }
+
 } // namespace
 } // namespace ros_portal::utils

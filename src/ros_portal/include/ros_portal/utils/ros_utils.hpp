@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <builtin_interfaces/msg/time.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -30,6 +31,11 @@
 #include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal::utils {
+
+/// @brief Convert a nonnegative microsecond timestamp to a ROS time.
+/// @param timestamp_us Timestamp in microseconds (for example, sender `user_timestamp_us`).
+/// @return ROS time, or std::nullopt when the seconds exceed the signed 32-bit range.
+[[nodiscard]] std::optional<builtin_interfaces::msg::Time> toRosTime(std::uint64_t timestamp_us);
 
 /// @brief Read a non-empty environment variable.
 ///

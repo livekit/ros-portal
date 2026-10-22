@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <rclcpp/rclcpp.hpp>
 #include <string_view>
 
@@ -28,7 +29,20 @@ namespace ros_portal::utils {
 namespace {
 /// @brief Child topic appended to a measured topic to carry its statistics.
 constexpr char kRosTopicStatisticsSuffix[] = "/statistics";
+constexpr std::uint64_t kMicrosecondsPerSecond = 1'000'000U;
+constexpr std::uint32_t kNanosecondsPerMicrosecond = 1'000U;
 } // namespace
+
+std::optional<builtin_interfaces::msg::Time> toRosTime(const std::uint64_t timestamp_us) {
+  const std::uint64_t seconds = timestamp_us / kMicrosecondsPerSecond;
+  if (seconds > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())) {
+    return std::nullopt;
+  }
+  builtin_interfaces::msg::Time stamp;
+  stamp.sec = static_cast<std::int32_t>(seconds);
+  stamp.nanosec = static_cast<std::uint32_t>(timestamp_us % kMicrosecondsPerSecond) * kNanosecondsPerMicrosecond;
+  return stamp;
+}
 
 std::optional<std::string> environmentVariable(const char* name) {
   const char* value = std::getenv(name);

@@ -433,7 +433,7 @@ track.
 - `sensor_msgs/Image` supports `rgba8`, `rgb8`, `bgr8`, `bgra8`, and `mono8`.
   The track has the same name as the topic.
 - `sensor_msgs/CompressedImage` supports JPEG only. The `format` field must
-  contain `jpeg` or `jpg`, for example `jpeg` or `bgr8; jpeg compressed bgr8`.
+  contain `jpeg` or `jpg` (case-insensitive).
   ROS Portal decodes each frame before LiveKit encodes it as video.
 - A `CompressedImage` topic named `<base>/compressed` publishes the track
   `<base>`. The receiving ROS Portal republishes the track on

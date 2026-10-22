@@ -94,7 +94,7 @@ TEST(JpegEncoderTest, KeepsChromaPlanesInOrder) {
   ASSERT_TRUE(encoder.encodeI420(makeI420Frame(32, 32, 81, 90, 240), jpeg)) << encoder.lastError();
 
   const auto rgb = decodeRgb(jpeg, 32, 32);
-  const std::size_t center = (16U * 32U + 16U) * 3U;
+  const std::size_t center = (std::size_t{16} * 32U + 16U) * 3U;
   EXPECT_GT(rgb[center], 200);
   EXPECT_LT(rgb[center + 1U], 60);
   EXPECT_LT(rgb[center + 2U], 60);

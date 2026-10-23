@@ -37,6 +37,7 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -78,7 +79,9 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     diagnostic_state_.config_path = config_path.empty() ? "default" : config_path;
   }
   initializeDiagnostics();
-  initializeForwardingServices();
+  if (!initializeForwardingServices()) {
+    throw std::runtime_error("Failed to advertise the ROS Portal pause/resume services");
+  }
 }
 
 bool RosPortal::initialize() {
@@ -427,9 +430,9 @@ bool RosPortal::isForwardingPaused() const {
   return connection_manager_ != nullptr && connection_manager_->isForwardingPaused();
 }
 
-void RosPortal::initializeForwardingServices() {
+bool RosPortal::initializeForwardingServices() {
   if (resume_service_ && pause_service_) {
-    return;
+    return true;
   }
 
   // Advertised on the node's default callback group so the services stay
@@ -451,7 +454,11 @@ void RosPortal::initializeForwardingServices() {
     // NOLINTEND(performance-unnecessary-value-param)
   } catch (const std::exception& error) {
     RCLCPP_ERROR(this->get_logger(), "Failed to advertise the ROS Portal pause/resume services: %s", error.what());
+    resume_service_.reset();
+    pause_service_.reset();
+    return false;
   }
+  return true;
 }
 
 void RosPortal::handleResumeForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& /*request*/,

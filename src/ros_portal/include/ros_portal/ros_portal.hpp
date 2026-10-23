@@ -68,6 +68,7 @@ class RosPortal : public rclcpp::Node, public livekit::RoomDelegate {
 public:
   /// @brief Constructor for the ROS Portal.
   /// @param options The options for the node
+  /// @throws std::runtime_error if the pause/resume services cannot be advertised.
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   ~RosPortal() override;
 
@@ -105,6 +106,8 @@ private:
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
   FRIEND_TEST(RosPortalPauseResumeTest, ReportsNotInitializedWithoutConnectionManager);
+  FRIEND_TEST(RosPortalPauseResumeTest, ForwardingServiceInitializationKeepsExistingServices);
+  FRIEND_TEST(RosPortalPauseResumeTest, ForwardingServiceInitializationFailureReleasesServices);
   FRIEND_TEST(RosPortalPauseResumeTest, PauseAndResumeForwardingAreIdempotent);
   FRIEND_TEST(RosPortalPauseResumeTest, ResumeWithoutRoomConnectionDefersOperations);
   FRIEND_TEST(RosPortalPauseResumeTest, ReportsPausedOperationsInDiagnostics);
@@ -168,7 +171,9 @@ private:
   ///
   /// Both services are advertised for the lifetime of the node so an operator
   /// can control ROS Portal even when initialization has not (yet) completed.
-  void initializeForwardingServices();
+  /// @return True when both services are advertised, false on failure after
+  /// releasing any partially advertised services.
+  bool initializeForwardingServices();
 
   /// @brief Resume forwarding operations.
   /// @param request Unused trigger request.

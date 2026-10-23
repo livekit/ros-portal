@@ -128,6 +128,32 @@ TEST(RosPortalPauseResumeTest, ReportsNotInitializedWithoutConnectionManager) {
   EXPECT_EQ(pause_response->message, "ROS Portal is not initialized");
 }
 
+TEST(RosPortalPauseResumeTest, ForwardingServiceInitializationKeepsExistingServices) {
+  RosPortal portal;
+  const auto pause_service = portal.pause_service_;
+  const auto resume_service = portal.resume_service_;
+
+  EXPECT_TRUE(portal.initializeForwardingServices());
+  EXPECT_EQ(portal.pause_service_, pause_service);
+  EXPECT_EQ(portal.resume_service_, resume_service);
+}
+
+TEST(RosPortalPauseResumeTest, ForwardingServiceInitializationFailureReleasesServices) {
+  auto context = std::make_shared<rclcpp::Context>();
+  context->init(0, nullptr);
+  RosPortal portal(rclcpp::NodeOptions{}.context(context));
+  ASSERT_NE(portal.resume_service_, nullptr);
+  portal.pause_service_.reset();
+
+  // A stopped context deterministically prevents service creation without
+  // shutting down the global context used by the rest of the suite.
+  ASSERT_TRUE(context->shutdown("test forwarding service creation failure"));
+
+  EXPECT_FALSE(portal.initializeForwardingServices());
+  EXPECT_EQ(portal.pause_service_, nullptr);
+  EXPECT_EQ(portal.resume_service_, nullptr);
+}
+
 TEST(RosPortalPauseResumeTest, PauseAndResumeForwardingAreIdempotent) {
   RosPortal portal;
   livekit::Room room;

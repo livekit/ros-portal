@@ -29,6 +29,7 @@
 
 #include "ros_portal/connection/connection_diagnostics.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/types.hpp"
 
 namespace ros_portal {
 
@@ -43,6 +44,10 @@ namespace ros_portal {
 /// opens the barrier around @ref Methods::try_connect, enables operations only
 /// after a successful connect/reconnect transition, and closes the session on
 /// failure, disconnect, or @ref stop so waiters never hang.
+///
+/// @ref pauseForwarding and @ref resumeForwarding suspend and resume room operations
+/// without tearing the node down. A latched pause keeps operations disabled across
+/// connect and reconnect transitions.
 class ConnectionManager {
 public:
   using Clock = std::chrono::steady_clock;
@@ -82,11 +87,33 @@ public:
   /// @brief Return whether ROS Portal components may use the LiveKit room.
   bool isOperationsEnabled() const;
 
-  /// @brief Lifetime-safe flag mirrored by readiness transitions.
+  /// @brief Resume topic/service/video forwarding operations after @ref pauseForwarding.
   ///
-  /// Captured by room-bound callbacks that need a lock-free availability check
-  /// without calling back into this manager.
-  std::shared_ptr<std::atomic_bool> operationsEnabledFlag() const;
+  /// Clears the latched pause so connect and reconnect transitions may enable
+  /// operations again, and enables them immediately when the room is already
+  /// connected. Idempotent.
+  /// @return True when room operations are enabled, false when the manager must
+  /// still (re)connect before it can enable them.
+  bool resumeForwarding();
+
+  /// @brief Pause topic/service/video forwarding operations until @ref resumeForwarding.
+  ///
+  /// Disables operations, wakes @ref waitForOperations waiters so they drop
+  /// work, and latches the pause so connect and reconnect transitions leave
+  /// operations disabled. Connection attempts continue, so the room session
+  /// stays ready to resume. Idempotent.
+  /// @return True when room operations are disabled.
+  bool pauseForwarding();
+
+  /// @brief Return whether topic/service/video forwarding is paused by @ref pauseForwarding.
+  bool isForwardingPaused() const;
+
+  /// @brief Return a thread-safe availability check for room-bound callbacks.
+  ///
+  /// The callback retains the session state independently of this manager and
+  /// reads availability under the same mutex used by readiness and pause transitions.
+  /// @return A callable that reports whether room operations are enabled.
+  IsRoomAvailableFn operationsEnabledFn() const;
 
   /// @brief Block until room operations are enabled, or until the session is
   /// closed.
@@ -177,10 +204,16 @@ private:
   std::atomic<State> state_{State::Disconnected};
   std::atomic_bool has_connected_{false};
   Clock::time_point next_attempt_at_{Clock::time_point::min()};
-  std::shared_ptr<std::atomic_bool> operations_enabled_{std::make_shared<std::atomic_bool>(false)};
-  std::mutex session_mutex_;
-  std::condition_variable session_cv_;
-  bool session_closed_{true};
+  /// @brief Session readiness shared with callbacks that may outlive the manager.
+  /// All state fields are guarded by mutex; no room or user code runs under it.
+  struct SessionState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool operations_enabled{false};
+    bool closed{true};
+    bool forwarding_paused{false};
+  };
+  std::shared_ptr<SessionState> session_{std::make_shared<SessionState>()};
 };
 
 } // namespace ros_portal

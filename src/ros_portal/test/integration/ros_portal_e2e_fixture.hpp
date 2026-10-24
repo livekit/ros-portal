@@ -32,6 +32,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sstream>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <string>
 #include <thread>
 
@@ -369,6 +370,25 @@ protected:
     }
     ADD_FAILURE() << "No ROS Portal node found for service " << service_name;
     return "/" + service_name;
+  }
+
+  /// @brief Call a `std_srvs/srv/Trigger` service on the ROS Portal node that
+  /// shares @p node's ROS graph.
+  std_srvs::srv::Trigger::Response::SharedPtr callTriggerService(const std::shared_ptr<rclcpp::Node>& node,
+                                                                 const std::string& service_name) {
+    auto client = node->create_client<std_srvs::srv::Trigger>(rosPortalServiceName(node, service_name));
+
+    if (!waitFor([&]() { return client->wait_for_service(100ms); }, kGraphTimeout)) {
+      ADD_FAILURE() << service_name << " service was not available";
+      return nullptr;
+    }
+
+    auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    if (future.wait_for(kMessageTimeout) != std::future_status::ready) {
+      ADD_FAILURE() << service_name << " service timed out";
+      return nullptr;
+    }
+    return future.get();
   }
 
   TopicListSrv::Response::SharedPtr callTopicListService(const std::shared_ptr<rclcpp::Node>& node,

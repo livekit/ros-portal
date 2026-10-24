@@ -26,6 +26,7 @@
 #include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,7 @@ class RosPortal : public rclcpp::Node, public livekit::RoomDelegate {
 public:
   /// @brief Constructor for the ROS Portal.
   /// @param options The options for the node
+  /// @throws std::runtime_error if the pause/resume services cannot be advertised.
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   ~RosPortal() override;
 
@@ -103,6 +105,12 @@ private:
   FRIEND_TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, CountsSharedRpcFailures);
+  FRIEND_TEST(RosPortalPauseResumeTest, ReportsNotInitializedWithoutConnectionManager);
+  FRIEND_TEST(RosPortalPauseResumeTest, ForwardingServiceInitializationKeepsExistingServices);
+  FRIEND_TEST(RosPortalPauseResumeTest, ForwardingServiceInitializationFailureReleasesServices);
+  FRIEND_TEST(RosPortalPauseResumeTest, PauseAndResumeForwardingAreIdempotent);
+  FRIEND_TEST(RosPortalPauseResumeTest, ResumeWithoutRoomConnectionDefersOperations);
+  FRIEND_TEST(RosPortalPauseResumeTest, ReportsPausedOperationsInDiagnostics);
 #endif
 
   /// @brief Mutable counters and state published by `ros_portal_status`.
@@ -158,6 +166,35 @@ private:
 
   /// @brief Return whether room-facing ROS Portal operations are currently allowed.
   bool roomOperationsEnabled() const;
+
+  /// @brief Advertise the `~/pause` and `~/resume` operation control services.
+  ///
+  /// Both services are advertised for the lifetime of the node so an operator
+  /// can control ROS Portal even when initialization has not (yet) completed.
+  /// @return True when both services are advertised, false on failure after
+  /// releasing any partially advertised services.
+  bool initializeForwardingServices();
+
+  /// @brief Resume forwarding operations.
+  /// @param request Unused trigger request.
+  /// @param response Populated with `success` and a human-readable message.
+  ///
+  /// Succeeds and reports `already running` when operations are not paused.
+  void handleResumeForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& request,
+                                     const std::shared_ptr<std_srvs::srv::Trigger::Response>& response);
+
+  /// @brief Pause forwarding operations.
+  /// @param request Unused trigger request.
+  /// @param response Populated with `success` and a human-readable message.
+  ///
+  /// Succeeds and reports `already paused` when operations are already paused.
+  /// The LiveKit room connection is kept so operations can resume without a
+  /// fresh join.
+  void handlePauseForwardingRequest(const std::shared_ptr<std_srvs::srv::Trigger::Request>& request,
+                                    const std::shared_ptr<std_srvs::srv::Trigger::Response>& response);
+
+  /// @brief Return whether forwarding operations are paused.
+  bool isForwardingPaused() const;
 
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
@@ -292,6 +329,10 @@ private:
   rclcpp::TimerBase::SharedPtr connection_timer_;
   //! @brief Owns graph events, snapshots, and the discovery worker.
   std::unique_ptr<graph::GraphManager> graph_manager_;
+  //! @brief `~/resume` service that resumes room-facing operations.
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr resume_service_;
+  //! @brief `~/pause` service that pauses room-facing operations.
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr pause_service_;
 
   //! @brief LiveKit room connection for publishing tracks directly via the SDK.
   std::unique_ptr<livekit::Room> room_;
@@ -299,11 +340,9 @@ private:
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   //! @brief Connection lifecycle, retry state, and session-readiness barrier.
   std::unique_ptr<ConnectionManager> connection_manager_;
-  //! @brief Lifetime-safe state gate shared with room-bound callbacks.
-  //!
-  //! Points at the flag owned by @ref connection_manager_ once that manager
-  //! exists.
-  std::shared_ptr<std::atomic_bool> room_operations_enabled_{std::make_shared<std::atomic_bool>(false)};
+  /// @brief Lifetime-safe, mutex-protected availability check shared with room callbacks.
+  /// Reads session state owned by @ref connection_manager_ once that manager exists.
+  IsRoomAvailableFn room_operations_enabled_{[]() { return false; }};
   //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
   std::atomic_bool room_session_ended_{false};
   //! @brief Whether participant metadata was applied for the current session.

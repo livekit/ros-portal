@@ -340,11 +340,9 @@ private:
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_updater_;
   //! @brief Connection lifecycle, retry state, and session-readiness barrier.
   std::unique_ptr<ConnectionManager> connection_manager_;
-  //! @brief Lifetime-safe state gate shared with room-bound callbacks.
-  //!
-  //! Points at the flag owned by @ref connection_manager_ once that manager
-  //! exists.
-  std::shared_ptr<std::atomic_bool> room_operations_enabled_{std::make_shared<std::atomic_bool>(false)};
+  /// @brief Lifetime-safe, mutex-protected availability check shared with room callbacks.
+  /// Reads session state owned by @ref connection_manager_ once that manager exists.
+  IsRoomAvailableFn room_operations_enabled_{[]() { return false; }};
   //! @brief Set by the SDK callback so ROS-thread cleanup precedes reconnect.
   std::atomic_bool room_session_ended_{false};
   //! @brief Whether participant metadata was applied for the current session.

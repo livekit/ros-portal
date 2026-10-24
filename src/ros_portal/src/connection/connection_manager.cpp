@@ -129,24 +129,32 @@ void ConnectionManager::poll(livekit::Room& room) {
 
 bool ConnectionManager::isConnected() const { return state_.load() == State::Connected; }
 
-bool ConnectionManager::isOperationsEnabled() const { return operations_enabled_->load(); }
+bool ConnectionManager::isOperationsEnabled() const {
+  const std::lock_guard<std::mutex> lock(session_->mutex);
+  return session_->operations_enabled;
+}
 
-std::shared_ptr<std::atomic_bool> ConnectionManager::operationsEnabledFlag() const { return operations_enabled_; }
+IsRoomAvailableFn ConnectionManager::operationsEnabledFn() const {
+  return [session = session_]() {
+    const std::lock_guard<std::mutex> lock(session->mutex);
+    return session->operations_enabled;
+  };
+}
 
 bool ConnectionManager::resumeForwarding() {
   bool was_paused = false;
   bool enabled = false;
   {
-    const std::lock_guard<std::mutex> lock(session_mutex_);
-    was_paused = forwarding_paused_;
-    forwarding_paused_ = false;
+    const std::lock_guard<std::mutex> lock(session_->mutex);
+    was_paused = session_->forwarding_paused;
+    session_->forwarding_paused = false;
     if (state_.load() == State::Connected) {
-      session_closed_ = false;
-      operations_enabled_->store(true);
+      session_->closed = false;
+      session_->operations_enabled = true;
     }
-    enabled = operations_enabled_->load();
+    enabled = session_->operations_enabled;
   }
-  session_cv_.notify_all();
+  session_->cv.notify_all();
 
   if (was_paused) {
     RCLCPP_INFO(logger_, "ROS Portal forwardiing operations resumed%s",
@@ -158,15 +166,15 @@ bool ConnectionManager::resumeForwarding() {
 bool ConnectionManager::pauseForwarding() {
   bool was_paused = false;
   {
-    const std::lock_guard<std::mutex> lock(session_mutex_);
-    was_paused = forwarding_paused_;
-    forwarding_paused_ = true;
-    operations_enabled_->store(false);
+    const std::lock_guard<std::mutex> lock(session_->mutex);
+    was_paused = session_->forwarding_paused;
+    session_->forwarding_paused = true;
+    session_->operations_enabled = false;
     // Treat the pause like a closed session so waiters drop work instead of
     // blocking until the pause is lifted.
-    session_closed_ = true;
+    session_->closed = true;
   }
-  session_cv_.notify_all();
+  session_->cv.notify_all();
 
   if (!was_paused) {
     RCLCPP_INFO(logger_, "ROS Portal forwarding operations paused");
@@ -175,14 +183,14 @@ bool ConnectionManager::pauseForwarding() {
 }
 
 bool ConnectionManager::isForwardingPaused() const {
-  const std::lock_guard<std::mutex> lock(session_mutex_);
-  return forwarding_paused_;
+  const std::lock_guard<std::mutex> lock(session_->mutex);
+  return session_->forwarding_paused;
 }
 
 bool ConnectionManager::waitForOperations() {
-  std::unique_lock<std::mutex> lock(session_mutex_);
-  session_cv_.wait(lock, [this]() { return operations_enabled_->load() || session_closed_; });
-  return operations_enabled_->load();
+  std::unique_lock<std::mutex> lock(session_->mutex);
+  session_->cv.wait(lock, [this]() { return session_->operations_enabled || session_->closed; });
+  return session_->operations_enabled;
 }
 
 void ConnectionManager::onConnectionStateChanged(livekit::Room& room,
@@ -293,45 +301,45 @@ void ConnectionManager::stop() {
 }
 
 void ConnectionManager::beginSessionAttempt() {
-  const std::lock_guard<std::mutex> lock(session_mutex_);
-  operations_enabled_->store(false);
+  const std::lock_guard<std::mutex> lock(session_->mutex);
+  session_->operations_enabled = false;
   // A latched pause keeps the barrier closed for the whole join attempt, so
   // waiters drop work instead of blocking until try_connect returns.
-  session_closed_ = forwarding_paused_;
+  session_->closed = session_->forwarding_paused;
 }
 
 void ConnectionManager::enableOperations() {
   {
-    const std::lock_guard<std::mutex> lock(session_mutex_);
-    if (forwarding_paused_) {
+    const std::lock_guard<std::mutex> lock(session_->mutex);
+    if (session_->forwarding_paused) {
       // A latched pause outlives connection transitions. Keep the barrier
       // closed so waiters drop work rather than block on a session that will
       // not enable operations.
-      operations_enabled_->store(false);
-      session_closed_ = true;
+      session_->operations_enabled = false;
+      session_->closed = true;
     } else {
-      session_closed_ = false;
-      operations_enabled_->store(true);
+      session_->closed = false;
+      session_->operations_enabled = true;
     }
   }
-  session_cv_.notify_all();
+  session_->cv.notify_all();
 }
 
 void ConnectionManager::disableOperations() {
-  const std::lock_guard<std::mutex> lock(session_mutex_);
-  operations_enabled_->store(false);
+  const std::lock_guard<std::mutex> lock(session_->mutex);
+  session_->operations_enabled = false;
   // Same reasoning as beginSessionAttempt: an in-session reconnect must not
   // reopen the barrier while operations are paused.
-  session_closed_ = forwarding_paused_;
+  session_->closed = session_->forwarding_paused;
 }
 
 void ConnectionManager::closeSession() {
   {
-    const std::lock_guard<std::mutex> lock(session_mutex_);
-    operations_enabled_->store(false);
-    session_closed_ = true;
+    const std::lock_guard<std::mutex> lock(session_->mutex);
+    session_->operations_enabled = false;
+    session_->closed = true;
   }
-  session_cv_.notify_all();
+  session_->cv.notify_all();
 }
 
 void ConnectionManager::markConnectionGained(livekit::Room& room) {

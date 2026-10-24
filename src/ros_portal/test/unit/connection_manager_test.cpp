@@ -395,6 +395,52 @@ TEST(ConnectionManagerTest, PauseAndResumeForwardingAreIdempotent) {
   EXPECT_TRUE(manager.isOperationsEnabled());
 }
 
+TEST(ConnectionManagerTest, SharedAvailabilityCheckTracksTransitionsAndOutlivesManager) {
+  livekit::Room room;
+  IsRoomAvailableFn is_available;
+  {
+    ConnectionManager manager(ConnectionManager::Methods{[]() { return true; }},
+                              rclcpp::get_logger("connection_manager_test"), makeDiagnosticsFns());
+    is_available = manager.operationsEnabledFn();
+    EXPECT_FALSE(is_available());
+
+    manager.poll(room);
+    EXPECT_TRUE(is_available());
+    EXPECT_TRUE(manager.pauseForwarding());
+    EXPECT_FALSE(is_available());
+    EXPECT_TRUE(manager.resumeForwarding());
+    EXPECT_TRUE(is_available());
+
+    manager.onReconnecting(room, livekit::ReconnectingEvent{});
+    EXPECT_FALSE(is_available());
+    manager.onReconnected(room, livekit::ReconnectedEvent{});
+    EXPECT_TRUE(is_available());
+    manager.stop();
+  }
+  EXPECT_FALSE(is_available());
+}
+
+TEST(ConnectionManagerTest, SharedAvailabilityCheckCanReadDuringPauseAndResume) {
+  livekit::Room room;
+  ConnectionManager manager(ConnectionManager::Methods{[]() { return true; }},
+                            rclcpp::get_logger("connection_manager_test"), makeDiagnosticsFns());
+  manager.poll(room);
+  const auto is_available = manager.operationsEnabledFn();
+  constexpr int kIterations = 100;
+  auto reader = std::async(std::launch::async, [is_available]() {
+    for (int i = 0; i < kIterations; ++i) {
+      (void)is_available();
+    }
+  });
+  for (int i = 0; i < kIterations; ++i) {
+    EXPECT_TRUE(manager.pauseForwarding());
+    EXPECT_FALSE(is_available());
+    EXPECT_TRUE(manager.resumeForwarding());
+    EXPECT_TRUE(is_available());
+  }
+  reader.get();
+}
+
 TEST(ConnectionManagerTest, PausedOperationsSurviveConnectAndReconnect) {
   int attempts = 0;
   ConnectionManager::Clock::time_point now{};

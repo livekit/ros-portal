@@ -161,7 +161,7 @@ TEST(RosPortalPauseResumeTest, PauseAndResumeForwardingAreIdempotent) {
   portal.connection_manager_ =
       std::make_unique<ConnectionManager>(ConnectionManager::Methods{[]() { return true; }},
                                           portal.get_logger().get_child("connection"), portal.makeDiagnosticsFns());
-  portal.room_operations_enabled_ = portal.connection_manager_->operationsEnabledFlag();
+  portal.room_operations_enabled_ = portal.connection_manager_->operationsEnabledFn();
   portal.connection_manager_->poll(room);
   ASSERT_TRUE(portal.roomOperationsEnabled());
 
@@ -194,7 +194,7 @@ TEST(RosPortalPauseResumeTest, ResumeWithoutRoomConnectionDefersOperations) {
   portal.connection_manager_ =
       std::make_unique<ConnectionManager>(ConnectionManager::Methods{[]() { return false; }},
                                           portal.get_logger().get_child("connection"), portal.makeDiagnosticsFns());
-  portal.room_operations_enabled_ = portal.connection_manager_->operationsEnabledFlag();
+  portal.room_operations_enabled_ = portal.connection_manager_->operationsEnabledFn();
   ASSERT_FALSE(portal.roomOperationsEnabled());
 
   // Never paused but never connected either: the portal is running, so a
@@ -223,7 +223,7 @@ TEST(RosPortalPauseResumeTest, ReportsPausedOperationsInDiagnostics) {
   portal.connection_manager_ =
       std::make_unique<ConnectionManager>(ConnectionManager::Methods{[]() { return true; }},
                                           portal.get_logger().get_child("connection"), portal.makeDiagnosticsFns());
-  portal.room_operations_enabled_ = portal.connection_manager_->operationsEnabledFlag();
+  portal.room_operations_enabled_ = portal.connection_manager_->operationsEnabledFn();
   portal.connection_manager_->poll(room);
   portal.initialized_.store(true);
   portal.diagnostic_state_.graph_discovery_active.store(true);

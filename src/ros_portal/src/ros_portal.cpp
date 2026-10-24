@@ -179,7 +179,7 @@ bool RosPortal::initialize() {
   connection_manager_ = std::make_unique<ConnectionManager>(
       std::move(connection_methods), this->get_logger().get_child("connection"), makeDiagnosticsFns());
   diagnostic_state_.connection_manager_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
-  room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
+  room_operations_enabled_ = connection_manager_->operationsEnabledFn();
 
   try {
     graph::GraphManager::Callbacks graph_callbacks{
@@ -423,7 +423,7 @@ void RosPortal::processEndedRoomSession() {
 }
 
 bool RosPortal::roomOperationsEnabled() const {
-  return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_->load();
+  return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_();
 }
 
 bool RosPortal::isForwardingPaused() const {
@@ -817,9 +817,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     forwarder_options.topic_snapshot = [manager = graph_manager_.get()]() { return manager->topics(); };
 
     TopicForwarder::LiveKitMethods forwarder_lk_methods;
-    forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
-      return operations_enabled->load();
-    };
+    forwarder_lk_methods.is_room_available = room_operations_enabled_;
     forwarder_lk_methods.publish_data_track = [this](const std::string& topic_name,
                                                      const livekit::DataTrackSchemaId& schema_id)
         -> livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string> {
@@ -858,7 +856,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
       auto writer = std::make_shared<TopicForwarder::DataTrackWriter>();
       writer->try_push = [operations_enabled = room_operations_enabled_, track = std::move(track)](
                              const std::uint8_t* data, std::size_t size) {
-        if (!operations_enabled->load()) {
+        if (!operations_enabled()) {
           return livekit::Result<void, std::string>::success();
         }
         std::vector<std::uint8_t> payload(data, data + size);
@@ -939,7 +937,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
             [operations_enabled = room_operations_enabled_, source = std::move(source), track = std::move(track),
              capture_options = std::move(capture_options), last_frame_id = std::optional<std::string>{}](
                 const livekit::VideoFrame& frame, const TopicForwarder::VideoFrameStamp& stamp) mutable {
-              if (!operations_enabled->load()) {
+              if (!operations_enabled()) {
                 return;
               }
               (void)track;
@@ -976,7 +974,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 bool RosPortal::initializeCliManager() {
   try {
     cli::Manager::LiveKitMethods cli_lk_methods{
-        [operations_enabled = room_operations_enabled_]() { return operations_enabled->load(); },
+        room_operations_enabled_,
         [this](const std::string& id) { return hasParticipant(id); },
         [this](const std::string& id, const std::string& method, const std::string& payload, std::uint8_t timeout_sec) {
           return rpcPerform(id, method, payload, timeout_sec);
@@ -1013,7 +1011,7 @@ bool RosPortal::initializeCliManager() {
 bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::ServiceConfig>& services) {
   try {
     const ServiceForwarder::LiveKitMethods livekit_methods{
-        [operations_enabled = room_operations_enabled_]() { return operations_enabled->load(); },
+        room_operations_enabled_,
         [this](const std::string& id) { return hasParticipant(id); },
         [this](const std::string& id, const std::string& method, const std::string& payload, std::uint8_t timeout_sec) {
           return rpcPerform(id, method, payload, timeout_sec);
@@ -1048,9 +1046,7 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
 
   try {
     LatchedTopicForwarder::LiveKitMethods methods;
-    methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
-      return operations_enabled->load();
-    };
+    methods.is_room_available = room_operations_enabled_;
     methods.register_rpc_method = [this](const std::string& method, RpcHandler handler) {
       return rpcRegisterMethod(method, std::move(handler));
     };
@@ -1146,7 +1142,7 @@ bool RosPortal::rpcRegisterMethod(const std::string& method, RpcHandler handler)
     local_participant->registerRpcMethod(method,
                                          [operations_enabled = room_operations_enabled_, handler = std::move(handler)](
                                              const livekit::RpcInvocationData& data) -> std::optional<std::string> {
-                                           if (!operations_enabled->load()) {
+                                           if (!operations_enabled()) {
                                              return std::nullopt;
                                            }
                                            return handler(data.payload);

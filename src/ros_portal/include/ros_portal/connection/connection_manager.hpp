@@ -29,6 +29,7 @@
 
 #include "ros_portal/connection/connection_diagnostics.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/types.hpp"
 
 namespace ros_portal {
 
@@ -107,11 +108,12 @@ public:
   /// @brief Return whether topic/service/video forwarding is paused by @ref pauseForwarding.
   bool isForwardingPaused() const;
 
-  /// @brief Lifetime-safe flag mirrored by readiness transitions.
+  /// @brief Return a thread-safe availability check for room-bound callbacks.
   ///
-  /// Captured by room-bound callbacks that need a lock-free availability check
-  /// without calling back into this manager.
-  std::shared_ptr<std::atomic_bool> operationsEnabledFlag() const;
+  /// The callback retains the session state independently of this manager and
+  /// reads availability under the same mutex used by readiness and pause transitions.
+  /// @return A callable that reports whether room operations are enabled.
+  IsRoomAvailableFn operationsEnabledFn() const;
 
   /// @brief Block until room operations are enabled, or until the session is
   /// closed.
@@ -202,13 +204,16 @@ private:
   std::atomic<State> state_{State::Disconnected};
   std::atomic_bool has_connected_{false};
   Clock::time_point next_attempt_at_{Clock::time_point::min()};
-  std::shared_ptr<std::atomic_bool> operations_enabled_{std::make_shared<std::atomic_bool>(false)};
-  mutable std::mutex session_mutex_;
-  std::condition_variable session_cv_;
-  bool session_closed_{true};
-
-  //! @brief Operator-requested pause of forwarding operations; guarded by @p session_mutex_.
-  bool forwarding_paused_{false};
+  /// @brief Session readiness shared with callbacks that may outlive the manager.
+  /// All state fields are guarded by mutex; no room or user code runs under it.
+  struct SessionState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool operations_enabled{false};
+    bool closed{true};
+    bool forwarding_paused{false};
+  };
+  std::shared_ptr<SessionState> session_{std::make_shared<SessionState>()};
 };
 
 } // namespace ros_portal

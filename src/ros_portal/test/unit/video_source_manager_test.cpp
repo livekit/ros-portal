@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -62,22 +63,24 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   int start_calls = 0;
   int stop_calls = 0;
   int unpublish_calls = 0;
-  VideoSourceManager::FinishedCallback pattern_finished;
+  std::optional<VideoSourceResult> pattern_finished;
   VideoSourceManager::LiveKitMethods methods;
-  methods.create_and_publish = [&](const ros_portal_config::VideoSourceConfig& config,
-                                   VideoSourceManager::FinishedCallback callback)
+  methods.create_and_publish = [&](const ros_portal_config::VideoSourceConfig& config)
       -> livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string> {
     ++create_calls;
     if (config.track_name == "broken") {
       return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure("pipeline failed");
     }
-    if (config.track_name == "pattern") {
-      pattern_finished = std::move(callback);
-    }
     auto session = std::make_shared<VideoSourceManager::Session>();
     session->start = [&start_calls] { ++start_calls; };
     session->stop = [&stop_calls] { ++stop_calls; };
     session->unpublish = [&unpublish_calls] { ++unpublish_calls; };
+    session->poll_result = [&, name = config.track_name]() -> std::optional<VideoSourceResult> {
+      if (name != "pattern") {
+        return std::nullopt;
+      }
+      return std::exchange(pattern_finished, std::nullopt);
+    };
     return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::success(std::move(session));
   };
 
@@ -100,13 +103,18 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
     EXPECT_EQ(valueFor(failed_status, "state"), "error");
     EXPECT_EQ(valueFor(failed_status, "error"), "pipeline failed");
 
-    ASSERT_TRUE(static_cast<bool>(pattern_finished));
-    pattern_finished(VideoSourceResult{std::nullopt, 42, VideoSourceExit::EndOfStream});
+    pattern_finished = VideoSourceResult{std::nullopt, 42, VideoSourceExit::EndOfStream};
     diagnostic_updater::DiagnosticStatusWrapper finished_status;
     diagnostic_callbacks.at("video_source/pattern/1")(finished_status);
     EXPECT_EQ(finished_status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
     EXPECT_EQ(valueFor(finished_status, "state"), "end_of_stream");
     EXPECT_EQ(valueFor(finished_status, "frames_captured"), "42");
+
+    // A consumed join result must preserve the terminal state on later updates.
+    diagnostic_updater::DiagnosticStatusWrapper repeated_status;
+    diagnostic_callbacks.at("video_source/pattern/1")(repeated_status);
+    EXPECT_EQ(valueFor(repeated_status, "state"), "end_of_stream");
+    EXPECT_EQ(valueFor(repeated_status, "frames_captured"), "42");
 
     // A failed sibling does not affect a healthy source of the same type.
     diagnostic_updater::DiagnosticStatusWrapper running_status;
@@ -120,6 +128,69 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   EXPECT_EQ(stop_calls, 2);
   EXPECT_EQ(unpublish_calls, 2);
 }
+
+class VideoSourceTerminalTest : public ::testing::TestWithParam<std::string> {};
+
+TEST_P(VideoSourceTerminalTest, PollsTerminalResultWithoutBlockingOrLosingErrors) {
+  diagnostics::DiagnosticsManagerFns::TaskCallback diagnostic;
+  diagnostics::DiagnosticsManagerFns diagnostics;
+  diagnostics.add = [&diagnostic](const std::string&, auto callback) { diagnostic = std::move(callback); };
+  diagnostics.remove = [&diagnostic](const std::string&) { diagnostic = {}; };
+
+  int polls = 0;
+  std::optional<VideoSourceResult> terminal;
+  bool join_throws = false;
+  VideoSourceManager::LiveKitMethods methods;
+  methods.create_and_publish = [&](const auto&) {
+    auto session = std::make_shared<VideoSourceManager::Session>();
+    session->start = [] {};
+    session->stop = [] {};
+    session->unpublish = [] {};
+    session->poll_result = [&]() -> std::optional<VideoSourceResult> {
+      ++polls;
+      if (std::exchange(join_throws, false)) {
+        throw std::runtime_error("capture join transport failure");
+      }
+      return std::exchange(terminal, std::nullopt);
+    };
+    return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::success(std::move(session));
+  };
+  const VideoSourceManager manager({makeSource("capture", ros_portal_config::CaptureSourceType::Gstreamer)},
+                                   std::move(methods), std::move(diagnostics),
+                                   rclcpp::get_logger("video_source_terminal_test"));
+
+  diagnostic_updater::DiagnosticStatusWrapper running;
+  diagnostic(running);
+  EXPECT_EQ(valueFor(running, "state"), "running");
+  EXPECT_EQ(polls, 1);
+
+  if (GetParam() == "stopped") {
+    terminal = VideoSourceResult{std::nullopt, 12, VideoSourceExit::Stopped};
+  } else if (GetParam() == "error") {
+    terminal = VideoSourceResult{"capture source failed", 0, VideoSourceExit::Stopped};
+  } else {
+    join_throws = true;
+  }
+  diagnostic_updater::DiagnosticStatusWrapper finished;
+  diagnostic(finished);
+  EXPECT_EQ(polls, 2);
+  if (GetParam() == "stopped") {
+    EXPECT_EQ(finished.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+    EXPECT_EQ(valueFor(finished, "state"), "stopped");
+    EXPECT_EQ(valueFor(finished, "frames_captured"), "12");
+  } else {
+    EXPECT_EQ(finished.level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+    EXPECT_EQ(valueFor(finished, "state"), "error");
+    EXPECT_EQ(valueFor(finished, "error"),
+              GetParam() == "error" ? "capture source failed" : "capture join transport failure");
+  }
+  diagnostic_updater::DiagnosticStatusWrapper repeated;
+  diagnostic(repeated);
+  EXPECT_EQ(repeated.message, finished.message);
+  EXPECT_EQ(valueFor(repeated, "state"), valueFor(finished, "state"));
+}
+
+INSTANTIATE_TEST_SUITE_P(CaptureJoin, VideoSourceTerminalTest, ::testing::Values("stopped", "error", "exception"));
 
 TEST(VideoSourceManagerTest, RendersCaptureError) {
   VideoSourceState state;

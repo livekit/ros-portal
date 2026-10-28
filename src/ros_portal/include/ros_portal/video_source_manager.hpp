@@ -71,7 +71,7 @@ struct VideoSourceState {
   std::string track_name;
   /// Stable configured source type name.
   std::string source_type;
-  /// Protects mutable fields updated by SDK callbacks.
+  /// Protects mutable lifecycle state.
   mutable std::mutex mutex;
   /// Current lifecycle state.
   VideoSourceStateKind kind{VideoSourceStateKind::Starting};
@@ -95,19 +95,19 @@ public:
     std::function<void()> start;
     /// Stop a running capture.
     std::function<void()> stop;
+    /// Poll once without blocking; return no value while capture is running or
+    /// after its terminal result has been consumed. Supports concurrent polls.
+    /// May throw on SDK failure.
+    std::function<std::optional<VideoSourceResult>()> poll_result;
     /// Unpublish the capture-backed track.
     std::function<void()> unpublish;
   };
 
-  /// @brief Callback invoked exactly once when a started capture terminates.
-  using FinishedCallback = std::function<void(const VideoSourceResult&)>;
-
   /// @brief LiveKit operations owned by the ROS Portal edge.
   struct LiveKitMethods {
-    /// Create and publish one configured source, installing @p callback before
-    /// capture starts.
-    std::function<livekit::Result<std::shared_ptr<Session>, std::string>(const ros_portal_config::VideoSourceConfig&,
-                                                                         FinishedCallback)>
+    /// Create and publish one configured source; the manager starts it and polls
+    /// its terminal result during diagnostics updates.
+    std::function<livekit::Result<std::shared_ptr<Session>, std::string>(const ros_portal_config::VideoSourceConfig&)>
         create_and_publish;
   };
 

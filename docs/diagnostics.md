@@ -372,6 +372,7 @@ and `ros2_interface_show`.
 
 ## `video_source/<track_name>/<index>`
 
+Polls the SDK's terminal result without blocking during each diagnostics update.
 Reports startup and terminal capture state independently for every entry in
 `ros_portal.video_sources`. A source that fails does not stop ROS Portal or any
 other configured source. The numeric suffix keeps task names unique when track
@@ -382,7 +383,7 @@ names are repeated.
 | Task name | `video_source/<track_name>/<index>` |
 | Topic | `/diagnostics` |
 | Hardware ID | `ros_portal` |
-| Source | LiveKit capture-source creation, startup, and finished callback |
+| Source | LiveKit capture-source creation, startup, and asynchronous `join()` result |
 
 ### Status Levels
 
@@ -401,7 +402,7 @@ names are repeated.
 | `track_name` | Configured LiveKit track name. |
 | `source_type` | Configured source discriminator, currently `gstreamer`, `pattern`, or `clock`. |
 | `state` | `starting`, `running`, `stopped`, `end_of_stream`, or `error`. |
-| `frames_captured` | Number of frames reported by the capture source; `0` before a terminal callback supplies a count. |
+| `frames_captured` | Number of frames reported by the capture source; `0` until a successful terminal `join()` result supplies a count. Structured capture failures report their error text without a frame count. |
 | `error` | Capture error text. Empty unless `state=error`. |
 
 ## Quick Check

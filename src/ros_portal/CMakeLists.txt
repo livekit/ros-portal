@@ -72,9 +72,8 @@ endif()
 # ---------------------------------------------------------------------------
 # LiveKit SDK install
 #
-# Build the capture-enabled SDK from the pinned vcstool checkout by default.
-# Standard release archives do not include capture. LIVEKIT_SDK_VERSION, also
-# mirrored in colcon.pkg, is used for the source package version and downloads.
+# Download the capture-enabled release archive by default. LIVEKIT_SDK_VERSION,
+# also mirrored in colcon.pkg, matches the source checkout in external.repos.
 #
 # Examples:
 #   colcon build --packages-select ros_portal
@@ -84,10 +83,11 @@ endif()
 #
 #   # Test a different capture-enabled SDK checkout:
 #   colcon build --packages-select ros_portal \
-#     --cmake-args -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
+#     --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON \
+#       -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
 #
 # ---------------------------------------------------------------------------
-set(LIVEKIT_SDK_VERSION "1.10.0" CACHE STRING
+set(LIVEKIT_SDK_VERSION "1.13.0" CACHE STRING
   "LiveKit C++ SDK version to download (use \"latest\" to resolve via GitHub API)")
 include(ConfigureLiveKitSDK)
 livekit_configure_sdk(
@@ -98,7 +98,8 @@ livekit_configure_sdk(
 if(NOT EXISTS "${LIVEKIT_SDK_INSTALL_ROOT}/include/livekit/capture/capture_source.h")
   message(FATAL_ERROR
     "ROS Portal requires a capture-enabled LiveKit SDK. "
-    "Import external.repos and configure with -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON.")
+    "Use a v1.13.0 or newer -capture release archive, or import external.repos "
+    "and configure with -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON.")
 endif()
 
 find_package(LiveKit CONFIG REQUIRED)

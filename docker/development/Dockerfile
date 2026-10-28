@@ -17,7 +17,7 @@ ARG ROS_IMAGE_REPOSITORY=ros
 ARG ROS_IMAGE_TAG=jazzy-ros-base-noble
 FROM ${ROS_IMAGE_REPOSITORY}:${ROS_IMAGE_TAG}@sha256:${ROS_IMAGE_DIGEST}
 
-ARG LIVEKIT_BUILD_SDK_FROM_SOURCE=true
+ARG LIVEKIT_BUILD_SDK_FROM_SOURCE=false
 ARG INSTALL_CPP_TOOLS=true
 ARG INSTALL_SIMULATION_DEPS=true
 ARG ROS_DISTRO=jazzy
@@ -94,11 +94,20 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     ros-${ROS_DISTRO}-turtlesim \
     ros-${ROS_DISTRO}-teleop-twist-keyboard
 
-# Capture is temporarily consumed from the pinned SDK source checkout on every
-# supported ROS distribution. Install its native, Rust, and GStreamer toolchain.
-# The same LIVEKIT_BUILD_SDK_FROM_SOURCE flag is the CMake option that selects
-# source vs prebuilt during configure. Keep libva/libdrm headers for the SDK's
-# optional hardware video codecs on x86, independently of capture sources.
+# The release capture bundle needs GStreamer plugins at runtime and a Vulkan
+# adapter for pattern/clock sources, including software Vulkan in headless CI.
+RUN apt-get update && apt-get install -y \
+    gstreamer1.0-libav \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-tools \
+    mesa-vulkan-drivers && \
+    rm -rf /var/lib/apt/lists/*
+
+# Optional SDK source builds need a native/Rust toolchain in addition to the
+# capture runtime above. libva/libdrm support optional x86 hardware codecs.
 RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
       install -m 0755 -d /etc/apt/keyrings && \
       curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
@@ -125,12 +134,6 @@ RUN if [ "${LIVEKIT_BUILD_SDK_FROM_SOURCE}" = "true" ]; then \
         lld \
         llvm-21-dev \
         protobuf-compiler \
-        gstreamer1.0-libav \
-        gstreamer1.0-plugins-bad \
-        gstreamer1.0-plugins-base \
-        gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-ugly \
-        gstreamer1.0-tools \
         xz-utils && \
       pip_break="" && \
       if python3 -m pip install --help 2>/dev/null \

@@ -38,6 +38,7 @@
 #include <exception>
 #include <filesystem>
 #include <future>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -896,8 +897,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 
 bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources) {
   VideoSourceManager::LiveKitMethods methods;
-  methods.create_and_publish = [this](const ros_portal_config::VideoSourceConfig& config,
-                                      VideoSourceManager::FinishedCallback finished_callback)
+  methods.create_and_publish = [this](const ros_portal_config::VideoSourceConfig& config)
       -> livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string> {
     const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
     if (!participant) {
@@ -906,7 +906,12 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
     }
 
     try {
-      auto capture_source = capture::createCaptureSource(config.source).get();
+      auto created = capture::createCaptureSource(config.source).get();
+      if (!created) {
+        return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+            created.error().message);
+      }
+      auto capture_source = std::move(created).value();
       if (!capture_source || !capture_source->videoSource()) {
         return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
             "capture source creation returned no video source");
@@ -916,16 +921,6 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
       // log what the SDK settled on.
       RCLCPP_INFO(this->get_logger(), "Capture source '%s' (%s) negotiated %dx%d", config.track_name.c_str(),
                   ros_portal_config::toString(config.source.type), capture_source->width(), capture_source->height());
-
-      capture_source->setOnFinishedCallback(
-          [finished_callback = std::move(finished_callback)](const livekit::capture::CaptureResult& result) {
-            VideoSourceResult mapped;
-            mapped.error = result.error;
-            mapped.frames_captured = result.frames_captured;
-            mapped.exit = result.exit == livekit::capture::CaptureExit::EndOfStream ? VideoSourceExit::EndOfStream
-                                                                                    : VideoSourceExit::Stopped;
-            finished_callback(mapped);
-          });
 
       auto track = livekit::LocalVideoTrack::createLocalVideoTrack(config.track_name, capture_source->videoSource());
       if (!track) {
@@ -937,17 +932,41 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
                                            capture::capturePublishOptions(config.publish_options, config.simulcast)));
 
       auto session = std::make_shared<VideoSourceManager::Session>();
-      // The manager treats a throwing start/stop as a failure, so surface the
-      // SDK's boolean result that way.
-      session->start = [capture_source] {
-        if (!capture_source->start()) {
-          throw std::runtime_error("capture source start request failed");
+      using JoinFuture = std::future<livekit::Result<livekit::capture::CaptureResult, livekit::capture::CaptureError>>;
+      struct PendingCapture {
+        std::mutex mutex;
+        JoinFuture result;
+      };
+      auto pending = std::make_shared<PendingCapture>();
+      session->start = [capture_source, pending] {
+        const auto started = capture_source->start();
+        if (!started) {
+          throw std::runtime_error(started.error().message);
         }
+        pending->result = capture_source->join();
       };
       session->stop = [capture_source] {
-        if (!capture_source->stop()) {
-          throw std::runtime_error("capture source stop request failed");
+        const auto stopped = capture_source->stop();
+        if (!stopped) {
+          throw std::runtime_error(stopped.error().message);
         }
+      };
+      session->poll_result = [pending]() -> std::optional<VideoSourceResult> {
+        const std::unique_lock<std::mutex> lock(pending->mutex, std::try_to_lock);
+        if (!lock.owns_lock() || !pending->result.valid() ||
+            pending->result.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+          return std::nullopt;
+        }
+        const auto result = pending->result.get();
+        VideoSourceResult mapped;
+        if (!result) {
+          mapped.error = result.error().message;
+        } else {
+          mapped.frames_captured = result.value().frames_captured;
+          mapped.exit = result.value().exit == livekit::capture::CaptureExit::EndOfStream ? VideoSourceExit::EndOfStream
+                                                                                          : VideoSourceExit::Stopped;
+        }
+        return mapped;
       };
       session->unpublish = [participant, track] {
         if (const auto publication = track->publication()) {

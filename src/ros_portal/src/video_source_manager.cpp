@@ -41,6 +41,30 @@ const char* stateName(VideoSourceStateKind kind) {
   return "error";
 }
 
+/// @brief Record and log the terminal result after a nonblocking SDK poll.
+void recordFinished(VideoSourceState& state, const VideoSourceResult& finished, const rclcpp::Logger& logger) {
+  {
+    const std::lock_guard<std::mutex> lock(state.mutex);
+    state.frames_captured = finished.frames_captured;
+    if (finished.error) {
+      state.kind = VideoSourceStateKind::Error;
+      state.error = *finished.error;
+    } else {
+      state.kind = finished.exit == VideoSourceExit::EndOfStream ? VideoSourceStateKind::EndOfStream
+                                                                 : VideoSourceStateKind::Stopped;
+      state.error.clear();
+    }
+  }
+  if (finished.error) {
+    RCLCPP_ERROR(logger, "Video source '%s' failed after %llu frames: %s", state.track_name.c_str(),
+                 static_cast<unsigned long long>(finished.frames_captured), finished.error->c_str());
+  } else {
+    RCLCPP_INFO(logger, "Video source '%s' finished after %llu frames (%s)", state.track_name.c_str(),
+                static_cast<unsigned long long>(finished.frames_captured),
+                finished.exit == VideoSourceExit::EndOfStream ? "end-of-stream" : "stopped");
+  }
+}
+
 } // namespace
 
 void populateVideoSourceStatus(const VideoSourceState& state, diagnostic_updater::DiagnosticStatusWrapper& status) {
@@ -91,7 +115,6 @@ VideoSourceManager::VideoSourceManager(const std::vector<ros_portal_config::Vide
     Runtime runtime;
     runtime.diagnostic_name = "video_source/" + config.track_name + "/" + std::to_string(index);
     runtime.state = state;
-    diagnostics_.add(runtime.diagnostic_name, [state](auto& status) { populateVideoSourceStatus(*state, status); });
     const auto cleanup_failed_session = [&runtime, &state, this] {
       if (!runtime.session) {
         return;
@@ -115,32 +138,11 @@ VideoSourceManager::VideoSourceManager(const std::vector<ros_portal_config::Vide
     };
 
     try {
-      auto result =
-          livekit_methods_.create_and_publish(config, [state, logger = logger_](const VideoSourceResult& finished) {
-            {
-              const std::lock_guard<std::mutex> lock(state->mutex);
-              state->frames_captured = finished.frames_captured;
-              if (finished.error) {
-                state->kind = VideoSourceStateKind::Error;
-                state->error = *finished.error;
-              } else {
-                state->kind = finished.exit == VideoSourceExit::EndOfStream ? VideoSourceStateKind::EndOfStream
-                                                                            : VideoSourceStateKind::Stopped;
-                state->error.clear();
-              }
-            }
-            if (finished.error) {
-              RCLCPP_ERROR(logger, "Video source '%s' failed after %llu frames: %s", state->track_name.c_str(),
-                           static_cast<unsigned long long>(finished.frames_captured), finished.error->c_str());
-            } else {
-              RCLCPP_INFO(logger, "Video source '%s' finished after %llu frames (%s)", state->track_name.c_str(),
-                          static_cast<unsigned long long>(finished.frames_captured),
-                          finished.exit == VideoSourceExit::EndOfStream ? "end-of-stream" : "stopped");
-            }
-          });
+      auto result = livekit_methods_.create_and_publish(config);
       if (!result) {
         markError(state, result.error());
-      } else if (!result.value() || !result.value()->start || !result.value()->stop || !result.value()->unpublish) {
+      } else if (!result.value() || !result.value()->start || !result.value()->stop || !result.value()->poll_result ||
+                 !result.value()->unpublish) {
         markError(state, "create_and_publish returned an invalid capture session");
       } else {
         runtime.session = result.value();
@@ -164,6 +166,24 @@ VideoSourceManager::VideoSourceManager(const std::vector<ros_portal_config::Vide
       cleanup_failed_session();
       markError(state, "unknown error");
     }
+    diagnostics_.add(runtime.diagnostic_name, [state, session = runtime.session, logger = logger_](auto& status) {
+      if (session) {
+        try {
+          if (const auto finished = session->poll_result()) {
+            recordFinished(*state, *finished, logger);
+          }
+        } catch (const std::exception& error) {
+          const std::lock_guard<std::mutex> lock(state->mutex);
+          state->kind = VideoSourceStateKind::Error;
+          state->error = error.what();
+        } catch (...) {
+          const std::lock_guard<std::mutex> lock(state->mutex);
+          state->kind = VideoSourceStateKind::Error;
+          state->error = "unknown capture join error";
+        }
+      }
+      populateVideoSourceStatus(*state, status);
+    });
     runtimes_.push_back(std::move(runtime));
   }
 }

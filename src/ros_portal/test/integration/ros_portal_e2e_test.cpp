@@ -25,6 +25,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -212,6 +213,39 @@ ros_portal:
   lock.unlock();
 
   receiver_room.clearOnVideoFrameCallback(identityA(), kTrackName);
+}
+
+TEST_F(RosPortalTestE2E, ReportsCaptureEndOfStreamFromJoinResult) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  initializeSinglePortalRuntime(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: finite_capture
+      source:
+        type: gstreamer
+        pipeline: videotestsrc is-live=true num-buffers=12 ! video/x-raw,width=320,height=240,framerate=30/1 ! vp8enc deadline=1 ! appsink name=lk_appsink
+)");
+  std::atomic_bool saw_terminal_result{false};
+  const auto subscription = rosPortalA()->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+      "/diagnostics", 10, [&saw_terminal_result](const diagnostic_msgs::msg::DiagnosticArray& message) {
+        for (const auto& status : message.status) {
+          if (status.name.find("video_source/finite_capture/0") == std::string::npos) {
+            continue;
+          }
+          bool end_of_stream = false;
+          bool has_frames = false;
+          for (const auto& value : status.values) {
+            end_of_stream = end_of_stream || (value.key == "state" && value.value == "end_of_stream");
+            has_frames = has_frames || (value.key == "frames_captured" && value.value != "0");
+          }
+          if (end_of_stream && has_frames) {
+            saw_terminal_result.store(true);
+          }
+        }
+      });
+  EXPECT_TRUE(waitFor([&saw_terminal_result] { return saw_terminal_result.load(); }, kMessageTimeout))
+      << "Capture join result did not report end-of-stream and a nonzero frame count";
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -94,6 +94,41 @@ TEST(CaptureSourceFactoryTest, GstreamerBitrateUnitDefaultsToBps) {
   EXPECT_EQ(toGstreamerConfig(source).rate_control->unit, livekit::capture::GstreamerBitrateUnit::Bps);
 }
 
+TEST(CaptureSourceFactoryTest, RejectsNonPositiveDimensionsBeforeUnsignedConversion) {
+  for (const auto resolution :
+       {ros_portal_config::CaptureResolution{-1, 480}, ros_portal_config::CaptureResolution{640, 0}}) {
+    auto gstreamer = makeGstreamerSource();
+    gstreamer.resolution = resolution;
+    EXPECT_THROW((void)toGstreamerConfig(gstreamer), std::invalid_argument);
+
+    auto pattern = makePatternSource();
+    pattern.pattern = ros_portal_config::PatternSourceConfig{};
+    pattern.pattern->resolution = resolution;
+    EXPECT_THROW((void)toPatternConfig(pattern), std::invalid_argument);
+
+    CaptureSourceConfig clock;
+    clock.type = CaptureSourceType::Clock;
+    clock.clock = ros_portal_config::ClockSourceConfig{};
+    clock.clock->resolution = resolution;
+    EXPECT_THROW((void)toClockConfig(clock), std::invalid_argument);
+  }
+}
+
+TEST(CaptureSourceFactoryTest, RejectsNonPositiveFrameRatesBeforeUnsignedConversion) {
+  for (const auto framerate : {-1, 0}) {
+    auto pattern = makePatternSource();
+    pattern.pattern = ros_portal_config::PatternSourceConfig{};
+    pattern.pattern->framerate_fps = framerate;
+    EXPECT_THROW((void)toPatternConfig(pattern), std::invalid_argument);
+
+    CaptureSourceConfig clock;
+    clock.type = CaptureSourceType::Clock;
+    clock.clock = ros_portal_config::ClockSourceConfig{};
+    clock.clock->framerate_fps = framerate;
+    EXPECT_THROW((void)toClockConfig(clock), std::invalid_argument);
+  }
+}
+
 TEST(CaptureSourceFactoryTest, GstreamerRequiresPipeline) {
   CaptureSourceConfig source;
   source.type = CaptureSourceType::Gstreamer;

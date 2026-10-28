@@ -63,12 +63,17 @@ void rejectGstreamerOnlyFields(const ros_portal_config::CaptureSourceConfig& sou
   }
 }
 
-/// @c framerate_fps is bounded positive by the schema (@c positiveInteger), so
-/// narrowing is safe here.
-std::uint32_t toUnsigned(int value) { return static_cast<std::uint32_t>(value); }
+/// Reject invalid programmatic configs before converting dimensions or frame
+/// rates to the unsigned types required by the SDK.
+std::uint32_t toUnsigned(int value) {
+  if (value <= 0) {
+    throw std::invalid_argument("capture dimensions and frame rate must be positive");
+  }
+  return static_cast<std::uint32_t>(value);
+}
 
 livekit::capture::CaptureResolution toLiveKitResolution(const ros_portal_config::CaptureResolution& resolution) {
-  return livekit::capture::CaptureResolution{resolution.width, resolution.height};
+  return livekit::capture::CaptureResolution{toUnsigned(resolution.width), toUnsigned(resolution.height)};
 }
 
 } // namespace
@@ -178,8 +183,8 @@ livekit::capture::ClockVideoSourceConfig toClockConfig(const ros_portal_config::
   return config;
 }
 
-std::future<std::shared_ptr<livekit::capture::CaptureSource>> createCaptureSource(
-    const ros_portal_config::CaptureSourceConfig& source) {
+std::future<livekit::Result<std::shared_ptr<livekit::capture::CaptureSource>, livekit::capture::CaptureError>>
+createCaptureSource(const ros_portal_config::CaptureSourceConfig& source) {
   switch (source.type) {
     case ros_portal_config::CaptureSourceType::Pattern:
       return livekit::capture::CaptureSource::create(toPatternConfig(source));

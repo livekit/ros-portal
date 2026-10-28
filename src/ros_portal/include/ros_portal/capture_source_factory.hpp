@@ -68,9 +68,11 @@ livekit::capture::PatternVideoSourceConfig toPatternConfig(const ros_portal_conf
 livekit::capture::ClockVideoSourceConfig toClockConfig(const ros_portal_config::CaptureSourceConfig& source);
 
 /// @brief Dispatch on @c source.type and hand the translated config to the SDK.
+/// @return Future containing the SDK source Result; inspect it before accessing the source.
+/// @throws std::runtime_error when awaiting the future if SDK setup fails.
 /// @throws std::invalid_argument when the entry is invalid for its type.
-std::future<std::shared_ptr<livekit::capture::CaptureSource>> createCaptureSource(
-    const ros_portal_config::CaptureSourceConfig& source);
+std::future<livekit::Result<std::shared_ptr<livekit::capture::CaptureSource>, livekit::capture::CaptureError>>
+createCaptureSource(const ros_portal_config::CaptureSourceConfig& source);
 
 /// @brief Build camera track publish options from the configured overrides.
 /// @param configured Optional application-controlled publish limits.

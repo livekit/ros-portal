@@ -60,20 +60,18 @@ The remaining overrides are independent feature choices:
 - `INSTALL_CPP_TOOLS` defaults to `true`. Set it to `false` when the formatter
   and static-analysis toolchain are unnecessary. The distro matrix disables it
   because those tools have a dedicated workflow.
-- `LIVEKIT_BUILD_SDK_FROM_SOURCE` defaults to `true`, which every distribution
-  currently needs. Setting it to `false` downloads the `LIVEKIT_SDK_VERSION`
-  release archive instead, and that archive does not build today.
+- `LIVEKIT_BUILD_SDK_FROM_SOURCE` defaults to `false`. The build downloads the
+  pinned `LIVEKIT_SDK_VERSION` capture release bundle. Set it to `true` to install
+  the additional toolchain and build the pinned SDK checkout instead.
 - `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
   other than the default `ros` repository.
 
-Every distribution builds the pinned LiveKit SDK from source because capture
-(`livekit/capture/capture_source.h`) only exists on the pre-release `client-sdk-cpp`
-commit pinned in `external.repos`, not in the `LIVEKIT_SDK_VERSION` release
-archive. CI installs the source-build toolchain in each image and asks ROS
-Portal CMake configuration to build the SDK checkout from `external.repos`.
-Once capture ships in a tagged SDK release, the download path must select its
-`-capture` archive before switching back from source builds. Standard SDK
-archives omit the capture API.
+All supported ROS distributions use the Ubuntu 22.04 capture bundle for their
+architecture (`ubuntu-22.04-x64-capture` or `ubuntu-22.04-arm64-capture`). Its
+older glibc baseline supports Humble and newer distributions. Standard SDK
+archives omit the capture API. The devcontainer installs GStreamer plugins and
+software Vulkan for hardware-free capture tests with either SDK build path.
+
 ## Shell Helpers
 
 See `scripts/setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
@@ -129,24 +127,35 @@ versions used in CI automatically.
 
 ## LiveKit SDK
 
-The default build compiles the `client-sdk-cpp` commit pinned in `external.repos`
-with `LIVEKIT_CAPTURE=all`, enabling GStreamer, pattern, and clock sources.
-Capture APIs live in `livekit::capture` under `livekit/capture/`.
-
-On Linux the Rust/WebRTC bridge requires Clang 21 or newer for Chromium's
-bundled C++ library. The devcontainer and clang-tidy workflow install Clang 21
-from [LLVM's Ubuntu packages](https://apt.llvm.org/). The source-build helper
-selects it for Cargo without changing the ROS compiler. To use another compatible
-installation, set `LIVEKIT_SDK_RUST_CXX_COMPILER` to its `clang++` path. A missing
-or older compiler fails at configure time before the SDK build starts.
+The default build downloads LiveKit C++ v1.13.0's `-capture` release archive and
+verifies its SHA-256 digest. These bundles include GStreamer, pattern, and clock
+sources. Capture APIs live in `livekit::capture` under `livekit/capture/`.
+Capture bundles are available for Linux x64/arm64, macOS arm64, and Windows x64;
+LiveKit Capture is not supported on Intel Macs.
 
 The release version lives in `src/ros_portal/colcon.pkg` and as the default of
-the `LIVEKIT_SDK_VERSION` CMake cache variable in
-`src/ros_portal/CMakeLists.txt`; `external.repos` pins the source
-checkout. Until capture ships in a tagged release, that checkout is pinned to
-capture PR #276 rather than the release commit. The SDK release check still
-verifies that the two version strings match; release-to-source equality is
-explicitly disabled during this transition.
+`LIVEKIT_SDK_VERSION` in `src/ros_portal/CMakeLists.txt`. `external.repos` pins the
+same release commit for optional source builds. CI checks that all three agree
+and builds, tests, and packages against the release capture artifacts.
+
+A normal build needs no SDK source toolchain:
+
+```bash
+colcon build --packages-select ros_portal \
+  --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=OFF
+```
+
+Pass `OFF` explicitly when reusing a build directory configured for source builds;
+CMake preserves cached options across builds.
+
+### Optional SDK source build
+
+On Linux the Rust/WebRTC bridge requires Clang 21 or newer for Chromium's
+bundled C++ library. With `LIVEKIT_BUILD_SDK_FROM_SOURCE=true`, the devcontainer
+installs Clang 21 from [LLVM's Ubuntu packages](https://apt.llvm.org/). The
+source-build helper selects it for Cargo without changing the ROS compiler.
+To use another compatible installation, set `LIVEKIT_SDK_RUST_CXX_COMPILER` to
+its `clang++` path. A missing or older compiler fails at configure time.
 
 Initialize the pinned SDK source checkout with the other external repositories:
 
@@ -193,13 +202,13 @@ To test another capture-enabled source checkout, set `LIVEKIT_SDK_SOURCE_DIR`:
 
 ```bash
 colcon build --packages-select ros_portal \
-  --cmake-args -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
+  --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON \
+    -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
 ```
 
 `LIVEKIT_SDK_VERSION` controls the package version, not the Git revision of a
-source build. Standard release downloads currently lack the capture API and
-cannot build ROS Portal. Restore release-to-source pin verification when a
-capture-enabled release becomes the supported dependency.
+source override. Keep it aligned with the checkout being tested. Source builds
+use `LIVEKIT_CAPTURE=all`, matching the release capture bundles.
 
 ## Capture verification
 

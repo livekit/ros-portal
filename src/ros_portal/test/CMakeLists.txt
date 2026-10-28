@@ -34,6 +34,13 @@ ament_add_pytest_test(
   launch/test_ros_portal_local_launch.py
 )
 
+# Offline regression checks for capture release artifact selection.
+add_test(NAME ros_portal_sdk_configuration_tests
+  COMMAND "${CMAKE_COMMAND}"
+    "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/sdk-configuration-test"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sdk_configuration_test.cmake"
+)
+
 # ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------

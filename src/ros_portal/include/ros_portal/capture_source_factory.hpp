@@ -41,10 +41,10 @@
 /// @c std::invalid_argument.
 namespace ros_portal::capture {
 
-/// Output characteristics used when a pixel source omits them.
+/// Output characteristics used only when a pattern or clock source omits them.
 ///
-/// The SDK's pattern and clock configs default to zero dimensions and frame
-/// rate. Fill omitted characteristics before handing them to the SDK.
+/// These synthetic sources generate their own frames and need output settings.
+/// GStreamer sources discover omitted characteristics from negotiated caps.
 inline constexpr int kDefaultPixelWidth = 640;
 inline constexpr int kDefaultPixelHeight = 480;
 inline constexpr std::uint32_t kDefaultPixelFramerateFps = 30;

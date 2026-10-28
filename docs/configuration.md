@@ -588,12 +588,18 @@ type. The schema tags the union by `type` but cannot express those
 rules, so they are enforced when the source is created and reported through
 `video_source/<track_name>/<index>`.
 
-When resolution is omitted, source creation waits up to five seconds for the
-first encoded sample. Declaring both resolution and codec can skip discovery;
-the first sample must still match. Codec discovery may also need the first
-sample when pre-playback caps are inconclusive. Codec or resolution changes
-after capture begins end the source with an error because the track cannot yet
-be republished in place.
+Only pattern and clock sources use the 640x480 at 30 fps defaults, and only for
+omitted settings. Explicit zero or negative dimensions or frame rates are
+rejected. GStreamer uses the pipeline's negotiated caps for omitted codec and
+resolution settings; source creation fails if required characteristics cannot
+be determined.
+
+For GStreamer, when resolution is omitted, source creation waits up to five
+seconds for the first encoded sample. Declaring both resolution and codec can
+skip discovery; the first sample must still match. Codec discovery may also need
+the first sample when pre-playback caps are inconclusive. Codec or resolution
+changes after capture begins end the source with an error because the track
+cannot yet be republished in place.
 
 `rate_control` has three required fields:
 

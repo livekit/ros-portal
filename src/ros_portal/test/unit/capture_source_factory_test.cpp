@@ -94,6 +94,13 @@ TEST(CaptureSourceFactoryTest, GstreamerBitrateUnitDefaultsToBps) {
   EXPECT_EQ(toGstreamerConfig(source).rate_control->unit, livekit::capture::GstreamerBitrateUnit::Bps);
 }
 
+TEST(CaptureSourceFactoryTest, GstreamerLeavesOmittedCharacteristicsForDiscovery) {
+  const auto config = toGstreamerConfig(makeGstreamerSource());
+
+  EXPECT_FALSE(config.codec.has_value());
+  EXPECT_FALSE(config.resolution.has_value());
+}
+
 TEST(CaptureSourceFactoryTest, RejectsNonPositiveDimensionsBeforeUnsignedConversion) {
   for (const auto resolution :
        {ros_portal_config::CaptureResolution{-1, 480}, ros_portal_config::CaptureResolution{640, 0}}) {
@@ -220,6 +227,18 @@ TEST(CaptureSourceFactoryTest, PatternConfigFillsOnlyOmittedCharacteristics) {
   EXPECT_EQ(config.resolution.height, kDefaultPixelHeight);
 }
 
+TEST(CaptureSourceFactoryTest, PatternConfigDefaultsFrameRateWithExplicitResolution) {
+  auto source = makePatternSource();
+  source.pattern = ros_portal_config::PatternSourceConfig{};
+  source.pattern->resolution = ros_portal_config::CaptureResolution{1280, 720};
+
+  const auto config = toPatternConfig(source);
+
+  EXPECT_EQ(config.resolution.width, 1280);
+  EXPECT_EQ(config.resolution.height, 720);
+  EXPECT_EQ(config.framerate_fps, kDefaultPixelFramerateFps);
+}
+
 TEST(CaptureSourceFactoryTest, PatternRejectsGstreamerOptions) {
   auto source = makePatternSource();
   source.pipeline = "videotestsrc ! appsink name=lk_appsink";
@@ -268,6 +287,19 @@ TEST(CaptureSourceFactoryTest, ClockConfigFillsOnlyOmittedCharacteristics) {
   EXPECT_EQ(config.resolution.width, kDefaultPixelWidth);
   EXPECT_EQ(config.resolution.height, kDefaultPixelHeight);
   EXPECT_EQ(config.framerate_fps, 5u);
+}
+
+TEST(CaptureSourceFactoryTest, ClockConfigDefaultsFrameRateWithExplicitResolution) {
+  CaptureSourceConfig source;
+  source.type = CaptureSourceType::Clock;
+  source.clock = ros_portal_config::ClockSourceConfig{};
+  source.clock->resolution = ros_portal_config::CaptureResolution{1280, 720};
+
+  const auto config = toClockConfig(source);
+
+  EXPECT_EQ(config.resolution.width, 1280);
+  EXPECT_EQ(config.resolution.height, 720);
+  EXPECT_EQ(config.framerate_fps, kDefaultPixelFramerateFps);
 }
 
 TEST(CaptureSourceFactoryTest, ClockRejectsGstreamerOptions) {

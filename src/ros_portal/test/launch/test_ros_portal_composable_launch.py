@@ -86,7 +86,7 @@ def test_launch_setup_creates_multithreaded_component_container(tmp_path, monkey
     assert len(container['composable_node_descriptions']) == 1
     component = container['composable_node_descriptions'][0].kwargs
     assert component['package'] == 'ros_portal'
-    assert component['plugin'] == 'ros_portal::RosPortalComponent'
+    assert component['plugin'] == 'ros_portal::RosPortal'
     assert component['name'] == 'ros_portal'
     assert component['namespace'] == '/robot'
     assert component['parameters'] == [{'config_path': str(config_path)}]
@@ -109,6 +109,7 @@ def test_launch_setup_uses_builtin_config_when_path_is_empty(monkeypatch):
     actions = module._launch_setup(_context(''))
     component = actions[0].kwargs['composable_node_descriptions'][0].kwargs
     assert component['parameters'] == [{'config_path': ''}]
+    assert actions[0].kwargs['parameters'] == []
 
 
 def test_launch_setup_accepts_single_thread(tmp_path, monkeypatch):

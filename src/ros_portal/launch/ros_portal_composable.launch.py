@@ -55,11 +55,11 @@ def _launch_setup(context, *args, **kwargs):
             executable='component_container_mt',
             output='screen',
             emulate_tty=True,
-            parameters=[{'thread_num': container_threads}],
+            parameters=[{'thread_num': container_threads}] if container_threads else [],
             composable_node_descriptions=[
                 ComposableNode(
                     package='ros_portal',
-                    plugin='ros_portal::RosPortalComponent',
+                    plugin='ros_portal::RosPortal',
                     name='ros_portal',
                     namespace=LaunchConfiguration('ns').perform(context),
                     parameters=[{'config_path': config_path_value}],

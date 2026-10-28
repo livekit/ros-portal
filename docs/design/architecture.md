@@ -31,19 +31,25 @@ ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
 
 The node supports two deployment layouts. `ros_portal_node` runs it in a
 dedicated process with its own multithreaded executor. The registered
-`ros_portal::RosPortalComponent` adapter loads the same implementation into a
-generic ROS2 component container. Component mode defers the initial blocking
-LiveKit connection attempt until after construction, when the container's
-executor is running.
+`ros_portal::RosPortal` class loads directly into a generic ROS2 component
+container. Both layouts initialize local resources during construction and
+defer LiveKit connection attempts to the executor. Configuration failures reject construction
+and are returned by the component load service.
 
 The bundled launch file uses a multithreaded component container. The container
 owns its executor, so `thread_num` replaces the standalone `ros_threads`
 configuration in this layout. A single worker is supported. More workers let
 other callbacks run during synchronous LiveKit RPC operations.
 
-Component instances in one process share a reference-counted LiveKit SDK
-runtime. They release the runtime after the last ROS Portal component destroys
-its LiveKit resources.
+ROS Portal instances in one process share a reference-counted LiveKit SDK
+runtime. They release a node-owned runtime after the last instance destroys its
+LiveKit resources. An SDK initialized externally remains owned externally.
+
+Forwarders use ROS interfaces without retaining the enclosing node. On unload,
+the node drains its timers, stops the graph worker, and disconnects the room
+before releasing forwarding state. Callback guards wait for running callbacks
+and make executor callbacks retained beyond teardown return without accessing
+their destroyed targets.
 
 ## Topic Discovery
 

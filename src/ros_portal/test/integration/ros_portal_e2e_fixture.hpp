@@ -512,6 +512,13 @@ protected:
   const std::string& identityB() const { return identity_b_; }
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
+  /// @brief Match component unload: release the last node owner while the
+  /// executor and LiveKit peer remain active, relying on destructor teardown.
+  void unloadRosPortalB() {
+    graph_b_executor_->remove_node(ros_portal_b_);
+    ros_portal_b_.reset();
+  }
+
   std::shared_ptr<RosPortal> rosPortalA() const { return ros_portal_a_; }
   std::shared_ptr<RosPortal> rosPortalB() const { return ros_portal_b_; }
 
@@ -570,10 +577,6 @@ private:
     }
 
     auto ros_portal = std::make_shared<RosPortal>(createRosPortalOptions(graph.context(), node_namespace, config_path));
-    if (!ros_portal->initialize()) {
-      ADD_FAILURE() << "ROS Portal failed to initialize for namespace " << node_namespace;
-      return nullptr;
-    }
     return ros_portal;
   }
 

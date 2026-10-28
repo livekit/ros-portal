@@ -118,7 +118,7 @@ protected:
   }
 
   TopicForwarder makeForwarder() {
-    return TopicForwarder(makeOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+    return TopicForwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(), diagnostics_fns_);
   }
 
   // Spins the node until the ROS graph reflects a predicate (e.g. a freshly
@@ -151,18 +151,20 @@ protected:
   diagnostics::DiagnosticsManagerFns diagnostics_fns_;
 };
 
-TEST_F(TopicForwarderTest, ConstructorRejectsExpiredNode) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeLiveKitMethods(), diagnostics_fns_),
+TEST_F(TopicForwarderTest, ConstructorRejectsMissingNodeInterfaces) {
+  EXPECT_THROW(TopicForwarder(makeOptions(), utils::TopicNodeInterfaces{}, makeLiveKitMethods(), diagnostics_fns_),
                std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, ConstructorRejectsMissingLiveKitMethods) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), node_, TopicForwarder::LiveKitMethods{}, diagnostics_fns_),
+  EXPECT_THROW(TopicForwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, TopicForwarder::LiveKitMethods{},
+                              diagnostics_fns_),
                std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, ConstructorRejectsMissingDiagnostics) {
-  EXPECT_THROW(TopicForwarder(makeOptions(), node_, makeLiveKitMethods(), {}), std::invalid_argument);
+  EXPECT_THROW(TopicForwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(), {}),
+               std::invalid_argument);
 }
 
 TEST_F(TopicForwarderTest, IncomingTopicAllowedUsesConfiguredPatterns) {
@@ -200,7 +202,8 @@ TEST_F(TopicForwarderTest, TypeResolutionWorksBeforeAndAfterLocalEndpointAppears
 TEST_F(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNull) {
   auto options = makeOptions();
   options.topic_snapshot = []() { return TopicGraphSnapshot{}; };
-  const TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+  const TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                                 diagnostics_fns_);
 
   auto subscription = node_->create_subscription<std_msgs::msg::String>(
       "/remote/null_snapshot", 10, [](const std_msgs::msg::String::ConstSharedPtr&) {});
@@ -213,7 +216,8 @@ TEST_F(TopicForwarderTest, TypeResolutionFallsBackWhenSnapshotProviderReturnsNul
 TEST_F(TopicForwarderTest, SubscriptionIsRemovedAfterPublisherGracePeriod) {
   auto options = makeOptions();
   options.inactive_subscription_grace = 0ms;
-  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/ephemeral", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/ephemeral", 1U));
@@ -230,7 +234,8 @@ TEST_F(TopicForwarderTest, SubscriptionIsRemovedAfterPublisherGracePeriod) {
 TEST_F(TopicForwarderTest, SubscriptionIsReestablishedWhenPublisherReturnsAfterGracePeriod) {
   auto options = makeOptions();
   options.inactive_subscription_grace = 40ms;
-  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/returning", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/returning", 1U));
@@ -252,7 +257,8 @@ TEST_F(TopicForwarderTest, SubscriptionIsReestablishedWhenPublisherReturnsAfterG
 TEST_F(TopicForwarderTest, ExpiryDeadlineIsOnlyReportedWhilePublishersAreAbsent) {
   auto options = makeOptions();
   options.inactive_subscription_grace = 10s;
-  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   // Nothing subscribed yet, so the discovery worker is owed no timed wake-up.
   EXPECT_FALSE(forwarder.nextExpiryDeadline().has_value());
@@ -338,7 +344,8 @@ TEST_F(TopicForwarderTest, InboundTrackDoesNotBlockLocalOutboundForwardingOrEcho
     };
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::success(std::move(writer));
   };
-  TopicForwarder forwarder(std::move(options), node_, std::move(livekit_methods), diagnostics_fns_);
+  TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, std::move(livekit_methods),
+                           diagnostics_fns_);
 
   const std::string inbound_json = R"({"data":"from LiveKit"})";
   const std::vector<std::uint8_t> inbound_payload(inbound_json.begin(), inbound_json.end());
@@ -559,7 +566,8 @@ TopicForwarder::LiveKitMethods makeRecordingLiveKitMethods(std::shared_ptr<std::
 TEST_F(TopicForwarderTest, RateCapDropsSamplesWithinPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   // 20 Hz cap -> one sample every 50 ms at most.
-  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count), diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(20.0), utils::TopicNodeInterfaces{*node_},
+                           makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(50)};
   pub_qos.reliable();
@@ -594,8 +602,8 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto last_payload = std::make_shared<std::vector<std::uint8_t>>();
   // 5 Hz cap -> 200 ms period, ample room to send the later samples in-period.
-  TopicForwarder forwarder(makeRateCapOptions(5.0), node_, makeRecordingLiveKitMethods(push_count, last_payload),
-                           diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(5.0), utils::TopicNodeInterfaces{*node_},
+                           makeRecordingLiveKitMethods(push_count, last_payload), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -643,7 +651,8 @@ TEST_F(TopicForwarderTest, RateCapForwardsFirstSampleInPeriod) {
 TEST_F(TopicForwarderTest, RateCapForwardsAgainAfterPeriodElapses) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   // 20 Hz cap -> 50 ms period.
-  TopicForwarder forwarder(makeRateCapOptions(20.0), node_, makeCountingLiveKitMethods(push_count), diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(20.0), utils::TopicNodeInterfaces{*node_},
+                           makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -675,8 +684,8 @@ TEST_F(TopicForwarderTest, RateCapDropsFailedPushWithoutRetry) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto remaining_failures = std::make_shared<std::atomic<int>>(1);
   // 50 Hz -> 20 ms period; the single sample is passed through immediately.
-  TopicForwarder forwarder(makeRateCapOptions(50.0), node_, makeFlakyLiveKitMethods(push_count, remaining_failures),
-                           diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(50.0), utils::TopicNodeInterfaces{*node_},
+                           makeFlakyLiveKitMethods(push_count, remaining_failures), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -704,7 +713,8 @@ TEST_F(TopicForwarderTest, OutboundSkipsSampleWhenWriterCreationFails) {
     return livekit::Result<std::shared_ptr<TopicForwarder::DataTrackWriter>, std::string>::failure(
         "required schema unavailable");
   };
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods), diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), utils::TopicNodeInterfaces{*node_}, std::move(methods),
+                           diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
@@ -724,7 +734,8 @@ TEST_F(TopicForwarderTest, OutboundPausesWhileRoomIsUnavailable) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto methods = makeCountingLiveKitMethods(push_count);
   methods.is_room_available = [room_available]() { return room_available->load(); };
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, std::move(methods), diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), utils::TopicNodeInterfaces{*node_}, std::move(methods),
+                           diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/data", 1U));
@@ -748,8 +759,8 @@ TEST_F(TopicForwarderTest, OutboundPausesWhileRoomIsUnavailable) {
 // the reader's KEEP_LAST queue, isolating the "no throttling" behaviour under test.
 TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_, makeCountingLiveKitMethods(push_count),
-                           diagnostics_fns_);
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), utils::TopicNodeInterfaces{*node_},
+                           makeCountingLiveKitMethods(push_count), diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -773,7 +784,7 @@ TEST_F(TopicForwarderTest, UncappedTopicForwardsEverySample) {
 TEST_F(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures) {
   auto push_count = std::make_shared<std::atomic<int>>(0);
   auto remaining_failures = std::make_shared<std::atomic<int>>(1);
-  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), node_,
+  TopicForwarder forwarder(makeRateCapOptions(std::nullopt), utils::TopicNodeInterfaces{*node_},
                            makeFlakyLiveKitMethods(push_count, remaining_failures), diagnostics_fns_);
 
   auto publisher = node_->create_publisher<std_msgs::msg::String>("/allowed/data", 10);
@@ -810,7 +821,8 @@ TEST_F(TopicForwarderTest, DiagnosticsReportOutboundInventoryAndPushFailures) {
 TEST_F(TopicForwarderTest, DiagnosticsReportInboundRejectionsAndStoppedReaders) {
   auto options = makeOptions();
   options.preserve_id_topic_patterns = utils::compileRegexPatterns(std::vector<std::string>{"/remote/name"});
-  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   TopicForwarder::RemoteDataTrackDescriptor not_allowed;
   not_allowed.sid = "not-allowed";
@@ -959,7 +971,8 @@ rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr subscribeInbo
 } // namespace
 
 TEST_F(TopicForwarderTest, InboundVideoPublishesJpegOnTrackTopic) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
   CompressedImageInbox inbox;
   auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
@@ -995,7 +1008,8 @@ TEST_F(TopicForwarderTest, InboundVideoNamingMatchesDataTracks) {
       auto options = makeOptions();
       options.incoming_video_topics = {
           {*utils::normalizeTrackTopicName(track_name), TopicForwarder::IncomingVideoTopic{preserve_id}}};
-      TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+      TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                               diagnostics_fns_);
       TopicForwarder::RemoteVideoTrackDescriptor descriptor;
       descriptor.track_name = track_name;
       descriptor.publisher_identity = "edge-robot";
@@ -1007,7 +1021,8 @@ TEST_F(TopicForwarderTest, InboundVideoNamingMatchesDataTracks) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoPreserveIdPrefixesTopic) {
-  TopicForwarder forwarder(makeVideoOptions(true), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(true), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   auto closed = std::make_shared<std::atomic_bool>(false);
   TopicForwarder::RemoteVideoTrackDescriptor descriptor;
@@ -1025,7 +1040,8 @@ TEST_F(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch) {
   auto options = makeOptions();
   // A regex entry is kept literally for video tracks, so it never matches.
   options.incoming_video_topics = {{"/camera/.*", TopicForwarder::IncomingVideoTopic{}}};
-  TopicForwarder forwarder(std::move(options), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   auto closed = std::make_shared<std::atomic_bool>(false);
   auto subscribe_count = std::make_shared<std::atomic<int>>(0);
@@ -1046,7 +1062,8 @@ TEST_F(TopicForwarderTest, InboundVideoIgnoresTracksWithoutExactMatch) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
   CompressedImageInbox inbox;
   auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
@@ -1073,7 +1090,8 @@ TEST_F(TopicForwarderTest, InboundVideoUsesSenderStampAndFrameId) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoFallsBackToLocalStampAndTrackFrameId) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
   CompressedImageInbox inbox;
   auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
   const auto before = node_->get_clock()->now();
@@ -1102,7 +1120,8 @@ TEST_F(TopicForwarderTest, InboundVideoFallsBackToLocalStampAndTrackFrameId) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   auto closed = std::make_shared<std::atomic_bool>(false);
   TopicForwarder::RemoteVideoTrackDescriptor descriptor;
@@ -1126,7 +1145,8 @@ TEST_F(TopicForwarderTest, InboundVideoUnsubscribeStopsReaderAndPublisher) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoPublisherIsTreatedAsInboundPublication) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
   CompressedImageInbox inbox;
   auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
 
@@ -1175,7 +1195,8 @@ TEST_F(TopicForwarderTest, InboundVideoTrackOwnsItsBufferWriterGids) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
   // Frames are only encoded while the topic has a subscriber.
   CompressedImageInbox inbox;
   auto subscription = subscribeInbox(node_, kVideoTrackName, inbox);
@@ -1201,7 +1222,8 @@ TEST_F(TopicForwarderTest, InboundVideoCountsEncodeFailures) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoPausesWithoutSubscribersAndResumes) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   auto calls_mutex = std::make_shared<std::mutex>();
   auto enable_calls = std::make_shared<std::vector<bool>>();
@@ -1244,7 +1266,8 @@ TEST_F(TopicForwarderTest, InboundVideoPausesWithoutSubscribersAndResumes) {
 }
 
 TEST_F(TopicForwarderTest, InboundVideoSkipsEncodingWithoutSubscribers) {
-  TopicForwarder forwarder(makeVideoOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeVideoOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(),
+                           diagnostics_fns_);
 
   // Every frame would fail to encode, so any encode attempt shows as a failure.
   ScriptedVideoFrame frame;
@@ -1320,7 +1343,8 @@ sensor_msgs::msg::Image makeRgbImage(const std::string& frame_id) {
 
 TEST_F(TopicForwarderTest, OutboundVideoSendsImageStampAndFrameId) {
   auto record = std::make_shared<VideoSinkRecord>();
-  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+  TopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeVideoRecordingLiveKitMethods(record),
+                           diagnostics_fns_);
 
   rclcpp::QoS pub_qos{rclcpp::KeepLast(10)};
   pub_qos.reliable();
@@ -1370,7 +1394,8 @@ sensor_msgs::msg::CompressedImage makeJpegImage(const std::string& format) {
 
 TEST_F(TopicForwarderTest, OutboundCompressedImagePreservesTopicName) {
   auto record = std::make_shared<VideoSinkRecord>();
-  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+  TopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeVideoRecordingLiveKitMethods(record),
+                           diagnostics_fns_);
 
   auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>("/allowed/cam/image_raw/compressed", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/cam/image_raw/compressed", 1U));
@@ -1394,7 +1419,8 @@ TEST_F(TopicForwarderTest, OutboundCompressedImagePreservesTopicName) {
 
 TEST_F(TopicForwarderTest, OutboundCompressedImageSkipsNonJpegFormats) {
   auto record = std::make_shared<VideoSinkRecord>();
-  TopicForwarder forwarder(makeOptions(), node_, makeVideoRecordingLiveKitMethods(record), diagnostics_fns_);
+  TopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeVideoRecordingLiveKitMethods(record),
+                           diagnostics_fns_);
 
   auto publisher = node_->create_publisher<sensor_msgs::msg::CompressedImage>("/allowed/cam/compressed", 10);
   ASSERT_TRUE(waitForPublishers("/allowed/cam/compressed", 1U));
@@ -1409,7 +1435,7 @@ TEST_F(TopicForwarderTest, OutboundCompressedImageSkipsNonJpegFormats) {
 }
 
 TEST_F(TopicForwarderTest, OutboundRawAndCompressedImagesHaveDistinctTrackNames) {
-  TopicForwarder forwarder(makeOptions(), node_, makeLiveKitMethods(), diagnostics_fns_);
+  TopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeLiveKitMethods(), diagnostics_fns_);
 
   forwarder.createImageSubscriber("/allowed/cam");
   forwarder.createCompressedImageSubscriber("/allowed/cam/compressed");

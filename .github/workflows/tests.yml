@@ -63,7 +63,7 @@ jobs:
               source install/setup.bash
               set -u
               test_exit=0
-              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_unit_tests || test_exit=$?
+              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R "ros_portal_unit_tests|ros_portal_composable_launch_test|ros_portal_component_runtime_test" || test_exit=$?
               colcon test-result --verbose --all
               exit $test_exit
             '

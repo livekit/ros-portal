@@ -67,7 +67,7 @@ ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 
 ## Running ROS Portal in Composition
 
-The package registers `ros_portal::RosPortalComponent`. The bundled composable
+The package registers `ros_portal::RosPortal`. The bundled composable
 launch file starts this component in a multithreaded container:
 
 ```bash
@@ -78,7 +78,8 @@ ros2 launch ros_portal ros_portal_composable.launch.py \
   container_threads:=4
 ```
 
-Use `container_threads:=0` to let `rclcpp` select the worker count. The
+Use `container_threads:=0` to use the component manager's default worker count;
+the launch file omits the `thread_num` override in this case. The
 `ros_threads` configuration field only controls the standalone
 `ros_portal_node` executable.
 
@@ -98,7 +99,7 @@ container = ComposableNodeContainer(
     composable_node_descriptions=[
         ComposableNode(
             package='ros_portal',
-            plugin='ros_portal::RosPortalComponent',
+            plugin='ros_portal::RosPortal',
             name='ros_portal',
             parameters=[{'config_path': '/path/to/config.yaml'}],
         ),

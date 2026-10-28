@@ -15,77 +15,113 @@
 # limitations under the License.
 
 from pathlib import Path
-import time
 import unittest
 
+from composition_interfaces.srv import ListNodes
+from composition_interfaces.srv import LoadNode
+from composition_interfaces.srv import UnloadNode
 from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
 from launch.actions import SetEnvironmentVariable
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 import launch_testing
 import launch_testing.actions
 import launch_testing.asserts
-from launch_ros.actions import ComposableNodeContainer
-from launch_ros.descriptions import ComposableNode
 import rclpy
+from rcl_interfaces.msg import Parameter
+from rcl_interfaces.msg import ParameterType
+from rcl_interfaces.msg import ParameterValue
+from rcl_interfaces.srv import GetParameters
+
+
+CONTAINER_NAME = '/ros_portal_component_test_container'
+NODE_NAMESPACE = '/composition_test'
+CONFIG_PATH = Path(__file__).resolve().parents[2] / 'config' / 'all_topics.yaml'
 
 
 def generate_test_description():
-    config_path = Path(__file__).resolve().parents[2] / 'config' / 'all_topics.yaml'
-    container = ComposableNodeContainer(
-        name='ros_portal_component_test_container',
-        namespace='',
-        package='rclcpp_components',
-        executable='component_container_mt',
-        output='screen',
-        parameters=[{'thread_num': 1}],
-        composable_node_descriptions=[
-            ComposableNode(
-                package='ros_portal',
-                plugin='ros_portal::RosPortalComponent',
-                name='ros_portal_component_a',
-                parameters=[{'config_path': str(config_path)}],
-            ),
-            ComposableNode(
-                package='ros_portal',
-                plugin='ros_portal::RosPortalComponent',
-                name='ros_portal_component_b',
-                parameters=[{'config_path': str(config_path)}],
-            ),
-        ],
-    )
-
-    return (
-        LaunchDescription([
-            SetEnvironmentVariable('LIVEKIT_URL', 'ws://127.0.0.1:1'),
-            SetEnvironmentVariable('LIVEKIT_TOKEN', 'unused-component-test-token'),
-            container,
-            launch_testing.actions.ReadyToTest(),
-        ]),
-        {'container': container},
-    )
+    launch_file = Path(__file__).resolve().parents[2] / 'launch' / 'ros_portal_composable.launch.py'
+    return LaunchDescription([
+        SetEnvironmentVariable('LIVEKIT_URL', 'ws://127.0.0.1:1'),
+        SetEnvironmentVariable('LIVEKIT_TOKEN', 'unused-component-test-token'),
+        SetEnvironmentVariable('LIVEKIT_TOKEN_ENDPOINT', ''),
+        SetEnvironmentVariable('LIVEKIT_TOKEN_SERVER_ID', ''),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(str(launch_file)),
+            launch_arguments={
+                'config_path': str(CONFIG_PATH),
+                'container_name': CONTAINER_NAME.lstrip('/'),
+                'ns': NODE_NAMESPACE,
+                # Exercise the bundled launch file's default worker count.
+            }.items(),
+        ),
+        launch_testing.actions.ReadyToTest(),
+    ])
 
 
 class TestRosPortalComponent(unittest.TestCase):
-    def test_both_components_join_the_ros_graph(self):
+    def test_load_failure_unload_survivor_and_reload(self, proc_output):
         rclpy.init()
         observer = rclpy.create_node('ros_portal_component_test_observer')
-        expected_names = {
-            'ros_portal_component_a',
-            'ros_portal_component_b',
-        }
+
+        def call(service_type, service_name, request):
+            client = observer.create_client(service_type, service_name)
+            try:
+                self.assertTrue(client.wait_for_service(timeout_sec=10.0), service_name)
+                future = client.call_async(request)
+                rclpy.spin_until_future_complete(observer, future, timeout_sec=10.0)
+                self.assertTrue(future.done(), f'Timed out calling {service_name}')
+                self.assertIsNone(future.exception())
+                return future.result()
+            finally:
+                observer.destroy_client(client)
+
+        def list_nodes():
+            return call(ListNodes, CONTAINER_NAME + '/_container/list_nodes', ListNodes.Request())
+
+        def load(name, config_path):
+            request = LoadNode.Request()
+            request.package_name = 'ros_portal'
+            request.plugin_name = 'ros_portal::RosPortal'
+            request.node_name = name
+            request.node_namespace = NODE_NAMESPACE
+            request.parameters = [Parameter(
+                name='config_path',
+                value=ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=str(config_path)),
+            )]
+            return call(LoadNode, CONTAINER_NAME + '/_container/load_node', request)
+
+        def unload(node_id):
+            request = UnloadNode.Request()
+            request.unique_id = node_id
+            response = call(UnloadNode, CONTAINER_NAME + '/_container/unload_node', request)
+            self.assertTrue(response.success, response.error_message)
 
         try:
-            deadline = time.monotonic() + 15.0
-            discovered_names = set()
-            while time.monotonic() < deadline:
-                rclpy.spin_once(observer, timeout_sec=0.1)
-                discovered_names = {name for name, _ in observer.get_node_names_and_namespaces()}
-                if expected_names.issubset(discovered_names):
-                    break
+            proc_output.assertWaitFor('ROS Portal initialized', timeout=15)
+            initial = list_nodes()
+            self.assertEqual(list(initial.full_node_names), [NODE_NAMESPACE + '/ros_portal'])
 
-            self.assertTrue(
-                expected_names.issubset(discovered_names),
-                f'Expected component nodes {expected_names}, discovered {discovered_names}',
-            )
+            failed = load('invalid_portal', '/nonexistent/ros_portal_component_test.yaml')
+            self.assertFalse(failed.success)
+            self.assertIn('Failed to initialize ROS Portal', failed.error_message)
+            self.assertEqual(list(list_nodes().unique_ids), list(initial.unique_ids))
+
+            second = load('surviving_portal', CONFIG_PATH)
+            self.assertTrue(second.success, second.error_message)
+            unload(initial.unique_ids[0])
+            self.assertEqual(list(list_nodes().unique_ids), [second.unique_id])
+            request = GetParameters.Request()
+            request.names = ['config_path']
+            parameters = call(GetParameters, NODE_NAMESPACE + '/surviving_portal/get_parameters', request)
+            self.assertEqual(parameters.values[0].string_value, str(CONFIG_PATH))
+
+            unload(second.unique_id)
+            self.assertEqual(list(list_nodes().unique_ids), [])
+            reloaded = load('reloaded_portal', CONFIG_PATH)
+            self.assertTrue(reloaded.success, reloaded.error_message)
+            unload(reloaded.unique_id)
+            self.assertEqual(list(list_nodes().unique_ids), [])
         finally:
             observer.destroy_node()
             rclpy.shutdown()
@@ -93,5 +129,5 @@ class TestRosPortalComponent(unittest.TestCase):
 
 @launch_testing.post_shutdown_test()
 class TestRosPortalComponentShutdown(unittest.TestCase):
-    def test_container_exits_cleanly(self, proc_info, container):
-        launch_testing.asserts.assertExitCodes(proc_info, process=container)
+    def test_container_exits_cleanly(self, proc_info):
+        launch_testing.asserts.assertExitCodes(proc_info)

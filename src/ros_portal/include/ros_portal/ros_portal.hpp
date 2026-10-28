@@ -33,6 +33,7 @@
 #include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/service_forwarder.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/callback_gate.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
 
 #ifdef BUILD_TESTING
@@ -40,6 +41,8 @@
 #endif
 
 namespace ros_portal {
+
+class LiveKitRuntime;
 
 namespace diagnostics {
 class BuildInfoDiagnostics;
@@ -67,19 +70,14 @@ class RosPortal : public rclcpp::Node, public livekit::RoomDelegate {
 public:
   /// @brief Constructor for the ROS Portal.
   /// @param options The options for the node
+  /// @throws std::runtime_error when local configuration or initialization fails.
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   ~RosPortal() override;
 
-  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
-  /// and graph discovery.
-  /// @return True if initialization completed, false for expected startup
-  /// failures that have already been logged.
-  bool initialize();
-
   /// @brief Disconnect LiveKit and release ROS Portal resources.
   ///
-  /// Call this before releasing the final shared owner. The LiveKit SDK must
-  /// not disconnect a room from one of its delegate callbacks.
+  /// Also called by the destructor on component unload. Call only from the
+  /// owning thread, outside ROS callbacks and LiveKit delegate callbacks.
   void shutdown();
 
   int rosThreads() const { return ros_threads_; }
@@ -93,30 +91,16 @@ public:
   /// should poll this until it returns true rather than assuming immediacy.
   bool hasParticipant(const std::string& participant_id) const;
 
-protected:
-  /// @brief Initialize ROS Portal without making the initial blocking LiveKit
-  /// connection attempt.
-  ///
-  /// Component containers own the executor and must not be blocked while a
-  /// component is being constructed. The regular connection timer makes the
-  /// first attempt after construction instead.
-  /// @return True if local initialization completed, false for expected
-  /// startup failures that have already been logged.
-  bool initializeForComposition();
-
 private:
-  /// @brief Initialize ROS Portal and optionally connect immediately.
-  /// @param connect_immediately Whether to make the first LiveKit connection
-  /// attempt before returning.
-  /// @return True if initialization completed, false for expected startup
-  /// failures that have already been logged.
-  bool initializeImpl(const bool connect_immediately);
+  /// @brief Configure local resources without connecting to the network.
+  /// @return True when local initialization succeeds.
+  bool initialize();
 
   /// @brief Poll the room connection state and make a scheduled connection
   /// attempt when needed.
   void pollConnection();
 #ifdef BUILD_TESTING
-  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration);
+  FRIEND_TEST(RosPortalDiagnosticsTest, ReportsShutdownAndEffectiveConfiguration);
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates);
   FRIEND_TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured);
   FRIEND_TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured);
@@ -288,6 +272,11 @@ private:
   /// @return True on success (including when there is nothing to do), false when
   /// the forwarder could not be initialized.
   bool initializeLatchedTopicForwarder(const std::vector<ros_portal_config::TopicConfig>& topics);
+
+  /// @brief SDK lease declared first so it outlives all LiveKit resources.
+  std::unique_ptr<LiveKitRuntime> livekit_runtime_;
+  /// @brief Drains node timers and diagnostics before teardown.
+  utils::CallbackGate callback_gate_;
 
   //! @brief The minimum QoS depth
   size_t min_qos_depth_{0};

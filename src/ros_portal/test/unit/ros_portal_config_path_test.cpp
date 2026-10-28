@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <livekit/livekit.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -73,26 +74,7 @@ constexpr const char* kGoodConfig =
       direction: "out"
 )";
 
-TEST_F(RosPortalConfigPathTest, InitializeReadsConfigPathParameter) {
-  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
-  const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
-  const ScopedEnvVar scoped_token_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
-  hideLiveKitCredentials();
-  const TemporaryConfigFile config{kGoodConfig};
-
-  rclcpp::NodeOptions options;
-  options.parameter_overrides({
-      rclcpp::Parameter("config_path", config.path().string()),
-  });
-
-  auto ros_portal = std::make_shared<RosPortal>(options);
-
-  EXPECT_FALSE(ros_portal->initialize());
-  EXPECT_EQ(ros_portal->rosThreads(), 3);
-}
-
-TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
+TEST_F(RosPortalConfigPathTest, ConstructionDoesNotRequireReachableSfu) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
@@ -109,11 +91,10 @@ TEST_F(RosPortalConfigPathTest, InitializeDoesNotRequireReachableSfu) {
 
   auto ros_portal = std::make_shared<RosPortal>(options);
 
-  EXPECT_TRUE(ros_portal->initialize());
   EXPECT_EQ(ros_portal->rosThreads(), 3);
 }
 
-TEST_F(RosPortalConfigPathTest, InitializeUsesBuiltinDefaultWhenConfigPathEmpty) {
+TEST_F(RosPortalConfigPathTest, ConstructionUsesBuiltinDefaultWhenConfigPathEmpty) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
@@ -129,11 +110,10 @@ TEST_F(RosPortalConfigPathTest, InitializeUsesBuiltinDefaultWhenConfigPathEmpty)
 
   auto ros_portal = std::make_shared<RosPortal>(options);
 
-  EXPECT_TRUE(ros_portal->initialize());
   EXPECT_EQ(ros_portal->rosThreads(), 0);
 }
 
-TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
+TEST_F(RosPortalConfigPathTest, ConstructionRejectsMissingConfigPathParameter) {
   const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
   const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
   const ScopedEnvVar scoped_token_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
@@ -148,10 +128,63 @@ TEST_F(RosPortalConfigPathTest, InitializeRejectsMissingConfigPathParameter) {
       rclcpp::Parameter("config_path", missing_path.string()),
   });
 
-  auto ros_portal = std::make_shared<RosPortal>(options);
+  EXPECT_THROW(std::make_shared<RosPortal>(options), std::runtime_error);
+}
 
-  EXPECT_FALSE(ros_portal->initialize());
-  EXPECT_EQ(ros_portal->rosThreads(), 0);
+TEST_F(RosPortalConfigPathTest, ConstructionRejectsMissingCredentials) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
+  hideLiveKitCredentials();
+  EXPECT_THROW(std::make_shared<RosPortal>(), std::runtime_error);
+}
+
+TEST_F(RosPortalConfigPathTest, RuntimeRemainsInitializedUntilLastNodeIsDestroyed) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
+  hideLiveKitCredentials();
+  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
+  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-runtime-test-token", 1), 0);
+
+  auto first = std::make_unique<RosPortal>();
+  auto second = std::make_unique<RosPortal>();
+  EXPECT_FALSE(livekit::initialize());
+  first.reset();
+  EXPECT_FALSE(livekit::initialize());
+  second.reset();
+  EXPECT_TRUE(livekit::initialize());
+  livekit::shutdown();
+}
+
+TEST_F(RosPortalConfigPathTest, DoesNotShutdownExternallyOwnedRuntime) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
+  hideLiveKitCredentials();
+  ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
+  ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-runtime-test-token", 1), 0);
+
+  EXPECT_TRUE(livekit::initialize());
+  {
+    RosPortal portal;
+  }
+  EXPECT_FALSE(livekit::initialize());
+  livekit::shutdown();
+}
+
+TEST_F(RosPortalConfigPathTest, FailedConstructionReleasesOwnedRuntime) {
+  const ScopedEnvVar scoped_url{"LIVEKIT_URL"};
+  const ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
+  const ScopedEnvVar scoped_endpoint{"LIVEKIT_TOKEN_ENDPOINT"};
+  const ScopedEnvVar scoped_server_id{"LIVEKIT_TOKEN_SERVER_ID"};
+  hideLiveKitCredentials();
+  EXPECT_THROW(std::make_unique<RosPortal>(), std::runtime_error);
+  EXPECT_TRUE(livekit::initialize());
+  livekit::shutdown();
 }
 
 } // namespace

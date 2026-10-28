@@ -120,24 +120,27 @@ protected:
   RpcHandler registered_handler_;
 };
 
-TEST_F(LatchedTopicForwarderTest, ConstructorRejectsExpiredNode) {
-  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), rclcpp::Node::WeakPtr{}, makeMethods(), diagnostics_fns_),
+TEST_F(LatchedTopicForwarderTest, ConstructorRejectsMissingNodeInterfaces) {
+  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), utils::TopicNodeInterfaces{}, makeMethods(), diagnostics_fns_),
                std::invalid_argument);
 }
 
 TEST_F(LatchedTopicForwarderTest, ConstructorRejectsMissingMethods) {
-  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), node_, LatchedTopicForwarder::LiveKitMethods{}, diagnostics_fns_),
+  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), utils::TopicNodeInterfaces{*node_},
+                                     LatchedTopicForwarder::LiveKitMethods{}, diagnostics_fns_),
                std::invalid_argument);
 }
 
 TEST_F(LatchedTopicForwarderTest, ConstructorRejectsMissingDiagnostics) {
-  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), node_, makeMethods(), {}), std::invalid_argument);
+  EXPECT_THROW(LatchedTopicForwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(), {}),
+               std::invalid_argument);
 }
 
 TEST_F(LatchedTopicForwarderTest, DiagnosticsReportConfigurationAndRpcRegistration) {
   auto options = makeOptions();
   options.inbound_topics = {"/tf_static"};
-  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeMethods(),
+                                  diagnostics_fns_);
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   forwarder.populateStatus(status);
@@ -174,7 +177,8 @@ TEST_F(LatchedTopicForwarderTest, DiagnosticsErrorWhenRpcRegistrationFails) {
   options.outbound_topics.clear();
   options.inbound_topics = {"/tf_static"};
   rpc_registration_succeeds_ = false;
-  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeMethods(),
+                                  diagnostics_fns_);
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   forwarder.populateStatus(status);
@@ -183,7 +187,7 @@ TEST_F(LatchedTopicForwarderTest, DiagnosticsErrorWhenRpcRegistrationFails) {
 }
 
 TEST_F(LatchedTopicForwarderTest, StoresDistinctMessagesAndBumpsVersion) {
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
   const std::vector<std::uint8_t> b = {4, 5, 6};
 
@@ -203,7 +207,7 @@ TEST_F(LatchedTopicForwarderTest, StoresDistinctMessagesAndBumpsVersion) {
 }
 
 TEST_F(LatchedTopicForwarderTest, SkipsOversizeMessage) {
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(), diagnostics_fns_);
   // Already over 15 KiB before base64 inflation.
   const std::vector<std::uint8_t> big(20 * 1024, 0xAB);
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", big.data(), big.size());
@@ -218,7 +222,7 @@ TEST_F(LatchedTopicForwarderTest, SkipsOversizeMessage) {
 
 TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
   roster_ = {"peerA"};
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
 
@@ -243,7 +247,7 @@ TEST_F(LatchedTopicForwarderTest, PushesStoredStateToPeers) {
 TEST_F(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion) {
   roster_ = {"peerA"};
   rpc_should_succeed_ = false;
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(),
+  LatchedTopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(),
                                   diagnostics_fns_); // max_participant_failures = 3
   const std::vector<std::uint8_t> a = {1, 2, 3};
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
@@ -277,7 +281,7 @@ TEST_F(LatchedTopicForwarderTest, GivesUpAfterFailureCapUntilNewVersion) {
 
 TEST_F(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves) {
   roster_ = {"peerA"};
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
 
@@ -293,7 +297,7 @@ TEST_F(LatchedTopicForwarderTest, ForgetsParticipantThatLeaves) {
 TEST_F(LatchedTopicForwarderTest, IdlesQuietlyWhileRoomUnavailable) {
   room_available_ = false;
   roster_ = {"peerA"};
-  LatchedTopicForwarder forwarder(makeOptions(), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(makeOptions(), utils::TopicNodeInterfaces{*node_}, makeMethods(), diagnostics_fns_);
   const std::vector<std::uint8_t> a = {1, 2, 3};
 
   forwarder.storeOutboundMessage("/tf_static", "tf2_msgs/msg/TFMessage", a.data(), a.size());
@@ -309,7 +313,8 @@ TEST_F(LatchedTopicForwarderTest, InboundHandlerValidatesTopic) {
   auto options = makeOptions();
   options.outbound_topics.clear();
   options.inbound_topics = {"/tf_static"};
-  LatchedTopicForwarder forwarder(std::move(options), node_, makeMethods(), diagnostics_fns_);
+  LatchedTopicForwarder forwarder(std::move(options), utils::TopicNodeInterfaces{*node_}, makeMethods(),
+                                  diagnostics_fns_);
 
   // Registered the inbound handler because an inbound latched topic exists.
   EXPECT_EQ(registered_method_, kLatchedStateRpcMethod);

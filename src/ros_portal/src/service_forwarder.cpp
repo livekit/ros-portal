@@ -197,7 +197,8 @@ ServiceForwarder::ServiceForwarder(const std::vector<ServiceRoute>& routes, Node
     createService(route, callback_group);
   }
   diagnostics_.add(kServiceForwarderDiagnosticTaskName,
-                   [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); });
+                   callback_gate_.wrap<void, diagnostic_updater::DiagnosticStatusWrapper&>(
+                       [this](diagnostic_updater::DiagnosticStatusWrapper& status) { populateStatus(status); }));
 }
 
 ServiceForwarder::ServiceForwarder(const std::vector<ServiceRoute>& routes, rclcpp::Node& node,
@@ -211,7 +212,10 @@ ServiceForwarder::ServiceForwarder(const std::vector<ServiceRoute>& routes, rclc
                        },
                        callback_group, std::move(livekit_methods), std::move(diagnostics)) {}
 
-ServiceForwarder::~ServiceForwarder() { diagnostics_.remove(kServiceForwarderDiagnosticTaskName); }
+ServiceForwarder::~ServiceForwarder() {
+  callback_gate_.close();
+  diagnostics_.remove(kServiceForwarderDiagnosticTaskName);
+}
 
 std::size_t ServiceForwarder::serviceCount() const { return services_.size(); }
 
@@ -245,10 +249,11 @@ void ServiceForwarder::createService(const ServiceRoute& route,
   try {
     auto service = std::make_shared<DynamicService>(
         node_interfaces_.node_base->get_shared_rcl_node_handle(), route.service, support,
-        [this, route](const void* request_data, void* response_data) {
+        callback_gate_.wrap<void, const void*, void*>([this, route](const void* request_data, void* response_data) {
           forwardRequest(route, request_data, response_data);
-        },
-        [this]() { recordHandlerException(); }, [this]() { recordResponseSendTimeout(); });
+        }),
+        callback_gate_.wrap<void>([this]() { recordHandlerException(); }),
+        callback_gate_.wrap<void>([this]() { recordResponseSendTimeout(); }));
     node_interfaces_.node_services->add_service(service, callback_group);
     services_.push_back(std::move(service));
     RCLCPP_INFO(logger_, "Created forwarded service '%s' [%s] to LiveKit participant '%s'", route.service.c_str(),

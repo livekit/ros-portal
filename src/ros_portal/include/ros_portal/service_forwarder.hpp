@@ -32,6 +32,7 @@
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/introspection/runtime_type_support.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/callback_gate.hpp"
 
 namespace diagnostic_updater {
 class DiagnosticStatusWrapper;
@@ -163,6 +164,8 @@ private:
   /// @brief Populate the service-forwarder diagnostic status.
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
+  /// @brief Stops executor and RPC callbacks before manager state is released.
+  utils::CallbackGate callback_gate_;
   NodeInterfaces node_interfaces_;
   LiveKitMethods livekit_methods_;
   diagnostics::DiagnosticsManagerFns diagnostics_;

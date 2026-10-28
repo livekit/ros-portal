@@ -40,6 +40,8 @@
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/callback_gate.hpp"
+#include "ros_portal/utils/topic_node_interfaces.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -116,14 +118,13 @@ public:
   /// any inbound latched topic is configured. Does not start the push worker;
   /// call @ref start().
   /// @param options Latched-topic forwarding configuration and limits.
-  /// @param node Non-owning handle to the ROS node used for subscriptions and
-  /// publishers.
+  /// @param node_interfaces ROS interfaces for subscriptions and publishers.
   /// @param livekit_methods LiveKit RPC and participant callbacks.
   /// @param diagnostics ROS Portal-owned diagnostics functions used to register
   /// the latched-topic-forwarder diagnostic task.
-  /// @throws std::invalid_argument when the node has expired or any LiveKit
+  /// @throws std::invalid_argument when any ROS interface, LiveKit
   /// or diagnostics callback is unset.
-  LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+  LatchedTopicForwarder(Options options, utils::TopicNodeInterfaces node_interfaces, LiveKitMethods livekit_methods,
                         diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop the push worker and unregister the RPC handler.
@@ -214,7 +215,9 @@ private:
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
   Options options_;
-  rclcpp::Node::WeakPtr node_;
+  utils::TopicNodeInterfaces node_interfaces_;
+  /// @brief Drains executor callbacks before releasing forwarding state.
+  utils::CallbackGate callback_gate_;
   LiveKitMethods livekit_methods_;
   diagnostics::DiagnosticsManagerFns diagnostics_;
   rclcpp::Logger logger_;

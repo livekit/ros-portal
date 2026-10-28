@@ -52,8 +52,10 @@
 #include "ros_portal/inbound_video_track.hpp"
 #include "ros_portal/schema/manager.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/callback_gate.hpp"
 #include "ros_portal/utils/image_conversion.hpp"
 #include "ros_portal/utils/jpeg_decoder.hpp"
+#include "ros_portal/utils/topic_node_interfaces.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -178,14 +180,13 @@ public:
   };
 
   /// @brief Construct a topic forwarder.
-  /// @param node Non-owning handle to the ROS node the forwarder creates its
-  /// subscriptions and publishers on. The forwarder locks the handle for each
-  /// ROS operation; operations become no-ops once the node is destroyed.
+  /// @param node_interfaces ROS interfaces for endpoints, graph queries, and timers.
+  /// The owner must destroy the forwarder before releasing its ROS interfaces.
   /// @param diagnostics ROS Portal-owned diagnostics functions used to register the
   /// topic-forwarder diagnostic task.
-  /// @throws std::invalid_argument when the node has already expired, any
+  /// @throws std::invalid_argument when any required ROS interface or
   /// required LiveKit callback is unset, or @p diagnostics is incomplete.
-  TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+  TopicForwarder(Options options, utils::TopicNodeInterfaces node_interfaces, LiveKitMethods livekit_methods,
                  diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop inbound streams before destruction.
@@ -483,9 +484,10 @@ private:
 
   /// @brief Forwarding configuration supplied at construction.
   Options options_;
-  /// @brief Non-owning handle to the ROS node used to create subscriptions and
-  /// publishers. Locked per operation so the node lifecycle stays at the edge.
-  rclcpp::Node::WeakPtr node_;
+  /// @brief Required ROS interfaces, without ownership of the enclosing node.
+  utils::TopicNodeInterfaces node_interfaces_;
+  /// @brief Drains executor callbacks before releasing forwarding state.
+  utils::CallbackGate callback_gate_;
   /// @brief Stateful ROS/LiveKit schema registration and validation component.
   SchemaManager schema_manager_;
   /// @brief LiveKit publish callbacks supplied by ROS Portal.

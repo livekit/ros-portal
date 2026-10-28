@@ -71,11 +71,22 @@ private:
 
 } // namespace
 
-TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
-  unsetenv("LIVEKIT_URL");
-  unsetenv("LIVEKIT_TOKEN");
+class RosPortalDiagnosticsTest : public ::testing::Test {
+protected:
+  void SetUp() override {
+    ASSERT_EQ(setenv("LIVEKIT_URL", "ws://127.0.0.1:1", 1), 0);
+    ASSERT_EQ(setenv("LIVEKIT_TOKEN", "unused-diagnostics-token", 1), 0);
+    unsetenv("LIVEKIT_TOKEN_ENDPOINT");
+    unsetenv("LIVEKIT_TOKEN_SERVER_ID");
+  }
+
+  ScopedEnvVar url_{"LIVEKIT_URL"};
+  ScopedEnvVar token_{"LIVEKIT_TOKEN"};
+  ScopedEnvVar endpoint_{"LIVEKIT_TOKEN_ENDPOINT"};
+  ScopedEnvVar server_id_{"LIVEKIT_TOKEN_SERVER_ID"};
+};
+
+TEST_F(RosPortalDiagnosticsTest, ReportsShutdownAndEffectiveConfiguration) {
   TemporaryDiagnosticsConfig config;
 
   const rclcpp::NodeOptions options = rclcpp::NodeOptions().parameter_overrides({
@@ -85,7 +96,7 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   });
   RosPortal portal(options);
 
-  EXPECT_FALSE(portal.initialize());
+  portal.shutdown();
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   portal.populateStatus(status);
@@ -103,7 +114,7 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
   EXPECT_FALSE(diagnosticValueFor(status, "ros_threads").has_value());
 }
 
-TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
+TEST_F(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
   RosPortal portal;
   portal.initialized_.store(true);
   portal.diagnostic_state_.graph_discovery_active.store(true);
@@ -126,7 +137,7 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
   EXPECT_EQ(stalled_status.message, "ROS Portal is initialized without an active graph discovery worker");
 }
 
-TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured) {
+TEST_F(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured) {
   RosPortal portal;
   portal.initialized_.store(true);
   portal.diagnostic_state_.graph_discovery_active.store(true);
@@ -143,11 +154,7 @@ TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigure
   EXPECT_EQ(diagnosticValueFor(status, "components_inactive"), "none");
 }
 
-TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
-  unsetenv("LIVEKIT_URL");
-  unsetenv("LIVEKIT_TOKEN");
+TEST_F(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured) {
   TemporaryDiagnosticsConfig config(R"(  topics:
     - topic: "/tf_static"
       direction: "out"
@@ -159,7 +166,7 @@ TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsC
   });
   RosPortal portal(options);
 
-  EXPECT_FALSE(portal.initialize());
+  portal.shutdown();
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   portal.populateStatus(status);

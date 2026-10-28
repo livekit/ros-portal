@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <livekit/livekit.h>
-
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -27,25 +25,16 @@ int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   const auto logger = rclcpp::get_logger("ros_portal_node");
 
-  livekit::initialize(livekit::LogLevel::Info);
-
   int exit_code = EXIT_SUCCESS;
 
   try {
     auto node = std::make_shared<ros_portal::RosPortal>();
-    if (!node->initialize()) {
-      RCLCPP_FATAL(logger, "Failed to initialize ROS Portal");
-      exit_code = EXIT_FAILURE;
-    } else {
-      const rclcpp::ExecutorOptions exec_options;
-      const size_t num_threads = node->rosThreads() > 0 ? static_cast<size_t>(node->rosThreads()) : 0;
-
-      std::cout << "Starting executor with " << num_threads << " threads\n";
-      rclcpp::executors::MultiThreadedExecutor executor(exec_options, num_threads);
-      executor.add_node(node);
-      executor.spin();
-      executor.remove_node(node);
-    }
+    const rclcpp::ExecutorOptions exec_options;
+    const size_t num_threads = node->rosThreads() > 0 ? static_cast<size_t>(node->rosThreads()) : 0;
+    rclcpp::executors::MultiThreadedExecutor executor(exec_options, num_threads);
+    executor.add_node(node);
+    executor.spin();
+    executor.remove_node(node);
     node->shutdown();
   } catch (const std::exception& e) {
     RCLCPP_FATAL(logger, "Unhandled exception in ROS Portal: %s", e.what());
@@ -55,7 +44,6 @@ int main(int argc, char* argv[]) {
     exit_code = EXIT_FAILURE;
   }
 
-  livekit::shutdown();
   rclcpp::shutdown();
 
   return exit_code;

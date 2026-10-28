@@ -36,6 +36,7 @@
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
 #include "ros_portal/graph/graph_types.hpp"
 #include "ros_portal/types.hpp"
+#include "ros_portal/utils/callback_gate.hpp"
 
 #ifdef BUILD_TESTING
 #include <gtest/gtest_prod.h>
@@ -291,6 +292,8 @@ private:
   /// @brief Whether @p rpc_method was successfully registered at construction.
   bool rpcRegistered(const std::string& rpc_method) const;
 
+  /// @brief Stops executor and RPC callbacks before manager state is released.
+  utils::CallbackGate callback_gate_;
   NodeInterfaces node_interfaces_;
   /// @brief Logger owned by the CLI manager, derived from the ROS node logger.
   rclcpp::Logger logger_;

@@ -379,5 +379,26 @@ TEST_F(DataTrackLifecycleTests, RecreatedSubscriberReceivesActiveTrack) {
   EXPECT_TRUE(pushUntilReceived(track_result.value(), serializeString("second subscriber"), second_received));
 }
 
+TEST_F(DataTrackLifecycleTests, LastOwnerReleaseStopsActiveInboundTrack) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  constexpr const char* kTopic = "/ros_portal/lifecycle/component_unload";
+  initializeInboundOnlyRuntime(kTopic);
+
+  livekit::Room publisher_room;
+  const auto publisher = connectPublisher(publisher_room);
+  ASSERT_NE(publisher, nullptr);
+  ASSERT_TRUE(defineStringSchema(*publisher));
+  const auto track_result = publisher->publishDataTrack(stringTrackOptions(kTopic));
+  ASSERT_TRUE(track_result) << track_result.error().message;
+  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
+
+  // The reader is waiting on a live stream. Destruction must close that stream,
+  // drain delegate callbacks, and join workers without an explicit shutdown().
+  const auto start = std::chrono::steady_clock::now();
+  unloadRosPortalB();
+  EXPECT_LT(std::chrono::steady_clock::now() - start, kGraphTimeout);
+  EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) == 0U; }, kGraphTimeout));
+}
+
 } // namespace
 } // namespace ros_portal::test

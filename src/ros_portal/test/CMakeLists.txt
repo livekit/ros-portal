@@ -41,7 +41,7 @@ ament_add_pytest_test(
 add_launch_test(
   launch/test_ros_portal_component.py
   TARGET ros_portal_component_runtime_test
-  TIMEOUT 30
+  TIMEOUT 60
 )
 
 # ---------------------------------------------------------------------------

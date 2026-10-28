@@ -19,6 +19,9 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <rclcpp/create_generic_subscription.hpp>
+#include <rclcpp/create_publisher.hpp>
+#include <rclcpp/create_timer.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/message_info.hpp>
 #include <rclcpp/node.hpp>
@@ -26,6 +29,8 @@
 #include <rclcpp/serialized_message.hpp>
 #include <rclcpp/subscription_options.hpp>
 #include <rclcpp/time.hpp>
+
+#include "ros_portal/utils/topic_node_interfaces.hpp"
 #ifndef ROS_DISTRO_HUMBLE
 #include <rclcpp/topic_statistics/subscription_topic_statistics.hpp>
 #include <statistics_msgs/msg/metrics_message.hpp>
@@ -96,7 +101,7 @@ private:
 /// the collector's public API.
 /// @throws std::invalid_argument when the configured publish period is not
 /// positive, matching rclcpp::create_subscription.
-inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::SharedPtr& node,
+inline SerializedCallbackWithInfo attachTopicStatistics(const TopicNodeInterfaces& node,
                                                         const rclcpp::SubscriptionOptions& options,
                                                         SerializedCallbackWithInfo callback) {
   if (options.topic_stats_options.publish_period <= std::chrono::milliseconds(0)) {
@@ -104,19 +109,22 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
                                 std::to_string(options.topic_stats_options.publish_period.count()) + " ms");
   }
 
+  auto parameters = node.parameters;
+  auto topics = node.topics;
   auto statistics = std::make_shared<rclcpp::topic_statistics::SubscriptionTopicStatistics>(
-      node->get_name(), node->create_publisher<statistics_msgs::msg::MetricsMessage>(
-                            options.topic_stats_options.publish_topic, options.topic_stats_options.qos));
+      node.base->get_name(),
+      rclcpp::create_publisher<statistics_msgs::msg::MetricsMessage>(
+          parameters, topics, options.topic_stats_options.publish_topic, options.topic_stats_options.qos));
 
   const std::weak_ptr<rclcpp::topic_statistics::SubscriptionTopicStatistics> weak_statistics(statistics);
-  statistics->set_publisher_timer(node->create_wall_timer(
+  statistics->set_publisher_timer(rclcpp::create_wall_timer(
       std::chrono::duration_cast<std::chrono::nanoseconds>(options.topic_stats_options.publish_period),
       [weak_statistics]() {
         if (const auto locked_statistics = weak_statistics.lock()) {
           locked_statistics->publish_message_and_reset_measurements();
         }
       },
-      options.callback_group));
+      options.callback_group, node.base.get(), node.timers.get()));
 
   // The subscription owns this callback, which owns the collector, which owns
   // the publish timer, so the chain is torn down with the subscription.
@@ -133,7 +141,7 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
 
 /// @brief Subscribe to a serialized ROS topic with a callback that receives
 /// rclcpp::MessageInfo, on every supported ROS distribution.
-/// @param node Node the subscription is created on.
+/// @param node ROS interfaces the subscription is created on.
 /// @param topic_name ROS topic to subscribe to.
 /// @param topic_type ROS message type of @p topic_name.
 /// @param qos Subscription QoS.
@@ -146,7 +154,7 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
 /// @throws std::runtime_error when the type support for @p topic_type cannot be
 /// loaded, matching rclcpp::Node::create_generic_subscription.
 inline std::shared_ptr<rclcpp::GenericSubscription> createGenericSubscription(
-    const rclcpp::Node::SharedPtr& node, const std::string& topic_name, const std::string& topic_type,
+    const TopicNodeInterfaces& node, const std::string& topic_name, const std::string& topic_type,
     const rclcpp::QoS& qos, SerializedCallbackWithInfo callback, const rclcpp::SubscriptionOptions& options) {
 #ifndef ROS_DISTRO_HUMBLE
   if (options.topic_stats_options.state == rclcpp::TopicStatisticsState::Enable) {
@@ -155,12 +163,12 @@ inline std::shared_ptr<rclcpp::GenericSubscription> createGenericSubscription(
 #endif
 #ifdef ROS_DISTRO_HUMBLE
   auto subscription = std::make_shared<GenericSubscriptionWithInfo>(
-      node->get_node_base_interface().get(), rclcpp::get_typesupport_library(topic_type, "rosidl_typesupport_cpp"),
-      topic_name, topic_type, qos, std::move(callback), options);
-  node->get_node_topics_interface()->add_subscription(subscription, options.callback_group);
+      node.base.get(), rclcpp::get_typesupport_library(topic_type, "rosidl_typesupport_cpp"), topic_name, topic_type,
+      qos, std::move(callback), options);
+  node.topics->add_subscription(subscription, options.callback_group);
   return subscription;
 #else
-  return node->create_generic_subscription(topic_name, topic_type, qos, std::move(callback), options);
+  return rclcpp::create_generic_subscription(node.topics, topic_name, topic_type, qos, std::move(callback), options);
 #endif
 }
 

@@ -65,6 +65,53 @@ source /opt/livekit/ros/$ROS_DISTRO/setup.bash
 ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 ```
 
+## Running ROS Portal in Composition
+
+The package registers `ros_portal::RosPortalComponent`. The bundled composable
+launch file starts this component in a multithreaded container:
+
+```bash
+# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+source install/setup.bash
+ros2 launch ros_portal ros_portal_composable.launch.py \
+  config_path:=/path/to/config.yaml \
+  container_threads:=4
+```
+
+Use `container_threads:=0` to let `rclcpp` select the worker count. The
+`ros_threads` configuration field only controls the standalone
+`ros_portal_node` executable.
+
+To compose ROS Portal with other components, add its descriptor to the same
+multithreaded container in the parent launch file:
+
+```python
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
+
+container = ComposableNodeContainer(
+    name='robot_container',
+    namespace='',
+    package='rclcpp_components',
+    executable='component_container_mt',
+    parameters=[{'thread_num': 4}],
+    composable_node_descriptions=[
+        ComposableNode(
+            package='ros_portal',
+            plugin='ros_portal::RosPortalComponent',
+            name='ros_portal',
+            parameters=[{'config_path': '/path/to/config.yaml'}],
+        ),
+        # Add other component descriptions here.
+    ],
+    output='screen',
+)
+```
+
+The container process must inherit `LIVEKIT_URL` and `LIVEKIT_TOKEN`. These
+environment variables, LiveKit logging, and process failure boundaries are
+shared by every component in the container.
+
 ## Forwarding Custom Topics
 
 Forwarding custom message types work like any other ROS type:

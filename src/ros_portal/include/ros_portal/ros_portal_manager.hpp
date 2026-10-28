@@ -29,22 +29,10 @@ class RosPortal;
 /// the manager only after removing its node from that executor.
 class RosPortalManager final {
 public:
-  /// @brief Select whether startup attempts a connection before returning.
-  enum class StartupMode {
-    Composable, ///< Let the node's connection timer make the first attempt.
-    Standalone, ///< Make the first connection attempt during initialization.
-  };
-
-  /// @brief Construct a component with nonblocking connection startup.
-  /// @param options Node options supplied by the component container.
+  /// @brief Construct and initialize an owned node without connecting to LiveKit.
+  /// @param options Options forwarded to the owned ROS Portal node.
   /// @throw std::runtime_error if local ROS Portal initialization fails.
   explicit RosPortalManager(const rclcpp::NodeOptions& options);
-
-  /// @brief Construct a manager for the selected deployment mode.
-  /// @param options Options forwarded to the owned ROS Portal node.
-  /// @param mode Whether to attempt the initial connection immediately.
-  /// @throw std::runtime_error if local ROS Portal initialization fails.
-  RosPortalManager(const rclcpp::NodeOptions& options, StartupMode mode);
 
   /// @brief Stop and destroy ROS Portal before releasing the LiveKit runtime.
   ~RosPortalManager();

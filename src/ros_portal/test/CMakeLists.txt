@@ -22,6 +22,7 @@ find_package(ament_cmake_pytest REQUIRED)
 find_package(ament_lint_auto REQUIRED)
 find_package(launch_testing_ament_cmake REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(rcutils REQUIRED)
 find_package(statistics_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
@@ -70,7 +71,7 @@ if(TARGET ros_portal_unit_tests)
   target_link_libraries(ros_portal_unit_tests
     ros_portal_lib
   )
-  medkit_target_dependencies(ros_portal_unit_tests nav_msgs std_srvs test_msgs)
+  medkit_target_dependencies(ros_portal_unit_tests nav_msgs rcutils std_srvs test_msgs)
   livekit_set_runtime_rpath(ros_portal_unit_tests)
 endif()
 

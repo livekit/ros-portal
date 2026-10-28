@@ -78,7 +78,7 @@ observable.
 | Level | Message | Meaning |
 |---|---|---|
 | `OK` | `ROS Portal is initialized` | Initialization completed and the graph discovery worker is running. |
-| `ERROR` | `ROS Portal is not initialized` | Initialization has not completed, including configuration, credential, or connection failures. |
+| `ERROR` | `ROS Portal is not initialized` | Local initialization has not completed, including invalid configuration or missing/conflicting token sources. |
 | `ERROR` | `ROS Portal is initialized without an active graph discovery worker` | Lifecycle state says initialized but the graph-event discovery worker is not running. |
 | `ERROR` | `ROS Portal has inactive components` | At least one expected component is not active. `latched_topic_forwarder` is expected only when at least one latched topic is configured. |
 
@@ -89,7 +89,7 @@ observable.
 | `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_manager`, `topic_forwarder`, `service_forwarder`, and `cli_manager`. `latched_topic_forwarder` is included only when at least one latched topic is configured. Any listed inactive component triggers an `ERROR` status. |
 | `config_path` | Effective configuration file path, or `unset`. |
 | `graph_discovery_active` | Whether the graph-event discovery worker is running. |
-| `initialized` | Whether initialization completed. |
+| `initialized` | Whether local initialization completed. Token resolution and room connection run later on the connection timer. |
 | `local_identity` | Connected local participant identity, or `default`. |
 
 ## `connection_health`
@@ -113,8 +113,9 @@ maps to `OK`, `reconnecting` maps to `WARN`, and `disconnected` maps to
 
 With valid credentials, ROS Portal remains alive while the LiveKit server is
 unavailable and retries at 1 Hz. During that interval it publishes the
-`disconnected` state. Missing credentials or invalid local configuration still
-prevent node initialization.
+`disconnected` state. Missing or conflicting token sources and invalid local
+configuration prevent initialization. Token resolution and the first room
+connection attempt run on the connection timer after the executor starts.
 
 ### Base Key/Value Fields
 

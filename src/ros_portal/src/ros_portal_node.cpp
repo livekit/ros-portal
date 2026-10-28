@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
   int exit_code = EXIT_SUCCESS;
 
   try {
-    ros_portal::RosPortalManager manager(rclcpp::NodeOptions{}, ros_portal::RosPortalManager::StartupMode::Standalone);
+    ros_portal::RosPortalManager manager(rclcpp::NodeOptions{});
     const rclcpp::ExecutorOptions exec_options;
     const size_t num_threads = manager.rosThreads() > 0 ? static_cast<size_t>(manager.rosThreads()) : 0;
 

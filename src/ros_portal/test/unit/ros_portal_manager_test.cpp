@@ -18,8 +18,12 @@
 
 #include <gtest/gtest.h>
 #include <livekit/livekit.h>
+#include <rcutils/logging.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <stdexcept>
@@ -33,11 +37,36 @@ namespace {
 using ros_portal::test::ScopedEnvVar;
 using ros_portal::test::setEnv;
 
+// Count token errors without relying on log formatting or contacting a server.
+// Restore the handler after the owned node and executor have stopped logging.
+class ScopedTokenErrorCounter {
+public:
+  ScopedTokenErrorCounter() : previous_(rcutils_logging_get_output_handler()) {
+    count_.store(0U);
+    rcutils_logging_set_output_handler(outputHandler);
+  }
+
+  ~ScopedTokenErrorCounter() { rcutils_logging_set_output_handler(previous_); }
+
+  std::size_t count() const { return count_.load(); }
+
+private:
+  static void outputHandler(const rcutils_log_location_t*, int severity, const char* name, rcutils_time_point_value_t,
+                            const char*, va_list*) {
+    if (severity >= RCUTILS_LOG_SEVERITY_ERROR && name != nullptr && std::strcmp(name, "ros_portal.token") == 0) {
+      ++count_;
+    }
+  }
+
+  rcutils_logging_output_handler_t previous_;
+  inline static std::atomic_size_t count_{0U};
+};
+
 class RosPortalManagerTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    // Start each ownership test with a known, stopped SDK. These tests never
-    // spin a connection timer or require a LiveKit server.
+    // Start each ownership test with a known, stopped SDK. These tests do not
+    // require a LiveKit server.
     (void)livekit::initialize();
     livekit::shutdown();
     ASSERT_TRUE(setEnv("LIVEKIT_URL", "ws://127.0.0.1:1"));
@@ -88,13 +117,25 @@ TEST_F(RosPortalManagerTest, KeepsRuntimeUntilLastManagerAndSupportsReload) {
   EXPECT_TRUE(livekit::initialize());
 }
 
-TEST_F(RosPortalManagerTest, StandaloneStartupRetainsManagerOwnership) {
-  // Missing URL makes the immediate credential lookup fail locally, without
-  // requiring network IO. The node remains initialized for later retries.
+TEST_F(RosPortalManagerTest, DefersCredentialResolutionUntilExecutorRuns) {
+  // The token source is valid, but resolving it fails locally without a URL.
+  // Any eager connection attempt would emit a token error during construction.
   unsetenv("LIVEKIT_URL");
+  const ScopedTokenErrorCounter token_errors;
   {
-    RosPortalManager manager(rclcpp::NodeOptions{}, RosPortalManager::StartupMode::Standalone);
+    RosPortalManager manager(rclcpp::NodeOptions{});
+    ASSERT_EQ(token_errors.count(), 0U);
     EXPECT_FALSE(livekit::initialize());
+
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(manager.get_node_base_interface());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (token_errors.count() == 0U && std::chrono::steady_clock::now() < deadline) {
+      executor.spin_once(std::chrono::milliseconds(100));
+    }
+    executor.remove_node(manager.get_node_base_interface());
+
+    EXPECT_GT(token_errors.count(), 0U);
   }
   EXPECT_TRUE(livekit::initialize());
 }

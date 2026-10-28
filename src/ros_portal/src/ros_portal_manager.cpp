@@ -62,23 +62,14 @@ RosPortalManager::LiveKitRuntimeLease::~LiveKitRuntimeLease() {
 }
 
 RosPortalManager::RosPortalManager(const rclcpp::NodeOptions& options)
-    : RosPortalManager(options, StartupMode::Composable) {}
-
-RosPortalManager::RosPortalManager(const rclcpp::NodeOptions& options, StartupMode mode)
     : runtime_(), portal_(std::make_shared<RosPortal>(options)) {
   // The inner node already has shared ownership, so forwarders can safely use
   // weak_from_this() without a deferred initialization callback.
   try {
-    const bool initialized =
-        mode == StartupMode::Standalone ? portal_->initialize() : portal_->initializeForComposition();
-    if (!initialized) {
+    if (!portal_->initialize()) {
       // The component factory and standalone main translate this boundary
       // exception into a failed load or a nonzero exit status.
       throw std::runtime_error("Failed to initialize ROS Portal");
-    }
-    if (mode == StartupMode::Composable && portal_->rosThreads() != 0) {
-      RCLCPP_WARN(portal_->get_logger(),
-                  "ros_threads is ignored in composition; configure thread_num on the component container");
     }
   } catch (...) {
     portal_->shutdown();

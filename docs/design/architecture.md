@@ -33,9 +33,9 @@ The node supports two deployment layouts. `ros_portal_node` runs it in a
 dedicated process with its own multithreaded executor. Both layouts use
 `RosPortalManager` to own the node and a shared LiveKit SDK runtime lease.
 The registered `ros_portal::RosPortalManager` exposes the owned node interface
-to a generic ROS2 component container. Component mode defers the initial
-blocking LiveKit connection attempt until after construction, when the
-container's executor is running.
+to a generic ROS2 component container. Both layouts use the same initialization
+path. Token resolution and the first LiveKit connection attempt run on the
+one-second connection timer once the executor is spinning.
 
 The bundled launch file uses a multithreaded component container. The container
 owns its executor, so `thread_num` replaces the standalone `ros_threads`

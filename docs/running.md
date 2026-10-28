@@ -11,6 +11,11 @@ This guide assumes the following:
 - `LIVEKIT_URL` and `LIVEKIT_TOKEN` environment variables are set appropriately.
 - Optionally, a YAML configuration file is set up. When `config_path` is omitted, ROS Portal forwards all topics bidirectionally using its builtin default (see [Configuration](./configuration.md)).
 
+ROS Portal prepares its local resources during initialization. Token resolution
+and the first LiveKit connection attempt run on the one-second connection timer
+once the ROS executor is spinning. This applies to standalone and composable
+execution; initialization itself does not establish a room connection.
+
 ## Running LiveKit Server
 
 If running LiveKit server locally, start as follows in `--dev` mode using the participant data blob option, which allows schema defining and retrieval for message validation and translation:

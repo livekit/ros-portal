@@ -86,7 +86,7 @@ def test_launch_setup_creates_multithreaded_component_container(tmp_path, monkey
     assert len(container['composable_node_descriptions']) == 1
     component = container['composable_node_descriptions'][0].kwargs
     assert component['package'] == 'ros_portal'
-    assert component['plugin'] == 'ros_portal::RosPortalComponent'
+    assert component['plugin'] == 'ros_portal::RosPortalManager'
     assert component['name'] == 'ros_portal'
     assert component['namespace'] == '/robot'
     assert component['parameters'] == [{'config_path': str(config_path)}]

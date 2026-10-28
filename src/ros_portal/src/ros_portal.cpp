@@ -139,7 +139,7 @@ bool RosPortal::initializeImpl(const bool connect_immediately) {
   }
 
   // The LiveKit SDK lifecycle (livekit::initialize()/shutdown()) is owned by
-  // the process entry point (the node main() or the test harness)
+  // the lifetime owner (RosPortalManager or the test harness)
   room_ = std::make_unique<livekit::Room>();
   if (!room_) {
     RCLCPP_FATAL(this->get_logger(), "Failed to create LiveKit room");
@@ -313,7 +313,7 @@ void RosPortal::shutdown() {
   diagnostics_updater_.reset();
   room_.reset();
   // Note: livekit::shutdown() is intentionally NOT called here — the SDK
-  // lifecycle is owned by the process entry point (see initialize()).
+  // lifecycle is owned by the lifetime owner (see initialize()).
 }
 
 diagnostics::DiagnosticsManagerFns RosPortal::makeDiagnosticsFns() {

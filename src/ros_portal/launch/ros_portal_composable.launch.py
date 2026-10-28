@@ -59,7 +59,7 @@ def _launch_setup(context, *args, **kwargs):
             composable_node_descriptions=[
                 ComposableNode(
                     package='ros_portal',
-                    plugin='ros_portal::RosPortalComponent',
+                    plugin='ros_portal::RosPortalManager',
                     name='ros_portal',
                     namespace=LaunchConfiguration('ns').perform(context),
                     parameters=[{'config_path': config_path_value}],

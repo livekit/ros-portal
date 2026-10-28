@@ -30,20 +30,24 @@ ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
    into ROS using the track name as the local topic name.
 
 The node supports two deployment layouts. `ros_portal_node` runs it in a
-dedicated process with its own multithreaded executor. The registered
-`ros_portal::RosPortalComponent` adapter loads the same implementation into a
-generic ROS2 component container. Component mode defers the initial blocking
-LiveKit connection attempt until after construction, when the container's
-executor is running.
+dedicated process with its own multithreaded executor. Both layouts use
+`RosPortalManager` to own the node and a shared LiveKit SDK runtime lease.
+The registered `ros_portal::RosPortalManager` exposes the owned node interface
+to a generic ROS2 component container. Component mode defers the initial
+blocking LiveKit connection attempt until after construction, when the
+container's executor is running.
 
 The bundled launch file uses a multithreaded component container. The container
 owns its executor, so `thread_num` replaces the standalone `ros_threads`
 configuration in this layout. A single worker is supported. More workers let
 other callbacks run during synchronous LiveKit RPC operations.
 
-Component instances in one process share a reference-counted LiveKit SDK
-runtime. They release the runtime after the last ROS Portal component destroys
-its LiveKit resources.
+Managers in one process share a reference-counted LiveKit SDK runtime. Each
+manager stops the node while retaining shared ownership, then destroys it
+before releasing its runtime lease. The last manager shuts down the SDK only
+if the managers initialized it. An externally initialized runtime remains
+owned by its caller. Local initialization failures reject component loading;
+network connection failures continue through the normal retry timer.
 
 ## Topic Discovery
 

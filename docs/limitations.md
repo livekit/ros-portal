@@ -8,9 +8,9 @@
 - `LIVEKIT_URL`, `LIVEKIT_TOKEN`, LiveKit logging, memory, and fault isolation
   are process-wide in composition. A failure that terminates the container
   also terminates every component it hosts.
-- ROS Portal reference-counts the LiveKit runtime across its component
-  instances. Other LiveKit components must coordinate process-global SDK
-  ownership with ROS Portal.
+- ROS Portal reference-counts the LiveKit runtime across its manager
+  instances, including standalone execution. Other LiveKit components must
+  coordinate process-global SDK ownership with ROS Portal.
 
 ## Video Tracks
 - `VideoSource` and `LocalVideoTrack` are created from the first received image

@@ -18,13 +18,16 @@ from pathlib import Path
 import time
 import unittest
 
+from composition_interfaces.srv import ListNodes, LoadNode, UnloadNode
 from launch import LaunchDescription
-from launch.actions import SetEnvironmentVariable
+from launch.actions import SetEnvironmentVariable, UnsetEnvironmentVariable
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 import launch_testing
 import launch_testing.actions
 import launch_testing.asserts
-from launch_ros.actions import ComposableNodeContainer
-from launch_ros.descriptions import ComposableNode
+from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
+from rcl_interfaces.srv import GetParameters
 import rclpy
 
 
@@ -40,15 +43,15 @@ def generate_test_description():
         composable_node_descriptions=[
             ComposableNode(
                 package='ros_portal',
-                plugin='ros_portal::RosPortalComponent',
+                plugin='ros_portal::RosPortalManager',
                 name='ros_portal_component_a',
-                parameters=[{'config_path': str(config_path)}],
+                parameters=[{'config_path': str(config_path), 'min_qos_depth': 5}],
             ),
             ComposableNode(
                 package='ros_portal',
-                plugin='ros_portal::RosPortalComponent',
+                plugin='ros_portal::RosPortalManager',
                 name='ros_portal_component_b',
-                parameters=[{'config_path': str(config_path)}],
+                parameters=[{'config_path': str(config_path), 'min_qos_depth': 5}],
             ),
         ],
     )
@@ -57,6 +60,8 @@ def generate_test_description():
         LaunchDescription([
             SetEnvironmentVariable('LIVEKIT_URL', 'ws://127.0.0.1:1'),
             SetEnvironmentVariable('LIVEKIT_TOKEN', 'unused-component-test-token'),
+            UnsetEnvironmentVariable('LIVEKIT_TOKEN_ENDPOINT'),
+            UnsetEnvironmentVariable('LIVEKIT_TOKEN_SERVER_ID'),
             container,
             launch_testing.actions.ReadyToTest(),
         ]),
@@ -65,7 +70,18 @@ def generate_test_description():
 
 
 class TestRosPortalComponent(unittest.TestCase):
-    def test_both_components_join_the_ros_graph(self):
+    def _call(self, observer, service_type, service_name, request):
+        client = observer.create_client(service_type, service_name)
+        try:
+            self.assertTrue(client.wait_for_service(timeout_sec=10.0), service_name)
+            future = client.call_async(request)
+            rclpy.spin_until_future_complete(observer, future, timeout_sec=10.0)
+            self.assertTrue(future.done(), service_name)
+            return future.result()
+        finally:
+            observer.destroy_client(client)
+
+    def test_components_initialize_unload_and_reload(self):
         rclpy.init()
         observer = rclpy.create_node('ros_portal_component_test_observer')
         expected_names = {
@@ -86,6 +102,66 @@ class TestRosPortalComponent(unittest.TestCase):
                 expected_names.issubset(discovered_names),
                 f'Expected component nodes {expected_names}, discovered {discovered_names}',
             )
+
+            service_prefix = '/ros_portal_component_test_container/_container'
+
+            def list_nodes():
+                return self._call(
+                    observer, ListNodes, f'{service_prefix}/list_nodes', ListNodes.Request()
+                )
+
+            def unload(node_id):
+                response = self._call(
+                    observer, UnloadNode, f'{service_prefix}/unload_node',
+                    UnloadNode.Request(unique_id=node_id),
+                )
+                self.assertTrue(response.success, response.error_message)
+
+            def load(name, invalid_config=False):
+                request = LoadNode.Request(
+                    package_name='ros_portal',
+                    plugin_name='ros_portal::RosPortalManager',
+                    node_name=name,
+                )
+                if invalid_config:
+                    # A directory cannot be parsed as a config file. The
+                    # constructor must reject this load and unwind its lease.
+                    request.parameters = [Parameter(
+                        name='config_path',
+                        value=ParameterValue(
+                            type=ParameterType.PARAMETER_STRING, string_value='/',
+                        ),
+                    )]
+                return self._call(observer, LoadNode, f'{service_prefix}/load_node', request)
+
+            loaded = list_nodes()
+            ids = dict(zip(loaded.full_node_names, loaded.unique_ids))
+            self.assertEqual(set(ids), {f'/{name}' for name in expected_names})
+
+            failed = load('invalid_portal', invalid_config=True)
+            self.assertFalse(failed.success)
+            self.assertIn('Failed to initialize ROS Portal', failed.error_message)
+
+            unload(ids['/ros_portal_component_a'])
+            self.assertEqual(list(list_nodes().full_node_names), ['/ros_portal_component_b'])
+            parameters = self._call(
+                observer, GetParameters, '/ros_portal_component_b/get_parameters',
+                GetParameters.Request(names=['min_qos_depth']),
+            )
+            self.assertEqual(parameters.values[0].type, ParameterType.PARAMETER_INTEGER)
+            self.assertEqual(parameters.values[0].integer_value, 5)
+
+            unload(ids['/ros_portal_component_b'])
+            self.assertEqual(list(list_nodes().unique_ids), [])
+
+            # Also exercise failure with no remaining runtime owner, followed
+            # by a successful load that must initialize the SDK again.
+            self.assertFalse(load('invalid_portal', invalid_config=True).success)
+            reloaded = load('reloaded_portal')
+            self.assertTrue(reloaded.success, reloaded.error_message)
+            self.assertEqual(reloaded.full_node_name, '/reloaded_portal')
+            unload(reloaded.unique_id)
+            self.assertEqual(list(list_nodes().unique_ids), [])
         finally:
             observer.destroy_node()
             rclpy.shutdown()

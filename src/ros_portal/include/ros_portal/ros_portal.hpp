@@ -93,7 +93,6 @@ public:
   /// should poll this until it returns true rather than assuming immediacy.
   bool hasParticipant(const std::string& participant_id) const;
 
-protected:
   /// @brief Initialize ROS Portal without making the initial blocking LiveKit
   /// connection attempt.
   ///

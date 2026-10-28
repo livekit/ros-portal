@@ -67,7 +67,7 @@ ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 
 ## Running ROS Portal in Composition
 
-The package registers `ros_portal::RosPortalComponent`. The bundled composable
+The package registers `ros_portal::RosPortalManager`. The bundled composable
 launch file starts this component in a multithreaded container:
 
 ```bash
@@ -98,7 +98,7 @@ container = ComposableNodeContainer(
     composable_node_descriptions=[
         ComposableNode(
             package='ros_portal',
-            plugin='ros_portal::RosPortalComponent',
+            plugin='ros_portal::RosPortalManager',
             name='ros_portal',
             parameters=[{'config_path': '/path/to/config.yaml'}],
         ),

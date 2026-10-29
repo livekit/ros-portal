@@ -342,6 +342,7 @@ endif()
 
 if(BUILD_TESTING)
   target_compile_definitions(ros2_cli_lib PRIVATE BUILD_TESTING=1)
+  target_compile_definitions(ros_portal_lib PRIVATE BUILD_TESTING=1)
   add_subdirectory(test)
 endif()
 

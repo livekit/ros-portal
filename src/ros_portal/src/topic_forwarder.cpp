@@ -49,6 +49,11 @@
 #include "ros_portal/utils/topic_matcher.hpp"
 #include "ros_portal/utils/video_frame_metadata.hpp"
 
+#ifdef BUILD_TESTING
+#include "testing/message_observer.hpp"
+std::atomic<ros_portal::test::MessageObserver*> ros_portal::test::message_observer{nullptr};
+#endif
+
 namespace ros_portal {
 
 namespace {
@@ -524,10 +529,14 @@ void TopicForwarder::subscribeVideoTopic(const std::string& topic_name, const ch
 }
 
 void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
-  // Taking ownership of the message lets packed rgba8/bgra8/rgb8 pixels move
-  // into the LiveKit frame without a copy.
-  auto callback = [this, topic_name](std::unique_ptr<sensor_msgs::msg::Image> msg,
+  // Shared immutable messages allow other local readers to use the same pixels.
+  auto callback = [this, topic_name](const sensor_msgs::msg::Image::ConstSharedPtr& msg,
                                      const rclcpp::MessageInfo& message_info) {
+#ifdef BUILD_TESTING
+    if (auto* observer = test::message_observer.load(std::memory_order_acquire)) {
+      observer->imageReceived(*msg, message_info);
+    }
+#endif
     if (isInboundPublication(message_info) || !livekit_methods_.is_room_available()) {
       return;
     }

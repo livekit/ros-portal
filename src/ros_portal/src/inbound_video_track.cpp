@@ -28,6 +28,10 @@
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/video_frame_metadata.hpp"
 
+#ifdef BUILD_TESTING
+#include "testing/message_observer.hpp"
+#endif
+
 namespace ros_portal {
 
 namespace {
@@ -129,6 +133,11 @@ void InboundVideoTrack::publishFrame(const livekit::VideoFrameEvent& event) {
   fillHeader(event);
 
   try {
+#ifdef BUILD_TESTING
+    if (auto* observer = test::message_observer.load(std::memory_order_acquire)) {
+      observer->imagePublishing(message_);
+    }
+#endif
     publisher_->publish(message_);
   } catch (const std::exception& e) {
     counters_.failures.fetch_add(1, std::memory_order_relaxed);

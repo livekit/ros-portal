@@ -110,6 +110,28 @@ The container's environment supplies the LiveKit URL and token source. The
 synchronous LiveKit connection or RPC occupies the single executor thread until
 it returns, so other callbacks in that container wait during the operation.
 
+### Intra-process communication
+
+For local image topics, enable `use_intra_process_comms` on both ROS Portal and
+its peer nodes in the same process and rclcpp context, with compatible QoS. In
+a `ComposableNode` description, set:
+
+```python
+extra_arguments=[{'use_intra_process_comms': True}],
+```
+
+ROS Portal receives typed images through immutable `ConstSharedPtr` callbacks.
+External publishers can keep their existing publication code. Publishing a
+moved `UniquePtr` allows the original message and pixel buffer to reach the
+portal callback without copying. Publishing `*shared_msg` also works, but Jazzy
+copies the message into ROS-owned storage before IPC delivery.
+
+The raw-image conversion to a LiveKit frame copies pixels into a reusable
+buffer. Inbound LiveKit video is published as `CompressedImage` by const
+reference, which also copies before IPC delivery to local subscribers. IPC
+does not imply zero-copy encoding, networking, or decoding. Generic serialized
+topics do not use rclcpp intra-process delivery on Jazzy.
+
 ## Forwarding Custom Topics
 
 Forwarding custom message types work like any other ROS type:

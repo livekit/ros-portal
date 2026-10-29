@@ -21,9 +21,12 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
+#include <iostream>
 #include <memory>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <sstream>
 #include <string>
 
 #include "ros_portal_e2e_fixture.hpp"
@@ -230,6 +233,117 @@ TEST_F(PortalIpcE2E, PortalToAppUsesIpcWithConstSharedPtrAndReportsPublicationCo
     EXPECT_NE(observations_.received.payload.load(std::memory_order_relaxed),
               observations_.sent.payload.load(std::memory_order_relaxed));
   }
+}
+
+/// @brief Compare ROS delivery only, excluding frame preparation and video encoding.
+class ImageIpcLatency : public ::testing::Test {
+protected:
+  using Clock = std::chrono::steady_clock;
+  static constexpr std::uint32_t kWidth = 7680U;
+  static constexpr std::uint32_t kHeight = 4320U;
+  static constexpr std::uint32_t kSamples = 30U;
+  static constexpr std::uint32_t kWarmupFrames = 3U;
+  static constexpr std::size_t kPayloadBytes = std::size_t{kWidth} * kHeight * 3U;
+
+  // Both callbacks run on the test thread's single-threaded executor. No
+  // atomic synchronization or polling sleep is needed in the timed interval.
+  struct Delivery {
+    Clock::time_point sent_at;
+    Clock::time_point received_at;
+    std::int32_t expected_id{0};
+    std::int32_t received_id{0};
+    bool intra_process{false};
+    bool contents_valid{false};
+  };
+
+  void measure(bool use_ipc, double& average_ms) {
+    SCOPED_TRACE(use_ipc ? "IPC enabled" : "IPC disabled");
+    const ScopedRosGraph graph(testDomainIds().first);
+    const auto options = rclcpp::NodeOptions().context(graph.context()).use_intra_process_comms(use_ipc);
+    auto sender = std::make_shared<rclcpp::Node>("latency_sender", options);
+    auto receiver = std::make_shared<rclcpp::Node>("latency_receiver", options);
+    const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().durability_volatile();
+    auto publisher = sender->create_publisher<sensor_msgs::msg::Image>("/ipc_latency/image_raw", qos);
+    Delivery delivery{};
+    auto subscription = receiver->create_subscription<sensor_msgs::msg::Image>(
+        "/ipc_latency/image_raw", qos,
+        [&](const sensor_msgs::msg::Image::ConstSharedPtr& message, const rclcpp::MessageInfo& info) {
+          const auto received_at = Clock::now();
+          if (message->header.stamp.sec != delivery.expected_id) {
+            return;
+          }
+          delivery.received_at = received_at;
+          delivery.received_id = message->header.stamp.sec;
+          delivery.intra_process = info.get_rmw_message_info().from_intra_process;
+          const auto marker = static_cast<std::uint8_t>(delivery.expected_id);
+          delivery.contents_valid = message->width == kWidth && message->height == kHeight &&
+                                    message->encoding == "rgb8" && message->data.size() == kPayloadBytes &&
+                                    message->data.front() == marker && message->data.back() == marker;
+        });
+    rclcpp::ExecutorOptions executor_options;
+    executor_options.context = graph.context();
+    rclcpp::executors::SingleThreadedExecutor executor(executor_options);
+    executor.add_node(sender);
+    executor.add_node(receiver);
+    ASSERT_TRUE(waitFor(
+        [&]() {
+          return publisher->get_subscription_count() == 1U && subscription->get_publisher_count() == 1U &&
+                 publisher->get_intra_process_subscription_count() == (use_ipc ? 1U : 0U);
+        },
+        kGraphTimeout))
+        << "Image endpoints did not match";
+    ASSERT_NO_FATAL_FAILURE(transmitFrames(*publisher, executor, delivery, use_ipc, average_ms));
+  }
+
+  void transmitFrames(rclcpp::Publisher<sensor_msgs::msg::Image>& publisher,
+                      rclcpp::executors::SingleThreadedExecutor& executor, Delivery& delivery, bool use_ipc,
+                      double& average_ms) {
+    const auto deadline = Clock::now() + 60s;
+    double total_ms = 0.0;
+    for (std::uint32_t frame = 1U; frame <= kWarmupFrames + kSamples; ++frame) {
+      SCOPED_TRACE("frame " + std::to_string(frame));
+      ASSERT_LT(Clock::now(), deadline) << "8K delivery trial exceeded 60 seconds";
+      // Allocate and touch the complete payload before starting the clock.
+      // One outstanding image bounds memory; both modes publish by ownership transfer.
+      auto message = std::make_unique<sensor_msgs::msg::Image>();
+      message->width = kWidth;
+      message->height = kHeight;
+      message->step = kWidth * 3U;
+      message->encoding = "rgb8";
+      message->header.stamp.sec = static_cast<std::int32_t>(frame);
+      message->data.assign(kPayloadBytes, static_cast<std::uint8_t>(frame));
+      delivery.expected_id = message->header.stamp.sec;
+      delivery.received_id = 0;
+      delivery.sent_at = Clock::now();
+      publisher.publish(std::move(message));
+      while (delivery.received_id != delivery.expected_id && Clock::now() < deadline) {
+        executor.spin_once(100ms);
+      }
+      ASSERT_EQ(delivery.received_id, delivery.expected_id) << "Timed out receiving an 8K image";
+      ASSERT_EQ(delivery.intra_process, use_ipc);
+      ASSERT_TRUE(delivery.contents_valid);
+      if (frame > kWarmupFrames) {
+        total_ms += std::chrono::duration<double, std::milli>(delivery.received_at - delivery.sent_at).count();
+      }
+    }
+    average_ms = total_ms / static_cast<double>(kSamples);
+  }
+};
+
+TEST_F(ImageIpcLatency, Thirty8kFramesArriveFasterWithIpc) {
+  double ipc_on_ms = 0.0;
+  double ipc_off_ms = 0.0;
+  ASSERT_NO_FATAL_FAILURE(measure(true, ipc_on_ms));
+  ASSERT_NO_FATAL_FAILURE(measure(false, ipc_off_ms));
+
+  std::ostringstream report;
+  report << std::fixed << std::setprecision(3) << "[  LATENCY ] 30 x 7680x4320 rgb8 (" << kPayloadBytes
+         << " bytes/frame): IPC on = " << ipc_on_ms << " ms average, IPC off = " << ipc_off_ms << " ms average\n";
+  std::cout << report.str() << std::flush;
+  RecordProperty("ipc_on_average_ms", std::to_string(ipc_on_ms));
+  RecordProperty("ipc_off_average_ms", std::to_string(ipc_off_ms));
+  RecordProperty("measured_frames_per_mode", static_cast<int>(kSamples));
+  EXPECT_LT(ipc_on_ms, ipc_off_ms) << report.str();
 }
 
 } // namespace

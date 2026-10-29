@@ -60,6 +60,28 @@ bounded waits. Observers are compiled only with `BUILD_TESTING`; they add no
 public runtime configuration. These tests cover local ROS message boundaries,
 not copies inside the video codec or LiveKit transport.
 
+### 8K Image IPC Latency Comparison
+
+`ImageIpcLatency.Thirty8kFramesArriveFasterWithIpc` compares two local ROS nodes
+with IPC on and off, using the same reliable, volatile, KeepLast(1) QoS and
+`ConstSharedPtr` receiving callback. Each mode warms up with three frames,
+then measures thirty 7680x4320 RGB images (99,532,800 bytes per frame), with
+one image in flight. It prints both average latencies, saves them as GTest XML
+properties, and asserts that the IPC-on average is lower.
+
+```bash
+source /opt/ros/${ROS_DISTRO}/setup.bash
+source install/setup.bash
+build/ros_portal/test/ros_portal_integration_tests --gtest_filter='ImageIpcLatency.*'
+```
+
+Timing uses a monotonic clock from immediately before publication to callback
+entry. Frame allocation and filling are outside the timed interval; encoding
+and LiveKit transport are excluded. This comparison needs no LiveKit server,
+credentials, or camera hardware. Each mode has a 60-second delivery deadline;
+the middleware must support approximately 100 MB ROS messages. Results depend
+on the host load and RMW implementation and are not a camera FPS measurement.
+
 ### Isolated Connection-Fault Test
 
 An opt-in integration test routes only its ROS Portal participants through a

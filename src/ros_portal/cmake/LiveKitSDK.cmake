@@ -1,7 +1,7 @@
 # LiveKitSDK.cmake
 #
 # Helper for example repos:
-# - Downloads the appropriate prebuilt LiveKit C++ SDK release asset for the target OS/arch
+# - Downloads the capture-enabled LiveKit C++ SDK release asset for the target OS/arch
 # - On Linux, uses the Ubuntu 22.04 ABI archive so Humble and newer ROS distros can share
 #   one prebuilt SDK
 # - Extracts it into a local directory (default: <build>/_deps/livekit-sdk)
@@ -192,15 +192,20 @@ function(livekit_sdk_setup)
     message(STATUS "LiveKitSDK: resolved latest version = ${_resolved_version}")
   endif()
 
+  if(LK_TRIPLE STREQUAL "macos-x64")
+    message(FATAL_ERROR "LiveKitSDK: capture release bundles are not available for Intel Macs")
+  endif()
+
   _lk_archive_ext(_ext)
-  set(_archive "livekit-sdk-${LK_TRIPLE}-${_resolved_version}.${_ext}")
+  set(_bundle "livekit-sdk-${LK_TRIPLE}-capture-${_resolved_version}")
+  set(_archive "${_bundle}.${_ext}")
   set(_url "https://github.com/${LK_REPO}/releases/download/v${_resolved_version}/${_archive}")
 
   set(_archive_path "${LK_DOWNLOAD_DIR}/${_archive}")
 
   # The archive is expected to contain a top-level folder named:
-  #   livekit-sdk-<triple>-<version>/
-  set(_extracted_root "${LK_SDK_DIR}/livekit-sdk-${LK_TRIPLE}-${_resolved_version}")
+  #   livekit-sdk-<triple>-capture-<version>/
+  set(_extracted_root "${LK_SDK_DIR}/${_bundle}")
 
   file(MAKE_DIRECTORY "${LK_DOWNLOAD_DIR}")
   file(MAKE_DIRECTORY "${LK_SDK_DIR}")

@@ -2,7 +2,7 @@
 
 `ros_portal` publishes ROS diagnostics on `/diagnostics` using
 `diagnostic_updater` from the [ROS diagnostics](https://github.com/ros/diagnostics)
-stack. ROS Portal currently exposes seven diagnostic tasks:
+stack. ROS Portal exposes these diagnostic tasks:
 
 - `build_info` — always published
 - `ros_portal_status` — always published
@@ -11,6 +11,7 @@ stack. ROS Portal currently exposes seven diagnostic tasks:
 - `latched_topic_forwarder` — published when latched topic forwarding is configured
 - `service_forwarder` — published when service forwarding is configured
 - `cli_manager` — published when the ROS CLI manager is enabled
+- `video_source/<track_name>/<index>` — one task for every configured video source
 
 Every task publishes on the `/diagnostics` topic with hardware ID `ros_portal`,
 and each task name is the section heading it is documented under below. Per-task
@@ -369,6 +370,41 @@ Request volume is not published. The five CLI methods are
 `ros2_topic_list`, `ros2_topic_pub`, `ros2_service_list`, `ros2_service_call`,
 and `ros2_interface_show`.
 
+## `video_source/<track_name>/<index>`
+
+Polls the SDK's terminal result without blocking during each diagnostics update.
+Reports startup and terminal capture state independently for every entry in
+`ros_portal.video_sources`. A source that fails does not stop ROS Portal or any
+other configured source. The numeric suffix keeps task names unique when track
+names are repeated.
+
+| Property | Value |
+|---|---|
+| Task name | `video_source/<track_name>/<index>` |
+| Topic | `/diagnostics` |
+| Hardware ID | `ros_portal` |
+| Source | LiveKit capture-source creation, startup, and asynchronous `join()` result |
+
+### Status Levels
+
+| Level | Message | Meaning |
+|---|---|---|
+| `OK` | `Video source is running` | Capture was created, published, and started. |
+| `OK` | `Video source stopped` | Capture was deliberately stopped during shutdown. |
+| `WARN` | `Video source is starting` | Source initialization has not reached the running state. |
+| `WARN` | `Video source reached end-of-stream` | Capture ended normally at EOS. ROS Portal reports this terminal state without retrying. |
+| `ERROR` | Capture error text | Source creation, publication, startup, or capture failed. ROS Portal reports this terminal state without retrying. |
+
+### Key/Value Fields
+
+| Key | Value |
+|---|---|
+| `track_name` | Configured LiveKit track name. |
+| `source_type` | Configured source discriminator, currently `gstreamer`, `pattern`, or `clock`. |
+| `state` | `starting`, `running`, `stopped`, `end_of_stream`, or `error`. |
+| `frames_captured` | Number of frames reported by the capture source; `0` until a successful terminal `join()` result supplies a count. Structured capture failures report their error text without a frame count. |
+| `error` | Capture error text. Empty unless `state=error`. |
+
 ## Quick Check
 
 After launching ROS Portal with valid LiveKit credentials, inspect one diagnostic
@@ -378,9 +414,9 @@ message with:
 
 Look for `build_info`, `ros_portal_status`, and, after configuration loads,
 `connection_health`. When those subsystems are enabled, look for
-`topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`, and
-`cli_manager` statuses. When the room is connected, `connection_health` should
-also contain the fixed `rtc.*` summary fields.
+`topic_forwarder`, `latched_topic_forwarder`, `service_forwarder`,
+`cli_manager`, and `video_source/*` statuses. When the room is connected,
+`connection_health` should also contain the fixed `rtc.*` summary fields.
 
 ## Aggregating Diagnostics
 
@@ -452,12 +488,17 @@ Save this as `ros_portal_diagnostics_aggregator.yaml`:
       type: diagnostic_aggregator/GenericAnalyzer
       path: CLI Manager
       contains: ['cli_manager']
+    video_sources:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Video Sources
+      contains: ['video_source/']
 ```
 
 This groups ROS Portal diagnostics under `ROS Portal / Build Info`,
 `ROS Portal / Node Status`, `ROS Portal / Connection Health`,
 `ROS Portal / Topic Forwarder`, `ROS Portal / Latched Topic Forwarder`,
-`ROS Portal / Service Forwarder`, and `ROS Portal / CLI Manager`.
+`ROS Portal / Service Forwarder`, `ROS Portal / CLI Manager`, and
+`ROS Portal / Video Sources`.
 Omit analyzers for tasks that are not enabled in your configuration.
 
 ### Launch The Aggregator

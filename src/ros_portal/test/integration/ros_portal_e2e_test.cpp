@@ -23,9 +23,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <exception>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
@@ -39,6 +42,8 @@
 
 namespace ros_portal::test {
 namespace {
+
+constexpr int kMinimumCaptureFrames = 5;
 
 TEST_F(RosPortalTestE2E, AdvertisesRobotParticipantAttribute) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
@@ -167,6 +172,88 @@ TEST_F(RosPortalTestE2E, RepublishesRosMessagesBothWays) {
   EXPECT_TRUE(verifyDirection(publisherB(), robotANode(), kBidirectionalTopic, kBidirectionalTopic,
                               "message from ROS Portal B"));
 }
+
+class CaptureSourceE2E : public RosPortalTestE2E, public ::testing::WithParamInterface<std::string> {};
+
+TEST_P(CaptureSourceE2E, PublishesConfiguredCaptureFrames) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+
+  livekit::Room receiver_room;
+  const livekit::RoomOptions room_options;
+  ASSERT_TRUE(receiver_room.connect(liveKitUrl(), tokenB(), room_options));
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  int frames_received = 0;
+  constexpr const char* kTrackName = "ros-portal-capture";
+  receiver_room.setOnVideoFrameEventCallback(identityA(), kTrackName,
+                                             [&mutex, &cv, &frames_received](const livekit::VideoFrameEvent&) {
+                                               const std::lock_guard<std::mutex> lock(mutex);
+                                               if (++frames_received >= kMinimumCaptureFrames) {
+                                                 cv.notify_all();
+                                               }
+                                             });
+
+  initializeSinglePortalRuntime(std::string(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: "ros-portal-capture"
+      source:
+)") + GetParam() + R"(
+      publish_options:
+        max_bitrate_bps: 1000000
+        max_framerate: 30
+)");
+
+  std::unique_lock<std::mutex> lock(mutex);
+  EXPECT_TRUE(
+      cv.wait_for(lock, kMessageTimeout, [&frames_received] { return frames_received >= kMinimumCaptureFrames; }))
+      << "Timed out waiting for ROS Portal capture frames; received " << frames_received;
+  lock.unlock();
+
+  receiver_room.clearOnVideoFrameCallback(identityA(), kTrackName);
+}
+
+TEST_F(RosPortalTestE2E, ReportsCaptureEndOfStreamFromJoinResult) {
+  ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
+  initializeSinglePortalRuntime(R"(
+ros_portal:
+  version: "0.0.1"
+  video_sources:
+    - track_name: finite_capture
+      source:
+        type: gstreamer
+        pipeline: videotestsrc is-live=true num-buffers=12 ! video/x-raw,width=320,height=240,framerate=30/1 ! vp8enc deadline=1 ! appsink name=lk_appsink
+)");
+  std::atomic_bool saw_terminal_result{false};
+  const auto subscription = rosPortalA()->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+      "/diagnostics", 10, [&saw_terminal_result](const diagnostic_msgs::msg::DiagnosticArray& message) {
+        for (const auto& status : message.status) {
+          if (status.name.find("video_source/finite_capture/0") == std::string::npos) {
+            continue;
+          }
+          bool end_of_stream = false;
+          bool has_frames = false;
+          for (const auto& value : status.values) {
+            end_of_stream = end_of_stream || (value.key == "state" && value.value == "end_of_stream");
+            has_frames = has_frames || (value.key == "frames_captured" && value.value != "0");
+          }
+          if (end_of_stream && has_frames) {
+            saw_terminal_result.store(true);
+          }
+        }
+      });
+  EXPECT_TRUE(waitFor([&saw_terminal_result] { return saw_terminal_result.load(); }, kMessageTimeout))
+      << "Capture join result did not report end-of-stream and a nonzero frame count";
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    CaptureSources, CaptureSourceE2E,
+    ::testing::Values("        type: pattern\n", "        type: clock\n",
+                      "        type: gstreamer\n"
+                      "        pipeline: videotestsrc is-live=true ! video/x-raw,width=640,height=480,framerate=30/1 ! "
+                      "vp8enc name=lk_encoder deadline=1 ! appsink name=lk_appsink\n"));
 
 // End-to-end encoding check: ROS Portal A forwards a ROS message with a configured
 // outbound `encoding`, and ROS Portal B (default config) receives, decodes, and

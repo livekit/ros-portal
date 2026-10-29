@@ -12,6 +12,17 @@ External repositories are tracked in `external.repos` using `vcstool`.
 
 __NOTE:__ Git Authentication From The Devcontainer is currently not supported.
 
+An existing container keeps the APT packages it was built with. When a commit
+adds a system dependency to `docker/development/Dockerfile` or a new
+`build_depend` to a `package.xml`, rebuild the container rather than reusing it;
+otherwise the build fails on the missing library. A stale GStreamer toolchain,
+for example, fails the LiveKit SDK source build at link time with
+`cannot find -lgstapp-1.0`.
+
+```bash
+devcontainer up --workspace-folder . --remove-existing-container
+```
+
 ## ROS Distribution
 
 The devcontainer defaults to ROS 2 Jazzy. Its Docker build accepts
@@ -49,13 +60,18 @@ The remaining overrides are independent feature choices:
 - `INSTALL_CPP_TOOLS` defaults to `true`. Set it to `false` when the formatter
   and static-analysis toolchain are unnecessary. The distro matrix disables it
   because those tools have a dedicated workflow.
-- `LIVEKIT_BUILD_SDK_FROM_SOURCE` defaults to `false`. Leave it off for normal
-  builds; the pinned Ubuntu 22.04 SDK archive works on Humble through Lyrical.
-  Set it to `true` only when iterating on the SDK checkout itself (installs the
-  Rust/C++ toolchain needed to compile `client-sdk-cpp`, and CMake defaults to
-  building that checkout instead of downloading the archive).
+- `LIVEKIT_BUILD_SDK_FROM_SOURCE` defaults to `false`. The build downloads the
+  pinned `LIVEKIT_SDK_VERSION` capture release bundle. Set it to `true` to install
+  the additional toolchain and build the pinned SDK checkout instead.
 - `ROS_IMAGE_REPOSITORY` only needs an override when using an image registry
   other than the default `ros` repository.
+
+All supported ROS distributions use the Ubuntu 22.04 capture bundle for their
+architecture (`ubuntu-22.04-x64-capture` or `ubuntu-22.04-arm64-capture`). Its
+older glibc baseline supports Humble and newer distributions. The devcontainer
+installs GStreamer plugins and software Vulkan for hardware-free capture tests
+with either SDK build path.
+
 ## Shell Helpers
 
 See `scripts/setup-shell-env.sh` for build helpers such as `bros`, `dros`, `sros`, and
@@ -111,17 +127,33 @@ versions used in CI automatically.
 
 ## LiveKit SDK
 
-The default build downloads the pinned LiveKit C++ SDK release during CMake
-configure. On Linux it selects the Ubuntu 22.04 archive
-(`livekit-sdk-ubuntu-22.04-*`) so the same prebuilt ABI works on Humble (Jammy)
-and newer ROS distros (Jazzy/Kilted on Noble, Lyrical on Resolute).
+The default build downloads LiveKit C++ `-capture` release archive.
+These bundles include GStreamer,a pattern, and clock sources.
+LiveKit Capture is not supported on Intel Macs.
 
 The release version lives in `src/ros_portal/colcon.pkg` and as the default of
-the `LIVEKIT_SDK_VERSION` CMake cache variable in
-`src/ros_portal/CMakeLists.txt`; `external.repos` pins the source
-checkout to that release's commit. Bump all three together when upgrading. The
-SDK release check verifies that the two version strings match and that the
-source commit is the commit referenced by the published release tag.
+`LIVEKIT_SDK_VERSION` in `src/ros_portal/CMakeLists.txt`. `external.repos` pins the
+same release commit for optional source builds. CI checks that all three agree
+and builds, tests, and packages against the release capture artifacts.
+
+A normal build needs no SDK source toolchain:
+
+```bash
+colcon build --packages-select ros_portal \
+  --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=OFF
+```
+
+Pass `OFF` explicitly when reusing a build directory configured for source builds;
+CMake preserves cached options across builds.
+
+### Optional SDK source build
+
+On Linux the Rust/WebRTC bridge requires Clang 21 or newer for Chromium's
+bundled C++ library. With `LIVEKIT_BUILD_SDK_FROM_SOURCE=true`, the devcontainer
+installs Clang 21 from [LLVM's Ubuntu packages](https://apt.llvm.org/). The
+source-build helper selects it for Cargo without changing the ROS compiler.
+To use another compatible installation, set `LIVEKIT_SDK_RUST_CXX_COMPILER` to
+its `clang++` path. A missing or older compiler fails at configure time.
 
 Initialize the pinned SDK source checkout with the other external repositories:
 
@@ -132,7 +164,7 @@ vcs import --recursive src/externals < external.repos
 ```
 
 To compile the SDK from that checkout and build ROS Portal against the
-resulting package (optional; only needed when changing the SDK itself):
+resulting capture-enabled package:
 
 ```bash
 colcon build --packages-select ros_portal \
@@ -148,25 +180,67 @@ directory. Its source build defaults to two parallel jobs. Set
 the same limit is applied to both the CMake and Rust/Cargo build steps. Use one
 SDK job when building in a memory-constrained Docker Desktop VM.
 
-A source build is expensive, so both halves of its output are reusable:
+A source build is expensive. Preserve these caches between builds:
 
-- `src/externals/client-sdk-cpp/client-sdk-rust/target` — Rust artifacts and the
-  vendored WebRTC the build scripts unpack. This is the bulk of both the time and
-  the ~3.4 GB on disk. It lives in the source tree, so it is shared by every
-  colcon build base.
-- `<build-base>/ros_portal/_deps` — the SDK's own CMake tree and install
-  prefix, roughly 250 MB.
+- `src/externals/client-sdk-cpp/client-sdk-rust/target/cpp-<feature-hash>` — Rust
+  runtime and metadata libraries, plus vendored WebRTC artifacts. The SDK keeps
+  each capture feature selection in a separate directory.
+- `src/externals/client-sdk-cpp/client-sdk-rust/target/bindgens` and
+  `src/externals/client-sdk-cpp/client-sdk-rust/target/uniffi-bindgen-cpp` — the
+  C++ binding driver and pinned generator.
+- `<build-base>/ros_portal/_deps` — the SDK's CMake tree and install prefix.
 
-Deleting either forces that half to be rebuilt. With both warm, a full CMake
-reconfigure plus SDK build and install finishes in well under a minute; from
-scratch it is tens of minutes.
+Deleting these directories forces their artifacts to be rebuilt. A cold build
+compiles the C++ dependencies, Rust runtime and metadata libraries, and binding
+generator before building ROS Portal.
 
-### One-Off SDK Version Override
+### One-Off SDK Source Override
 
-To override the pin for one build, or to track upstream with `latest`:
+To test another capture-enabled source checkout, set `LIVEKIT_SDK_SOURCE_DIR`:
 
-    colcon build --packages-select ros_portal \
-      --cmake-args -DLIVEKIT_SDK_VERSION=latest
+```bash
+colcon build --packages-select ros_portal \
+  --cmake-args -DLIVEKIT_BUILD_SDK_FROM_SOURCE=ON \
+    -DLIVEKIT_SDK_SOURCE_DIR=/path/to/client-sdk-cpp
+```
+
+`LIVEKIT_SDK_VERSION` controls the package version, not the Git revision of a
+source override. Keep it aligned with the checkout being tested. Source builds
+use `LIVEKIT_CAPTURE=all`, matching the release capture bundles.
+
+## Capture verification
+
+The integration suite uses LiveKit v1.13.3 with
+`enable_participant_data_blob: true`, matching CI. It also needs GStreamer's
+`videotestsrc` and `vp8enc` plugins. Pattern and clock cases need a
+compatible GPU adapter; for a headless Linux container, install
+`mesa-vulkan-drivers` to provide software Vulkan. These tests use synthetic
+sources and require no camera hardware.
+
+Start the test server on the Docker host:
+
+```bash
+docker run --rm --network host livekit/livekit-server:v1.13.3 \
+  --dev --bind 0.0.0.0 --node-ip 127.0.0.1 \
+  --config-body 'enable_participant_data_blob: true'
+```
+
+With that server on port 7880, run in the devcontainer:
+
+```bash
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+source install/setup.bash
+export LIVEKIT_URL=ws://127.0.0.1:7880
+source scripts/set-test-tokens.sh
+colcon test --packages-select ros_portal_config
+colcon test --packages-select ros_portal --ctest-args -R ros_portal_unit_tests
+colcon test --packages-select ros_portal --ctest-args -R ros_portal_integration_tests
+colcon test-result --verbose
+```
+
+The token helper defaults to the server's development credentials (`devkey` /
+`secret`). For another server, set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and
+`LIVEKIT_API_SECRET` before sourcing it.
 
 ## Packaging Debian Artifacts
 
@@ -182,6 +256,21 @@ devcontainer:
 colcon build --packages-up-to ros_portal
 ./scripts/package-deb.sh
 ```
+
+The `ros_portal` test translation units are the workspace's largest, and a
+default-parallelism build of them exhausts a 8 GB Docker Desktop VM, which the
+kernel reports as `c++: fatal error: Killed signal terminated program cc1plus`.
+Bound the compiler jobs on a memory-constrained host. Colcon passes explicit
+Make job flags unless `MAKEFLAGS` already sets them, so
+`CMAKE_BUILD_PARALLEL_LEVEL` alone does not bound this build:
+
+```bash
+MAKEFLAGS="-j2 -l2" CMAKE_BUILD_PARALLEL_LEVEL=2 \
+  colcon build --packages-up-to ros_portal --parallel-workers 1
+```
+
+The runtime image is built from the resulting `.deb`; see
+[Build a runtime image locally](docker.md#build-a-runtime-image-locally).
 
 The resulting self-contained package preserves the isolated prefixes for ROS
 Portal, config, message, and medkit packages under `/opt/livekit/ros/$ROS_DISTRO`;

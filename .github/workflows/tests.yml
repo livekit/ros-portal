@@ -24,6 +24,7 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
     env:
+      # Build and consume the published capture-enabled SDK bundle.
       LIVEKIT_BUILD_SDK_FROM_SOURCE: "false"
       INSTALL_CPP_TOOLS: "false"
       INSTALL_SIMULATION_DEPS: "false"
@@ -63,7 +64,7 @@ jobs:
               source install/setup.bash
               set -u
               test_exit=0
-              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R ros_portal_unit_tests || test_exit=$?
+              GTEST_COLOR=1 colcon test --packages-up-to ros_portal test_utilities custom_msgs --packages-skip ros2_medkit_serialization --event-handlers console_direct+ --return-code-on-test-failure --ctest-args -R "ros_portal_(unit_tests|sdk_configuration_tests)" || test_exit=$?
               colcon test-result --verbose --all
               exit $test_exit
             '

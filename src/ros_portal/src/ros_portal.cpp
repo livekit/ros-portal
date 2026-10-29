@@ -16,6 +16,7 @@
 
 #include "ros_portal/ros_portal.hpp"
 
+#include <livekit/capture/capture_source.h>
 #include <livekit/data_track_options.h>
 #include <livekit/data_track_schema.h>
 #include <livekit/data_track_stream.h>
@@ -36,11 +37,15 @@
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
 #include <exception>
 #include <filesystem>
+#include <future>
+#include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "ros_portal/capture_source_factory.hpp"
 #include "ros_portal/cli/manager.hpp"
 #include "ros_portal/connection/connection_manager.hpp"
 #include "ros_portal/diagnostics/build_info.hpp"
@@ -53,6 +58,7 @@
 #include "ros_portal/utils/config_mapping.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "ros_portal/utils/video_frame_metadata.hpp"
+#include "ros_portal/video_source_manager.hpp"
 #include "ros_portal_config/config/config_parser.hpp"
 
 namespace ros_portal {
@@ -124,6 +130,7 @@ bool RosPortal::initialize() {
       diagnostic_state_.latched_topic_forwarder_active.reset();
     }
   }
+  video_sources_ = config->video_sources;
 
   RCLCPP_INFO(this->get_logger(), "%zu configured topic regex, QoS depth range: [%zu, %zu], ros_threads: %d",
               config->topics.size(), min_qos_depth_, max_qos_depth_, ros_threads_);
@@ -352,6 +359,12 @@ bool RosPortal::startRoomComponents() {
     stopRoomComponents();
     return false;
   }
+  // Video sources publish through the local participant, so they are created
+  // with the room session. A failure is isolated to its own source and must not
+  // tear down topic or service forwarding.
+  if (!initializeVideoSources(video_sources_)) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to initialize video source manager");
+  }
 
   room_components_started_ = true;
   return true;
@@ -359,6 +372,7 @@ bool RosPortal::startRoomComponents() {
 
 void RosPortal::stopRoomComponents() {
   // Reset before room_ so RPC handlers and workers can release room state.
+  video_source_manager_.reset();
   cli_manager_.reset();
   diagnostic_state_.cli_manager_active.store(false, std::memory_order_relaxed);
   latched_topic_forwarder_.reset();
@@ -879,6 +893,95 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
     return false;
   }
   return topic_forwarder_ != nullptr;
+}
+
+bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources) {
+  VideoSourceManager::LiveKitMethods methods;
+  methods.create_and_publish = [this](const ros_portal_config::VideoSourceConfig& config)
+      -> livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string> {
+    const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
+    if (!participant) {
+      return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+          "local participant is unavailable");
+    }
+
+    try {
+      auto created = capture::createCaptureSource(config.source).get();
+      if (!created) {
+        return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+            created.error().message);
+      }
+      auto capture_source = std::move(created).value();
+      if (!capture_source || !capture_source->videoSource()) {
+        return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+            "capture source creation returned no video source");
+      }
+
+      // GStreamer sources discover resolution from negotiated pipeline caps, so
+      // log what the SDK settled on.
+      RCLCPP_INFO(this->get_logger(), "Capture source '%s' (%s) negotiated %dx%d", config.track_name.c_str(),
+                  ros_portal_config::toString(config.source.type), capture_source->width(), capture_source->height());
+
+      auto track = livekit::LocalVideoTrack::createLocalVideoTrack(config.track_name, capture_source->videoSource());
+      if (!track) {
+        return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(
+            "failed to create local video track");
+      }
+
+      participant->publishTrack(track, capture_source->publishOptions(
+                                           capture::capturePublishOptions(config.publish_options, config.simulcast)));
+
+      auto session = std::make_shared<VideoSourceManager::Session>();
+      auto pending = std::make_shared<capture::CaptureCompletion>();
+      session->start = [capture_source, pending] {
+        const auto started = capture_source->start();
+        if (!started) {
+          throw std::runtime_error(started.error().message);
+        }
+        pending->setResult(capture_source->join());
+      };
+      session->stop = [capture_source, pending] {
+        const auto stopped = capture_source->stop();
+        if (!stopped) {
+          throw std::runtime_error(stopped.error().message);
+        }
+        pending->wait(std::chrono::seconds(5));
+      };
+      session->poll_result = [pending]() -> std::optional<VideoSourceResult> {
+        auto finished = pending->poll();
+        if (!finished) {
+          return std::nullopt;
+        }
+        const auto& result = *finished;
+        VideoSourceResult mapped;
+        if (!result) {
+          mapped.error = result.error().message;
+        } else {
+          mapped.frames_captured = result.value().frames_captured;
+          mapped.exit = result.value().exit == livekit::capture::CaptureExit::EndOfStream ? VideoSourceExit::EndOfStream
+                                                                                          : VideoSourceExit::Stopped;
+        }
+        return mapped;
+      };
+      session->unpublish = [participant, track] {
+        if (const auto publication = track->publication()) {
+          participant->unpublishTrack(publication->sid());
+        }
+      };
+      return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::success(std::move(session));
+    } catch (const std::exception& error) {
+      return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::failure(error.what());
+    }
+  };
+
+  try {
+    video_source_manager_ = std::make_unique<VideoSourceManager>(video_sources, std::move(methods),
+                                                                 makeDiagnosticsFns(), this->get_logger());
+  } catch (const std::exception& error) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to construct video source manager: %s", error.what());
+    return false;
+  }
+  return true;
 }
 
 bool RosPortal::initializeCliManager() {

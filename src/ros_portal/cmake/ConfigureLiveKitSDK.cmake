@@ -75,22 +75,20 @@ function(livekit_configure_sdk)
   include(LiveKitSDK)
   _lk_default_triple(_livekit_sdk_triple)
 
-  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.10.0")
+  # Digests of the published v1.13.0 capture bundles (GitHub release assets).
+  if(NOT LIVEKIT_SDK_SHA256 AND LIVEKIT_SDK_VERSION STREQUAL "1.13.0")
     if(_livekit_sdk_triple STREQUAL "ubuntu-22.04-x64")
       set(LIVEKIT_SDK_SHA256
-        "736f878f5d255397261f0c88260763025b0d3a9552cdaf5b532b4ffcb0abd54c")
+        "f9c06f863697dd2d59d33929a242dcd03a9d6f9a80ffd82857ed76e068600f9d")
     elseif(_livekit_sdk_triple STREQUAL "ubuntu-22.04-arm64")
       set(LIVEKIT_SDK_SHA256
-        "5d73fe5ab6ef4212d34c8f957cd12e3bbc356d6b4cbac6f1b2c5be1c5020158d")
+        "2a17d086a5c66eee366ce033a37adf083d827ef6d428d5980efe3e6c4a17591f")
     elseif(_livekit_sdk_triple STREQUAL "macos-arm64")
       set(LIVEKIT_SDK_SHA256
-        "5867b8c9f4bf24d8598eee46952bbe6cf361dfbd7cc13226b354f1d3ef28f41e")
-    elseif(_livekit_sdk_triple STREQUAL "macos-x64")
-      set(LIVEKIT_SDK_SHA256
-        "93d7cac004f009c4f6258c509733e4bc7528164b17516406bff0fd64ecad5dd5")
+        "39b0786e9ea099492b9e38ba857df96006f1c8b1523b7d7c82ca6dff04149daa")
     elseif(_livekit_sdk_triple STREQUAL "windows-x64")
       set(LIVEKIT_SDK_SHA256
-        "6808b44e8ef8fdb31194ac084049f416eae144a34c51a6233f43a5106a54b6d2")
+        "0a0f26995a250ab605e7e3916b7e467a379c2d4751cf5fb2e733b707c20b5a45")
     endif()
   endif()
 

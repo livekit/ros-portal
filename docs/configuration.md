@@ -683,11 +683,4 @@ Pattern and clock sources require a compatible GPU adapter, including a software
 Vulkan adapter for headless testing. GStreamer sources require the pipeline's
 runtime plugins instead.
 
-Capture requires the pinned C++ SDK source build. GStreamer is also required for
-`type: gstreamer`, but not for `pattern` or `clock`. The SDK does not support
-native camera device capture. To read a camera, use a `gstreamer` source with `v4l2src`, as in
-the example at the start of this section. The tagged `source.type` is
-backend-neutral, so RTSP and other ingest backends can be added later without a
-change to the `video_sources` collection shape.
-
-Audio options are not part of config version `0.0.1`.
+Audio options are currently not supported.

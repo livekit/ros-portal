@@ -68,9 +68,9 @@ The remaining overrides are independent feature choices:
 
 All supported ROS distributions use the Ubuntu 22.04 capture bundle for their
 architecture (`ubuntu-22.04-x64-capture` or `ubuntu-22.04-arm64-capture`). Its
-older glibc baseline supports Humble and newer distributions. Standard SDK
-archives omit the capture API. The devcontainer installs GStreamer plugins and
-software Vulkan for hardware-free capture tests with either SDK build path.
+older glibc baseline supports Humble and newer distributions. The devcontainer
+installs GStreamer plugins and software Vulkan for hardware-free capture tests
+with either SDK build path.
 
 ## Shell Helpers
 
@@ -127,10 +127,8 @@ versions used in CI automatically.
 
 ## LiveKit SDK
 
-The default build downloads LiveKit C++ v1.13.0's `-capture` release archive and
-verifies its SHA-256 digest. These bundles include GStreamer, pattern, and clock
-sources. Capture APIs live in `livekit::capture` under `livekit/capture/`.
-Capture bundles are available for Linux x64/arm64, macOS arm64, and Windows x64;
+The default build downloads LiveKit C++ `-capture` release archive.
+These bundles include GStreamer,a pattern, and clock sources.
 LiveKit Capture is not supported on Intel Macs.
 
 The release version lives in `src/ros_portal/colcon.pkg` and as the default of

@@ -98,6 +98,7 @@ endif()
 
 if(TARGET ros_portal_integration_tests)
   target_include_directories(ros_portal_integration_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
   )
   medkit_target_dependencies(ros_portal_integration_tests statistics_msgs std_srvs)

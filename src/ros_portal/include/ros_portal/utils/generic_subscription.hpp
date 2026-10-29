@@ -19,9 +19,14 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <rclcpp/create_generic_subscription.hpp>
+#include <rclcpp/create_publisher.hpp>
+#include <rclcpp/create_timer.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/message_info.hpp>
-#include <rclcpp/node.hpp>
+#include <rclcpp/node_interfaces/node_parameters_interface.hpp>
+#include <rclcpp/node_interfaces/node_timers_interface.hpp>
+#include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <rclcpp/subscription_options.hpp>
@@ -94,29 +99,38 @@ private:
 /// path, so a serialized subscription silently ignores
 /// SubscriptionOptions::topic_stats_options. This reproduces that wiring using
 /// the collector's public API.
+/// @param node_parameters Parameters used by the statistics publisher.
+/// @param node_topics Publisher registry and underlying node identity.
+/// @param node_timers Timer registry for statistics publication.
+/// @param options Statistics topic, QoS, period, and callback group.
+/// @param callback Serialized callback to wrap.
+/// @return Callback retaining the collector until subscription teardown.
 /// @throws std::invalid_argument when the configured publish period is not
 /// positive, matching rclcpp::create_subscription.
-inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::SharedPtr& node,
-                                                        const rclcpp::SubscriptionOptions& options,
-                                                        SerializedCallbackWithInfo callback) {
+inline SerializedCallbackWithInfo attachTopicStatistics(
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr& node_parameters,
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr& node_topics,
+    const rclcpp::node_interfaces::NodeTimersInterface::SharedPtr& node_timers,
+    const rclcpp::SubscriptionOptions& options, SerializedCallbackWithInfo callback) {
   if (options.topic_stats_options.publish_period <= std::chrono::milliseconds(0)) {
     throw std::invalid_argument("topic_stats_options.publish_period must be greater than 0, specified value of " +
                                 std::to_string(options.topic_stats_options.publish_period.count()) + " ms");
   }
 
   auto statistics = std::make_shared<rclcpp::topic_statistics::SubscriptionTopicStatistics>(
-      node->get_name(), node->create_publisher<statistics_msgs::msg::MetricsMessage>(
-                            options.topic_stats_options.publish_topic, options.topic_stats_options.qos));
+      node_topics->get_node_base_interface()->get_name(),
+      rclcpp::create_publisher<statistics_msgs::msg::MetricsMessage>(
+          node_parameters, node_topics, options.topic_stats_options.publish_topic, options.topic_stats_options.qos));
 
   const std::weak_ptr<rclcpp::topic_statistics::SubscriptionTopicStatistics> weak_statistics(statistics);
-  statistics->set_publisher_timer(node->create_wall_timer(
+  statistics->set_publisher_timer(rclcpp::create_wall_timer(
       std::chrono::duration_cast<std::chrono::nanoseconds>(options.topic_stats_options.publish_period),
       [weak_statistics]() {
         if (const auto locked_statistics = weak_statistics.lock()) {
           locked_statistics->publish_message_and_reset_measurements();
         }
       },
-      options.callback_group));
+      options.callback_group, node_topics->get_node_base_interface(), node_timers.get()));
 
   // The subscription owns this callback, which owns the collector, which owns
   // the publish timer, so the chain is torn down with the subscription.
@@ -133,7 +147,9 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
 
 /// @brief Subscribe to a serialized ROS topic with a callback that receives
 /// rclcpp::MessageInfo, on every supported ROS distribution.
-/// @param node Node the subscription is created on.
+/// @param node_parameters Parameters used by the statistics publisher.
+/// @param node_topics Publisher and subscription registry.
+/// @param node_timers Timer registry used by the statistics collector.
 /// @param topic_name ROS topic to subscribe to.
 /// @param topic_type ROS message type of @p topic_name.
 /// @param qos Subscription QoS.
@@ -146,21 +162,26 @@ inline SerializedCallbackWithInfo attachTopicStatistics(const rclcpp::Node::Shar
 /// @throws std::runtime_error when the type support for @p topic_type cannot be
 /// loaded, matching rclcpp::Node::create_generic_subscription.
 inline std::shared_ptr<rclcpp::GenericSubscription> createGenericSubscription(
-    const rclcpp::Node::SharedPtr& node, const std::string& topic_name, const std::string& topic_type,
-    const rclcpp::QoS& qos, SerializedCallbackWithInfo callback, const rclcpp::SubscriptionOptions& options) {
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr& node_parameters,
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr& node_topics,
+    const rclcpp::node_interfaces::NodeTimersInterface::SharedPtr& node_timers, const std::string& topic_name,
+    const std::string& topic_type, const rclcpp::QoS& qos, SerializedCallbackWithInfo callback,
+    const rclcpp::SubscriptionOptions& options) {
 #ifndef ROS_DISTRO_HUMBLE
   if (options.topic_stats_options.state == rclcpp::TopicStatisticsState::Enable) {
-    callback = attachTopicStatistics(node, options, std::move(callback));
+    callback = attachTopicStatistics(node_parameters, node_topics, node_timers, options, std::move(callback));
   }
 #endif
 #ifdef ROS_DISTRO_HUMBLE
+  (void)node_parameters;
+  (void)node_timers;
   auto subscription = std::make_shared<GenericSubscriptionWithInfo>(
-      node->get_node_base_interface().get(), rclcpp::get_typesupport_library(topic_type, "rosidl_typesupport_cpp"),
+      node_topics->get_node_base_interface(), rclcpp::get_typesupport_library(topic_type, "rosidl_typesupport_cpp"),
       topic_name, topic_type, qos, std::move(callback), options);
-  node->get_node_topics_interface()->add_subscription(subscription, options.callback_group);
+  node_topics->add_subscription(subscription, options.callback_group);
   return subscription;
 #else
-  return node->create_generic_subscription(topic_name, topic_type, qos, std::move(callback), options);
+  return rclcpp::create_generic_subscription(node_topics, topic_name, topic_type, qos, std::move(callback), options);
 #endif
 }
 

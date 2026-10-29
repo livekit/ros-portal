@@ -29,6 +29,25 @@ ROS Portal is implemented as a single ROS2 node (`RosPortal`) that:
    against the local ROS installation, and republishes accepted CDR payloads
    into ROS using the track name as the local topic name.
 
+`RosPortal` is registered directly as the `ros_portal::RosPortal` component.
+Its constructor prepares local resources; the one-second connection timer
+resolves credentials and connects once the executor is spinning. The standalone
+executable uses the same constructor and retains its configurable executor.
+
+The supported component layout has one ROS Portal in a single-threaded
+container. The node initializes the process-wide LiveKit SDK and releases it
+only after disconnecting its room, detaching callbacks, stopping graph
+monitoring, and joining reader workers. There is no runtime reference count or
+separate manager. If a host initializes the SDK first, ROS Portal borrows it;
+the host must keep it alive until the node and all SDK resources are gone.
+Concurrent SDK lifecycle ownership is unsupported.
+
+Topic and latched-topic forwarders receive explicit ROS node interfaces rather
+than a shared or borrowed enclosing node. This allows construction before
+shared node ownership exists. Publisher and interface handles retain the
+ownership required by ROS APIs; owned helpers remain `std::unique_ptr` members.
+SDK callbacks and background workers still run concurrently with the executor.
+
 ## Topic Discovery
 
 For outbound topic patterns, ROS Portal reconciles subscriptions after each ROS

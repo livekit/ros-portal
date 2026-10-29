@@ -593,10 +593,6 @@ private:
     }
 
     auto ros_portal = std::make_shared<RosPortal>(createRosPortalOptions(graph.context(), node_namespace, config_path));
-    if (!ros_portal->initialize()) {
-      ADD_FAILURE() << "ROS Portal failed to initialize for namespace " << node_namespace;
-      return nullptr;
-    }
     return ros_portal;
   }
 

@@ -32,6 +32,7 @@ ament_auto_find_build_dependencies(REQUIRED
   diagnostic_updater
   geometry_msgs
   rclcpp
+  rclcpp_components
   ros2_medkit_serialization
   rosbag2_cpp
   rosbag2_storage
@@ -311,6 +312,8 @@ target_link_libraries(ros_portal_lib
   ${LIVEKIT_EXTRA_LINK_LIBS}
 )
 livekit_set_runtime_rpath(ros_portal_lib)
+medkit_target_dependencies(ros_portal_lib rclcpp_components)
+rclcpp_components_register_nodes(ros_portal_lib "ros_portal::RosPortal")
 
 # ---------------------------------------------------------------------------
 # Main ROS Portal node

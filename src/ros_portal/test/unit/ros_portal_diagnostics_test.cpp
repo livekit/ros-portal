@@ -26,6 +26,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
+#include "ros_portal/graph/graph_manager.hpp"
 #include "ros_portal/ros_portal.hpp"
 #include "test_common.hpp"
 
@@ -44,6 +45,22 @@ std::optional<std::string> diagnosticValueFor(const diagnostic_updater::Diagnost
   }
   return std::nullopt;
 }
+
+class ScopedPortalEnvironment {
+public:
+  ScopedPortalEnvironment() {
+    EXPECT_EQ(setenv("LIVEKIT_TOKEN", "unused-diagnostics-token", 1), 0);
+    unsetenv("LIVEKIT_URL");
+    unsetenv("LIVEKIT_TOKEN_ENDPOINT");
+    unsetenv("LIVEKIT_TOKEN_SERVER_ID");
+  }
+
+private:
+  ScopedEnvVar url_{"LIVEKIT_URL"};
+  ScopedEnvVar token_{"LIVEKIT_TOKEN"};
+  ScopedEnvVar endpoint_{"LIVEKIT_TOKEN_ENDPOINT"};
+  ScopedEnvVar server_id_{"LIVEKIT_TOKEN_SERVER_ID"};
+};
 
 class TemporaryDiagnosticsConfig {
 public:
@@ -72,10 +89,7 @@ private:
 } // namespace
 
 TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfiguration) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
-  unsetenv("LIVEKIT_URL");
-  unsetenv("LIVEKIT_TOKEN");
+  const ScopedPortalEnvironment environment;
   TemporaryDiagnosticsConfig config;
 
   const rclcpp::NodeOptions options = rclcpp::NodeOptions().parameter_overrides({
@@ -84,8 +98,15 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
       rclcpp::Parameter("max_qos_depth", 8),
   });
   RosPortal portal(options);
+  portal.graph_manager_->stop();
 
-  EXPECT_FALSE(portal.initialize());
+  // Exercise the partial-initialization diagnostic independently of the
+  // component factory, which rejects a constructor that cannot initialize.
+  portal.initialized_.store(false);
+  portal.diagnostic_state_.connection_manager_active.store(false);
+  portal.diagnostic_state_.topic_forwarder_active.store(false);
+  portal.diagnostic_state_.service_forwarder_active.store(false);
+  portal.diagnostic_state_.cli_manager_active.store(false);
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   portal.populateStatus(status);
@@ -104,7 +125,9 @@ TEST(RosPortalDiagnosticsTest, ReportsPartialInitializationAndEffectiveConfigura
 }
 
 TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
+  const ScopedPortalEnvironment environment;
   RosPortal portal;
+  portal.graph_manager_->stop();
   portal.initialized_.store(true);
   portal.diagnostic_state_.graph_discovery_active.store(true);
   portal.diagnostic_state_.connection_manager_active.store(true);
@@ -127,7 +150,9 @@ TEST(RosPortalDiagnosticsTest, ReportsHealthyAndInactiveDiscoveryStates) {
 }
 
 TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigured) {
+  const ScopedPortalEnvironment environment;
   RosPortal portal;
+  portal.graph_manager_->stop();
   portal.initialized_.store(true);
   portal.diagnostic_state_.graph_discovery_active.store(true);
   portal.diagnostic_state_.connection_manager_active.store(true);
@@ -144,10 +169,7 @@ TEST(RosPortalDiagnosticsTest, OmitsLatchedForwarderWhenNoLatchedTopicsConfigure
 }
 
 TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsConfigured) {
-  ScopedEnvVar scoped_url{"LIVEKIT_URL"};
-  ScopedEnvVar scoped_token{"LIVEKIT_TOKEN"};
-  unsetenv("LIVEKIT_URL");
-  unsetenv("LIVEKIT_TOKEN");
+  const ScopedPortalEnvironment environment;
   TemporaryDiagnosticsConfig config(R"(  topics:
     - topic: "/tf_static"
       direction: "out"
@@ -158,8 +180,15 @@ TEST(RosPortalDiagnosticsTest, ReportsInactiveLatchedForwarderWhenLatchedTopicsC
       rclcpp::Parameter("config_path", config.path().string()),
   });
   RosPortal portal(options);
+  portal.graph_manager_->stop();
 
-  EXPECT_FALSE(portal.initialize());
+  // Exercise the partial-initialization diagnostic independently of the
+  // component factory, which rejects a constructor that cannot initialize.
+  portal.initialized_.store(false);
+  portal.diagnostic_state_.connection_manager_active.store(false);
+  portal.diagnostic_state_.topic_forwarder_active.store(false);
+  portal.diagnostic_state_.service_forwarder_active.store(false);
+  portal.diagnostic_state_.cli_manager_active.store(false);
 
   diagnostic_updater::DiagnosticStatusWrapper status;
   portal.populateStatus(status);

@@ -65,6 +65,51 @@ source /opt/livekit/ros/$ROS_DISTRO/setup.bash
 ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 ```
 
+## Running ROS Portal in Composition
+
+The package exports `ros_portal::RosPortal`. The bundled launch file loads one
+portal into a single-threaded component container:
+
+```bash
+# Configure LIVEKIT_URL and one token source first.
+source install/setup.bash
+ros2 launch ros_portal ros_portal_composable.launch.py \
+  config_path:=/path/to/config.yaml
+```
+
+The same component can be included in a parent launch file:
+
+```python
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
+
+container = ComposableNodeContainer(
+    name='robot_container',
+    namespace='',
+    package='rclcpp_components',
+    executable='component_container',
+    composable_node_descriptions=[
+        ComposableNode(
+            package='ros_portal',
+            plugin='ros_portal::RosPortal',
+            name='ros_portal',
+            parameters=[{'config_path': '/path/to/config.yaml'}],
+        ),
+    ],
+)
+```
+
+Use one SDK-owning ROS Portal per process. Its constructor initializes local
+resources, and its connection timer performs token resolution and connection
+attempts after the executor starts. The node shuts down an SDK it initialized;
+an externally initialized SDK is borrowed and must outlive the node. This model
+does not reference-count multiple portal instances.
+
+The container's environment supplies the LiveKit URL and token source. The
+`ros_threads` configuration applies only to the standalone executable. A
+synchronous LiveKit connection or RPC occupies the single executor thread until
+it returns, so other callbacks in that container wait during the operation.
+
 ## Forwarding Custom Topics
 
 Forwarding custom message types work like any other ROS type:

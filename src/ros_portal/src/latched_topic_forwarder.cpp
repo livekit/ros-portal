@@ -23,6 +23,10 @@
 #include <exception>
 #include <functional>
 #include <nlohmann/json.hpp>
+#include <rclcpp/create_generic_publisher.hpp>
+#include <rclcpp/create_publisher.hpp>
+#include <rclcpp/create_subscription.hpp>
+#include <rclcpp/create_timer.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialized_message.hpp>
@@ -75,18 +79,19 @@ bool rpcSucceeded(const std::string& response) {
 
 } // namespace
 
-LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node,
+LatchedTopicForwarder::LatchedTopicForwarder(Options options, NodeInterfaces node_interfaces,
                                              LiveKitMethods livekit_methods,
                                              diagnostics::DiagnosticsManagerFns diagnostics)
     : options_(std::move(options)),
-      node_(std::move(node)),
+      node_interfaces_(std::move(node_interfaces)),
       livekit_methods_(std::move(livekit_methods)),
       diagnostics_(std::move(diagnostics)),
       logger_(rclcpp::get_logger("latched_topic_forwarder")) {
-  const auto locked_node = node_.lock();
-  if (!locked_node) {
-    throw std::invalid_argument("LatchedTopicForwarder requires a non-expired ROS node");
+  if (!node_interfaces_.node_base || !node_interfaces_.node_clock || !node_interfaces_.node_logging ||
+      !node_interfaces_.node_parameters || !node_interfaces_.node_timers || !node_interfaces_.node_topics) {
+    throw std::invalid_argument("LatchedTopicForwarder requires all ROS node interfaces");
   }
+
   if (!livekit_methods_.is_room_available || !livekit_methods_.register_rpc_method ||
       !livekit_methods_.unregister_rpc_method || !livekit_methods_.perform_rpc ||
       !livekit_methods_.list_remote_identities) {
@@ -96,9 +101,9 @@ LatchedTopicForwarder::LatchedTopicForwarder(Options options, rclcpp::Node::Weak
     throw std::invalid_argument("LatchedTopicForwarder requires fully populated DiagnosticsManagerFns");
   }
 
-  logger_ = locked_node->get_logger().get_child("latched_topic_forwarder");
-  clock_ = locked_node->get_clock();
-  callback_group_ = locked_node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  logger_ = node_interfaces_.node_logging->get_logger().get_child("latched_topic_forwarder");
+  clock_ = node_interfaces_.node_clock->get_clock();
+  callback_group_ = node_interfaces_.node_base->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
   if (!options_.inbound_topics.empty()) {
     rpc_registered_ = livekit_methods_.register_rpc_method(
@@ -174,12 +179,6 @@ void LatchedTopicForwarder::reconcileTopics(const TopicNamesAndTypes& topic_name
 }
 
 void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_name, const std::string& topic_type) {
-  const auto node = node_.lock();
-  if (!node) {
-    RCLCPP_ERROR(logger_, "Skipping latched topic subscription; ROS node has been destroyed");
-    return;
-  }
-
   // Callback signature matches rclcpp generic subscription callbacks on Jazzy+.
   auto callback = [this, topic_name, topic_type](const std::shared_ptr<rclcpp::SerializedMessage>& msg,
                                                  const rclcpp::MessageInfo&) {
@@ -201,8 +200,9 @@ void LatchedTopicForwarder::createOutboundSubscription(const std::string& topic_
       RCLCPP_INFO(logger_, "Enabled ROS 2 topic statistics for latched topic '%s' on '%s'", topic_name.c_str(),
                   sub_options.topic_stats_options.publish_topic.c_str());
     }
-    auto subscription =
-        utils::createGenericSubscription(node, topic_name, topic_type, latchedQoS(), std::move(callback), sub_options);
+    auto subscription = utils::createGenericSubscription(node_interfaces_.node_parameters, node_interfaces_.node_topics,
+                                                         node_interfaces_.node_timers, topic_name, topic_type,
+                                                         latchedQoS(), std::move(callback), sub_options);
     subscriptions_[topic_name] = std::static_pointer_cast<void>(subscription);
   } catch (const std::exception& e) {
     RCLCPP_ERROR(logger_, "Failed to create latched subscription for '%s' [%s]: %s", topic_name.c_str(),
@@ -400,12 +400,8 @@ std::string LatchedTopicForwarder::handleLatchedStateRpc(const std::string& payl
     if (it != inbound_publishers_.end()) {
       publisher = it->second;
     } else {
-      const auto node = node_.lock();
-      if (!node) {
-        return reject("ROS node unavailable");
-      }
       try {
-        publisher = node->create_generic_publisher(topic, msg_type, latchedQoS());
+        publisher = rclcpp::create_generic_publisher(node_interfaces_.node_topics, topic, msg_type, latchedQoS());
       } catch (const std::exception& e) {
         return reject(std::string("failed to create publisher for '") + topic + "' [" + msg_type + "]: " + e.what());
       }

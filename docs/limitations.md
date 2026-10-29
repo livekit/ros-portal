@@ -1,5 +1,18 @@
 # Current Limitations
 
+## ROS2 Composition
+
+- The supported layout has one SDK-owning ROS Portal per process, loaded in a
+  single-threaded container. SDK initialization and destruction must be
+  serialized. Multiple independently owned portals in one process are unsupported.
+- An externally initialized SDK is borrowed. Its owner must keep it alive until
+  ROS Portal and every SDK resource are destroyed; there is no reference count.
+- SDK callbacks, graph monitoring, and reader workers remain concurrent even
+  with a single-threaded ROS executor. Teardown still drains and joins them.
+- Synchronous connection and RPC operations occupy the container executor
+  thread. Environment variables, LiveKit logging, and fault isolation are shared
+  with other components in that process.
+
 ## Video Tracks
 - `VideoSource` and `LocalVideoTrack` are created from the first received image
   dimensions. If camera resolution changes mid-stream, the track is not

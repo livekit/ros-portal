@@ -93,7 +93,8 @@ public:
   struct Session {
     /// Start capture after the track has been published.
     std::function<void()> start;
-    /// Stop a running capture.
+    /// Request stop and wait for capture completion with a bounded timeout.
+    /// May throw on stop failure, timeout, or a terminal capture error.
     std::function<void()> stop;
     /// Poll once without blocking; return no value while capture is running or
     /// after its terminal result has been consumed. Supports concurrent polls.

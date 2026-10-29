@@ -932,32 +932,27 @@ bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::Vide
                                            capture::capturePublishOptions(config.publish_options, config.simulcast)));
 
       auto session = std::make_shared<VideoSourceManager::Session>();
-      using JoinFuture = std::future<livekit::Result<livekit::capture::CaptureResult, livekit::capture::CaptureError>>;
-      struct PendingCapture {
-        std::mutex mutex;
-        JoinFuture result;
-      };
-      auto pending = std::make_shared<PendingCapture>();
+      auto pending = std::make_shared<capture::CaptureCompletion>();
       session->start = [capture_source, pending] {
         const auto started = capture_source->start();
         if (!started) {
           throw std::runtime_error(started.error().message);
         }
-        pending->result = capture_source->join();
+        pending->setResult(capture_source->join());
       };
-      session->stop = [capture_source] {
+      session->stop = [capture_source, pending] {
         const auto stopped = capture_source->stop();
         if (!stopped) {
           throw std::runtime_error(stopped.error().message);
         }
+        pending->wait(std::chrono::seconds(5));
       };
       session->poll_result = [pending]() -> std::optional<VideoSourceResult> {
-        const std::unique_lock<std::mutex> lock(pending->mutex, std::try_to_lock);
-        if (!lock.owns_lock() || !pending->result.valid() ||
-            pending->result.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        auto finished = pending->poll();
+        if (!finished) {
           return std::nullopt;
         }
-        const auto result = pending->result.get();
+        const auto& result = *finished;
         VideoSourceResult mapped;
         if (!result) {
           mapped.error = result.error().message;

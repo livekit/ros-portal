@@ -22,9 +22,11 @@
 #include <livekit/room_event_types.h>
 #include <livekit/track.h>
 
+#include <chrono>
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -48,6 +50,27 @@ namespace ros_portal::capture {
 inline constexpr int kDefaultPixelWidth = 640;
 inline constexpr int kDefaultPixelHeight = 480;
 inline constexpr std::uint32_t kDefaultPixelFramerateFps = 30;
+
+/// @brief Share one SDK join future between diagnostics and shutdown.
+/// All methods are thread-safe. Shutdown consumes the future under the mutex,
+/// then waits outside the lock so diagnostics remain nonblocking.
+class CaptureCompletion final {
+public:
+  using Result = livekit::Result<livekit::capture::CaptureResult, livekit::capture::CaptureError>;
+
+  /// @brief Store the single join future after a successful capture start.
+  void setResult(std::future<Result> result);
+  /// @brief Consume a ready result without blocking; return no value otherwise.
+  std::optional<Result> poll();
+  /// @brief Consume the remaining result after requesting stop, if still valid.
+  /// @param timeout Maximum time to wait for capture completion.
+  /// @throws std::runtime_error on timeout or a capture error; propagates future exceptions.
+  void wait(std::chrono::milliseconds timeout);
+
+private:
+  std::mutex mutex_;
+  std::future<Result> result_;
+};
 
 /// @brief Map a configured codec onto its SDK enumerator.
 livekit::VideoCodec toLiveKitCodec(ros_portal_config::VideoCodec codec);

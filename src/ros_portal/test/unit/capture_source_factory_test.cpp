@@ -25,6 +25,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <future>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -33,6 +35,54 @@
 
 namespace ros_portal::capture {
 namespace {
+
+TEST(CaptureCompletionTest, WaitsForOutstandingCaptureAndConsumesItOnce) {
+  CaptureCompletion completion;
+  std::promise<CaptureCompletion::Result> result;
+  completion.setResult(result.get_future());
+  EXPECT_FALSE(completion.poll());
+
+  auto waiter = std::async(std::launch::async, [&completion] { completion.wait(std::chrono::seconds(5)); });
+  EXPECT_EQ(waiter.wait_for(std::chrono::seconds(0)), std::future_status::timeout);
+  result.set_value(CaptureCompletion::Result::success(livekit::capture::CaptureResult{}));
+  EXPECT_NO_THROW(waiter.get());
+  EXPECT_FALSE(completion.poll());
+  EXPECT_NO_THROW(completion.wait(std::chrono::milliseconds(0)));
+}
+
+TEST(CaptureCompletionTest, ShutdownAcceptsMissingOrAlreadyPolledResult) {
+  CaptureCompletion completion;
+  EXPECT_NO_THROW(completion.wait(std::chrono::milliseconds(0)));
+  std::promise<CaptureCompletion::Result> result;
+  completion.setResult(result.get_future());
+  result.set_value(CaptureCompletion::Result::success(livekit::capture::CaptureResult{}));
+  ASSERT_TRUE(completion.poll());
+  EXPECT_NO_THROW(completion.wait(std::chrono::milliseconds(0)));
+  EXPECT_FALSE(completion.poll());
+}
+
+TEST(CaptureCompletionTest, BoundsShutdownWait) {
+  CaptureCompletion completion;
+  std::promise<CaptureCompletion::Result> result;
+  completion.setResult(result.get_future());
+  EXPECT_THROW(completion.wait(std::chrono::milliseconds(0)), std::runtime_error);
+  EXPECT_FALSE(completion.poll());
+}
+
+TEST(CaptureCompletionTest, ReportsCaptureAndFutureErrorsDuringShutdown) {
+  CaptureCompletion completion;
+  std::promise<CaptureCompletion::Result> failed_capture;
+  completion.setResult(failed_capture.get_future());
+  livekit::capture::CaptureError error;
+  error.message = "capture failed";
+  failed_capture.set_value(CaptureCompletion::Result::failure(error));
+  EXPECT_THROW(completion.wait(std::chrono::milliseconds(0)), std::runtime_error);
+
+  std::promise<CaptureCompletion::Result> failed_future;
+  completion.setResult(failed_future.get_future());
+  failed_future.set_exception(std::make_exception_ptr(std::runtime_error("join transport failed")));
+  EXPECT_THROW(completion.wait(std::chrono::milliseconds(0)), std::runtime_error);
+}
 
 using ros_portal_config::CaptureSourceConfig;
 using ros_portal_config::CaptureSourceType;

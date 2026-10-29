@@ -23,6 +23,37 @@
 
 namespace ros_portal::capture {
 
+void CaptureCompletion::setResult(std::future<Result> result) {
+  const std::lock_guard<std::mutex> lock(mutex_);
+  result_ = std::move(result);
+}
+
+std::optional<CaptureCompletion::Result> CaptureCompletion::poll() {
+  const std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock() || !result_.valid() || result_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+    return std::nullopt;
+  }
+  return result_.get();
+}
+
+void CaptureCompletion::wait(std::chrono::milliseconds timeout) {
+  std::future<Result> result;
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    result = std::move(result_);
+  }
+  if (!result.valid()) {
+    return;
+  }
+  if (result.wait_for(timeout) != std::future_status::ready) {
+    throw std::runtime_error("timed out waiting for capture to stop");
+  }
+  const auto finished = result.get();
+  if (!finished) {
+    throw std::runtime_error(finished.error().message);
+  }
+}
+
 namespace {
 
 /// Fields on a capture source entry that only a GStreamer source accepts.

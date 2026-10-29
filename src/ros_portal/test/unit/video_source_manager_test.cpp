@@ -18,8 +18,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
+#include <future>
 #include <map>
 #include <memory>
 #include <optional>
@@ -28,6 +31,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "ros_portal/capture_source_factory.hpp"
 
 namespace ros_portal {
 namespace {
@@ -127,6 +132,65 @@ TEST(VideoSourceManagerTest, IsolatesStartupFailureAndReportsTerminalState) {
   EXPECT_TRUE(diagnostic_callbacks.empty());
   EXPECT_EQ(stop_calls, 2);
   EXPECT_EQ(unpublish_calls, 2);
+}
+
+TEST(VideoSourceManagerTest, WaitsForCaptureCompletionBeforeUnpublishing) {
+  capture::CaptureCompletion completion;
+  std::promise<capture::CaptureCompletion::Result> result;
+  completion.setResult(result.get_future());
+  std::promise<void> stop_requested;
+  std::atomic<bool> unpublished{false};
+  diagnostics::DiagnosticsManagerFns diagnostics;
+  diagnostics.add = [](const std::string&, auto) {};
+  diagnostics.remove = [](const std::string&) {};
+  VideoSourceManager::LiveKitMethods methods;
+  methods.create_and_publish = [&](const auto&) {
+    auto session = std::make_shared<VideoSourceManager::Session>();
+    session->start = [] {};
+    session->stop = [&] {
+      stop_requested.set_value();
+      completion.wait(std::chrono::seconds(5));
+    };
+    session->unpublish = [&] { unpublished.store(true); };
+    session->poll_result = [] { return std::optional<VideoSourceResult>{}; };
+    return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::success(std::move(session));
+  };
+  auto manager = std::make_unique<VideoSourceManager>(
+      std::vector{makeSource("capture", ros_portal_config::CaptureSourceType::Gstreamer)}, std::move(methods),
+      std::move(diagnostics), rclcpp::get_logger("video_source_shutdown_test"));
+  auto stopped = stop_requested.get_future();
+  auto shutdown = std::async(std::launch::async, [&] { manager.reset(); });
+  EXPECT_EQ(stopped.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+  EXPECT_FALSE(unpublished.load());
+  EXPECT_EQ(shutdown.wait_for(std::chrono::seconds(0)), std::future_status::timeout);
+  result.set_value(capture::CaptureCompletion::Result::success(livekit::capture::CaptureResult{}));
+  EXPECT_NO_THROW(shutdown.get());
+  EXPECT_TRUE(unpublished.load());
+}
+
+TEST(VideoSourceManagerTest, UnpublishesWhenStopThrows) {
+  std::vector<std::string> events;
+  diagnostics::DiagnosticsManagerFns diagnostics;
+  diagnostics.add = [](const std::string&, auto) {};
+  diagnostics.remove = [&events](const std::string&) { events.emplace_back("remove diagnostics"); };
+  VideoSourceManager::LiveKitMethods methods;
+  methods.create_and_publish = [&events](const auto&) {
+    auto session = std::make_shared<VideoSourceManager::Session>();
+    session->start = [] {};
+    session->stop = [&events] {
+      events.emplace_back("capture completion failed");
+      throw std::runtime_error("capture join failed");
+    };
+    session->unpublish = [&events] { events.emplace_back("unpublish"); };
+    session->poll_result = [] { return std::optional<VideoSourceResult>{}; };
+    return livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string>::success(std::move(session));
+  };
+  {
+    const VideoSourceManager manager({makeSource("capture", ros_portal_config::CaptureSourceType::Gstreamer)},
+                                     std::move(methods), std::move(diagnostics),
+                                     rclcpp::get_logger("video_source_shutdown_test"));
+  }
+  EXPECT_EQ(events, (std::vector<std::string>{"remove diagnostics", "capture completion failed", "unpublish"}));
 }
 
 class VideoSourceTerminalTest : public ::testing::TestWithParam<std::string> {};

@@ -319,7 +319,7 @@ rclcpp_components_register_nodes(ros_portal_lib "ros_portal::RosPortal")
 # Main ROS Portal node
 # ---------------------------------------------------------------------------
 ament_auto_add_executable(ros_portal_node
-  src/ros_portal_node.cpp
+  src/main.cpp
 )
 target_link_libraries(ros_portal_node
   ros_portal_lib

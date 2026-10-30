@@ -38,10 +38,12 @@ Inspect results with:
 colcon test-result --verbose
 ```
 
-### Image IPC Boundary Tests
+### Image Intra-process Communication Boundary Tests
 
-The `PortalIpcE2E` cases use one real portal and a test app in the same ROS
-context and process, with IPC enabled and a single-threaded executor. They
+The `PortalIntraProcessCommsE2E` cases in
+[`intra_process_comms_e2e_test.cpp`](../src/ros_portal/test/integration/intra_process_comms_e2e_test.cpp)
+use one real portal and a test app in the same ROS context and process, with
+intra-process communication enabled and a single-threaded executor. They
 require the same LiveKit server and tokens as the other integration tests,
 including support for video frame metadata. No camera hardware is needed.
 
@@ -49,30 +51,31 @@ including support for video frame metadata. No camera hardware is needed.
 source /opt/ros/${ROS_DISTRO}/setup.bash
 source install/setup.bash
 source scripts/set-test-tokens.sh
-build/ros_portal/test/ros_portal_integration_tests --gtest_filter='PortalIpcE2E.*'
+build/ros_portal/test/ros_portal_integration_tests --gtest_filter='PortalIntraProcessCommsE2E.*'
 ```
 
 The app-to-portal case compares atomic message and pixel-buffer addresses at
 the portal's actual `ConstSharedPtr` callback. The portal-to-app case checks
-IPC delivery and matching contents while verifying the copy caused by the
-portal's const-reference publication. Both use three correlated frames and
-bounded waits. Observers are compiled only with `BUILD_TESTING`; they add no
-public runtime configuration. These tests cover local ROS message boundaries,
-not copies inside the video codec or LiveKit transport.
+intra-process delivery and matching contents while verifying the copy caused
+by the portal's const-reference publication. Both use three correlated frames
+and bounded waits. Observers are compiled only with `BUILD_TESTING`; they add
+no public runtime configuration. These tests cover local ROS message
+boundaries, not copies inside the video codec or LiveKit transport.
 
-### 8K Image IPC Latency Comparison
+### 8K Image Intra-process Communication Latency Comparison
 
-`ImageIpcLatency.Thirty8kFramesArriveFasterWithIpc` compares two local ROS nodes
-with IPC on and off, using the same reliable, volatile, KeepLast(1) QoS and
-`ConstSharedPtr` receiving callback. Each mode warms up with three frames,
-then measures thirty 7680x4320 RGB images (99,532,800 bytes per frame), with
-one image in flight. It prints both average latencies, saves them as GTest XML
-properties, and asserts that the IPC-on average is lower.
+`ImageIntraProcessCommsLatency.Thirty8kFramesArriveFasterWithIntraProcessComms`
+compares two local ROS nodes with intra-process communication on and off, using
+the same reliable, volatile, KeepLast(1) QoS and `ConstSharedPtr` receiving
+callback. Each mode warms up with three frames, then measures thirty 7680x4320
+RGB images (99,532,800 bytes per frame), with one image in flight. It prints
+both average latencies, saves them as GTest XML properties, and asserts that
+the intra-process-on average is lower.
 
 ```bash
 source /opt/ros/${ROS_DISTRO}/setup.bash
 source install/setup.bash
-build/ros_portal/test/ros_portal_integration_tests --gtest_filter='ImageIpcLatency.*'
+build/ros_portal/test/ros_portal_integration_tests --gtest_filter='ImageIntraProcessCommsLatency.*'
 ```
 
 Timing uses a monotonic clock from immediately before publication to callback

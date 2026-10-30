@@ -72,8 +72,8 @@ public:
     received.record(message);
     intra_process_ = info.get_rmw_message_info().from_intra_process;
     contents_valid_ = message.width == 64U && message.height == 48U && message.step == 192U &&
-                     message.encoding == "rgb8" && message.data.size() == std::size_t{64} * 48U * 3U &&
-                     std::all_of(message.data.begin(), message.data.end(), [](auto byte) { return byte == 128U; });
+                      message.encoding == "rgb8" && message.data.size() == std::size_t{64} * 48U * 3U &&
+                      std::all_of(message.data.begin(), message.data.end(), [](auto byte) { return byte == 128U; });
     received_id.store(message.header.stamp.nanosec / 1000U, std::memory_order_release);
   }
 
@@ -195,8 +195,8 @@ TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstShar
         observations_.received.record(*message);
         observations_.intra_process_ = info.get_rmw_message_info().from_intra_process;
         observations_.contents_valid_ = message->format == "jpeg" && message->header.stamp.sec == 1'700'000 &&
-                                       message->data.size() > 2U && message->data[0] == 0xFFU &&
-                                       message->data[1] == 0xD8U;
+                                        message->data.size() > 2U && message->data[0] == 0xFFU &&
+                                        message->data[1] == 0xD8U;
         observations_.received_id.store(message->header.stamp.nanosec / 1000U, std::memory_order_release);
       });
   VideoPublisher publisher;
@@ -277,8 +277,8 @@ protected:
           delivery.intra_process_ = info.get_rmw_message_info().from_intra_process;
           const auto marker = static_cast<std::uint8_t>(delivery.expected_id);
           delivery.contents_valid_ = message->width == kWidth && message->height == kHeight &&
-                                    message->encoding == "rgb8" && message->data.size() == kPayloadBytes &&
-                                    message->data.front() == marker && message->data.back() == marker;
+                                     message->encoding == "rgb8" && message->data.size() == kPayloadBytes &&
+                                     message->data.front() == marker && message->data.back() == marker;
         });
     rclcpp::ExecutorOptions executor_options;
     executor_options.context = graph.context();

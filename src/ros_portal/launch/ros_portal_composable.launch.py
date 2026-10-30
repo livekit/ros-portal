@@ -14,6 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Example of how to launch ROS Portal using composition.
+Modify or integrate this into your component launch setup.
+"""
+
 from pathlib import Path
 
 from launch import LaunchDescription
@@ -40,6 +44,7 @@ def _launch_setup(context, *args, **kwargs):
         raise RuntimeError('container_name launch argument must be non-empty')
 
     return [
+        # Add any other composable nodes here
         ComposableNodeContainer(
             name=container_name,
             namespace='',

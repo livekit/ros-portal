@@ -93,9 +93,9 @@ public:
   bool contents_valid{false};
 };
 
-class PortalIpcE2E : public RosPortalTestE2E {
+class PortalIntraProcessCommsE2E : public RosPortalTestE2E {
 protected:
-  void initializeIpc(const std::string& direction) {
+  void initializeIntraProcessComms(const std::string& direction) {
     ASSERT_TRUE(configured()) << "Source scripts/set-test-tokens.sh; a LiveKit server with frame metadata is required";
     ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", tokenB()));
     graph_ = std::make_unique<ScopedRosGraph>(testDomainIds().first);
@@ -143,8 +143,8 @@ protected:
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
-TEST_F(PortalIpcE2E, AppToPortalPreservesMessageAndPayloadWithConstSharedPtr) {
-  ASSERT_NO_FATAL_FAILURE(initializeIpc("out"));
+TEST_F(PortalIntraProcessCommsE2E, AppToPortalPreservesMessageAndPayloadWithConstSharedPtr) {
+  ASSERT_NO_FATAL_FAILURE(initializeIntraProcessComms("out"));
   auto publisher = app_->create_publisher<sensor_msgs::msg::Image>(kIpcTopic, rclcpp::QoS(10));
   livekit::Room peer;
   ASSERT_TRUE(peer.connect(liveKitUrl(), tokenA(), livekit::RoomOptions{}));
@@ -182,8 +182,8 @@ TEST_F(PortalIpcE2E, AppToPortalPreservesMessageAndPayloadWithConstSharedPtr) {
   }
 }
 
-TEST_F(PortalIpcE2E, PortalToAppUsesIpcWithConstSharedPtrAndReportsPublicationCopy) {
-  ASSERT_NO_FATAL_FAILURE(initializeIpc("in"));
+TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstSharedPtrAndReportsPublicationCopy) {
+  ASSERT_NO_FATAL_FAILURE(initializeIntraProcessComms("in"));
   bool warmed = false;
   auto subscription = app_->create_subscription<sensor_msgs::msg::CompressedImage>(
       kIpcTopic, rclcpp::QoS(10),
@@ -236,7 +236,7 @@ TEST_F(PortalIpcE2E, PortalToAppUsesIpcWithConstSharedPtrAndReportsPublicationCo
 }
 
 /// @brief Compare ROS delivery only, excluding frame preparation and video encoding.
-class ImageIpcLatency : public ::testing::Test {
+class ImageIntraProcessCommsLatency : public ::testing::Test {
 protected:
   using Clock = std::chrono::steady_clock;
   static constexpr std::uint32_t kWidth = 7680U;
@@ -330,7 +330,7 @@ protected:
   }
 };
 
-TEST_F(ImageIpcLatency, Thirty8kFramesArriveFasterWithIpc) {
+TEST_F(ImageIntraProcessCommsLatency, Thirty8kFramesArriveFasterWithIntraProcessComms) {
   double ipc_on_ms = 0.0;
   double ipc_off_ms = 0.0;
   ASSERT_NO_FATAL_FAILURE(measure(true, ipc_on_ms));

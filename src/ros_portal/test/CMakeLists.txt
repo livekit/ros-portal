@@ -21,6 +21,8 @@ find_package(ament_cmake_gtest REQUIRED)
 find_package(ament_cmake_pytest REQUIRED)
 find_package(ament_lint_auto REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(rcutils REQUIRED)
+find_package(launch_testing_ament_cmake REQUIRED)
 find_package(statistics_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(test_msgs REQUIRED)
@@ -39,6 +41,12 @@ add_test(NAME ros_portal_sdk_configuration_tests
   COMMAND "${CMAKE_COMMAND}"
     "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/sdk-configuration-test"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sdk_configuration_test.cmake"
+)
+
+add_launch_test(
+  launch/test_ros_portal_component.py
+  TARGET ros_portal_component_runtime_test
+  TIMEOUT 60
 )
 
 # ---------------------------------------------------------------------------
@@ -67,7 +75,7 @@ if(TARGET ros_portal_unit_tests)
   target_link_libraries(ros_portal_unit_tests
     ros_portal_lib
   )
-  medkit_target_dependencies(ros_portal_unit_tests nav_msgs std_srvs test_msgs)
+  medkit_target_dependencies(ros_portal_unit_tests nav_msgs rcutils std_srvs test_msgs)
   livekit_set_runtime_rpath(ros_portal_unit_tests)
 endif()
 
@@ -90,6 +98,7 @@ endif()
 
 if(TARGET ros_portal_integration_tests)
   target_include_directories(ros_portal_integration_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
   )
   medkit_target_dependencies(ros_portal_integration_tests statistics_msgs std_srvs)

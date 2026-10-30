@@ -40,6 +40,7 @@
 #include <future>
 #include <mutex>
 #include <optional>
+#include <rclcpp_components/register_node_macro.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -70,8 +71,16 @@ constexpr char kRosPortalStatusDiagnosticTaskName[] = "ros_portal_status";
 
 } // namespace
 
+RosPortal::LiveKitRuntime::LiveKitRuntime() : owned_(livekit::initialize(livekit::LogLevel::Info)) {}
+
+RosPortal::LiveKitRuntime::~LiveKitRuntime() {
+  if (owned_) {
+    livekit::shutdown();
+  }
+}
+
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
-    : rclcpp::Node("ros_portal", options), initialized_(false), shutting_down_(false) {
+    : rclcpp::Node("ros_portal", options), livekit_runtime_(), initialized_(false), shutting_down_(false) {
   this->declare_parameter<std::string>("config_path", "");
   const std::vector<std::string> kEmptyStringVec{};
   this->declare_parameter<int>("min_qos_depth", static_cast<int>(kDefaultMinQosDepth));
@@ -84,6 +93,14 @@ RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     diagnostic_state_.config_path = config_path.empty() ? "default" : config_path;
   }
   initializeDiagnostics();
+  try {
+    if (!initialize()) {
+      throw std::runtime_error("Failed to initialize ROS Portal");
+    }
+  } catch (...) {
+    shutdown();
+    throw;
+  }
 }
 
 bool RosPortal::initialize() {
@@ -141,8 +158,7 @@ bool RosPortal::initialize() {
     return false;
   }
 
-  // The LiveKit SDK lifecycle (livekit::initialize()/shutdown()) is owned by
-  // the process entry point (the node main() or the test harness)
+  // livekit_runtime_ keeps the SDK alive until all room resources are released.
   room_ = std::make_unique<livekit::Room>();
   if (!room_) {
     RCLCPP_FATAL(this->get_logger(), "Failed to create LiveKit room");
@@ -232,10 +248,8 @@ bool RosPortal::initialize() {
   connection_timer_ = this->create_wall_timer(
       ConnectionManager::kRetryInterval, [this]() { pollConnection(); }, reentrant_callback_group_);
 
-  // Mark initialized before the first poll so pollConnection() is not skipped.
-  // Connect immediately to avoid a 1s timer delay, then log initialized.
+  // Network IO starts only when the executor services the connection timer.
   initialized_.store(true, std::memory_order_relaxed);
-  pollConnection();
   RCLCPP_INFO(this->get_logger(), "ROS Portal initialized");
   return true;
 }
@@ -310,8 +324,7 @@ void RosPortal::shutdown() {
   initialized_.store(false, std::memory_order_relaxed);
   diagnostics_updater_.reset();
   room_.reset();
-  // Note: livekit::shutdown() is intentionally NOT called here — the SDK
-  // lifecycle is owned by the process entry point (see initialize()).
+  // livekit_runtime_ releases an owned SDK after all other members are gone.
 }
 
 diagnostics::DiagnosticsManagerFns RosPortal::makeDiagnosticsFns() {
@@ -883,10 +896,13 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
       }
     };
 
-    topic_forwarder_ = std::make_unique<TopicForwarder>(std::move(forwarder_options),
-                                                        this->weak_from_this(), // weak_from_this() MUST be called after
-                                                                                // constructor
-                                                        std::move(forwarder_lk_methods), makeDiagnosticsFns());
+    topic_forwarder_ = std::make_unique<TopicForwarder>(
+        std::move(forwarder_options),
+        TopicForwarder::NodeInterfaces{get_node_base_interface(), get_node_clock_interface(),
+                                       get_node_logging_interface(), get_node_parameters_interface(),
+                                       get_node_timers_interface(), get_node_topics_interface(),
+                                       get_node_graph_interface()},
+        std::move(forwarder_lk_methods), makeDiagnosticsFns());
     diagnostic_state_.topic_forwarder_active.store(topic_forwarder_ != nullptr, std::memory_order_relaxed);
   } catch (...) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize topic forwarder, unknown exception");
@@ -1030,9 +1046,11 @@ bool RosPortal::initializeServiceForwarder(const std::vector<ros_portal_config::
           return rpcPerform(id, method, payload, timeout_sec);
         },
     };
-    service_forwarder_ =
-        std::make_unique<ServiceForwarder>(utils::outgoingServiceRoutes(services), *this, reentrant_callback_group_,
-                                           livekit_methods, makeDiagnosticsFns());
+    service_forwarder_ = std::make_unique<ServiceForwarder>(
+        utils::outgoingServiceRoutes(services),
+        ServiceForwarder::NodeInterfaces{get_node_base_interface(), get_node_services_interface(),
+                                         get_node_logging_interface()},
+        reentrant_callback_group_, livekit_methods, makeDiagnosticsFns());
     diagnostic_state_.service_forwarder_active.store(service_forwarder_ != nullptr, std::memory_order_relaxed);
   } catch (const std::exception& error) {
     RCLCPP_FATAL(this->get_logger(), "Failed to initialize service forwarder: %s", error.what());
@@ -1081,9 +1099,12 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
       return identities;
     };
 
-    latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(std::move(options),
-                                                                       this->weak_from_this(), // after constructor
-                                                                       std::move(methods), makeDiagnosticsFns());
+    latched_topic_forwarder_ = std::make_unique<LatchedTopicForwarder>(
+        std::move(options),
+        LatchedTopicForwarder::NodeInterfaces{get_node_base_interface(), get_node_clock_interface(),
+                                              get_node_logging_interface(), get_node_parameters_interface(),
+                                              get_node_timers_interface(), get_node_topics_interface()},
+        std::move(methods), makeDiagnosticsFns());
     latched_topic_forwarder_->start();
     {
       const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
@@ -1220,3 +1241,5 @@ bool RosPortal::rpcUnregisterMethod(const std::string& method) {
 }
 
 } // namespace ros_portal
+
+RCLCPP_COMPONENTS_REGISTER_NODE(ros_portal::RosPortal)

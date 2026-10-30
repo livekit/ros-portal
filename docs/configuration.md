@@ -183,7 +183,7 @@ All config lives under `ros_portal`.
 |---|---:|---:|---:|---|
 | `$schema` | string | no | - | Link to JSON schema. Use `https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json` and an IDE YAML plugin to validate config files and add autocomplete. |
 | `version` | string | yes | - | Configuration schema version, currently `"0.0.1"`. |
-| `ros_threads` | integer | no | `0` | ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. |
+| `ros_threads` | integer | no | `0` | Standalone ROS executor thread count. `0` uses the available CPU-core count, matching `rclcpp` default. Ignored in composition, where the container owns the executor. |
 | `enable_all_ros_topic_stats` | boolean | no | `false` | Enable ROS 2 topic statistics for every outbound topic subscription. Overrides per-topic values when true. |
 | `services` | list | no | `[]` | Service route declarations. |
 | `topics` | list | no | `[]` | Topic route declarations. |

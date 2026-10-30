@@ -65,6 +65,68 @@ source /opt/livekit/ros/$ROS_DISTRO/setup.bash
 ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 ```
 
+## Running ROS Portal in Composition
+
+You can use ROS Portal in composition for lower system overhead, more flexible deployment, and zero-copy intra-process communication.
+
+The package exports `ros_portal::RosPortal`. The bundled launch file loads one
+portal into a single-threaded component container:
+
+```bash
+# Configure LIVEKIT_URL and one token source first.
+source install/setup.bash
+ros2 launch ros_portal ros_portal_composable.launch.py \
+  config_path:=/path/to/config.yaml
+```
+
+The same component can be included in a parent launch file:
+
+```python
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
+
+container = ComposableNodeContainer(
+    name='robot_container',
+    namespace='',
+    package='rclcpp_components',
+    executable='component_container',
+    composable_node_descriptions=[
+        ComposableNode(
+            package='ros_portal',
+            plugin='ros_portal::RosPortal',
+            name='ros_portal',
+            parameters=[{'config_path': '/path/to/config.yaml'}],
+        ),
+    ],
+)
+```
+
+__Warning:__ Only one ROS Portal instance should be launched. 
+
+### Intra-process communication
+
+Intra-process communication (IPC) is useful for reducing transport overhead and latency. It can be especially useful for high
+bandwidth topics such as sensor data. To use IPC, enable `use_intra_process_comms` on both ROS Portal and its peer nodes in the
+same process and rclcpp context, with compatible QoS. Then, in a `ComposableNode` description, set:
+
+```python
+extra_arguments=[{'use_intra_process_comms': True}],
+```
+
+How a producer publishes into ROS Portal affects whether the payload is copied
+before the portal sees it. Existing publishers can keep their current API; the
+table is only about the extra copy, not about whether the topic is forwarded.
+
+| How the producer publishes | What happens |
+| --- | --- |
+| `publish(std::move(unique_msg))` | The original message and pixel buffer can reach ROS Portal without a ROS copy. Prefer this for high-bandwidth images. |
+| `publish(shared_msg)` or `publish(*shared_msg)` | Works with existing publishers. On Jazzy, ROS copies the message into its own storage before intra-process communication delivery. |
+
+Intra-process communication reduces ROS delivery overhead only. Video encode/decode and LiveKit
+networking still copy. Inbound LiveKit video is republished as
+`sensor_msgs/CompressedImage` and is also copied to local subscribers. Generic
+serialized topics do not use rclcpp intra-process delivery on Jazzy.
+
 ## Forwarding Custom Topics
 
 Forwarding custom message types work like any other ROS type:

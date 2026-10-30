@@ -37,8 +37,8 @@ sensor_msgs::msg::Image makeImage(std::uint32_t width, std::uint32_t height, std
   return image;
 }
 
-TEST(ImageFrameBuilderTest, MovesPackedRgb8WithoutCopy) {
-  auto image = makeImage(2, 1, 6, "rgb8", {10, 20, 30, 40, 50, 60});
+TEST(ImageFrameBuilderTest, CopiesPackedRgb8WithoutModifyingSharedInput) {
+  const auto image = makeImage(2, 1, 6, "rgb8", {10, 20, 30, 40, 50, 60});
   const auto* pixels = image.data.data();
   ImageFrameBuilder builder;
 
@@ -46,8 +46,13 @@ TEST(ImageFrameBuilderTest, MovesPackedRgb8WithoutCopy) {
 
   ASSERT_NE(frame, nullptr);
   EXPECT_EQ(frame->type(), livekit::VideoBufferType::RGB24);
-  EXPECT_EQ(frame->data(), pixels);
-  EXPECT_TRUE(image.data.empty());
+  EXPECT_NE(frame->data(), pixels);
+  EXPECT_EQ(image.data.data(), pixels);
+  const std::vector<std::uint8_t> expected{10, 20, 30, 40, 50, 60};
+  EXPECT_EQ(std::vector<std::uint8_t>(image.data.begin(), image.data.end()), expected);
+  EXPECT_EQ(std::vector<std::uint8_t>(frame->data(), frame->data() + frame->dataSize()), expected);
+  const auto* converted_pixels = frame->data();
+  EXPECT_EQ(builder.build(image)->data(), converted_pixels);
 }
 
 TEST(ImageFrameBuilderTest, MapsPackedFourChannelEncodingsToNativeLayouts) {
@@ -65,7 +70,7 @@ TEST(ImageFrameBuilderTest, MapsPackedFourChannelEncodingsToNativeLayouts) {
             (std::vector<std::uint8_t>{1, 2, 3, 4}));
 }
 
-TEST(ImageFrameBuilderTest, DropsTrailingBytesOnZeroCopyPath) {
+TEST(ImageFrameBuilderTest, DropsTrailingBytesWithoutModifyingInput) {
   auto image = makeImage(1, 1, 4, "rgba8", {1, 2, 3, 4, 99, 99});
   ImageFrameBuilder builder;
 

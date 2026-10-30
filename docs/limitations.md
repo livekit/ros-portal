@@ -1,5 +1,13 @@
 # Current Limitations
 
+## ROS2 Composition
+
+In a composition-based deployment of ROS Portal:
+- Only one ROS Portal instance may be launched
+- No other ROS nodes may use LiveKit, as ROS Portal uniquely owns the SDK lifecycle
+
+If this is a limitation of your ability to use ROS Portal, please raise an issue.
+
 ## Video Tracks
 - `VideoSource` and `LocalVideoTrack` are created from the first received image
   dimensions. If camera resolution changes mid-stream, the track is not

@@ -143,7 +143,7 @@ protected:
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
-TEST_F(PortalIntraProcessCommsE2E, AppToPortalPreservesMessageAndPayloadWithConstSharedPtr) {
+TEST_F(PortalIntraProcessCommsE2E, AppToPortalCorrectConstSharedPtr) {
   ASSERT_NO_FATAL_FAILURE(initializeIntraProcessComms("out"));
   auto publisher = app_->create_publisher<sensor_msgs::msg::Image>(kIpcTopic, rclcpp::QoS(10));
   livekit::Room peer;
@@ -182,7 +182,7 @@ TEST_F(PortalIntraProcessCommsE2E, AppToPortalPreservesMessageAndPayloadWithCons
   }
 }
 
-TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstSharedPtrAndReportsPublicationCopy) {
+TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstSharedPtr) {
   ASSERT_NO_FATAL_FAILURE(initializeIntraProcessComms("in"));
   bool warmed = false;
   auto subscription = app_->create_subscription<sensor_msgs::msg::CompressedImage>(

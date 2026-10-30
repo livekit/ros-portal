@@ -70,8 +70,8 @@ public:
       return;
     }
     received.record(message);
-    intra_process = info.get_rmw_message_info().from_intra_process;
-    contents_valid = message.width == 64U && message.height == 48U && message.step == 192U &&
+    intra_process_ = info.get_rmw_message_info().from_intra_process;
+    contents_valid_ = message.width == 64U && message.height == 48U && message.step == 192U &&
                      message.encoding == "rgb8" && message.data.size() == std::size_t{64} * 48U * 3U &&
                      std::all_of(message.data.begin(), message.data.end(), [](auto byte) { return byte == 128U; });
     received_id.store(message.header.stamp.nanosec / 1000U, std::memory_order_release);
@@ -89,8 +89,8 @@ public:
   AddressObservation received;
   std::atomic<std::uint64_t> sent_id{0};
   std::atomic<std::uint64_t> received_id{0};
-  bool intra_process{false};
-  bool contents_valid{false};
+  bool intra_process_{false};
+  bool contents_valid_{false};
 };
 
 class PortalIntraProcessCommsE2E : public RosPortalTestE2E {
@@ -172,8 +172,8 @@ TEST_F(PortalIntraProcessCommsE2E, AppToPortalPreservesMessageAndPayloadWithCons
         << "No callback acknowledgment for frame " << id
         << "; sent message=" << observations_.sent.message.load(std::memory_order_relaxed)
         << ", received=" << observations_.received.message.load(std::memory_order_relaxed);
-    EXPECT_TRUE(observations_.intra_process);
-    EXPECT_TRUE(observations_.contents_valid);
+    EXPECT_TRUE(observations_.intra_process_);
+    EXPECT_TRUE(observations_.contents_valid_);
     EXPECT_EQ(observations_.received.message.load(std::memory_order_relaxed),
               observations_.sent.message.load(std::memory_order_relaxed));
     EXPECT_EQ(observations_.received.payload.load(std::memory_order_relaxed),
@@ -193,8 +193,8 @@ TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstShar
           return;
         }
         observations_.received.record(*message);
-        observations_.intra_process = info.get_rmw_message_info().from_intra_process;
-        observations_.contents_valid = message->format == "jpeg" && message->header.stamp.sec == 1'700'000 &&
+        observations_.intra_process_ = info.get_rmw_message_info().from_intra_process;
+        observations_.contents_valid_ = message->format == "jpeg" && message->header.stamp.sec == 1'700'000 &&
                                        message->data.size() > 2U && message->data[0] == 0xFFU &&
                                        message->data[1] == 0xD8U;
         observations_.received_id.store(message->header.stamp.nanosec / 1000U, std::memory_order_release);
@@ -223,8 +223,8 @@ TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstShar
         << "; published frame=" << observations_.sent_id.load(std::memory_order_acquire)
         << ", received frame=" << observations_.received_id.load(std::memory_order_acquire);
     ASSERT_EQ(observations_.sent_id.load(std::memory_order_acquire), id);
-    EXPECT_TRUE(observations_.intra_process);
-    EXPECT_TRUE(observations_.contents_valid);
+    EXPECT_TRUE(observations_.intra_process_);
+    EXPECT_TRUE(observations_.contents_valid_);
     EXPECT_EQ(observations_.received.bytes, observations_.sent.bytes);
     EXPECT_EQ(observations_.received.checksum, observations_.sent.checksum);
     // publish(const Message&) copies into ROS-owned storage even with IPC.
@@ -252,8 +252,8 @@ protected:
     Clock::time_point received_at;
     std::int32_t expected_id{0};
     std::int32_t received_id{0};
-    bool intra_process{false};
-    bool contents_valid{false};
+    bool intra_process_{false};
+    bool contents_valid_{false};
   };
 
   void measure(bool use_ipc, double& average_ms) {
@@ -274,9 +274,9 @@ protected:
           }
           delivery.received_at = received_at;
           delivery.received_id = message->header.stamp.sec;
-          delivery.intra_process = info.get_rmw_message_info().from_intra_process;
+          delivery.intra_process_ = info.get_rmw_message_info().from_intra_process;
           const auto marker = static_cast<std::uint8_t>(delivery.expected_id);
-          delivery.contents_valid = message->width == kWidth && message->height == kHeight &&
+          delivery.contents_valid_ = message->width == kWidth && message->height == kHeight &&
                                     message->encoding == "rgb8" && message->data.size() == kPayloadBytes &&
                                     message->data.front() == marker && message->data.back() == marker;
         });
@@ -320,8 +320,8 @@ protected:
         executor.spin_once(100ms);
       }
       ASSERT_EQ(delivery.received_id, delivery.expected_id) << "Timed out receiving an 8K image";
-      ASSERT_EQ(delivery.intra_process, use_ipc);
-      ASSERT_TRUE(delivery.contents_valid);
+      ASSERT_EQ(delivery.intra_process_, use_ipc);
+      ASSERT_TRUE(delivery.contents_valid_);
       if (frame > kWarmupFrames) {
         total_ms += std::chrono::duration<double, std::milli>(delivery.received_at - delivery.sent_at).count();
       }

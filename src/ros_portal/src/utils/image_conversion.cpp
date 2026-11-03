@@ -22,6 +22,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace ros_portal::utils {
 
@@ -83,7 +84,7 @@ void bgrToRgb(const sensor_msgs::msg::Image& image, std::uint8_t* dst) {
 
 } // namespace
 
-const livekit::VideoFrame* ImageFrameBuilder::build(const sensor_msgs::msg::Image& image) {
+const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image&& image) {
   const std::uint32_t bytes_per_pixel = bytesPerPixel(image.encoding);
   constexpr auto kMaxDimension = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
   // Reject unsupported encodings, empty images, and dimensions that cannot fit LiveKit's int API.
@@ -102,6 +103,12 @@ const livekit::VideoFrame* ImageFrameBuilder::build(const sensor_msgs::msg::Imag
   bool fresh = false;
 
   if (const auto layout = nativeLayout(image.encoding)) {
+    if (image.step == row_bytes) {
+      // Shrinking drops trailing bytes without reallocating the pixel buffer.
+      image.data.resize(row_bytes * image.height);
+      converted_ = livekit::VideoFrame(width, height, *layout, std::move(image.data));
+      return &converted_;
+    }
     auto& frame = reuse(width, height, *layout, fresh);
     copyRows(image, row_bytes, frame.data());
     return &frame;

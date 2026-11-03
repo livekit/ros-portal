@@ -119,7 +119,7 @@ table is only about the extra copy, not about whether the topic is forwarded.
 
 | How the producer publishes | What happens |
 | --- | --- |
-| `publish(std::move(unique_msg))` | The original message and pixel buffer can reach ROS Portal without a ROS copy. Prefer this for high-bandwidth images. |
+| `publish(std::move(unique_msg))` | With ROS Portal as the only local subscriber, the original message and pixel buffer can reach it without a ROS copy. Other subscribers, including shared readers, can require ROS to copy for exclusive delivery to the portal. |
 | `publish(shared_msg)` or `publish(*shared_msg)` | Works with existing publishers. On Jazzy, ROS copies the message into its own storage before intra-process communication delivery. |
 
 Intra-process communication reduces ROS delivery overhead only. Video encode/decode and LiveKit

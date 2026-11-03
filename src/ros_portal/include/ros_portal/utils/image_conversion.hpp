@@ -27,7 +27,7 @@ namespace ros_portal::utils {
 /// LiveKit converts RGBA, BGRA, RGB24 (R,G,B byte order) and I420 frames to
 /// I420 itself in one fused pass, so the builder hands over the closest native
 /// layout instead of converting to RGBA first:
-/// - `rgba8`, `bgra8` and `rgb8` copy rows into a reused native-layout frame.
+/// - `rgba8`, `bgra8` and `rgb8` move packed pixels into a native-layout frame.
 /// - `bgr8` swaps channels into a reused RGB24 frame.
 /// - `mono8` copies rows into the Y plane of a reused I420 frame with neutral
 ///   chroma.
@@ -37,7 +37,8 @@ namespace ros_portal::utils {
 class ImageFrameBuilder {
 public:
   /// @brief Build a frame for @p image.
-  /// @param image Immutable source image; its pixel buffer is never modified.
+  /// @param image Exclusively owned source image. Packed native-layout pixels
+  /// are moved into the builder; other layouts are copied or converted.
   /// @return A non-owning pointer to a frame stored in this builder, or nullptr
   /// when the encoding is unsupported, the image is empty, or `data` is smaller
   /// than `step * height`.
@@ -45,7 +46,7 @@ public:
   /// frame synchronously before the next build() call or before moving or
   /// destroying the builder. Serialize building and consumption together when
   /// sharing an instance across threads.
-  const livekit::VideoFrame* build(const sensor_msgs::msg::Image& image);
+  const livekit::VideoFrame* build(sensor_msgs::msg::Image&& image);
 
 private:
   /// @brief Return the reused conversion frame, reallocating it only when the
@@ -53,7 +54,7 @@ private:
   /// @param fresh Set to true when the frame was reallocated.
   livekit::VideoFrame& reuse(int width, int height, livekit::VideoBufferType type, bool& fresh);
 
-  /// @brief Reused target for encodings that need a copy or conversion.
+  /// @brief Own moved native pixels or reused storage for copying and conversion.
   livekit::VideoFrame converted_;
 };
 

@@ -54,10 +54,12 @@ source scripts/set-test-tokens.sh
 build/ros_portal/test/ros_portal_integration_tests --gtest_filter='PortalIntraProcessCommsE2E.*'
 ```
 
-The app-to-portal case compares atomic message and pixel-buffer addresses at
-the portal's actual `ConstSharedPtr` callback. The portal-to-app case checks
+The app-to-portal cases compare atomic message and pixel-buffer addresses at
+the portal's actual `UniquePtr` callback for a sole subscriber. Additional cases
+check that shared producers and shared subscribers retain their image contents
+after the portal consumes its own pixels. The portal-to-app case checks
 intra-process delivery and matching contents while verifying the copy caused
-by the portal's const-reference publication. Both use three correlated frames
+by the portal's const-reference publication. The cases use three correlated frames
 and bounded waits. Observers are compiled only with `BUILD_TESTING`; they add
 no public runtime configuration. These tests cover local ROS message
 boundaries, not copies inside the video codec or LiveKit transport.

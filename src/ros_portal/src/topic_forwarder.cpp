@@ -529,9 +529,8 @@ void TopicForwarder::subscribeVideoTopic(const std::string& topic_name, const ch
 }
 
 void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
-  // Shared immutable messages allow other local readers to use the same pixels.
-  auto callback = [this, topic_name](const sensor_msgs::msg::Image::ConstSharedPtr& msg,
-                                     const rclcpp::MessageInfo& message_info) {
+  // Exclusive ownership lets the frame builder move packed pixels into LiveKit.
+  auto callback = [this, topic_name](sensor_msgs::msg::Image::UniquePtr msg, const rclcpp::MessageInfo& message_info) {
 #ifdef BUILD_TESTING
     if (auto* observer = test::message_observer.load(std::memory_order_acquire)) {
       observer->imageReceived(*msg, message_info);
@@ -551,7 +550,7 @@ void TopicForwarder::createImageSubscriber(const std::string& topic_name) {
     }
 
     const auto frame_stamp = makeVideoFrameStamp(msg->header, topic_name);
-    const auto* frame = state->frame_builder.build(*msg);
+    const auto* frame = state->frame_builder.build(std::move(*msg));
     if (frame == nullptr) {
       RCLCPP_WARN_THROTTLE(logger_, *clock_, 5000,
                            "Skipping image on topic '%s': encoding '%s' is unsupported or the %zu-byte buffer does "

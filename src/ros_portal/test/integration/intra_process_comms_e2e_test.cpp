@@ -135,6 +135,8 @@ protected:
     RosPortalTestE2E::TearDown();
   }
 
+  void checkOutboundImage(bool shared_publisher, bool shared_reader);
+
   BoundaryObserver observations_;
   std::unique_ptr<ScopedRosGraph> graph_;
   std::unique_ptr<TemporaryConfigFile> config_;
@@ -143,15 +145,23 @@ protected:
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
-TEST_F(PortalIntraProcessCommsE2E, AppToPortalCorrectConstSharedPtr) {
+void PortalIntraProcessCommsE2E::checkOutboundImage(bool shared_publisher, bool shared_reader) {
   ASSERT_NO_FATAL_FAILURE(initializeIntraProcessComms("out"));
   auto publisher = app_->create_publisher<sensor_msgs::msg::Image>(kIpcTopic, rclcpp::QoS(10));
+  sensor_msgs::msg::Image::ConstSharedPtr shared_message;
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr reader;
+  if (shared_reader) {
+    reader = app_->create_subscription<sensor_msgs::msg::Image>(
+        kIpcTopic, rclcpp::QoS(10),
+        [&shared_message](sensor_msgs::msg::Image::ConstSharedPtr message) { shared_message = std::move(message); });
+  }
   livekit::Room peer;
   ASSERT_TRUE(peer.connect(liveKitUrl(), tokenA(), livekit::RoomOptions{}));
   ASSERT_TRUE(spinUntil([&]() { return portal_->hasParticipant(identityA()); }))
       << "Portal did not connect to the LiveKit room";
-  ASSERT_TRUE(spinUntil([&]() { return publisher->get_intra_process_subscription_count() == 1U; }))
-      << "Portal's typed IPC subscription did not match";
+  ASSERT_TRUE(spinUntil([&]() {
+    return publisher->get_intra_process_subscription_count() == (shared_reader ? 2U : 1U);
+  })) << "Portal's typed IPC subscription did not match";
 
   for (std::uint64_t id = 1; id <= kFrameCount; ++id) {
     SCOPED_TRACE("app -> portal frame " + std::to_string(id));
@@ -166,21 +176,44 @@ TEST_F(PortalIntraProcessCommsE2E, AppToPortalCorrectConstSharedPtr) {
     message->data.assign(std::size_t{64} * 48U * 3U, 128U);
     observations_.sent.record(*message);
     observations_.sent_id.store(id, std::memory_order_release);
-    publisher->publish(std::move(message));
+    sensor_msgs::msg::Image::SharedPtr producer_message;
+    if (shared_publisher) {
+      producer_message = std::move(message);
+      publisher->publish(*producer_message);
+    } else {
+      publisher->publish(std::move(message));
+    }
 
-    ASSERT_TRUE(spinUntil([&]() { return observations_.received_id.load(std::memory_order_acquire) == id; }))
-        << "No callback acknowledgment for frame " << id
-        << "; sent message=" << observations_.sent.message.load(std::memory_order_relaxed)
+    ASSERT_TRUE(spinUntil([&]() {
+      return observations_.received_id.load(std::memory_order_acquire) == id &&
+             (!shared_reader || (shared_message && shared_message->header.stamp.nanosec / 1000U == id));
+    })) << "No callback acknowledgment for frame "
+        << id << "; sent message=" << observations_.sent.message.load(std::memory_order_relaxed)
         << ", received=" << observations_.received.message.load(std::memory_order_relaxed);
     EXPECT_TRUE(observations_.intra_process_);
     EXPECT_TRUE(observations_.contents_valid_);
-    EXPECT_EQ(observations_.received.message.load(std::memory_order_relaxed),
-              observations_.sent.message.load(std::memory_order_relaxed));
-    EXPECT_EQ(observations_.received.payload.load(std::memory_order_relaxed),
-              observations_.sent.payload.load(std::memory_order_relaxed));
+    if (!shared_publisher && !shared_reader) {
+      EXPECT_EQ(observations_.received.message.load(std::memory_order_relaxed),
+                observations_.sent.message.load(std::memory_order_relaxed));
+      EXPECT_EQ(observations_.received.payload.load(std::memory_order_relaxed),
+                observations_.sent.payload.load(std::memory_order_relaxed));
+    }
+    // Portal's move into its SDK frame must leave other owners' pixels intact.
+    for (const auto& retained : {sensor_msgs::msg::Image::ConstSharedPtr(producer_message), shared_message}) {
+      if (retained) {
+        EXPECT_EQ(retained->data.size(), std::size_t{64} * 48U * 3U);
+        EXPECT_TRUE(std::all_of(retained->data.begin(), retained->data.end(), [](auto byte) { return byte == 128U; }));
+      }
+    }
     EXPECT_EQ(observations_.received.checksum, observations_.sent.checksum);
   }
 }
+
+TEST_F(PortalIntraProcessCommsE2E, AppToPortalPreservesUniqueImage) { checkOutboundImage(false, false); }
+
+TEST_F(PortalIntraProcessCommsE2E, AppToPortalWithSharedReader) { checkOutboundImage(false, true); }
+
+TEST_F(PortalIntraProcessCommsE2E, AppToPortalWithSharedProducerAndReader) { checkOutboundImage(true, true); }
 
 TEST_F(PortalIntraProcessCommsE2E, PortalToAppUsesIntraProcessCommsWithConstSharedPtr) {
   ASSERT_NO_FATAL_FAILURE(initializeIntraProcessComms("in"));

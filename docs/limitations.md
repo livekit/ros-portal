@@ -17,9 +17,10 @@ If this is a limitation of your ability to use ROS Portal, please raise an issue
 - Outbound `sensor_msgs/CompressedImage` topics support JPEG only. Each frame
   is decoded on the CPU before LiveKit encodes it as video. A 1472x1440 frame
   takes about 6.5 ms to decode on an aarch64 devcontainer.
-- Packed `rgba8`, `bgra8`, and `rgb8` images go to LiveKit without a pixel
-  copy. `bgr8`, `mono8`, and images with row padding need one CPU pass inside
-  the subscription callback. The LiveKit SDK then converts each frame to I420.
+- Packed `rgba8`, `bgra8`, and `rgb8` image buffers are moved into LiveKit
+  frames without a pixel copy inside ROS Portal. ROS delivery may still copy
+  when publishers or other subscribers require it. `bgr8`, `mono8`, and images
+  with row padding need one CPU pass inside the subscription callback. The LiveKit SDK then converts each frame to I420.
 - Inbound video tracks are republished only as JPEG `sensor_msgs/CompressedImage`
   at a fixed quality of 90. The LiveKit SDK gives decoded frames only, so the
   receiver decodes and then encodes each frame again on the CPU.

@@ -292,12 +292,13 @@ TEST_F(RosPortalTestE2E, PublishesToRemoteRosTopicOverRpc) {
   // Robot B sees its own publisher immediately, but Portal B receives the ROS
   // graph update asynchronously. Wait for the graph used by the remote RPC
   // handler before asserting its type-mismatch response.
+  TopicListServiceOptions graph_options;
+  graph_options.show_types = true;
   ASSERT_TRUE(waitFor(
       [&]() {
-        const auto topics = rosPortalB()->get_topic_names_and_types();
-        const auto topic = topics.find(kBidirectionalTopic);
-        return topic != topics.end() &&
-               std::find(topic->second.begin(), topic->second.end(), kStringType) != topic->second.end();
+        const auto response = callTopicListService(robotANode(), identityB(), graph_options);
+        return response && response->success &&
+               contains(response->output, std::string(kBidirectionalTopic) + " [" + kStringType + "]");
       },
       kGraphTimeout))
       << "ROS Portal B did not discover " << kBidirectionalTopic << " as " << kStringType;

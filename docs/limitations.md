@@ -5,6 +5,7 @@
 In a composition-based deployment of ROS Portal:
 - Only one ROS Portal instance may be launched
 - No other ROS nodes may use LiveKit, as ROS Portal uniquely owns the SDK lifecycle
+- Construction fails if LiveKit::initialize() fails.
 
 If this is a limitation of your ability to use ROS Portal, please raise an issue.
 

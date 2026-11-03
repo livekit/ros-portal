@@ -415,7 +415,7 @@ TEST_F(DataTrackLifecycleTests, RosPortalDestructionCleansUpActiveTrack) {
   ASSERT_TRUE(track_result) << track_result.error().message;
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
-  const std::weak_ptr<RosPortal> portal = rosPortalB();
+  const std::weak_ptr<PortalProcess> portal = rosPortalB();
   const auto start = std::chrono::steady_clock::now();
   shutdownRosPortalB();
   const auto elapsed = std::chrono::steady_clock::now() - start;
@@ -454,7 +454,12 @@ TEST_F(DataTrackLifecycleTests, RecreatedSubscriberReceivesActiveTrack) {
   ASSERT_TRUE(pushUntilReceived(track_result.value(), serializeString("first subscriber"), first_received));
 
   first_subscription.reset();
-  ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_subscribers(kTopic) == 0U; }, kGraphTimeout));
+  // Service responses keep the local executor advancing so it releases the
+  // last callback reference to the removed subscription, while checking that
+  // the child still sees the publisher throughout the subscriber gap.
+  ASSERT_TRUE(waitFor(
+      [&]() { return rosPortalB()->hasParticipant(identityA()) && robotBNode()->count_subscribers(kTopic) == 0U; },
+      kGraphTimeout));
   ASSERT_GT(robotBNode()->count_publishers(kTopic), 0U);
 
   std::atomic_bool second_received{false};

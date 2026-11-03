@@ -66,14 +66,14 @@ inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
 /// topics as data tracks.
 ///
 /// Supports one SDK-owning ROS Portal per process, with SDK initialization and
-/// destruction serialized by its owner. An externally initialized SDK is
-/// borrowed and must outlive the node. Background SDK and reader callbacks are
+/// destruction serialized by its owner. Construction rejects an already
+/// initialized SDK. Background SDK and reader callbacks are
 /// stopped before their node-owned targets are destroyed.
 class RosPortal : public rclcpp::Node, public livekit::RoomDelegate {
 public:
   /// @brief Construct and initialize ROS Portal without making a network connection.
   /// @param options Options forwarded by the executable or component container.
-  /// @throws std::runtime_error when local initialization fails.
+  /// @throws std::runtime_error when the SDK is already initialized or local startup fails.
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
   /// @brief Stop callbacks and workers, then release node-owned resources.
   /// @note Stop external ROS execution before destroying the node.
@@ -289,21 +289,19 @@ private:
 
   /// @brief Own the process-wide SDK for this single-owner node.
   ///
-  /// An already initialized SDK is borrowed and must outlive the node. No
+  /// Construction fails if another owner already initialized the SDK. No
   /// reference counting or concurrent lifecycle ownership is supported.
   class LiveKitRuntime {
   public:
-    /// @brief Initialize the SDK, or borrow the caller's initialized SDK.
+    /// @brief Initialize the exclusively owned SDK.
+    /// @throws std::runtime_error if the SDK is already initialized.
     LiveKitRuntime();
-    /// @brief Stop an owned SDK after all node-owned SDK objects are gone.
+    /// @brief Stop the SDK after all node-owned SDK objects are gone.
     ~LiveKitRuntime();
     LiveKitRuntime(const LiveKitRuntime&) = delete;
     LiveKitRuntime& operator=(const LiveKitRuntime&) = delete;
     LiveKitRuntime(LiveKitRuntime&&) = delete;
     LiveKitRuntime& operator=(LiveKitRuntime&&) = delete;
-
-  private:
-    bool owned_;
   };
 
   // Declared first so the SDK outlives every other member, including during

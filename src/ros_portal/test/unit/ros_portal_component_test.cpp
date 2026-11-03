@@ -138,12 +138,9 @@ TEST_F(RosPortalComponentTest, DefersCredentialResolutionUntilExecutorRuns) {
   EXPECT_TRUE(livekit::initialize());
 }
 
-TEST_F(RosPortalComponentTest, PreservesExternallyOwnedRuntime) {
+TEST_F(RosPortalComponentTest, RejectsExternallyOwnedRuntime) {
   ASSERT_TRUE(livekit::initialize());
-  {
-    RosPortal portal(rclcpp::NodeOptions{});
-    EXPECT_FALSE(livekit::initialize());
-  }
+  EXPECT_THROW(RosPortal portal(rclcpp::NodeOptions{}), std::runtime_error);
   EXPECT_FALSE(livekit::initialize());
 }
 
@@ -162,12 +159,14 @@ TEST_F(RosPortalComponentTest, ReleasesRuntimeOnNodeConstructionFailure) {
   EXPECT_TRUE(livekit::initialize());
 }
 
-TEST_F(RosPortalComponentTest, FailedLoadPreservesExternallyOwnedRuntime) {
-  ASSERT_TRUE(livekit::initialize());
-  ASSERT_TRUE(setEnv("LIVEKIT_TOKEN_ENDPOINT", "http://127.0.0.1:1/token"));
-
-  EXPECT_THROW(RosPortal portal(rclcpp::NodeOptions{}), std::runtime_error);
-  EXPECT_FALSE(livekit::initialize());
+TEST_F(RosPortalComponentTest, RejectsSecondPortalWithoutStoppingFirst) {
+  {
+    RosPortal first;
+    EXPECT_THROW(RosPortal second, std::runtime_error);
+    EXPECT_FALSE(livekit::initialize());
+    EXPECT_EQ(first.rosThreads(), 0);
+  }
+  EXPECT_TRUE(livekit::initialize());
 }
 
 } // namespace

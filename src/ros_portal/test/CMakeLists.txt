@@ -79,6 +79,12 @@ if(TARGET ros_portal_unit_tests)
   livekit_set_runtime_rpath(ros_portal_unit_tests)
 endif()
 
+# Each integration Portal owns its SDK in a fresh process.
+ament_auto_add_executable(ros_portal_test_process common/portal_process_main.cpp)
+target_link_libraries(ros_portal_test_process ros_portal_lib)
+medkit_target_dependencies(ros_portal_test_process std_srvs)
+livekit_set_runtime_rpath(ros_portal_test_process)
+
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
@@ -105,6 +111,10 @@ if(TARGET ros_portal_integration_tests)
   target_link_libraries(ros_portal_integration_tests
     ros_portal_lib
   )
+  target_compile_definitions(ros_portal_integration_tests PRIVATE
+    ROS_PORTAL_TEST_PROCESS="$<TARGET_FILE:ros_portal_test_process>"
+  )
+  add_dependencies(ros_portal_integration_tests ros_portal_test_process)
   livekit_set_runtime_rpath(ros_portal_integration_tests)
   set_tests_properties(ros_portal_integration_tests PROPERTIES
     TIMEOUT 240
@@ -131,6 +141,10 @@ if(TARGET ros_portal_connection_fault_tests)
   target_link_libraries(ros_portal_connection_fault_tests
     ros_portal_lib
   )
+  target_compile_definitions(ros_portal_connection_fault_tests PRIVATE
+    ROS_PORTAL_TEST_PROCESS="$<TARGET_FILE:ros_portal_test_process>"
+  )
+  add_dependencies(ros_portal_connection_fault_tests ros_portal_test_process)
   livekit_set_runtime_rpath(ros_portal_connection_fault_tests)
   set_tests_properties(ros_portal_connection_fault_tests PROPERTIES
     LABELS "integration;connection_fault;opt_in"

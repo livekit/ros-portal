@@ -71,13 +71,13 @@ constexpr char kRosPortalStatusDiagnosticTaskName[] = "ros_portal_status";
 
 } // namespace
 
-RosPortal::LiveKitRuntime::LiveKitRuntime() : owned_(livekit::initialize(livekit::LogLevel::Info)) {}
-
-RosPortal::LiveKitRuntime::~LiveKitRuntime() {
-  if (owned_) {
-    livekit::shutdown();
+RosPortal::LiveKitRuntime::LiveKitRuntime() {
+  if (!livekit::initialize(livekit::LogLevel::Info)) {
+    throw std::runtime_error("livekit::initialize() failed.");
   }
 }
+
+RosPortal::LiveKitRuntime::~LiveKitRuntime() { livekit::shutdown(); }
 
 RosPortal::RosPortal(const rclcpp::NodeOptions& options)
     : rclcpp::Node("ros_portal", options), livekit_runtime_(), initialized_(false), shutting_down_(false) {

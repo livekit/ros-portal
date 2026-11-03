@@ -38,9 +38,8 @@ The supported component layout has one ROS Portal in a single-threaded
 container. The node initializes the process-wide LiveKit SDK and releases it
 only after disconnecting its room, detaching callbacks, stopping graph
 monitoring, and joining reader workers. There is no runtime reference count or
-separate manager. If a host initializes the SDK first, ROS Portal borrows it;
-the host must keep it alive until the node and all SDK resources are gone.
-Concurrent SDK lifecycle ownership is unsupported.
+separate manager. Construction fails if LiveKit::initialize() fails.
+Concurrent SDK lifecycle ownership in a single process is unsupported.
 
 Topic and latched-topic forwarders receive explicit ROS node interfaces rather
 than a shared or borrowed enclosing node. This allows construction before

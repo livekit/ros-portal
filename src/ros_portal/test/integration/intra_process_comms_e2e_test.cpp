@@ -95,6 +95,10 @@ public:
 
 class PortalIntraProcessCommsE2E : public RosPortalTestE2E {
 protected:
+  // The local Portal owns the SDK. Peer rooms borrow it only within its lifetime.
+  static void SetUpTestSuite() {}
+  static void TearDownTestSuite() {}
+
   void initializeIntraProcessComms(const std::string& direction) {
     ASSERT_TRUE(configured()) << "Source scripts/set-test-tokens.sh; a LiveKit server with frame metadata is required";
     ASSERT_TRUE(setEnv("LIVEKIT_TOKEN", tokenB()));

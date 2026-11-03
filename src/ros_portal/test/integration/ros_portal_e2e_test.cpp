@@ -402,7 +402,7 @@ TEST_F(DataTrackLifecycleTests, RepublishedTrackResumesForwarding) {
 // 2. Verify the ROS publisher exists.
 // 3. Destroy ROS Portal while the track remains active.
 // 4. Verify teardown completes and the ROS publisher disappears.
-TEST_F(DataTrackLifecycleTests, RosPortalShutdownCleansUpActiveTrack) {
+TEST_F(DataTrackLifecycleTests, RosPortalDestructionCleansUpActiveTrack) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
   constexpr const char* kTopic = "/ros_portal/lifecycle/ros_portal_shutdown";
   initializeInboundOnlyRuntime(kTopic);
@@ -415,10 +415,12 @@ TEST_F(DataTrackLifecycleTests, RosPortalShutdownCleansUpActiveTrack) {
   ASSERT_TRUE(track_result) << track_result.error().message;
   ASSERT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) > 0U; }, kGraphTimeout));
 
+  const std::weak_ptr<RosPortal> portal = rosPortalB();
   const auto start = std::chrono::steady_clock::now();
   shutdownRosPortalB();
   const auto elapsed = std::chrono::steady_clock::now() - start;
 
+  EXPECT_TRUE(portal.expired());
   EXPECT_LT(elapsed, kGraphTimeout);
   EXPECT_TRUE(waitFor([&]() { return robotBNode()->count_publishers(kTopic) == 0U; }, kGraphTimeout));
 }

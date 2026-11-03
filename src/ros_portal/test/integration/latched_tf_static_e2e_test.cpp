@@ -163,12 +163,7 @@ protected:
         executor_b_->remove_node(ros_portal_b_);
       }
     }
-    if (ros_portal_a_) {
-      ros_portal_a_->shutdown();
-    }
-    if (ros_portal_b_) {
-      ros_portal_b_->shutdown();
-    }
+    // Destruction drains portal callbacks and readers before ROS graph teardown.
     publisher_a_.reset();
     ros_portal_a_.reset();
     ros_portal_b_.reset();

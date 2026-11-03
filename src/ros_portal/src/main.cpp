@@ -37,7 +37,6 @@ int main(int argc, char* argv[]) {
     executor.add_node(node);
     executor.spin();
     executor.remove_node(node);
-    node->shutdown();
   } catch (const std::exception& e) {
     RCLCPP_FATAL(logger, "Unhandled exception in ROS Portal: %s", e.what());
     exit_code = EXIT_FAILURE;

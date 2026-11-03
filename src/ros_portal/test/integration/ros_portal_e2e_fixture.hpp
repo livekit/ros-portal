@@ -550,9 +550,6 @@ protected:
     if (graph_b_executor_ && ros_portal_b_) {
       graph_b_executor_->remove_node(ros_portal_b_);
     }
-    if (ros_portal_b_) {
-      ros_portal_b_->shutdown();
-    }
     ros_portal_b_.reset();
 
     if (graph_b_executor_) {
@@ -650,13 +647,7 @@ private:
       }
     }
 
-    if (ros_portal_a_) {
-      ros_portal_a_->shutdown();
-    }
-    if (ros_portal_b_) {
-      ros_portal_b_->shutdown();
-    }
-
+    // Destruction drains portal callbacks and readers before ROS graph teardown.
     publisher_a_.reset();
     publisher_b_.reset();
     robot_a_node_.reset();

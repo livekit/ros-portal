@@ -75,20 +75,9 @@ public:
   /// @param options Options forwarded by the executable or component container.
   /// @throws std::runtime_error when local initialization fails.
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  /// @brief Stop callbacks and workers, then release node-owned resources.
+  /// @note Stop external ROS execution before destroying the node.
   ~RosPortal() override;
-
-  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
-  /// and graph discovery. Called by the constructor; subsequent calls are no-ops.
-  /// Token resolution and connection attempts run on the executor's timer.
-  /// @return True if initialization completed, false for expected startup
-  /// failures that have already been logged.
-  bool initialize();
-
-  /// @brief Disconnect LiveKit and release ROS Portal resources.
-  ///
-  /// Stop external ROS execution before calling this. SDK callbacks and reader
-  /// workers are drained before their targets are released.
-  void shutdown();
 
   int rosThreads() const { return ros_threads_; }
 
@@ -102,6 +91,19 @@ public:
   bool hasParticipant(const std::string& participant_id) const;
 
 private:
+  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
+  /// and graph discovery during construction.
+  /// Token resolution and connection attempts run on the executor's timer.
+  /// @return True if initialization completed, false for expected startup
+  /// failures that have already been logged.
+  bool initialize();
+
+  /// @brief Disconnect LiveKit and release ROS Portal resources.
+  ///
+  /// Called during destruction or to clean up failed construction. SDK
+  /// callbacks and reader workers are drained before their targets are released.
+  void shutdown();
+
   /// @brief Poll the room connection state and make a scheduled connection
   /// attempt when needed.
   void pollConnection();

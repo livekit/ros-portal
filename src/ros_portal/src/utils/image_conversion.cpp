@@ -23,6 +23,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ros_portal::utils {
 
@@ -106,7 +107,9 @@ const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image&& im
     if (image.step == row_bytes) {
       // Shrinking drops trailing bytes without reallocating the pixel buffer.
       image.data.resize(row_bytes * image.height);
-      converted_ = livekit::VideoFrame(width, height, *layout, std::move(image.data));
+      // Lyrical's rosidl::Buffer converts to a vector lvalue; move its backing vector explicitly.
+      auto& pixels = static_cast<std::vector<std::uint8_t>&>(image.data);
+      converted_ = livekit::VideoFrame(width, height, *layout, std::move(pixels));
       return &converted_;
     }
     auto& frame = reuse(width, height, *layout, fresh);

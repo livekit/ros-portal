@@ -64,24 +64,20 @@ inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
 /// against user-defined patterns, and creating subscribers for the allowed
 /// topics. ROS Portal treats video and audio as LK video/audio tracks and other
 /// topics as data tracks.
+///
+/// Supports one SDK-owning ROS Portal per process, with SDK initialization and
+/// destruction serialized by its owner. Construction rejects an already
+/// initialized SDK. Background SDK and reader callbacks are
+/// stopped before their node-owned targets are destroyed.
 class RosPortal : public rclcpp::Node, public livekit::RoomDelegate {
 public:
-  /// @brief Constructor for the ROS Portal.
-  /// @param options The options for the node
+  /// @brief Construct and initialize ROS Portal without making a network connection.
+  /// @param options Options forwarded by the executable or component container.
+  /// @throws std::runtime_error when the SDK is already initialized or local startup fails.
   explicit RosPortal(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  /// @brief Stop callbacks and workers, then release node-owned resources.
+  /// @note Stop external ROS execution before destroying the node.
   ~RosPortal() override;
-
-  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
-  /// and graph discovery.
-  /// @return True if initialization completed, false for expected startup
-  /// failures that have already been logged.
-  bool initialize();
-
-  /// @brief Disconnect LiveKit and release ROS Portal resources.
-  ///
-  /// Call this before releasing the final shared owner. The LiveKit SDK must
-  /// not disconnect a room from one of its delegate callbacks.
-  void shutdown();
 
   int rosThreads() const { return ros_threads_; }
 
@@ -95,6 +91,19 @@ public:
   bool hasParticipant(const std::string& participant_id) const;
 
 private:
+  /// @brief Initialize ROS Portal configuration, LiveKit connection management,
+  /// and graph discovery during construction.
+  /// Token resolution and connection attempts run on the executor's timer.
+  /// @return True if initialization completed, false for expected startup
+  /// failures that have already been logged.
+  bool initialize();
+
+  /// @brief Disconnect LiveKit and release ROS Portal resources.
+  ///
+  /// Called during destruction or to clean up failed construction. SDK
+  /// callbacks and reader workers are drained before their targets are released.
+  void shutdown();
+
   /// @brief Poll the room connection state and make a scheduled connection
   /// attempt when needed.
   void pollConnection();
@@ -277,6 +286,28 @@ private:
   /// @return True when the manager was constructed. Individual source failures
   /// are isolated and reported through diagnostics.
   bool initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources);
+
+  /// @brief Own the process-wide SDK for this single-owner node.
+  ///
+  /// Construction fails if another owner already initialized the SDK. No
+  /// reference counting or concurrent lifecycle ownership is supported.
+  class LiveKitRuntime {
+  public:
+    /// @brief Initialize the exclusively owned SDK.
+    /// @throws std::runtime_error if the SDK is already initialized.
+    LiveKitRuntime();
+    /// @brief Stop the SDK after all node-owned SDK objects are gone.
+    ~LiveKitRuntime();
+    LiveKitRuntime(const LiveKitRuntime&) = delete;
+    LiveKitRuntime& operator=(const LiveKitRuntime&) = delete;
+    LiveKitRuntime(LiveKitRuntime&&) = delete;
+    LiveKitRuntime& operator=(LiveKitRuntime&&) = delete;
+  };
+
+  // Declared first so the SDK outlives every other member, including during
+  // constructor failure. The destructor body drains callbacks before release.
+  LiveKitRuntime livekit_runtime_;
+
   //! @brief The minimum QoS depth
   size_t min_qos_depth_{0};
   //! @brief The maximum QoS depth

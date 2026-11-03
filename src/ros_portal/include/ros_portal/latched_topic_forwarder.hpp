@@ -29,7 +29,12 @@
 #include <rclcpp/clock.hpp>
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/logger.hpp>
-#include <rclcpp/node.hpp>
+#include <rclcpp/node_interfaces/node_base_interface.hpp>
+#include <rclcpp/node_interfaces/node_clock_interface.hpp>
+#include <rclcpp/node_interfaces/node_logging_interface.hpp>
+#include <rclcpp/node_interfaces/node_parameters_interface.hpp>
+#include <rclcpp/node_interfaces/node_timers_interface.hpp>
+#include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp/qos.hpp>
 #include <string>
 #include <thread>
@@ -78,6 +83,22 @@ inline constexpr const char* kLatchedStateRpcMethod = "ros2_latched_state";
 ///    still receive them. The ROS message type travels in the payload.
 class LatchedTopicForwarder {
 public:
+  /// @brief ROS interfaces used without retaining the enclosing node.
+  struct NodeInterfaces {
+    /// @brief Callback groups and the underlying ROS node handle.
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base;
+    /// @brief Clock used by subscriptions and throttled logs.
+    rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock;
+    /// @brief Logger used by the forwarder.
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
+    /// @brief Parameters required by typed topic factories and statistics.
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters;
+    /// @brief Timer registry for topic statistics.
+    rclcpp::node_interfaces::NodeTimersInterface::SharedPtr node_timers;
+    /// @brief Publisher and subscription registry.
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics;
+  };
+
   /// @brief LiveKit-facing callbacks supplied by ROS Portal.
   struct LiveKitMethods {
     /// @brief Return whether the current room session can perform room operations.
@@ -112,18 +133,15 @@ public:
     std::size_t max_stored_messages{32};
   };
 
-  /// @brief Construct the forwarder and register the inbound RPC handler when
-  /// any inbound latched topic is configured. Does not start the push worker;
-  /// call @ref start().
+  /// @brief Construct the forwarder and register its inbound RPC handler.
   /// @param options Latched-topic forwarding configuration and limits.
-  /// @param node Non-owning handle to the ROS node used for subscriptions and
-  /// publishers.
+  /// @param node_interfaces Interfaces for ROS entities, clocks, and logs.
   /// @param livekit_methods LiveKit RPC and participant callbacks.
-  /// @param diagnostics ROS Portal-owned diagnostics functions used to register
-  /// the latched-topic-forwarder diagnostic task.
-  /// @throws std::invalid_argument when the node has expired or any LiveKit
-  /// or diagnostics callback is unset.
-  LatchedTopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+  /// @param diagnostics Owner-provided diagnostic registration functions.
+  /// @throws std::invalid_argument when an interface or required callback is unset.
+  /// @note Call start() to start the push worker. The owner must stop external
+  /// callbacks before destroying the forwarder.
+  LatchedTopicForwarder(Options options, NodeInterfaces node_interfaces, LiveKitMethods livekit_methods,
                         diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop the push worker and unregister the RPC handler.
@@ -214,7 +232,7 @@ private:
   void populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status);
 
   Options options_;
-  rclcpp::Node::WeakPtr node_;
+  NodeInterfaces node_interfaces_;
   LiveKitMethods livekit_methods_;
   diagnostics::DiagnosticsManagerFns diagnostics_;
   rclcpp::Logger logger_;

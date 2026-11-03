@@ -85,7 +85,7 @@ void bgrToRgb(const sensor_msgs::msg::Image& image, std::uint8_t* dst) {
 
 } // namespace
 
-const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image& image) {
+const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image&& image) {
   const std::uint32_t bytes_per_pixel = bytesPerPixel(image.encoding);
   constexpr auto kMaxDimension = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
   // Reject unsupported encodings, empty images, and dimensions that cannot fit LiveKit's int API.
@@ -105,15 +105,12 @@ const livekit::VideoFrame* ImageFrameBuilder::build(sensor_msgs::msg::Image& ima
 
   if (const auto layout = nativeLayout(image.encoding)) {
     if (image.step == row_bytes) {
-      // Swap instead of move: on Lyrical, `data` is a rosidl::Buffer, and
-      // moving it into a std::vector copies. Both types swap with a vector.
-      std::vector<std::uint8_t> pixels;
-      image.data.swap(pixels);
-      // Validation accepts oversized buffers, so discard bytes beyond the declared image.
-      // This is a no-op for correctly sized images; shrinking preserves the zero-copy hand-off.
-      pixels.resize(row_bytes * image.height);
-      moved_ = livekit::VideoFrame(width, height, *layout, std::move(pixels));
-      return &moved_;
+      // Shrinking drops trailing bytes without reallocating the pixel buffer.
+      image.data.resize(row_bytes * image.height);
+      // Lyrical's rosidl::Buffer converts to a vector lvalue; move its backing vector explicitly.
+      auto& pixels = static_cast<std::vector<std::uint8_t>&>(image.data);
+      converted_ = livekit::VideoFrame(width, height, *layout, std::move(pixels));
+      return &converted_;
     }
     auto& frame = reuse(width, height, *layout, fresh);
     copyRows(image, row_bytes, frame.data());

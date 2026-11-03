@@ -120,8 +120,14 @@ protected:
     const auto config = ros_portal_config::ConfigParser{}.parseString(yaml);
     auto options = utils::topicForwarderOptions(config.topics, config.enable_all_ros_topic_stats, 1, 10, {},
                                                 forwarder_node_->get_logger());
-    forwarder_ = std::make_unique<TopicForwarder>(std::move(options), forwarder_node_, makeUnavailableLiveKitMethods(),
-                                                  diagnostics_fns_);
+    forwarder_ = std::make_unique<TopicForwarder>(
+        std::move(options),
+        TopicForwarder::NodeInterfaces{
+            forwarder_node_->get_node_base_interface(), forwarder_node_->get_node_clock_interface(),
+            forwarder_node_->get_node_logging_interface(), forwarder_node_->get_node_parameters_interface(),
+            forwarder_node_->get_node_timers_interface(), forwarder_node_->get_node_topics_interface(),
+            forwarder_node_->get_node_graph_interface()},
+        makeUnavailableLiveKitMethods(), diagnostics_fns_);
   }
 
   template <typename Predicate>
@@ -255,8 +261,13 @@ TEST_F(TopicStatisticsE2E, LatchedTopicProducesPerTopicStatistics) {
   options.outbound_topics.insert("/stats/latched");
   options.ros_topic_stats_topics.insert("/stats/latched");
   options.push_interval = std::chrono::hours(1);
-  LatchedTopicForwarder forwarder(std::move(options), forwarder_node_, makeUnavailableLatchedLiveKitMethods(),
-                                  diagnostics_fns_);
+  LatchedTopicForwarder forwarder(
+      std::move(options),
+      LatchedTopicForwarder::NodeInterfaces{
+          forwarder_node_->get_node_base_interface(), forwarder_node_->get_node_clock_interface(),
+          forwarder_node_->get_node_logging_interface(), forwarder_node_->get_node_parameters_interface(),
+          forwarder_node_->get_node_timers_interface(), forwarder_node_->get_node_topics_interface()},
+      makeUnavailableLatchedLiveKitMethods(), diagnostics_fns_);
 
   auto publisher = publisher_node_->create_publisher<std_msgs::msg::String>(
       "/stats/latched", rclcpp::QoS(10).reliable().transient_local());

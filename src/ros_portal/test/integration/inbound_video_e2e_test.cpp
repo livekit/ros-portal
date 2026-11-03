@@ -34,6 +34,7 @@
 
 #include "ros_portal/utils/video_frame_metadata.hpp"
 #include "ros_portal_e2e_fixture.hpp"
+#include "video_publisher.hpp"
 
 namespace ros_portal::test {
 namespace {
@@ -42,70 +43,6 @@ using namespace std::chrono_literals;
 
 constexpr char kVideoTrackName[] = "/e2e_camera/image_raw";
 constexpr char kSenderFrameId[] = "e2e_camera_optical_frame";
-constexpr std::uint64_t kSenderTimestampUs = 1'700'000'123'456U;
-constexpr int kWidth = 64;
-constexpr int kHeight = 48;
-
-// Publishes a video track with frame metadata from an independent LiveKit
-// participant, the same way a ROS Portal edge publishes a sensor_msgs/Image.
-class VideoPublisher {
-public:
-  bool connect(const std::string& url, const std::string& token) {
-    livekit::RoomOptions room_options;
-    room_options.auto_subscribe = false;
-    if (!room_.connect(url, token, room_options)) {
-      return false;
-    }
-    const auto participant = room_.localParticipant().lock();
-    if (!participant) {
-      return false;
-    }
-
-    source_ = std::make_shared<livekit::VideoSource>(kWidth, kHeight);
-    track_ = livekit::LocalVideoTrack::createLocalVideoTrack(kVideoTrackName, source_);
-    livekit::TrackPublishOptions publish_options;
-    publish_options.source = livekit::TrackSource::SOURCE_CAMERA;
-    publish_options.frame_metadata_features = livekit::FrameMetadataFeatures{};
-    publish_options.frame_metadata_features->user_timestamp = true;
-    publish_options.frame_metadata_features->user_data = true;
-    participant->publishTrack(track_, publish_options);
-    return true;
-  }
-
-  // Push frames until stopped. The first decoded frames can arrive late, so the
-  // test keeps the track live instead of sending a fixed number of frames.
-  void start() {
-    capture_thread_ = std::thread([this]() {
-      auto frame = livekit::VideoFrame::create(kWidth, kHeight, livekit::VideoBufferType::RGBA);
-      std::memset(frame.data(), 128, frame.dataSize());
-      livekit::VideoCaptureOptions capture_options;
-      capture_options.metadata.emplace();
-      capture_options.metadata->user_timestamp_us = kSenderTimestampUs;
-      capture_options.metadata->user_data = utils::encodeFrameIdUserData(kSenderFrameId);
-      while (!stop_.load()) {
-        capture_options.timestamp_us =
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch())
-                .count();
-        source_->captureFrame(frame, capture_options);
-        std::this_thread::sleep_for(33ms);
-      }
-    });
-  }
-
-  ~VideoPublisher() {
-    stop_.store(true);
-    if (capture_thread_.joinable()) {
-      capture_thread_.join();
-    }
-  }
-
-private:
-  livekit::Room room_;
-  std::shared_ptr<livekit::VideoSource> source_;
-  std::shared_ptr<livekit::LocalVideoTrack> track_;
-  std::thread capture_thread_;
-  std::atomic_bool stop_{false};
-};
 
 TEST_F(RosPortalTestE2E, RepublishesRemoteVideoTrackAsCompressedImageWithSenderHeader) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
@@ -134,6 +71,10 @@ TEST_F(RosPortalTestE2E, RepublishesRemoteVideoTrackAsCompressedImageWithSenderH
       << "No CompressedImage arrived on " << kVideoTrackName;
 
   const std::lock_guard<std::mutex> lock(mutex);
+  if (!received.has_value()) {
+    ADD_FAILURE() << "No compressed frame was captured";
+    return;
+  }
   EXPECT_EQ(received->format, "jpeg");
   ASSERT_GE(received->data.size(), 2U);
   EXPECT_EQ(received->data[0], 0xFF);
@@ -174,6 +115,10 @@ TEST_F(RosPortalTestE2E, ResumesPausedVideoTrackWhenRosSubscriberAppears) {
       kMessageTimeout))
       << "No CompressedImage arrived on " << kVideoTrackName << " after the subscriber appeared";
   const std::lock_guard<std::mutex> lock(mutex);
+  if (!received.has_value()) {
+    ADD_FAILURE() << "No compressed frame was captured";
+    return;
+  }
   EXPECT_EQ(received->header.frame_id, kSenderFrameId);
 }
 

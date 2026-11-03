@@ -68,9 +68,11 @@ directly instead of going through diagnostics.
 ## `ros_portal_status`
 
 Reports the node's initialization lifecycle, effective
-configuration, component health, and graph discovery health. The task exists as
-soon as the node is constructed, so configuration and credential failures remain
-observable.
+configuration, component health, and graph discovery health. The task is
+registered during construction. Invalid local configuration rejects construction or
+component loading and is reported in startup logs. Successful local initialization
+does not mean the room is connected; token resolution and connection attempts
+run on the executor's connection timer.
 
 **Source:** Node lifecycle, effective configuration, component ownership, and the graph discovery worker
 
@@ -79,7 +81,7 @@ observable.
 | Level | Message | Meaning |
 |---|---|---|
 | `OK` | `ROS Portal is initialized` | Initialization completed and the graph discovery worker is running. |
-| `ERROR` | `ROS Portal is not initialized` | Initialization has not completed, including configuration, credential, or connection failures. |
+| `ERROR` | `ROS Portal is not initialized` | Local initialization has not completed, including invalid configuration or missing/conflicting token sources. |
 | `ERROR` | `ROS Portal is initialized without an active graph discovery worker` | Lifecycle state says initialized but the graph-event discovery worker is not running. |
 | `ERROR` | `ROS Portal has inactive components` | At least one expected component is not active. `latched_topic_forwarder` is expected only when at least one latched topic is configured. |
 
@@ -90,7 +92,7 @@ observable.
 | `components_inactive` | Comma-separated inactive component names, or `none`. Components are `connection_manager`, `topic_forwarder`, `service_forwarder`, and `cli_manager`. `latched_topic_forwarder` is included only when at least one latched topic is configured. Any listed inactive component triggers an `ERROR` status. |
 | `config_path` | Effective configuration file path, or `unset`. |
 | `graph_discovery_active` | Whether the graph-event discovery worker is running. |
-| `initialized` | Whether initialization completed. |
+| `initialized` | Whether local initialization completed. Connection readiness is reported separately. |
 | `local_identity` | Connected local participant identity, or `default`. |
 
 ## `connection_health`

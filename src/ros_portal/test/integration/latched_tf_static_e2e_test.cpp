@@ -40,6 +40,7 @@
 #include <string>
 #include <thread>
 
+#include "portal_process.hpp"
 #include "ros_portal/ros_portal.hpp"
 #include "ros_portal/utils/ros_utils.hpp"
 #include "test_common.hpp"
@@ -66,14 +67,6 @@ std::string latchedConfigYaml(const std::string& topic, const std::string& direc
   return stream.str();
 }
 
-rclcpp::NodeOptions makeRosPortalOptions(const rclcpp::Context::SharedPtr& context, const std::string& node_namespace,
-                                         const std::string& config_path) {
-  return rclcpp::NodeOptions()
-      .context(context)
-      .arguments({"--ros-args", "-r", "__ns:=" + node_namespace})
-      .parameter_overrides({rclcpp::Parameter("config_path", config_path)});
-}
-
 rclcpp::QoS latchedQoS() { return rclcpp::QoS(rclcpp::KeepLast(10)).reliable().transient_local(); }
 
 std_msgs::msg::String makeMessage(const std::string& data) {
@@ -95,9 +88,6 @@ bool hasTransientLocalPublisher(rclcpp::Node& node, const std::string& topic) {
 
 class LatchedTfStaticE2E : public ::testing::Test {
 protected:
-  static void SetUpTestSuite() { livekit::initialize(livekit::LogLevel::Info); }
-  static void TearDownTestSuite() { livekit::shutdown(); }
-
   void SetUp() override {
     url_ = utils::environmentVariable("LIVEKIT_URL").value_or("");
     token_a_ = utils::environmentVariable("LIVEKIT_TOKEN_A").value_or("");
@@ -115,18 +105,9 @@ protected:
 
   bool configured() const { return !url_.empty() && !token_a_.empty() && !token_b_.empty(); }
 
-  std::shared_ptr<RosPortal> makeRosPortal(const rclcpp::Context::SharedPtr& context, const std::string& node_namespace,
-                                           const std::string& token, const std::string& config_path) {
-    if (!setEnv("LIVEKIT_TOKEN", token) || !setEnv("LIVEKIT_URL", url_)) {
-      ADD_FAILURE() << "Failed to set LiveKit environment variables";
-      return nullptr;
-    }
-    auto ros_portal = std::make_shared<RosPortal>(makeRosPortalOptions(context, node_namespace, config_path));
-    if (!ros_portal->initialize()) {
-      ADD_FAILURE() << "ROS Portal failed to initialize for " << node_namespace;
-      return nullptr;
-    }
-    return ros_portal;
+  std::shared_ptr<PortalProcess> makeRosPortal(const ScopedRosGraph& graph, const std::string& node_namespace,
+                                               const std::string& token, const std::string& config_path) {
+    return std::make_shared<PortalProcess>(graph, node_namespace, token, url_, config_path);
   }
 
   void spin(const std::unique_ptr<rclcpp::executors::MultiThreadedExecutor>& executor, std::thread& thread,
@@ -167,12 +148,7 @@ protected:
         executor_b_->remove_node(ros_portal_b_);
       }
     }
-    if (ros_portal_a_) {
-      ros_portal_a_->shutdown();
-    }
-    if (ros_portal_b_) {
-      ros_portal_b_->shutdown();
-    }
+    // Destruction drains portal callbacks and readers before ROS graph teardown.
     publisher_a_.reset();
     ros_portal_a_.reset();
     ros_portal_b_.reset();
@@ -196,8 +172,8 @@ protected:
   std::unique_ptr<ScopedRosGraph> graph_b_;
   std::unique_ptr<TemporaryConfigFile> config_a_;
   std::unique_ptr<TemporaryConfigFile> config_b_;
-  std::shared_ptr<RosPortal> ros_portal_a_;
-  std::shared_ptr<RosPortal> ros_portal_b_;
+  std::shared_ptr<PortalProcess> ros_portal_a_;
+  std::shared_ptr<PortalProcess> ros_portal_b_;
   std::shared_ptr<rclcpp::Node> robot_a_node_;
   std::shared_ptr<rclcpp::Node> robot_b_node_;
   std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> executor_a_;
@@ -233,7 +209,7 @@ TEST_F(LatchedTfStaticE2E, RepublishesLatchedStatePublishedBeforePeerJoined) {
   publisher_a_->publish(makeMessage(kPayload)); // latched: retained for late subscribers, incl. ROS Portal
 
   config_a_ = std::make_unique<TemporaryConfigFile>(latchedConfigYaml(kLatchedTopic, "out"), "ros_portal_latched_a_");
-  ros_portal_a_ = makeRosPortal(graph_a_->context(), "/ros_portal_latched_a", token_a_, config_a_->path().string());
+  ros_portal_a_ = makeRosPortal(*graph_a_, "/ros_portal_latched_a", token_a_, config_a_->path().string());
   ASSERT_NE(ros_portal_a_, nullptr);
 
   executor_a_->add_node(ros_portal_a_);
@@ -248,7 +224,7 @@ TEST_F(LatchedTfStaticE2E, RepublishesLatchedStatePublishedBeforePeerJoined) {
   // --- Graph B: bring up the consuming ROS Portal node only now (peer joins late). ---
   robot_b_node_ = std::make_shared<rclcpp::Node>("latched_robot_b", rclcpp::NodeOptions().context(graph_b_->context()));
   config_b_ = std::make_unique<TemporaryConfigFile>(latchedConfigYaml(kLatchedTopic, "in"), "ros_portal_latched_b_");
-  ros_portal_b_ = makeRosPortal(graph_b_->context(), "/ros_portal_latched_b", token_b_, config_b_->path().string());
+  ros_portal_b_ = makeRosPortal(*graph_b_, "/ros_portal_latched_b", token_b_, config_b_->path().string());
   ASSERT_NE(ros_portal_b_, nullptr);
 
   executor_b_->add_node(ros_portal_b_);

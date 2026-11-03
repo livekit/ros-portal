@@ -34,7 +34,13 @@
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/message_info.hpp>
-#include <rclcpp/node.hpp>
+#include <rclcpp/node_interfaces/node_base_interface.hpp>
+#include <rclcpp/node_interfaces/node_clock_interface.hpp>
+#include <rclcpp/node_interfaces/node_graph_interface.hpp>
+#include <rclcpp/node_interfaces/node_logging_interface.hpp>
+#include <rclcpp/node_interfaces/node_parameters_interface.hpp>
+#include <rclcpp/node_interfaces/node_timers_interface.hpp>
+#include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/subscription_base.hpp>
 #include <rclcpp/time.hpp>
@@ -84,6 +90,24 @@ inline constexpr std::size_t kDefaultMaxQosDepth = 25U;
 /// lifecycle at the edge and forwards inbound remote data tracks here.
 class TopicForwarder {
 public:
+  /// @brief ROS interfaces used without retaining the enclosing node.
+  struct NodeInterfaces {
+    /// @brief Callback groups and the underlying ROS node handle.
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base;
+    /// @brief Clock used by subscriptions and throttled logs.
+    rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock;
+    /// @brief Logger used by the forwarder.
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging;
+    /// @brief Parameters required by typed topic factories and statistics.
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters;
+    /// @brief Timer registry for video demand and topic statistics.
+    rclcpp::node_interfaces::NodeTimersInterface::SharedPtr node_timers;
+    /// @brief Publisher and subscription registry.
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics;
+    /// @brief Topic graph queries and publisher QoS discovery.
+    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph;
+  };
+
   /// @brief Outbound LiveKit data-track writer.
   struct DataTrackWriter {
     /// @brief Push a serialized ROS payload onto the LiveKit data track.
@@ -177,15 +201,14 @@ public:
     SchemaManager::LiveKitMethods schema;
   };
 
-  /// @brief Construct a topic forwarder.
-  /// @param node Non-owning handle to the ROS node the forwarder creates its
-  /// subscriptions and publishers on. The forwarder locks the handle for each
-  /// ROS operation; operations become no-ops once the node is destroyed.
-  /// @param diagnostics ROS Portal-owned diagnostics functions used to register the
-  /// topic-forwarder diagnostic task.
-  /// @throws std::invalid_argument when the node has already expired, any
-  /// required LiveKit callback is unset, or @p diagnostics is incomplete.
-  TopicForwarder(Options options, rclcpp::Node::WeakPtr node, LiveKitMethods livekit_methods,
+  /// @brief Construct a topic forwarder from its required ROS interfaces.
+  /// @param options Forwarding routes, QoS settings, and resource limits.
+  /// @param node_interfaces Interfaces for ROS entities, graph queries, and logs.
+  /// @param livekit_methods LiveKit operations supplied by the owner.
+  /// @param diagnostics Owner-provided diagnostic registration functions.
+  /// @throws std::invalid_argument when an interface or required callback is unset.
+  /// @note The owner must stop external callbacks before destroying the forwarder.
+  TopicForwarder(Options options, NodeInterfaces node_interfaces, LiveKitMethods livekit_methods,
                  diagnostics::DiagnosticsManagerFns diagnostics);
 
   /// @brief Stop inbound streams before destruction.
@@ -483,9 +506,9 @@ private:
 
   /// @brief Forwarding configuration supplied at construction.
   Options options_;
-  /// @brief Non-owning handle to the ROS node used to create subscriptions and
-  /// publishers. Locked per operation so the node lifecycle stays at the edge.
-  rclcpp::Node::WeakPtr node_;
+  /// @brief Interfaces retained until all callbacks and reader workers stop.
+  /// These do not retain shared ownership of the enclosing ROS Portal node.
+  NodeInterfaces node_interfaces_;
   /// @brief Stateful ROS/LiveKit schema registration and validation component.
   SchemaManager schema_manager_;
   /// @brief LiveKit publish callbacks supplied by ROS Portal.

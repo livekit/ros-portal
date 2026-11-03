@@ -35,6 +35,7 @@
 #include <string>
 #include <thread>
 
+#include "portal_process.hpp"
 #include "ros_portal/cli/constants.hpp"
 #include "ros_portal/cli/types.hpp"
 #include "ros_portal/ros_portal.hpp"
@@ -137,9 +138,7 @@ inline std::string rosPortalConfigYaml(const std::string& topic_pattern, bool pr
 
 class RosPortalTestE2E : public ::testing::Test {
 protected:
-  // The LiveKit SDK lifecycle is process-global, so it is owned by the test
-  // harness rather than by individual ROS Portal nodes: initialize once before any
-  // ROS Portal node in the suite is constructed, and shut down once after the last test.
+  // Test peer clients own the parent SDK; each Portal owns a separate child SDK.
   static void SetUpTestSuite() { livekit::initialize(livekit::LogLevel::Info); }
 
   static void TearDownTestSuite() { livekit::shutdown(); }
@@ -535,8 +534,8 @@ protected:
   const std::string& liveKitUrl() const { return livekit_url_; }
   const std::string& tokenA() const { return token_a_; }
   const std::string& tokenB() const { return token_b_; }
-  std::shared_ptr<RosPortal> rosPortalA() const { return ros_portal_a_; }
-  std::shared_ptr<RosPortal> rosPortalB() const { return ros_portal_b_; }
+  std::shared_ptr<PortalProcess> rosPortalA() const { return ros_portal_a_; }
+  std::shared_ptr<PortalProcess> rosPortalB() const { return ros_portal_b_; }
 
   void setLiveKitUrl(std::string livekit_url) { livekit_url_ = std::move(livekit_url); }
 
@@ -549,9 +548,6 @@ protected:
 
     if (graph_b_executor_ && ros_portal_b_) {
       graph_b_executor_->remove_node(ros_portal_b_);
-    }
-    if (ros_portal_b_) {
-      ros_portal_b_->shutdown();
     }
     ros_portal_b_.reset();
 
@@ -581,23 +577,9 @@ private:
     return options;
   }
 
-  std::shared_ptr<RosPortal> createRosPortal(const ScopedRosGraph& graph, const std::string& node_namespace,
-                                             const std::string& livekit_token, const std::string& config_path) {
-    if (!setEnv("LIVEKIT_TOKEN", livekit_token)) {
-      ADD_FAILURE() << "Failed to set environment variable LIVEKIT_TOKEN";
-      return nullptr;
-    }
-    if (!setEnv("LIVEKIT_URL", livekit_url_)) {
-      ADD_FAILURE() << "Failed to set environment variable LIVEKIT_URL";
-      return nullptr;
-    }
-
-    auto ros_portal = std::make_shared<RosPortal>(createRosPortalOptions(graph.context(), node_namespace, config_path));
-    if (!ros_portal->initialize()) {
-      ADD_FAILURE() << "ROS Portal failed to initialize for namespace " << node_namespace;
-      return nullptr;
-    }
-    return ros_portal;
+  std::shared_ptr<PortalProcess> createRosPortal(const ScopedRosGraph& graph, const std::string& node_namespace,
+                                                 const std::string& livekit_token, const std::string& config_path) {
+    return std::make_shared<PortalProcess>(graph, node_namespace, livekit_token, livekit_url_, config_path);
   }
 
   void startGraphBSpin() {
@@ -654,13 +636,7 @@ private:
       }
     }
 
-    if (ros_portal_a_) {
-      ros_portal_a_->shutdown();
-    }
-    if (ros_portal_b_) {
-      ros_portal_b_->shutdown();
-    }
-
+    // Destruction drains portal callbacks and readers before ROS graph teardown.
     publisher_a_.reset();
     publisher_b_.reset();
     robot_a_node_.reset();
@@ -688,8 +664,8 @@ private:
   std::unique_ptr<TemporaryConfigFile> config_file_a_;
   std::unique_ptr<TemporaryConfigFile> config_file_b_;
 
-  std::shared_ptr<RosPortal> ros_portal_a_;
-  std::shared_ptr<RosPortal> ros_portal_b_;
+  std::shared_ptr<PortalProcess> ros_portal_a_;
+  std::shared_ptr<PortalProcess> ros_portal_b_;
   std::shared_ptr<rclcpp::Node> robot_a_node_;
   std::shared_ptr<rclcpp::Node> robot_b_node_;
 

@@ -1,0 +1,29 @@
+# Copyright 2026 LiveKit
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Video pass-through tutorial, publisher side. See docs/tutorials.md.
+#
+# Sends the JPEG camera topic from the bag as a LiveKit video track. A
+# CompressedImage topic named <base>/compressed becomes the track <base>, so the
+# track here is /insta/cam0/image_raw.
+
+$schema: https://raw.githubusercontent.com/livekit/ros-portal/main/src/ros_portal_config/schema/ros_portal_config.schema.json
+
+ros_portal:
+  version: "0.0.1"
+  ros_threads: 4
+
+  topics:
+    - topic: "/insta/cam0/image_raw/compressed"
+      direction: "out"

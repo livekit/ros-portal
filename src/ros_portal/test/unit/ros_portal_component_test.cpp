@@ -79,6 +79,26 @@ protected:
     livekit::shutdown();
   }
 
+  void expectParticipantsUnavailable(const rclcpp::NodeOptions& options, const std::string& service_name) {
+    // Keep this check offline even if discovery takes long enough to run the retry timer.
+    unsetenv("LIVEKIT_URL");
+    auto portal = std::make_shared<RosPortal>(options);
+    auto client_node = std::make_shared<rclcpp::Node>("participant_list_client");
+    auto client = client_node->create_client<ros_portal_msgs::srv::ListLivekitParticipants>(service_name);
+    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
+
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(portal);
+    executor.add_node(client_node);
+    auto future =
+        client->async_send_request(std::make_shared<ros_portal_msgs::srv::ListLivekitParticipants::Request>());
+    ASSERT_EQ(executor.spin_until_future_complete(future, std::chrono::seconds(5)), rclcpp::FutureReturnCode::SUCCESS);
+    const auto response = future.get();
+    EXPECT_FALSE(response->success);
+    EXPECT_EQ(response->err_msg, kRoomNotConnectedError);
+    EXPECT_TRUE(response->participant_identities.empty());
+  }
+
   ScopedEnvVar url_{"LIVEKIT_URL"};
   ScopedEnvVar token_{"LIVEKIT_TOKEN"};
   ScopedEnvVar endpoint_{"LIVEKIT_TOKEN_ENDPOINT"};
@@ -97,6 +117,22 @@ TEST_F(RosPortalComponentTest, InitializesOwnedNodeAndForwardsContainerOptions) 
   EXPECT_EQ(portal.rosThreads(), 0);
   EXPECT_TRUE(portal.get_node_base_interface()->get_use_intra_process_default());
   EXPECT_FALSE(livekit::initialize());
+}
+
+TEST_F(RosPortalComponentTest, ListsParticipantsBeforeConnectionWithExplicitFailure) {
+  expectParticipantsUnavailable(rclcpp::NodeOptions{}, "/ros_portal/list_livekit_participants");
+}
+
+TEST_F(RosPortalComponentTest, NamespacesParticipantListService) {
+  rclcpp::NodeOptions options;
+  options.arguments({"--ros-args", "-r", "__ns:=/robot"});
+  expectParticipantsUnavailable(options, "/robot/ros_portal/list_livekit_participants");
+}
+
+TEST_F(RosPortalComponentTest, RemapsParticipantListService) {
+  rclcpp::NodeOptions options;
+  options.arguments({"--ros-args", "-r", "ros_portal/list_livekit_participants:=/room/participants"});
+  expectParticipantsUnavailable(options, "/room/participants");
 }
 
 TEST_F(RosPortalComponentTest, OwnsRuntimeUntilDestructionAndSupportsReload) {

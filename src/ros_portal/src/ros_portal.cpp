@@ -32,6 +32,7 @@
 #include <livekit/track.h>
 #include <livekit/video_source.h>
 
+#include <algorithm>
 #include <chrono>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -200,6 +201,19 @@ bool RosPortal::initialize() {
   diagnostic_state_.connection_manager_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
   room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
+#ifdef ROS_DISTRO_HUMBLE
+  const auto services_qos = rmw_qos_profile_services_default;
+#else
+  const auto services_qos = rclcpp::ServicesQoS();
+#endif
+  list_participants_service_ = this->create_service<ros_portal_msgs::srv::ListLivekitParticipants>(
+      "ros_portal/list_livekit_participants",
+      [this](const ros_portal_msgs::srv::ListLivekitParticipants::Request::SharedPtr&,
+             const ros_portal_msgs::srv::ListLivekitParticipants::Response::SharedPtr& response) {
+        listLivekitParticipants(*response);
+      },
+      services_qos, reentrant_callback_group_);
+
   try {
     graph::GraphManager::Callbacks graph_callbacks{
         [this](const TopicNamesAndTypes& topics) { return reconcileGraphTopics(topics); },
@@ -259,6 +273,7 @@ RosPortal::~RosPortal() { shutdown(); }
 void RosPortal::shutdown() {
   const std::lock_guard<std::mutex> shutdown_lock(shutdown_mutex_);
   shutting_down_.store(true, std::memory_order_relaxed);
+  list_participants_service_.reset();
   if (diagnostics_updater_) {
     // Publish the lifecycle transition before the updater and component tasks
     // are dismantled; otherwise the brief shutting-down state is rarely visible.
@@ -447,6 +462,46 @@ void RosPortal::processEndedRoomSession() {
 
 bool RosPortal::roomOperationsEnabled() const {
   return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_->load();
+}
+
+void RosPortal::listLivekitParticipants(ros_portal_msgs::srv::ListLivekitParticipants::Response& response) {
+  const std::lock_guard<std::mutex> lock(shutdown_mutex_);
+  response.success = false;
+  response.err_msg = kRoomNotConnectedError;
+  response.participant_identities.clear();
+  if (shutting_down_.load(std::memory_order_relaxed) || !room_ || !roomOperationsEnabled()) {
+    return;
+  }
+
+  try {
+    const auto local_participant = room_->localParticipant().lock();
+    if (!local_participant) {
+      response.err_msg = "local participant is unavailable";
+      return;
+    }
+    const auto remote_participants = room_->remoteParticipants();
+    std::vector<std::string> identities;
+    identities.reserve(remote_participants.size() + 1U);
+    identities.push_back(local_participant->identity());
+    for (const auto& weak_participant : remote_participants) {
+      if (const auto participant = weak_participant.lock()) {
+        identities.push_back(participant->identity());
+      }
+    }
+    std::sort(identities.begin(), identities.end());
+    identities.erase(std::unique(identities.begin(), identities.end()), identities.end());
+    // Lifecycle events may disable operations while the SDK snapshot is collected.
+    if (!roomOperationsEnabled()) {
+      return;
+    }
+    response.participant_identities = std::move(identities);
+    response.err_msg.clear();
+    response.success = true;
+  } catch (const std::exception& error) {
+    response.err_msg = std::string("failed to list LiveKit participants: ") + error.what();
+  } catch (...) {
+    response.err_msg = "failed to list LiveKit participants: unknown error";
+  }
 }
 
 void RosPortal::pollConnection() {

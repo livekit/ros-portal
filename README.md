@@ -30,7 +30,10 @@ streams `sensor_msgs/msg/Image` topics as LiveKit video. ROS Portal enables
 low-latency teleoperation, monitoring, and robot-to-cloud communication
 without exposing DDS across networks.
 
-<img style="width:100%;height:100%;" alt="ROS Portal architecture" src="docs/assets/ros-portal-overview.png">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ros-portal-overview-dark.svg">
+  <img alt="Two robots, each running ROS Portal inside its own ROS graph, join one LiveKit room with an operator app. Images travel as video tracks, topics as DataTracks, and services and ros2 CLI calls over LiveKit RPC." src="docs/assets/ros-portal-overview-light.svg" width="100%">
+</picture>
 
 ## Quick Start
 

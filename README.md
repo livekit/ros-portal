@@ -32,7 +32,7 @@ without exposing DDS across networks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ros-portal-overview-dark.svg">
-  <img alt="Two robots, each running ROS Portal inside its own ROS graph, join one LiveKit room with an operator app. Images travel as video tracks, topics as DataTracks, and services and ros2 CLI calls over LiveKit RPC." src="docs/assets/ros-portal-overview-light.svg" width="100%">
+  <img alt="Two robots, each running ROS Portal inside its own ROS Graph, join one LiveKit room with an operator app and a recorder. Topics travel as Data Tracks with message schemas, image topics as Video Tracks, and service calls and ROS 2 CLI commands over LiveKit RPC." src="docs/assets/ros-portal-overview-light.svg" width="100%">
 </picture>
 
 ## Quick Start

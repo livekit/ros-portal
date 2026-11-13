@@ -78,8 +78,7 @@ ros2 service call /ros_portal/list_livekit_participants \
 The request is empty. On success, `success` is `true`, `err_msg` is empty, and
 `participant_identities` contains the exact LiveKit identities of the portal
 itself and all visible remote participants, including clients that do not run
-ROS Portal. Identities are sorted and unique. A room containing only the portal
-returns its own identity.
+ROS Portal. A room containing only the portal returns its own identity.
 
 The service is available before connection and across reconnections. While the
 room is disconnected or reconnecting, it returns `success: false`,
@@ -87,10 +86,7 @@ room is disconnected or reconnecting, it returns `success: false`,
 return `success: false`, an error message, and an empty list.
 
 Results reflect the portal's current room view. Joins and departures arrive
-asynchronously, so poll with a timeout when waiting for a participant. The
-service name is relative to the portal's ROS namespace: a portal in `/robot`
-exposes `/robot/ros_portal/list_livekit_participants`. Standard ROS service
-remapping is supported.
+asynchronously, so poll with a timeout when waiting for a participant.
 
 ## Running ROS Portal in Composition
 

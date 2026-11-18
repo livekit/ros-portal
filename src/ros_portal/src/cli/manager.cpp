@@ -32,6 +32,7 @@
 #include "ros_portal/cli/service_list.hpp"
 #include "ros_portal/cli/topic_list.hpp"
 #include "ros_portal/cli/utils.hpp"
+#include "ros_portal/distro_adapter.hpp"
 
 namespace ros_portal::cli {
 
@@ -48,11 +49,7 @@ typename rclcpp::Service<SrvT>::SharedPtr tryCreateService(const Manager::NodeIn
                                                            const rclcpp::CallbackGroup::SharedPtr& callback_group,
                                                            const rclcpp::Logger& logger) {
   try {
-#ifdef ROS_DISTRO_HUMBLE
-    const auto services_qos = rmw_qos_profile_services_default;
-#else
-    const auto services_qos = rclcpp::ServicesQoS();
-#endif
+    const auto services_qos = servicesQos();
     return rclcpp::create_service<SrvT>(node_interfaces.node_base, node_interfaces.node_services, service_name,
                                         std::move(callback), services_qos, callback_group);
   } catch (const std::exception& error) {

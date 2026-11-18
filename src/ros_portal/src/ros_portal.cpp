@@ -52,6 +52,7 @@
 #include "ros_portal/connection/connection_manager.hpp"
 #include "ros_portal/diagnostics/build_info.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/distro_adapter.hpp"
 #include "ros_portal/graph/graph_manager.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
 #include "ros_portal/service_forwarder.hpp"
@@ -201,11 +202,7 @@ bool RosPortal::initialize() {
   diagnostic_state_.connection_manager_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
   room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
-#ifdef ROS_DISTRO_HUMBLE
-  const auto services_qos = rmw_qos_profile_services_default;
-#else
-  const auto services_qos = rclcpp::ServicesQoS();
-#endif
+  const auto services_qos = servicesQos();
   list_participants_service_ = this->create_service<ros_portal_msgs::srv::ListLivekitParticipants>(
       "ros_portal/list_livekit_participants",
       [this](const ros_portal_msgs::srv::ListLivekitParticipants::Request::SharedPtr&,

@@ -15,8 +15,7 @@
 [![Lyrical](https://img.shields.io/badge/ROS_2-Lyrical-blue)](https://github.com/livekit/ros-portal/releases/latest)
 
 > [!IMPORTANT]
-> This repository is currently in Developer Preview mode and not ready for production use.
-> There may be bugs, and APIs and configuration options are subject to change during this period.
+> LiveKit Portal for ROS is in early-access. APIs and configuration options may change during this period. Please raise an issue if you encounter bugs or undesired behavior.
 
 # ROS Portal
 
@@ -37,34 +36,32 @@ without exposing DDS across networks.
 
 ## Quick Start
 
-1. **Install ROS Portal.** [Download the `.deb`](https://github.com/livekit/ros-portal/releases/latest) for your ROS 2 distro and architecture and install, or skip this step if running from Docker. See [Installation](docs/installation.md).
-2. **Configure ROS Portal.** Set LiveKit credentials and a YAML config for the
-   topics and services to forward. See [Configuration](docs/configuration.md).
-3. **Run ROS Portal.** Start a LiveKit server or connect to your LiveKit Cloud
-   project, then run. See [Running](docs/running.md).
+1. **[Install](docs/installation.md) ROS Portal.** [Download the `.deb`](https://github.com/livekit/ros-portal/releases/latest) for your ROS 2 distro and architecture and install, or skip the download if running from Docker. Install LiveKit CLI and server if running locally, or skip the server installation if connecting to your [LiveKit Cloud](https://cloud.livekit.io/) project.
+2. **[Configure](docs/configuration.md) ROS Portal.** Set LiveKit credentials and create a `ros_portal.yaml` config file for the
+   topics and services to forward.
+3. **[Run](docs/running.md) ROS Portal.** Start a local LiveKit server or connect to your LiveKit Cloud
+   project (via token environment variables), then run ROS Portal against your ROS graph.
 
-Or quickly run via Docker for your ROS distribution:
+   Or quickly run via [Docker](docs/docker.md) for your ROS distribution:
 
-Set `LIVEKIT_*` environment variables and define a configuration file `ros_portal.yaml` as described
-in [Configuration](configuration.md), then run:
+   ```bash
+   # Assumptions:
+   # LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
+   # ros_portal.yaml exists in same location
 
-```bash
-docker login
+   # Change to desired ROS distro, or skip this if already in a ROS environment
+   export ROS_DISTRO=jazzy
 
-# LIVEKIT_URL and LIVEKIT_TOKEN are set in the environment
-# Assumes ros_portal.yaml exists in same location
-
-# Change to desired ROS distro, or skip this if already in a ROS environment
-export ROS_DISTRO=jazzy
-docker run --rm \
-  --network host \
-  -e LIVEKIT_URL \
-  -e LIVEKIT_TOKEN \
-  --volume $(pwd)/ros_portal.yaml:/config/ros_portal.yaml:ro \
-  livekit/ros-portal:$ROS_DISTRO \
-  ros2 launch ros_portal ros_portal.launch.py \
-  config_path:=/config/ros_portal.yaml
-```
+   # Run the Docker container, passing in relevant environment, volume, and launch arguments
+   docker run --rm \
+     --network host \
+     -e LIVEKIT_URL \
+     -e LIVEKIT_TOKEN \
+     --volume "$(pwd)/ros_portal.yaml:/config/ros_portal.yaml:ro" \
+     livekit/ros-portal:$ROS_DISTRO \
+     ros2 launch ros_portal ros_portal.launch.py \
+     config_path:=/config/ros_portal.yaml
+   ```
 
 ## User Guides
 

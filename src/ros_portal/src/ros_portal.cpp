@@ -183,7 +183,7 @@ bool RosPortal::initialize() {
   room_options.other_sdks = other_sdks;
   RCLCPP_DEBUG(this->get_logger(), "LiveKit client info other_sdks: %s", other_sdks.c_str());
 
-  ConnectionManager::Methods const connection_methods;
+  ConnectionManager::Methods connection_methods;
   connection_methods.try_connect = [this, token_loader, room_options]() {
     if (!room_) {
       return false;
@@ -564,9 +564,9 @@ void RosPortal::initializeDiagnostics() {
 }
 
 void RosPortal::populateStatus(diagnostic_updater::DiagnosticStatusWrapper& status) {
-  std::string const config_path;
-  std::string const local_identity;
-  bool const latched_topic_forwarder_inactive = false;
+  std::string config_path;
+  std::string local_identity;
+  bool latched_topic_forwarder_inactive = false;
   {
     const std::lock_guard<std::mutex> lock(diagnostic_state_.metadata_mutex);
     config_path = diagnostic_state_.config_path;
@@ -717,7 +717,7 @@ void RosPortal::onTrackSubscribed(livekit::Room&, const livekit::TrackSubscribed
     return;
   }
 
-  bool const republished = false;
+  bool republished = false;
   {
     const std::lock_guard<std::mutex> lock(room_components_mutex_);
     if (topic_forwarder_) {
@@ -817,7 +817,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
                                                           max_qos_depth_, best_effort_qos_topics, this->get_logger());
     forwarder_options.topic_snapshot = [manager = graph_manager_.get()]() { return manager->topics(); };
 
-    TopicForwarder::LiveKitMethods const forwarder_lk_methods;
+    TopicForwarder::LiveKitMethods forwarder_lk_methods;
     forwarder_lk_methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
       return operations_enabled->load();
     };
@@ -977,7 +977,7 @@ bool RosPortal::initializeTopicForwarder(const std::vector<ros_portal_config::To
 }
 
 bool RosPortal::initializeVideoSources(const std::vector<ros_portal_config::VideoSourceConfig>& video_sources) {
-  VideoSourceManager::LiveKitMethods const methods;
+  VideoSourceManager::LiveKitMethods methods;
   methods.create_and_publish = [this](const ros_portal_config::VideoSourceConfig& config)
       -> livekit::Result<std::shared_ptr<VideoSourceManager::Session>, std::string> {
     const auto participant = room_ ? room_->localParticipant().lock() : nullptr;
@@ -1141,7 +1141,7 @@ bool RosPortal::initializeLatchedTopicForwarder(const std::vector<ros_portal_con
   }
 
   try {
-    LatchedTopicForwarder::LiveKitMethods const methods;
+    LatchedTopicForwarder::LiveKitMethods methods;
     methods.is_room_available = [operations_enabled = room_operations_enabled_]() {
       return operations_enabled->load();
     };

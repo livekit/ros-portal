@@ -90,8 +90,7 @@ protected:
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(portal);
     executor.add_node(client_node);
-    auto future =
-        client->async_send_request(std::make_shared<ros_portal_msgs::srv::ListParticipants::Request>());
+    auto future = client->async_send_request(std::make_shared<ros_portal_msgs::srv::ListParticipants::Request>());
     ASSERT_EQ(executor.spin_until_future_complete(future, std::chrono::seconds(5)), rclcpp::FutureReturnCode::SUCCESS);
     const auto response = future.get();
     EXPECT_FALSE(response->success);

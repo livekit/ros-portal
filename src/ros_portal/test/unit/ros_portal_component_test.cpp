@@ -84,14 +84,14 @@ protected:
     unsetenv("LIVEKIT_URL");
     auto portal = std::make_shared<RosPortal>(options);
     auto client_node = std::make_shared<rclcpp::Node>("participant_list_client");
-    auto client = client_node->create_client<ros_portal_msgs::srv::ListLivekitParticipants>(service_name);
+    auto client = client_node->create_client<ros_portal_msgs::srv::ListParticipants>(service_name);
     ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(5)));
 
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(portal);
     executor.add_node(client_node);
     auto future =
-        client->async_send_request(std::make_shared<ros_portal_msgs::srv::ListLivekitParticipants::Request>());
+        client->async_send_request(std::make_shared<ros_portal_msgs::srv::ListParticipants::Request>());
     ASSERT_EQ(executor.spin_until_future_complete(future, std::chrono::seconds(5)), rclcpp::FutureReturnCode::SUCCESS);
     const auto response = future.get();
     EXPECT_FALSE(response->success);
@@ -120,18 +120,18 @@ TEST_F(RosPortalComponentTest, InitializesOwnedNodeAndForwardsContainerOptions) 
 }
 
 TEST_F(RosPortalComponentTest, ListsParticipantsBeforeConnectionWithExplicitFailure) {
-  expectParticipantsUnavailable(rclcpp::NodeOptions{}, "/ros_portal/list_livekit_participants");
+  expectParticipantsUnavailable(rclcpp::NodeOptions{}, "/ros_portal/list_participants");
 }
 
 TEST_F(RosPortalComponentTest, NamespacesParticipantListService) {
   rclcpp::NodeOptions options;
   options.arguments({"--ros-args", "-r", "__ns:=/robot"});
-  expectParticipantsUnavailable(options, "/robot/ros_portal/list_livekit_participants");
+  expectParticipantsUnavailable(options, "/robot/ros_portal/list_participants");
 }
 
 TEST_F(RosPortalComponentTest, RemapsParticipantListService) {
   rclcpp::NodeOptions options;
-  options.arguments({"--ros-args", "-r", "ros_portal/list_livekit_participants:=/room/participants"});
+  options.arguments({"--ros-args", "-r", "ros_portal/list_participants:=/room/participants"});
   expectParticipantsUnavailable(options, "/room/participants");
 }
 

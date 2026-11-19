@@ -22,7 +22,7 @@ ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Participant.msg"
-  "srv/ListLivekitParticipants.srv"
+  "srv/ListParticipants.srv"
   "srv/Ros2InterfaceShow.srv"
   "srv/Ros2ServiceCall.srv"
   "srv/Ros2ServiceList.srv"

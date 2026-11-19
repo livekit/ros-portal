@@ -25,18 +25,18 @@
 #include <vector>
 
 #include "ros_portal_e2e_fixture.hpp"
-#include "ros_portal_msgs/srv/list_livekit_participants.hpp"
+#include "ros_portal_msgs/srv/list_participants.hpp"
 
 namespace ros_portal::test {
 namespace {
 
-using ParticipantsSrv = ros_portal_msgs::srv::ListLivekitParticipants;
+using ParticipantsSrv = ros_portal_msgs::srv::ListParticipants;
 
 TEST_F(RosPortalTestE2E, ListsLocalAndNonPortalParticipantsAcrossPeerJoinAndLeave) {
   ASSERT_TRUE(configured()) << "LIVEKIT_URL, LIVEKIT_TOKEN_A, and LIVEKIT_TOKEN_B must be set";
   initializeInboundOnlyRuntime("/participant_listing");
   auto client = robotBNode()->create_client<ParticipantsSrv>(
-      rosPortalServiceName(robotBNode(), "ros_portal/list_livekit_participants"));
+      rosPortalServiceName(robotBNode(), "ros_portal/list_participants"));
   ASSERT_TRUE(client->wait_for_service(kGraphTimeout));
 
   ParticipantsSrv::Response::SharedPtr response;

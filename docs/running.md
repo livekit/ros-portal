@@ -71,8 +71,8 @@ Call the local ROS service to list the LiveKit participant identities visible
 to this portal:
 
 ```bash
-ros2 service call /ros_portal/list_livekit_participants \
-  ros_portal_msgs/srv/ListLivekitParticipants '{}'
+ros2 service call /ros_portal/list_participants \
+  ros_portal_msgs/srv/ListParticipants '{}'
 ```
 
 The request is empty. On success, `success` is `true`, `err_msg` is empty, and

@@ -203,11 +203,11 @@ bool RosPortal::initialize() {
   room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
   const auto services_qos = servicesQos();
-  list_participants_service_ = this->create_service<ros_portal_msgs::srv::ListLivekitParticipants>(
-      "ros_portal/list_livekit_participants",
-      [this](const ros_portal_msgs::srv::ListLivekitParticipants::Request::SharedPtr&,
-             const ros_portal_msgs::srv::ListLivekitParticipants::Response::SharedPtr& response) {
-        listLivekitParticipants(*response);
+  list_participants_service_ = this->create_service<ros_portal_msgs::srv::ListParticipants>(
+      "ros_portal/list_participants",
+      [this](const ros_portal_msgs::srv::ListParticipants::Request::SharedPtr&,
+             const ros_portal_msgs::srv::ListParticipants::Response::SharedPtr& response) {
+        listParticipants(*response);
       },
       services_qos, reentrant_callback_group_);
 
@@ -462,7 +462,7 @@ bool RosPortal::roomOperationsEnabled() const {
   return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_->load();
 }
 
-void RosPortal::listLivekitParticipants(ros_portal_msgs::srv::ListLivekitParticipants::Response& response) {
+void RosPortal::listParticipants(ros_portal_msgs::srv::ListParticipants::Response& response) {
   const std::lock_guard<std::mutex> lock(shutdown_mutex_);
   response.success = false;
   response.err_msg = kRoomNotConnectedError;
@@ -508,9 +508,9 @@ void RosPortal::listLivekitParticipants(ros_portal_msgs::srv::ListLivekitPartici
     response.err_msg.clear();
     response.success = true;
   } catch (const std::exception& error) {
-    response.err_msg = std::string("failed to list LiveKit participants: ") + error.what();
+    response.err_msg = std::string("failed to list participants: ") + error.what();
   } catch (...) {
-    response.err_msg = "failed to list LiveKit participants: unknown error";
+    response.err_msg = "failed to list participants: unknown error";
   }
 }
 

@@ -26,7 +26,7 @@
 #include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
-#include <ros_portal_msgs/srv/list_livekit_participants.hpp>
+#include <ros_portal_msgs/srv/list_participants.hpp>
 #include <string>
 #include <vector>
 
@@ -175,7 +175,7 @@ private:
   /// @brief Populate a sorted snapshot of all visible room participant identities.
   /// @param response Service response, including an error when room operations are unavailable.
   /// @note Called by the ROS executor; serialized with shutdown to protect room lifetime.
-  void listLivekitParticipants(ros_portal_msgs::srv::ListLivekitParticipants::Response& response);
+  void listParticipants(ros_portal_msgs::srv::ListParticipants::Response& response);
 
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
@@ -336,7 +336,7 @@ private:
   //! @brief Fixed-rate timer for LiveKit room connection attempts.
   rclcpp::TimerBase::SharedPtr connection_timer_;
   /// @brief Node-lifetime service for local and remote LiveKit participant discovery.
-  rclcpp::Service<ros_portal_msgs::srv::ListLivekitParticipants>::SharedPtr list_participants_service_;
+  rclcpp::Service<ros_portal_msgs::srv::ListParticipants>::SharedPtr list_participants_service_;
   //! @brief Owns graph events, snapshots, and the discovery worker.
   std::unique_ptr<graph::GraphManager> graph_manager_;
 

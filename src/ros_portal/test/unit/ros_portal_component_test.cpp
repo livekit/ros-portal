@@ -96,7 +96,7 @@ protected:
     const auto response = future.get();
     EXPECT_FALSE(response->success);
     EXPECT_EQ(response->err_msg, kRoomNotConnectedError);
-    EXPECT_TRUE(response->participant_identities.empty());
+    EXPECT_TRUE(response->participants.empty());
   }
 
   ScopedEnvVar url_{"LIVEKIT_URL"};

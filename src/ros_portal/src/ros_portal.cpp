@@ -431,6 +431,7 @@ bool RosPortal::prepareRoomSession() {
   try {
     auto attributes = local_participant->attributes();
     attributes[kRobotParticipantAttribute] = "true";
+    attributes[kRosPortalVersion] = ROS_PORTAL_VERSION;
     local_participant->setAttributes(attributes);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(this->get_logger(), "Failed to set local participant attributes: %s", error.what());
@@ -465,7 +466,7 @@ void RosPortal::listLivekitParticipants(ros_portal_msgs::srv::ListLivekitPartici
   const std::lock_guard<std::mutex> lock(shutdown_mutex_);
   response.success = false;
   response.err_msg = kRoomNotConnectedError;
-  response.participant_identities.clear();
+  response.participants.clear();
   if (shutting_down_.load(std::memory_order_relaxed) || !room_ || !roomOperationsEnabled()) {
     return;
   }
@@ -477,21 +478,33 @@ void RosPortal::listLivekitParticipants(ros_portal_msgs::srv::ListLivekitPartici
       return;
     }
     const auto remote_participants = room_->remoteParticipants();
-    std::vector<std::string> identities;
-    identities.reserve(remote_participants.size() + 1U);
-    identities.push_back(local_participant->identity());
+    std::vector<ros_portal_msgs::msg::Participant> participants;
+    participants.reserve(remote_participants.size() + 1U);
+    const auto add = [&participants](const livekit::Participant& participant) {
+      ros_portal_msgs::msg::Participant entry;
+      entry.name = participant.identity();
+      const auto attributes = participant.attributes();
+      if (const auto it = attributes.find(kRosPortalVersion); it != attributes.end()) {
+        entry.ros_portal_version = it->second;
+      }
+      participants.push_back(std::move(entry));
+    };
+    add(*local_participant);
     for (const auto& weak_participant : remote_participants) {
       if (const auto participant = weak_participant.lock()) {
-        identities.push_back(participant->identity());
+        add(*participant);
       }
     }
-    std::sort(identities.begin(), identities.end());
-    identities.erase(std::unique(identities.begin(), identities.end()), identities.end());
+    const auto by_name = [](const auto& a, const auto& b) { return a.name < b.name; };
+    std::sort(participants.begin(), participants.end(), by_name);
+    participants.erase(std::unique(participants.begin(), participants.end(),
+                                   [](const auto& a, const auto& b) { return a.name == b.name; }),
+                       participants.end());
     // Lifecycle events may disable operations while the SDK snapshot is collected.
     if (!roomOperationsEnabled()) {
       return;
     }
-    response.participant_identities = std::move(identities);
+    response.participants = std::move(participants);
     response.err_msg.clear();
     response.success = true;
   } catch (const std::exception& error) {

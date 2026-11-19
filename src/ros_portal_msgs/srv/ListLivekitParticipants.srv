@@ -16,5 +16,5 @@
 ---
 bool success
 string err_msg
-# Exact LiveKit identities, sorted and unique. Empty on failure.
-string[] participant_identities
+# Exact LiveKit participants, sorted by name and unique. Empty on failure.
+Participant[] participants

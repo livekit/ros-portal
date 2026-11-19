@@ -58,6 +58,8 @@ class VideoSourceManager;
 
 /// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
 inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
+/// @brief LiveKit participant attribute key holding the ROS Portal version; absent for non-portal participants.
+inline constexpr const char* kRosPortalVersion = "lk.ros_portal_version";
 
 /// @brief The main ROS Portal node.
 ///

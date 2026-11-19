@@ -76,9 +76,13 @@ ros2 service call /ros_portal/list_livekit_participants \
 ```
 
 The request is empty. On success, `success` is `true`, `err_msg` is empty, and
-`participant_identities` contains the exact LiveKit identities of the portal
-itself and all visible remote participants, including clients that do not run
-ROS Portal. A room containing only the portal returns its own identity.
+`participants` lists the portal itself and all visible remote participants,
+including clients that do not run ROS Portal. Each entry has `name`, the exact
+LiveKit identity, and `ros_portal_version`. A ROS Portal sets the
+`lk.ros_portal_version` attribute, so a participant with an empty
+`ros_portal_version` is not a ROS Portal. Clients can set attributes freely, so
+this is not proof. Entries are sorted by name. A room containing only the portal
+returns its own entry.
 
 The service is available before connection and across reconnections. While the
 room is disconnected or reconnecting, it returns `success: false`,

@@ -40,6 +40,13 @@ TEST_F(RosPortalTestE2E, ListsLocalAndNonPortalParticipantsAcrossPeerJoinAndLeav
   ASSERT_TRUE(client->wait_for_service(kGraphTimeout));
 
   ParticipantsSrv::Response::SharedPtr response;
+  const auto names = [&]() {
+    std::vector<std::string> out;
+    for (const auto& participant : response->participants) {
+      out.push_back(participant.name);
+    }
+    return out;
+  };
   const auto lists = [&](const std::vector<std::string>& expected) {
     auto future = client->async_send_request(std::make_shared<ParticipantsSrv::Request>());
     if (future.wait_for(1s) != std::future_status::ready) {
@@ -47,7 +54,7 @@ TEST_F(RosPortalTestE2E, ListsLocalAndNonPortalParticipantsAcrossPeerJoinAndLeav
       return false;
     }
     response = future.get();
-    return response->success && response->err_msg.empty() && response->participant_identities == expected;
+    return response->success && response->err_msg.empty() && names() == expected;
   };
 
   // A connected room containing only the portal is a successful, nonempty result.
@@ -59,8 +66,12 @@ TEST_F(RosPortalTestE2E, ListsLocalAndNonPortalParticipantsAcrossPeerJoinAndLeav
   std::vector<std::string> expected{identityA(), identityB()};
   std::sort(expected.begin(), expected.end());
   ASSERT_TRUE(waitFor([&]() { return lists(expected); }, kGraphTimeout));
-  EXPECT_EQ(std::count(response->participant_identities.begin(), response->participant_identities.end(), identityA()),
-            1);
+  const auto listed = names();
+  EXPECT_EQ(std::count(listed.begin(), listed.end(), identityA()), 1);
+  // The raw SDK peer sets no version attribute; the local portal does.
+  for (const auto& participant : response->participants) {
+    EXPECT_EQ(participant.ros_portal_version.empty(), participant.name != identityB());
+  }
 
   ASSERT_TRUE(peer.disconnect());
   ASSERT_TRUE(waitFor([&]() { return lists({identityB()}); }, kGraphTimeout));

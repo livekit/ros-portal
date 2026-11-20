@@ -350,7 +350,7 @@ diagnostics::DiagnosticsManagerFns RosPortal::makeDiagnosticsFns() {
       return;
     }
     diagnostics_updater_->removeByName(name);
-    diagnostics_updater_->add(name, std::move(callback));
+    diagnostics_updater_->add(name, callback);
   };
   fns.remove = [this](const std::string& name) {
     if (diagnostics_updater_ == nullptr) {

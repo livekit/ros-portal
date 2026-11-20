@@ -298,6 +298,7 @@ ament_auto_add_library(ros_portal_lib SHARED
 )
 target_compile_definitions(ros_portal_lib PRIVATE
   LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS=${LIVEKIT_HAS_ROSBAG2_MESSAGE_DEFINITIONS}
+  ROS_PORTAL_VERSION="${${PROJECT_NAME}_VERSION}"
 )
 target_include_directories(ros_portal_lib PUBLIC
   "$<BUILD_INTERFACE:${ROS_PORTAL_GENERATED_INCLUDE_DIR}>"

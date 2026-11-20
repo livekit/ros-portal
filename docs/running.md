@@ -65,6 +65,33 @@ source /opt/livekit/ros/$ROS_DISTRO/setup.bash
 ros-portal-$ROS_DISTRO config_path:=/path/to/config.yaml
 ```
 
+## Listing LiveKit participants
+
+Call the local ROS service to list the LiveKit participant identities visible
+to this portal:
+
+```bash
+ros2 service call /ros_portal/list_participants \
+  ros_portal_msgs/srv/ListParticipants '{}'
+```
+
+The request is empty. On success, `success` is `true`, `err_msg` is empty, and
+`participants` lists the portal itself and all visible remote participants,
+including clients that do not run ROS Portal. Each entry has `name`, the exact
+LiveKit identity, and `ros_portal_version`. A ROS Portal sets the
+`lk.ros_portal_version` attribute, so a participant with an empty
+`ros_portal_version` is not a ROS Portal. Clients can set attributes freely, so
+this is not proof. Entries are sorted by name. A room containing only the portal
+returns its own entry.
+
+The service is available before connection and across reconnections. While the
+room is disconnected or reconnecting, it returns `success: false`,
+`err_msg: "room not connected"`, and an empty list. Other query failures also
+return `success: false`, an error message, and an empty list.
+
+Results reflect the portal's current room view. Joins and departures arrive
+asynchronously, so poll with a timeout when waiting for a participant.
+
 ## Running ROS Portal in Composition
 
 You can use ROS Portal in composition for lower system overhead, more flexible deployment, and zero-copy intra-process communication.

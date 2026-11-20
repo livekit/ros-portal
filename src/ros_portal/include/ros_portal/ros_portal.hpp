@@ -26,6 +26,7 @@
 #include <mutex>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
+#include <ros_portal_msgs/srv/list_participants.hpp>
 #include <string>
 #include <vector>
 
@@ -57,6 +58,8 @@ class VideoSourceManager;
 
 /// @brief LiveKit participant attribute key that marks ROS Portal as a robot.
 inline constexpr const char* kRobotParticipantAttribute = "lk.robot";
+/// @brief LiveKit participant attribute key holding the ROS Portal version; absent for non-portal participants.
+inline constexpr const char* kRosPortalVersion = "lk.ros_portal_version";
 
 /// @brief The main ROS Portal node.
 ///
@@ -168,6 +171,11 @@ private:
 
   /// @brief Return whether room-facing ROS Portal operations are currently allowed.
   bool roomOperationsEnabled() const;
+
+  /// @brief Populate a sorted snapshot of all visible room participant identities.
+  /// @param response Service response, including an error when room operations are unavailable.
+  /// @note Called by the ROS executor; serialized with shutdown to protect room lifetime.
+  void listParticipants(ros_portal_msgs::srv::ListParticipants::Response& response);
 
   /// @brief Handle a remote LiveKit data track being published.
   void onDataTrackPublished(livekit::Room& room, const livekit::DataTrackPublishedEvent& event) override;
@@ -327,6 +335,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
   //! @brief Fixed-rate timer for LiveKit room connection attempts.
   rclcpp::TimerBase::SharedPtr connection_timer_;
+  /// @brief Node-lifetime service for local and remote LiveKit participant discovery.
+  rclcpp::Service<ros_portal_msgs::srv::ListParticipants>::SharedPtr list_participants_service_;
   //! @brief Owns graph events, snapshots, and the discovery worker.
   std::unique_ptr<graph::GraphManager> graph_manager_;
 

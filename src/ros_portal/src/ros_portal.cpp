@@ -32,6 +32,7 @@
 #include <livekit/track.h>
 #include <livekit/video_source.h>
 
+#include <algorithm>
 #include <chrono>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_updater/diagnostic_status_wrapper.hpp>
@@ -51,6 +52,7 @@
 #include "ros_portal/connection/connection_manager.hpp"
 #include "ros_portal/diagnostics/build_info.hpp"
 #include "ros_portal/diagnostics/diagnostics_fns.hpp"
+#include "ros_portal/distro_adapter.hpp"
 #include "ros_portal/graph/graph_manager.hpp"
 #include "ros_portal/latched_topic_forwarder.hpp"
 #include "ros_portal/service_forwarder.hpp"
@@ -200,6 +202,15 @@ bool RosPortal::initialize() {
   diagnostic_state_.connection_manager_active.store(connection_manager_ != nullptr, std::memory_order_relaxed);
   room_operations_enabled_ = connection_manager_->operationsEnabledFlag();
 
+  const auto services_qos = servicesQos();
+  list_participants_service_ = this->create_service<ros_portal_msgs::srv::ListParticipants>(
+      "ros_portal/list_participants",
+      [this](const ros_portal_msgs::srv::ListParticipants::Request::SharedPtr&,
+             const ros_portal_msgs::srv::ListParticipants::Response::SharedPtr& response) {
+        listParticipants(*response);
+      },
+      services_qos, reentrant_callback_group_);
+
   try {
     graph::GraphManager::Callbacks graph_callbacks{
         [this](const TopicNamesAndTypes& topics) { return reconcileGraphTopics(topics); },
@@ -259,6 +270,7 @@ RosPortal::~RosPortal() { shutdown(); }
 void RosPortal::shutdown() {
   const std::lock_guard<std::mutex> shutdown_lock(shutdown_mutex_);
   shutting_down_.store(true, std::memory_order_relaxed);
+  list_participants_service_.reset();
   if (diagnostics_updater_) {
     // Publish the lifecycle transition before the updater and component tasks
     // are dismantled; otherwise the brief shutting-down state is rarely visible.
@@ -331,14 +343,14 @@ diagnostics::DiagnosticsManagerFns RosPortal::makeDiagnosticsFns() {
   // Components are owned by this node and destroyed before it, so capturing
   // `this` is safe for the lifetime of every wrapper handed out here.
   diagnostics::DiagnosticsManagerFns fns;
-  fns.add = [this](const std::string& name, diagnostics::DiagnosticsManagerFns::TaskCallback callback) {
+  fns.add = [this](const std::string& name, const diagnostics::DiagnosticsManagerFns::TaskCallback& callback) {
     if (diagnostics_updater_ == nullptr) {
       RCLCPP_FATAL(this->get_logger(), "Cannot register diagnostic task '%s': diagnostics updater does not exist",
                    name.c_str());
       return;
     }
     diagnostics_updater_->removeByName(name);
-    diagnostics_updater_->add(name, std::move(callback));
+    diagnostics_updater_->add(name, callback);
   };
   fns.remove = [this](const std::string& name) {
     if (diagnostics_updater_ == nullptr) {
@@ -419,6 +431,7 @@ bool RosPortal::prepareRoomSession() {
   try {
     auto attributes = local_participant->attributes();
     attributes[kRobotParticipantAttribute] = "true";
+    attributes[kRosPortalVersion] = ROS_PORTAL_VERSION;
     local_participant->setAttributes(attributes);
   } catch (const std::exception& error) {
     RCLCPP_ERROR(this->get_logger(), "Failed to set local participant attributes: %s", error.what());
@@ -447,6 +460,58 @@ void RosPortal::processEndedRoomSession() {
 
 bool RosPortal::roomOperationsEnabled() const {
   return connection_manager_ ? connection_manager_->isOperationsEnabled() : room_operations_enabled_->load();
+}
+
+void RosPortal::listParticipants(ros_portal_msgs::srv::ListParticipants::Response& response) {
+  const std::lock_guard<std::mutex> lock(shutdown_mutex_);
+  response.success = false;
+  response.err_msg = kRoomNotConnectedError;
+  response.participants.clear();
+  if (shutting_down_.load(std::memory_order_relaxed) || !room_ || !roomOperationsEnabled()) {
+    return;
+  }
+
+  try {
+    const auto local_participant = room_->localParticipant().lock();
+    if (!local_participant) {
+      response.err_msg = "local participant is unavailable";
+      return;
+    }
+    const auto remote_participants = room_->remoteParticipants();
+    std::vector<ros_portal_msgs::msg::Participant> participants;
+    participants.reserve(remote_participants.size() + 1U);
+    const auto add = [&participants](const livekit::Participant& participant) {
+      ros_portal_msgs::msg::Participant entry;
+      entry.name = participant.identity();
+      const auto& attributes = participant.attributes();
+      if (const auto it = attributes.find(kRosPortalVersion); it != attributes.end()) {
+        entry.ros_portal_version = it->second;
+      }
+      participants.push_back(std::move(entry));
+    };
+    add(*local_participant);
+    for (const auto& weak_participant : remote_participants) {
+      if (const auto participant = weak_participant.lock()) {
+        add(*participant);
+      }
+    }
+    const auto by_name = [](const auto& a, const auto& b) { return a.name < b.name; };
+    std::sort(participants.begin(), participants.end(), by_name);
+    participants.erase(std::unique(participants.begin(), participants.end(),
+                                   [](const auto& a, const auto& b) { return a.name == b.name; }),
+                       participants.end());
+    // Lifecycle events may disable operations while the SDK snapshot is collected.
+    if (!roomOperationsEnabled()) {
+      return;
+    }
+    response.participants = std::move(participants);
+    response.err_msg.clear();
+    response.success = true;
+  } catch (const std::exception& error) {
+    response.err_msg = std::string("failed to list participants: ") + error.what();
+  } catch (...) {
+    response.err_msg = "failed to list participants: unknown error";
+  }
 }
 
 void RosPortal::pollConnection() {

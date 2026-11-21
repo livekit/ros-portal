@@ -445,7 +445,9 @@ topics:
     direction: "out"
 ```
 
-The track size comes from the first frame.
+The track size comes from the first frame. The
+[video pass-through tutorial](tutorials.md#video-pass-through-over-livekit)
+uses this route with a recorded bag.
 
 #### Inbound video
 
